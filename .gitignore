@@ -21,9 +21,8 @@ Saved/
 *.dll
 *.pdb
 
-# Content - exclude large binary assets (keep source)
-# Uncomment if you don't want to track Content folder:
-# Content/
+# Content - assets binarios de Unreal (grandes, no se trackean en git)
+Content/
 
 # OS files
 .DS_Store
