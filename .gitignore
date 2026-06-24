@@ -1,0 +1,36 @@
+# Unreal Engine
+Binaries/
+Build/
+DerivedDataCache/
+Intermediate/
+Saved/
+*.VC.db
+*.opensdf
+*.opendb
+*.sdf
+*.suo
+*.xcworkspace
+*.xcodeproj
+*.sln
+*.slnx
+
+# Compiled source
+*.o
+*.obj
+*.exe
+*.dll
+*.pdb
+
+# Content - exclude large binary assets (keep source)
+# Uncomment if you don't want to track Content folder:
+# Content/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vs/
+.vscode/
+.idea/
