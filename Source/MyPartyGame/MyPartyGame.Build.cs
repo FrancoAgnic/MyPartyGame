@@ -32,6 +32,7 @@ public class MyPartyGame : ModuleRules
 			"MyPartyGame",
 			"MyPartyGame/Multiplayer",
 			"MyPartyGame/UI",
+			"MyPartyGame/Lobby",
 			"MyPartyGame/Variant_Platforming",
 			"MyPartyGame/Variant_Platforming/Animation",
 			"MyPartyGame/Variant_Combat",
