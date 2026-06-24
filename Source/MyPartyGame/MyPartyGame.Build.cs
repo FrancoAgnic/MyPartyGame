@@ -18,13 +18,19 @@ public class MyPartyGame : ModuleRules
 			"StateTreeModule",
 			"GameplayStateTreeModule",
 			"UMG",
-			"Slate"
+			"Slate",
+			"SlateCore",
+			// Online Subsystem — cargados dinámicamente vía plugin/config, NO se enlaza NULL ni EOS directamente.
+			"OnlineSubsystem",
+			"OnlineSubsystemUtils",
+			"CoreOnline"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
 
 		PublicIncludePaths.AddRange(new string[] {
 			"MyPartyGame",
+			"MyPartyGame/Multiplayer",
 			"MyPartyGame/Variant_Platforming",
 			"MyPartyGame/Variant_Platforming/Animation",
 			"MyPartyGame/Variant_Combat",
@@ -39,13 +45,5 @@ public class MyPartyGame : ModuleRules
 			"MyPartyGame/Variant_SideScrolling/Interfaces",
 			"MyPartyGame/Variant_SideScrolling/UI"
 		});
-
-		// Uncomment if you are using Slate UI
-		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
-
-		// Uncomment if you are using online features
-		// PrivateDependencyModuleNames.Add("OnlineSubsystem");
-
-		// To include OnlineSubsystemSteam, add it to the plugins section in your uproject file with the Enabled attribute set to true
 	}
 }

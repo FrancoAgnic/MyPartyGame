@@ -29,6 +29,13 @@ Content/
 Thumbs.db
 desktop.ini
 
+# Scripts de setup (no van al repo)
+setup_github.ps1
+push_inicial.ps1
+debug_git.ps1
+git_debug.log
+git_last_push.log
+
 # IDE
 .vs/
 .vscode/
