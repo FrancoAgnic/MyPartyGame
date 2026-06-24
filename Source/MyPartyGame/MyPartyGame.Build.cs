@@ -31,6 +31,7 @@ public class MyPartyGame : ModuleRules
 		PublicIncludePaths.AddRange(new string[] {
 			"MyPartyGame",
 			"MyPartyGame/Multiplayer",
+			"MyPartyGame/UI",
 			"MyPartyGame/Variant_Platforming",
 			"MyPartyGame/Variant_Platforming/Animation",
 			"MyPartyGame/Variant_Combat",

@@ -193,13 +193,15 @@ void UMultiplayerSessionsSubsystem::CreateSession(
 void UMultiplayerSessionsSubsystem::InternalCreateSession()
 {
     LastSessionSettings = MakeShareable(new FOnlineSessionSettings());
-    LastSessionSettings->bIsLANMatch            = IsUsingNullSubsystem();  // true en NULL, false en EOS
+    const bool bIsNULL = IsUsingNullSubsystem();
+    LastSessionSettings->bIsLANMatch            = bIsNULL;   // true en NULL, false en EOS
     LastSessionSettings->NumPublicConnections   = PendingNumPublicConnections;
     LastSessionSettings->bAllowJoinInProgress   = true;
     LastSessionSettings->bShouldAdvertise       = true;
-    LastSessionSettings->bUsesPresence          = true;
-    LastSessionSettings->bUseLobbiesIfAvailable = true;
-    LastSessionSettings->bAllowJoinViaPresence  = true;
+    // Presence y lobbies solo en backends que los soportan (EOS). NULL los ignora o rompe el Find.
+    LastSessionSettings->bUsesPresence          = !bIsNULL;
+    LastSessionSettings->bUseLobbiesIfAvailable = !bIsNULL;
+    LastSessionSettings->bAllowJoinViaPresence  = !bIsNULL;
     LastSessionSettings->BuildUniqueId          = 1;
 
     // Nombre visible elegido por el usuario (el FName interno siempre es NAME_GameSession)
@@ -272,8 +274,11 @@ void UMultiplayerSessionsSubsystem::FindSessions(int32 MaxSearchResults)
     LastSessionSearch                    = MakeShareable(new FOnlineSessionSearch());
     LastSessionSearch->MaxSearchResults  = MaxSearchResults;
     LastSessionSearch->bIsLanQuery       = IsUsingNullSubsystem();
-    // SEARCH_PRESENCE == FName("presence") — literal para evitar problemas de include en UE 5.8
-    LastSessionSearch->QuerySettings.Set(FName(TEXT("presence")), true, EOnlineComparisonOp::Equals);
+    // El filtro "presence" solo aplica a backends que lo soportan (EOS). En NULL rompe el Find.
+    if (!IsUsingNullSubsystem())
+    {
+        LastSessionSearch->QuerySettings.Set(FName(TEXT("presence")), true, EOnlineComparisonOp::Equals);
+    }
 
     FindSessionsCompleteHandle = GetSessions()->AddOnFindSessionsCompleteDelegate_Handle(
         FOnFindSessionsCompleteDelegate::CreateUObject(
@@ -567,20 +572,23 @@ void UMultiplayerSessionsSubsystem::RegisterDebugCommands()
 
 void UMultiplayerSessionsSubsystem::UnregisterDebugCommands()
 {
-    auto Unreg = [](IConsoleCommand*& Cmd)
+    // En PIE con múltiples instancias, ambas registran los mismos comandos y comparten
+    // el mismo puntero subyacente. Al cerrar, la primera instancia lo libera; la segunda
+    // debe verificar por nombre que el objeto todavía exista antes de intentar desregistrar.
+    auto Unreg = [](IConsoleCommand*& Cmd, const TCHAR* Name)
     {
-        if (Cmd)
+        if (Cmd && IConsoleManager::Get().FindConsoleObject(Name) == Cmd)
         {
             IConsoleManager::Get().UnregisterConsoleObject(Cmd);
-            Cmd = nullptr;
         }
+        Cmd = nullptr;
     };
 
-    Unreg(DebugCmd_Login);
-    Unreg(DebugCmd_CreateSession);
-    Unreg(DebugCmd_FindSessions);
-    Unreg(DebugCmd_JoinSession);
-    Unreg(DebugCmd_DestroySession);
+    Unreg(DebugCmd_Login,          TEXT("PT.Debug.Login"));
+    Unreg(DebugCmd_CreateSession,  TEXT("PT.Debug.Create"));
+    Unreg(DebugCmd_FindSessions,   TEXT("PT.Debug.Find"));
+    Unreg(DebugCmd_JoinSession,    TEXT("PT.Debug.Join"));
+    Unreg(DebugCmd_DestroySession, TEXT("PT.Debug.Destroy"));
 }
 
 #endif // !UE_BUILD_SHIPPING
