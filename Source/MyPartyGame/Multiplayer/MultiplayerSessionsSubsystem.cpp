@@ -5,7 +5,7 @@
 #include "MultiplayerSessionsSubsystem.h"
 #include "OnlineSubsystem.h"
 #include "OnlineSubsystemUtils.h"
-#include "Online/OnlineSessionNames.h"          // SEARCH_PRESENCE, etc. (UE5)
+#include "OnlineSessionSettings.h"              // FOnlineSessionSettings, SEARCH_PRESENCE (UE 5.8)
 #include "Interfaces/OnlineIdentityInterface.h"
 #include "Misc/SecureHash.h"                    // FMD5
 
@@ -272,7 +272,8 @@ void UMultiplayerSessionsSubsystem::FindSessions(int32 MaxSearchResults)
     LastSessionSearch                    = MakeShareable(new FOnlineSessionSearch());
     LastSessionSearch->MaxSearchResults  = MaxSearchResults;
     LastSessionSearch->bIsLanQuery       = IsUsingNullSubsystem();
-    LastSessionSearch->QuerySettings.Set(SEARCH_PRESENCE, true, EOnlineComparisonOp::Equals);
+    // SEARCH_PRESENCE == FName("presence") — literal para evitar problemas de include en UE 5.8
+    LastSessionSearch->QuerySettings.Set(FName(TEXT("presence")), true, EOnlineComparisonOp::Equals);
 
     FindSessionsCompleteHandle = GetSessions()->AddOnFindSessionsCompleteDelegate_Handle(
         FOnFindSessionsCompleteDelegate::CreateUObject(
