@@ -10,6 +10,7 @@
 
 class UScrollBox;
 class UButton;
+class UEditableTextBox;
 class UPTSessionRowWidget;
 class UMultiplayerSessionsSubsystem;
 
@@ -23,7 +24,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sessions")
     void ShowPanel();
 
-    /** Poblar la lista con los resultados del subsistema. Llamar desde UPTMainMenuWidget::OnFindSessions. */
+    /**
+     * Poblar la lista con los resultados del subsistema. Llamar desde UPTMainMenuWidget::OnFindSessions.
+     * Fase 5 — solo pinta sesiones públicas (sin código); las privadas se unen por OnJoinByCodeClicked.
+     */
     void PopulateResults(const TArray<FOnlineSessionSearchResult>& Results, bool bWasSuccessful);
 
 protected:
@@ -33,12 +37,17 @@ protected:
     UPROPERTY(meta = (BindWidget)) UButton*    RefreshButton;
     UPROPERTY(meta = (BindWidget)) UButton*    BackButton;
 
+    // Fase 5 — pestaña "unirse con código": pegar el código y unirse directo, sin lista.
+    UPROPERTY(meta = (BindWidget)) UEditableTextBox* CodeInput;
+    UPROPERTY(meta = (BindWidget)) UButton*          JoinByCodeButton;
+
     /** Clase del widget de fila. Asignar en el WBP derivado. */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sessions")
     TSubclassOf<UPTSessionRowWidget> RowWidgetClass;
 
     UFUNCTION() void OnRefreshClicked();
     UFUNCTION() void OnBackClicked();
+    UFUNCTION() void OnJoinByCodeClicked();
 
 private:
     UPROPERTY() UMultiplayerSessionsSubsystem* Sessions = nullptr;

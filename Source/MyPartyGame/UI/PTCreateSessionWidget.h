@@ -9,6 +9,7 @@
 class UButton;
 class UEditableTextBox;
 class USpinBox;
+class UCheckBox;
 class UMultiplayerSessionsSubsystem;
 
 UCLASS()
@@ -25,7 +26,9 @@ protected:
     virtual bool Initialize() override;
 
     UPROPERTY(meta = (BindWidget)) UEditableTextBox* NameInput;
-    UPROPERTY(meta = (BindWidget)) UEditableTextBox* PasswordInput;
+    // Fase 5 — reemplaza al viejo campo de contraseña libre: si está marcado, el subsistema
+    // genera un código aleatorio (ver UMultiplayerSessionsSubsystem::GetGeneratedSessionCode).
+    UPROPERTY(meta = (BindWidget)) UCheckBox*        PrivateCheckbox;
     UPROPERTY(meta = (BindWidget)) USpinBox*         MaxPlayersInput;
     UPROPERTY(meta = (BindWidget)) UButton*          ConfirmButton;
     UPROPERTY(meta = (BindWidget)) UButton*          BackButton;

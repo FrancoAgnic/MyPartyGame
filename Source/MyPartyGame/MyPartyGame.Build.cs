@@ -23,7 +23,9 @@ public class MyPartyGame : ModuleRules
 			// Online Subsystem — cargados dinámicamente vía plugin/config, NO se enlaza NULL ni EOS directamente.
 			"OnlineSubsystem",
 			"OnlineSubsystemUtils",
-			"CoreOnline"
+			"CoreOnline",
+			// Fase 5 — FPlatformApplicationMisc::ClipboardCopy (compartir código de sesión privada)
+			"ApplicationCore"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });

@@ -8,6 +8,7 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "HAL/PlatformApplicationMisc.h"
 
 // ==========================================================================
 // Inicialización
@@ -90,13 +91,13 @@ void UPTMainMenuWidget::OnHostClicked()
 {
     if (CreatePanel)
     {
-        // Mostrar sub-panel con campo de nombre/password/jugadores.
+        // Mostrar sub-panel con campo de nombre/privada/jugadores.
         CreatePanel->ShowPanel(NumPublicConnections);
     }
     else if (Sessions)
     {
-        // Fallback si no hay CreatePanel en el WBP: crear con valores por defecto.
-        Sessions->CreateSession(NumPublicConnections, TEXT("TestRoom"), TEXT(""));
+        // Fallback si no hay CreatePanel en el WBP: crear pública con valores por defecto.
+        Sessions->CreateSession(NumPublicConnections, TEXT("TestRoom"), false);
     }
 }
 
@@ -127,8 +128,24 @@ void UPTMainMenuWidget::OnCreateSession(bool bWasSuccessful)
 {
     if (!bWasSuccessful)
     {
-        // TODO Fase UI: mostrar error al usuario.
+        if (ErrorText) ErrorText->SetText(FText::FromString(TEXT("No se pudo crear la sesión")));
         return;
+    }
+
+    // Fase 5 — si la sesión es privada, copiar el código al portapapeles para compartirlo.
+    if (Sessions)
+    {
+        const FString Code = Sessions->GetGeneratedSessionCode();
+        if (!Code.IsEmpty())
+        {
+            FPlatformApplicationMisc::ClipboardCopy(*Code);
+            UE_LOG(LogTemp, Log, TEXT("[Menu] Sesión privada — código (copiado al portapapeles): %s"), *Code);
+            if (GeneratedCodeText)
+            {
+                GeneratedCodeText->SetText(FText::FromString(
+                    FString::Printf(TEXT("Código: %s (copiado al portapapeles)"), *Code)));
+            }
+        }
     }
 
     if (UWorld* World = GetWorld())
@@ -162,7 +179,13 @@ void UPTMainMenuWidget::OnJoinSession(EOnJoinSessionCompleteResult::Type Result)
 {
     if (Result != EOnJoinSessionCompleteResult::Success)
     {
-        // TODO Fase UI: mostrar "No se pudo unir a la sesión".
+        if (ErrorText)
+        {
+            const FString Msg = (Result == EOnJoinSessionCompleteResult::SessionDoesNotExist)
+                ? TEXT("Código inválido o sesión no encontrada")
+                : TEXT("No se pudo unir a la sesión");
+            ErrorText->SetText(FText::FromString(Msg));
+        }
         return;
     }
 

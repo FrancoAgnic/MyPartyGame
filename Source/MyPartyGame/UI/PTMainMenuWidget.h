@@ -49,6 +49,10 @@ protected:
     // Fase 4 — Texto de error de conexión (ej: "Contraseña incorrecta")
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* ErrorText;
 
+    // Fase 5 — Código de invitación recién generado (sesión privada). Se completa solo
+    // cuando CreateSession se hizo con bPrivate=true; queda vacío/oculto en sesión pública.
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* GeneratedCodeText;
+
     // ------------------------------------------------------------------
     // Handlers de botones
     // ------------------------------------------------------------------

@@ -15,6 +15,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogPTSessions, Log, All);
 const FName UMultiplayerSessionsSubsystem::KEY_SERVER_NAME  = FName("SERVER_NAME");
 const FName UMultiplayerSessionsSubsystem::KEY_HAS_PASSWORD = FName("HAS_PASSWORD");
 const FName UMultiplayerSessionsSubsystem::KEY_MATCH_TYPE   = FName("MATCH_TYPE");
+const FName UMultiplayerSessionsSubsystem::KEY_CODE_HASH    = FName("CODE_HASH");
 
 // ==========================================================================
 // Lifecycle
@@ -90,6 +91,18 @@ FString UMultiplayerSessionsSubsystem::HashPassword(const FString& Plain)
     return FMD5::HashAnsiString(*Plain);
 }
 
+FString UMultiplayerSessionsSubsystem::GenerateSessionCode()
+{
+    // Alfabeto sin caracteres ambiguos (sin I/L/O/0/1) para que sea fácil de dictar/transcribir.
+    static const FString Alphabet = TEXT("ABCDEFGHJKMNPQRSTUVWXYZ23456789");
+    FString Code;
+    for (int32 i = 0; i < 6; ++i)
+    {
+        Code.AppendChar(Alphabet[FMath::RandRange(0, Alphabet.Len() - 1)]);
+    }
+    return Code;
+}
+
 // ==========================================================================
 // LOGIN — agnóstico (NULL resuelve al instante, Steam autentica contra la cuenta local)
 // ==========================================================================
@@ -159,7 +172,7 @@ void UMultiplayerSessionsSubsystem::HandleLoginComplete(
 // ==========================================================================
 
 void UMultiplayerSessionsSubsystem::CreateSession(
-    int32 NumPublicConnections, const FString& SessionName, const FString& Password)
+    int32 NumPublicConnections, const FString& SessionName, bool bPrivate)
 {
     if (!GetSessions().IsValid())
     {
@@ -176,7 +189,8 @@ void UMultiplayerSessionsSubsystem::CreateSession(
 
     PendingNumPublicConnections = NumPublicConnections;
     PendingSessionName          = SessionName;
-    PendingPassword             = Password;
+    // Fase 5 — el código nunca lo escribe el usuario: se genera acá si la sesión es privada.
+    PendingPassword             = bPrivate ? GenerateSessionCode() : FString();
 
     // Si ya existe una sesión activa, destruirla primero y recrear en el callback de destroy.
     if (GetSessions()->GetNamedSession(NAME_GameSession) != nullptr)
@@ -208,9 +222,18 @@ void UMultiplayerSessionsSubsystem::InternalCreateSession()
     LastSessionSettings->Set(KEY_SERVER_NAME, PendingSessionName,
         EOnlineDataAdvertisementType::ViaOnlineService);
 
-    // Solo se publica si tiene contraseña (booleano), NUNCA la contraseña real
-    LastSessionSettings->Set(KEY_HAS_PASSWORD, (bool)!PendingPassword.IsEmpty(),
+    // Solo se publica si es privada (booleano), NUNCA el código real
+    const bool bIsPrivate = !PendingPassword.IsEmpty();
+    LastSessionSettings->Set(KEY_HAS_PASSWORD, bIsPrivate,
         EOnlineDataAdvertisementType::ViaOnlineService);
+
+    // Fase 5 — hash del código para que JoinSessionByCode pueda reconocer la sesión correcta
+    // entre todos los resultados sin que el código viaje en claro por la red de matchmaking.
+    if (bIsPrivate)
+    {
+        LastSessionSettings->Set(KEY_CODE_HASH, HashPassword(PendingPassword),
+            EOnlineDataAdvertisementType::ViaOnlineService);
+    }
 
     // Clave de tipo para filtrar en búsquedas (solo sesiones de este template)
     LastSessionSettings->Set(KEY_MATCH_TYPE, FString("PartyLobby"),
@@ -258,16 +281,51 @@ void UMultiplayerSessionsSubsystem::HandleCreateSessionComplete(FName SessionNam
 
 void UMultiplayerSessionsSubsystem::FindSessions(int32 MaxSearchResults)
 {
+    bSearchingByCode = false;
+    InternalFindSessions(MaxSearchResults);
+}
+
+void UMultiplayerSessionsSubsystem::JoinSessionByCode(const FString& Code)
+{
+    if (Code.IsEmpty())
+    {
+        UE_LOG(LogPTSessions, Warning, TEXT("JoinSessionByCode: código vacío."));
+        OnJoinSessionComplete.Broadcast(EOnJoinSessionCompleteResult::SessionDoesNotExist);
+        return;
+    }
+
+    PendingJoinCode  = Code;
+    bSearchingByCode = true;
+    InternalFindSessions(50); // suficientes resultados para encontrar la sesión por código
+}
+
+void UMultiplayerSessionsSubsystem::InternalFindSessions(int32 MaxSearchResults)
+{
+    // Fase 5 — JoinSessionByCode reutiliza este mismo Find; si falla, el error debe ir
+    // por OnJoinSessionComplete (no por OnFindSessionsComplete) para esa ruta.
+    auto BroadcastFailure = [this]()
+    {
+        if (bSearchingByCode)
+        {
+            bSearchingByCode = false;
+            OnJoinSessionComplete.Broadcast(EOnJoinSessionCompleteResult::UnknownError);
+        }
+        else
+        {
+            OnFindSessionsComplete.Broadcast({}, false);
+        }
+    };
+
     if (!GetSessions().IsValid())
     {
         UE_LOG(LogPTSessions, Error, TEXT("FindSessions: SessionInterface no válida."));
-        OnFindSessionsComplete.Broadcast({}, false);
+        BroadcastFailure();
         return;
     }
     if (!bIsLoggedIn)
     {
         UE_LOG(LogPTSessions, Warning, TEXT("FindSessions: llamado sin login previo."));
-        OnFindSessionsComplete.Broadcast({}, false);
+        BroadcastFailure();
         return;
     }
 
@@ -289,7 +347,7 @@ void UMultiplayerSessionsSubsystem::FindSessions(int32 MaxSearchResults)
     {
         GetSessions()->ClearOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteHandle);
         UE_LOG(LogPTSessions, Error, TEXT("FindSessions: no hay LocalPlayer."));
-        OnFindSessionsComplete.Broadcast({}, false);
+        BroadcastFailure();
         return;
     }
 
@@ -297,7 +355,7 @@ void UMultiplayerSessionsSubsystem::FindSessions(int32 MaxSearchResults)
     {
         GetSessions()->ClearOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteHandle);
         UE_LOG(LogPTSessions, Warning, TEXT("FindSessions: FindSessions() devolvió false."));
-        OnFindSessionsComplete.Broadcast({}, false);
+        BroadcastFailure();
     }
 }
 
@@ -306,6 +364,34 @@ void UMultiplayerSessionsSubsystem::HandleFindSessionsComplete(bool bWasSuccessf
     if (GetSessions().IsValid())
     {
         GetSessions()->ClearOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteHandle);
+    }
+
+    // Fase 5 — esta búsqueda era para JoinSessionByCode: matchear por hash y unirse directo,
+    // sin pasar por el delegate de lista (OnFindSessionsComplete) que usa el browse público.
+    if (bSearchingByCode)
+    {
+        bSearchingByCode = false;
+        const FString Code = PendingJoinCode;
+        PendingJoinCode.Reset();
+        const FString WantedHash = HashPassword(Code);
+
+        if (LastSessionSearch.IsValid())
+        {
+            for (const FOnlineSessionSearchResult& R : LastSessionSearch->SearchResults)
+            {
+                FString StoredHash;
+                if (R.Session.SessionSettings.Get(KEY_CODE_HASH, StoredHash) && StoredHash == WantedHash)
+                {
+                    UE_LOG(LogPTSessions, Log, TEXT("JoinSessionByCode: código válido, uniendo..."));
+                    JoinSession(R, Code);
+                    return;
+                }
+            }
+        }
+
+        UE_LOG(LogPTSessions, Log, TEXT("JoinSessionByCode: ningún resultado coincide con el código."));
+        OnJoinSessionComplete.Broadcast(EOnJoinSessionCompleteResult::SessionDoesNotExist);
+        return;
     }
 
     if (!LastSessionSearch.IsValid() || LastSessionSearch->SearchResults.Num() == 0)
@@ -518,17 +604,18 @@ void UMultiplayerSessionsSubsystem::RegisterDebugCommands()
         FConsoleCommandDelegate::CreateUObject(this, &UMultiplayerSessionsSubsystem::Login),
         ECVF_Default);
 
-    // PT.Debug.Create [Nombre] [Password] [MaxJugadores]
+    // PT.Debug.Create [Nombre] [Privada=0/1] [MaxJugadores]
     DebugCmd_CreateSession = IConsoleManager::Get().RegisterConsoleCommand(
         TEXT("PT.Debug.Create"),
-        TEXT("[Fase1 Debug] Crear sesión. Args: [Nombre=TestRoom] [Password=] [Max=4]"),
+        TEXT("[Fase1/5 Debug] Crear sesión. Args: [Nombre=TestRoom] [Privada=0] [Max=4]"),
         FConsoleCommandWithArgsDelegate::CreateLambda([this](const TArray<FString>& Args)
         {
-            const FString Name = Args.Num() > 0 ? Args[0] : TEXT("TestRoom");
-            const FString Pass = Args.Num() > 1 ? Args[1] : TEXT("");
-            const int32   Max  = Args.Num() > 2 ? FCString::Atoi(*Args[2]) : 4;
-            UE_LOG(LogPTSessions, Log, TEXT("[Debug] CreateSession(%s, %s, %d)"), *Name, *Pass, Max);
-            CreateSession(Max, Name, Pass);
+            const FString Name      = Args.Num() > 0 ? Args[0] : TEXT("TestRoom");
+            const bool    bPrivate  = Args.Num() > 1 && Args[1] != TEXT("0");
+            const int32   Max       = Args.Num() > 2 ? FCString::Atoi(*Args[2]) : 4;
+            UE_LOG(LogPTSessions, Log, TEXT("[Debug] CreateSession(%s, privada=%s, %d)"),
+                *Name, bPrivate ? TEXT("SÍ") : TEXT("NO"), Max);
+            CreateSession(Max, Name, bPrivate);
         }),
         ECVF_Default);
 
@@ -565,6 +652,18 @@ void UMultiplayerSessionsSubsystem::RegisterDebugCommands()
         }),
         ECVF_Default);
 
+    // PT.Debug.JoinByCode [Código]
+    DebugCmd_JoinByCode = IConsoleManager::Get().RegisterConsoleCommand(
+        TEXT("PT.Debug.JoinByCode"),
+        TEXT("[Fase5 Debug] Buscar y unirse a una sesión privada por su código."),
+        FConsoleCommandWithArgsDelegate::CreateLambda([this](const TArray<FString>& Args)
+        {
+            const FString Code = Args.Num() > 0 ? Args[0] : TEXT("");
+            UE_LOG(LogPTSessions, Log, TEXT("[Debug] JoinSessionByCode(%s)"), *Code);
+            JoinSessionByCode(Code);
+        }),
+        ECVF_Default);
+
     // PT.Debug.Destroy
     DebugCmd_DestroySession = IConsoleManager::Get().RegisterConsoleCommand(
         TEXT("PT.Debug.Destroy"),
@@ -573,7 +672,7 @@ void UMultiplayerSessionsSubsystem::RegisterDebugCommands()
         ECVF_Default);
 
     UE_LOG(LogPTSessions, Log,
-        TEXT("Comandos de debug registrados: PT.Debug.Login | PT.Debug.Create | PT.Debug.Find | PT.Debug.Join | PT.Debug.Destroy"));
+        TEXT("Comandos de debug registrados: PT.Debug.Login | PT.Debug.Create | PT.Debug.Find | PT.Debug.Join | PT.Debug.JoinByCode | PT.Debug.Destroy"));
 }
 
 void UMultiplayerSessionsSubsystem::UnregisterDebugCommands()
@@ -594,6 +693,7 @@ void UMultiplayerSessionsSubsystem::UnregisterDebugCommands()
     Unreg(DebugCmd_CreateSession,  TEXT("PT.Debug.Create"));
     Unreg(DebugCmd_FindSessions,   TEXT("PT.Debug.Find"));
     Unreg(DebugCmd_JoinSession,    TEXT("PT.Debug.Join"));
+    Unreg(DebugCmd_JoinByCode,     TEXT("PT.Debug.JoinByCode"));
     Unreg(DebugCmd_DestroySession, TEXT("PT.Debug.Destroy"));
 }
 

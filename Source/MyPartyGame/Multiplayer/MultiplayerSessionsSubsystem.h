@@ -38,9 +38,18 @@ public:
     // API pública — la UI llama a esto, NUNCA a OSS directamente
     // ------------------------------------------------------------------
     void Login();
-    void CreateSession(int32 NumPublicConnections, const FString& SessionName, const FString& Password);
+
+    // Fase 5 — bPrivate=true genera un código aleatorio internamente (ver GetGeneratedSessionCode);
+    // bPrivate=false crea una sesión pública sin código, visible en FindSessions sin filtrar.
+    void CreateSession(int32 NumPublicConnections, const FString& SessionName, bool bPrivate);
     void FindSessions(int32 MaxSearchResults);
     void JoinSession(const FOnlineSessionSearchResult& SessionResult, const FString& Password);
+
+    // Fase 5 — busca entre las sesiones anunciadas la que coincide con este código de invitación
+    // y, si la encuentra, se une directamente (sin pasar por una lista visible).
+    // Si no hay coincidencia, OnJoinSessionComplete dispara con SessionDoesNotExist.
+    void JoinSessionByCode(const FString& Code);
+
     void DestroySession();
     void StartSession();
 
@@ -49,10 +58,14 @@ public:
     bool GetResolvedConnectString(FString& OutConnectString) const;
 
     // Getters de estado (para UI / PlayerController)
-    FString GetPendingJoinPassword()  const { return PendingJoinPassword;  }
-    FString GetPendingHostPassword()  const { return PendingPassword;      }
-    FString GetPendingSessionName()   const { return PendingSessionName;   }
-    bool    IsLoggedIn()              const { return bIsLoggedIn;          }
+    FString GetPendingJoinPassword()    const { return PendingJoinPassword;  }
+    FString GetPendingHostPassword()    const { return PendingPassword;      }
+    FString GetPendingSessionName()     const { return PendingSessionName;   }
+    bool    IsLoggedIn()                const { return bIsLoggedIn;          }
+
+    // Fase 5 — código de invitación recién generado para la sesión propia (vacío si es pública).
+    // Mostrar al host tras OnCreateSessionComplete(true) para que lo copie y comparta.
+    FString GetGeneratedSessionCode()   const { return PendingPassword;      }
 
     // Helpers estáticos para leer settings de un resultado de búsqueda
     static FString GetServerNameFromResult(const FOnlineSessionSearchResult& Result);
@@ -103,19 +116,27 @@ private:
     bool    bCreateSessionOnDestroy   = false;  // si había sesión vieja, destruir y recrear
     int32   PendingNumPublicConnections = 0;
     FString PendingSessionName;
-    FString PendingPassword;        // contraseña que guarda el host (NO se publica en OSS)
-    FString PendingJoinPassword;    // contraseña que el cliente envía al hacer join
+    FString PendingPassword;        // código/contraseña que guarda el host (NO se publica en OSS)
+    FString PendingJoinPassword;    // código/contraseña que el cliente envía al hacer join
+
+    // Fase 5 — true mientras un FindSessions en curso es para JoinSessionByCode (no para
+    // poblar la lista pública); HandleFindSessionsComplete bifurca según este flag.
+    bool    bSearchingByCode = false;
+    FString PendingJoinCode;
 
     // Claves de settings de sesión (definidas como FName para evitar typos)
     static const FName KEY_SERVER_NAME;
     static const FName KEY_HAS_PASSWORD;
     static const FName KEY_MATCH_TYPE;
+    static const FName KEY_CODE_HASH;    // Fase 5 — hash del código; nunca se anuncia en claro
 
     // Helpers privados
     IOnlineSessionPtr GetSessions() const;
     bool IsUsingNullSubsystem() const;                   // true → LAN (NULL subsystem)
     static FString HashPassword(const FString& Plain);   // MD5 simple; reforzar en producción
+    static FString GenerateSessionCode();                // Fase 5 — código aleatorio de 6 caracteres
     void InternalCreateSession();                        // crea de verdad tras login/destroy
+    void InternalFindSessions(int32 MaxSearchResults);    // Find compartido por FindSessions y JoinSessionByCode
 
 #if !UE_BUILD_SHIPPING
     // ------------------------------------------------------------------
@@ -128,6 +149,7 @@ private:
     IConsoleCommand* DebugCmd_CreateSession  = nullptr;
     IConsoleCommand* DebugCmd_FindSessions   = nullptr;
     IConsoleCommand* DebugCmd_JoinSession    = nullptr;
+    IConsoleCommand* DebugCmd_JoinByCode     = nullptr;
     IConsoleCommand* DebugCmd_DestroySession = nullptr;
 
     // Caché de resultados para PT.Debug.Join [índice]
