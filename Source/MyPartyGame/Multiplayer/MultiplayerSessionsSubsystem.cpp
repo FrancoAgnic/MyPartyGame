@@ -5,7 +5,8 @@
 #include "MultiplayerSessionsSubsystem.h"
 #include "OnlineSubsystem.h"
 #include "OnlineSubsystemUtils.h"
-#include "OnlineSessionSettings.h"              // FOnlineSessionSettings, SEARCH_PRESENCE (UE 5.8)
+#include "OnlineSessionSettings.h"              // FOnlineSessionSettings
+#include "Online/OnlineSessionNames.h"          // SEARCH_LOBBIES
 #include "Interfaces/OnlineIdentityInterface.h"
 #include "Misc/SecureHash.h"                    // FMD5
 
@@ -212,13 +213,12 @@ void UMultiplayerSessionsSubsystem::InternalCreateSession()
     LastSessionSettings->NumPublicConnections   = PendingNumPublicConnections;
     LastSessionSettings->bAllowJoinInProgress   = true;
     LastSessionSettings->bShouldAdvertise       = true;
-    // Presence y lobbies solo en backends que los soportan (Steam). NULL los ignora o rompe el Find.
-    // bUsesPresence/bAllowJoinViaPresence son para sesiones visibles solo entre amigos de Steam
-    // (estilo "unirse vía overlay"). Este template quiere sesiones públicas buscables por cualquiera,
-    // así que van en false; solo bUseLobbiesIfAvailable queda en true para que Steam las liste.
-    LastSessionSettings->bUsesPresence          = false;
+    // Steam exige bUsesPresence == bUseLobbiesIfAvailable (si no coinciden, CreateSession falla
+    // con "the values... have to match"). bAllowJoinViaPresence es para el botón "unirse" del
+    // overlay de Steam, no restringe el FindSessions normal a amigos — se deja igual a los otros.
+    LastSessionSettings->bUsesPresence          = !bIsNULL;
     LastSessionSettings->bUseLobbiesIfAvailable = !bIsNULL;
-    LastSessionSettings->bAllowJoinViaPresence  = false;
+    LastSessionSettings->bAllowJoinViaPresence  = !bIsNULL;
     LastSessionSettings->BuildUniqueId          = 1;
 
     // Nombre visible elegido por el usuario (el FName interno siempre es NAME_GameSession)
@@ -335,10 +335,13 @@ void UMultiplayerSessionsSubsystem::InternalFindSessions(int32 MaxSearchResults)
     LastSessionSearch                    = MakeShareable(new FOnlineSessionSearch());
     LastSessionSearch->MaxSearchResults  = MaxSearchResults;
     LastSessionSearch->bIsLanQuery       = IsUsingNullSubsystem();
-    // Sin filtro de "presence": ese filtro es para sesiones visibles solo entre amigos de Steam.
-    // Este template quiere que cualquiera pueda encontrar una sesión pública, sin ser amigos
-    // (confirmado en pruebas: con el filtro puesto, FindSessions no encontraba sesiones reales
-    // creadas con bUseLobbiesIfAvailable=true).
+    // Las sesiones se crean como Steam Lobbies (bUseLobbiesIfAvailable=true en InternalCreateSession);
+    // sin este filtro, FOnlineSessionSteam::FindInternetSession busca en la lista de game servers
+    // dedicados en vez de lobbies, y nunca encuentra nada aunque la sesión exista de verdad.
+    if (!IsUsingNullSubsystem())
+    {
+        LastSessionSearch->QuerySettings.Set(SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);
+    }
 
     FindSessionsCompleteHandle = GetSessions()->AddOnFindSessionsCompleteDelegate_Handle(
         FOnFindSessionsCompleteDelegate::CreateUObject(
