@@ -213,9 +213,12 @@ void UMultiplayerSessionsSubsystem::InternalCreateSession()
     LastSessionSettings->bAllowJoinInProgress   = true;
     LastSessionSettings->bShouldAdvertise       = true;
     // Presence y lobbies solo en backends que los soportan (Steam). NULL los ignora o rompe el Find.
-    LastSessionSettings->bUsesPresence          = !bIsNULL;
+    // bUsesPresence/bAllowJoinViaPresence son para sesiones visibles solo entre amigos de Steam
+    // (estilo "unirse vía overlay"). Este template quiere sesiones públicas buscables por cualquiera,
+    // así que van en false; solo bUseLobbiesIfAvailable queda en true para que Steam las liste.
+    LastSessionSettings->bUsesPresence          = false;
     LastSessionSettings->bUseLobbiesIfAvailable = !bIsNULL;
-    LastSessionSettings->bAllowJoinViaPresence  = !bIsNULL;
+    LastSessionSettings->bAllowJoinViaPresence  = false;
     LastSessionSettings->BuildUniqueId          = 1;
 
     // Nombre visible elegido por el usuario (el FName interno siempre es NAME_GameSession)
@@ -332,11 +335,10 @@ void UMultiplayerSessionsSubsystem::InternalFindSessions(int32 MaxSearchResults)
     LastSessionSearch                    = MakeShareable(new FOnlineSessionSearch());
     LastSessionSearch->MaxSearchResults  = MaxSearchResults;
     LastSessionSearch->bIsLanQuery       = IsUsingNullSubsystem();
-    // El filtro "presence" solo aplica a backends que lo soportan (Steam). En NULL rompe el Find.
-    if (!IsUsingNullSubsystem())
-    {
-        LastSessionSearch->QuerySettings.Set(FName(TEXT("presence")), true, EOnlineComparisonOp::Equals);
-    }
+    // Sin filtro de "presence": ese filtro es para sesiones visibles solo entre amigos de Steam.
+    // Este template quiere que cualquiera pueda encontrar una sesión pública, sin ser amigos
+    // (confirmado en pruebas: con el filtro puesto, FindSessions no encontraba sesiones reales
+    // creadas con bUseLobbiesIfAvailable=true).
 
     FindSessionsCompleteHandle = GetSessions()->AddOnFindSessionsCompleteDelegate_Handle(
         FOnFindSessionsCompleteDelegate::CreateUObject(
