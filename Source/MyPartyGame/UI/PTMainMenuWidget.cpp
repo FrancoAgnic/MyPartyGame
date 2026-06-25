@@ -4,7 +4,9 @@
 #include "MultiplayerSessionsSubsystem.h"
 #include "PTCreateSessionWidget.h"
 #include "PTFindSessionsWidget.h"
+#include "PTGameInstance.h"
 #include "Components/Button.h"
+#include "Components/TextBlock.h"
 #include "Kismet/KismetSystemLibrary.h"
 
 // ==========================================================================
@@ -41,6 +43,17 @@ void UPTMainMenuWidget::MenuSetup(int32 InNumPublicConnections, FString InLobbyP
             InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
             PC->SetInputMode(InputMode);
             PC->SetShowMouseCursor(true);
+        }
+    }
+
+    // Fase 4 — Mostrar error de conexión previo si lo hay (ej: contraseña incorrecta).
+    if (UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance()))
+    {
+        const FString Err = GI->ConsumePendingConnectError();
+        if (!Err.IsEmpty())
+        {
+            if (ErrorText) ErrorText->SetText(FText::FromString(Err));
+            UE_LOG(LogTemp, Warning, TEXT("[Menu] Error de conexión: %s"), *Err);
         }
     }
 
@@ -121,8 +134,20 @@ void UPTMainMenuWidget::OnCreateSession(bool bWasSuccessful)
     if (UWorld* World = GetWorld())
     {
         MenuTearDown();
-        // Host viaja al lobby como listen server.
-        World->ServerTravel(LobbyPath + TEXT("?listen"));
+
+        // Host viaja al lobby como listen server. Su propia conexión local también
+        // pasa por PreLogin, así que si la sesión tiene contraseña hay que incluirla
+        // o PTLobbyGameMode::PreLogin rechaza al propio host.
+        FString TravelURL = LobbyPath + TEXT("?listen");
+        if (Sessions)
+        {
+            const FString HostPassword = Sessions->GetPendingHostPassword();
+            if (!HostPassword.IsEmpty())
+            {
+                TravelURL += TEXT("?Password=") + HostPassword;
+            }
+        }
+        World->ServerTravel(TravelURL);
     }
 }
 

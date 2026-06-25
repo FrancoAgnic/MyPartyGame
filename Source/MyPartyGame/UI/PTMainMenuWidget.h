@@ -6,7 +6,10 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Interfaces/OnlineSessionInterface.h"
+#include "PTGameInstance.h"
 #include "PTMainMenuWidget.generated.h"
+
+class UTextBlock;
 
 class UButton;
 class UMultiplayerSessionsSubsystem;
@@ -42,6 +45,9 @@ protected:
     // Sub-paneles opcionales incrustados en el WBP
     UPROPERTY(meta = (BindWidgetOptional)) UPTCreateSessionWidget* CreatePanel;
     UPROPERTY(meta = (BindWidgetOptional)) UPTFindSessionsWidget*  FindPanel;
+
+    // Fase 4 — Texto de error de conexión (ej: "Contraseña incorrecta")
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* ErrorText;
 
     // ------------------------------------------------------------------
     // Handlers de botones

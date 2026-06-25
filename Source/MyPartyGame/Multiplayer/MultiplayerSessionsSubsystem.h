@@ -50,12 +50,17 @@ public:
 
     // Getters de estado (para UI / PlayerController)
     FString GetPendingJoinPassword()  const { return PendingJoinPassword;  }
+    FString GetPendingHostPassword()  const { return PendingPassword;      }
     FString GetPendingSessionName()   const { return PendingSessionName;   }
     bool    IsLoggedIn()              const { return bIsLoggedIn;          }
 
     // Helpers estáticos para leer settings de un resultado de búsqueda
     static FString GetServerNameFromResult(const FOnlineSessionSearchResult& Result);
     static bool    GetHasPasswordFromResult(const FOnlineSessionSearchResult& Result);
+
+    // Fase 4 — Compara un intento de contraseña contra la del host.
+    // Devuelve true si coincide, o si el host no puso contraseña.
+    bool DoesHostPasswordMatch(const FString& Attempt) const;
 
     // ------------------------------------------------------------------
     // Delegates hacia la UI — suscribirse a estos, no a los de OSS

@@ -483,6 +483,12 @@ bool UMultiplayerSessionsSubsystem::GetResolvedConnectString(FString& OutConnect
     return SessionInterface->GetResolvedConnectString(NAME_GameSession, OutConnectString);
 }
 
+bool UMultiplayerSessionsSubsystem::DoesHostPasswordMatch(const FString& Attempt) const
+{
+    if (PendingPassword.IsEmpty()) return true;   // sesión sin contraseña: aceptar a todos
+    return HashPassword(Attempt) == HashPassword(PendingPassword);
+}
+
 FString UMultiplayerSessionsSubsystem::GetServerNameFromResult(const FOnlineSessionSearchResult& Result)
 {
     FString Out;
