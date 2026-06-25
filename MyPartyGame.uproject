@@ -44,11 +44,7 @@
 			"Enabled": true
 		},
 		{
-			"Name": "OnlineSubsystemEOS",
-			"Enabled": true
-		},
-		{
-			"Name": "EOSShared",
+			"Name": "OnlineSubsystemSteam",
 			"Enabled": true
 		},
 		{

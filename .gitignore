@@ -40,3 +40,9 @@ git_last_push.log
 .vs/
 .vscode/
 .idea/
+
+# Secretos por plataforma (claves API, etc.) - no van al repo
+Config/Windows/
+
+# Builds empaquetados (binarios grandes, no se trackean en git)
+Packaged/

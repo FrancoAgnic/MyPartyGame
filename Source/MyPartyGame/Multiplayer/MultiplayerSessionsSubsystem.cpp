@@ -91,7 +91,7 @@ FString UMultiplayerSessionsSubsystem::HashPassword(const FString& Plain)
 }
 
 // ==========================================================================
-// LOGIN — agnóstico (NULL resuelve al instante, EOS autentica de verdad)
+// LOGIN — agnóstico (NULL resuelve al instante, Steam autentica contra la cuenta local)
 // ==========================================================================
 
 void UMultiplayerSessionsSubsystem::Login()
@@ -126,8 +126,8 @@ void UMultiplayerSessionsSubsystem::Login()
         FOnLoginCompleteDelegate::CreateUObject(this, &UMultiplayerSessionsSubsystem::HandleLoginComplete));
 
     // AutoLogin es el punto de entrada uniforme.
-    // En EOS, el método concreto (Device ID / Account Portal) se configura por .ini en la Fase 7
-    // sin tocar este código — así se mantiene el agnosticismo de backend.
+    // En Steam, resuelve contra la cuenta de Steam ya logueada en el cliente local
+    // (sin flujo de UI adicional) — el backend se elige por .ini, este código no cambia.
     if (!Identity->AutoLogin(0))
     {
         Identity->ClearOnLoginCompleteDelegate_Handle(0, LoginCompleteHandle);
@@ -194,11 +194,11 @@ void UMultiplayerSessionsSubsystem::InternalCreateSession()
 {
     LastSessionSettings = MakeShareable(new FOnlineSessionSettings());
     const bool bIsNULL = IsUsingNullSubsystem();
-    LastSessionSettings->bIsLANMatch            = bIsNULL;   // true en NULL, false en EOS
+    LastSessionSettings->bIsLANMatch            = bIsNULL;   // true en NULL, false en Steam
     LastSessionSettings->NumPublicConnections   = PendingNumPublicConnections;
     LastSessionSettings->bAllowJoinInProgress   = true;
     LastSessionSettings->bShouldAdvertise       = true;
-    // Presence y lobbies solo en backends que los soportan (EOS). NULL los ignora o rompe el Find.
+    // Presence y lobbies solo en backends que los soportan (Steam). NULL los ignora o rompe el Find.
     LastSessionSettings->bUsesPresence          = !bIsNULL;
     LastSessionSettings->bUseLobbiesIfAvailable = !bIsNULL;
     LastSessionSettings->bAllowJoinViaPresence  = !bIsNULL;
@@ -274,7 +274,7 @@ void UMultiplayerSessionsSubsystem::FindSessions(int32 MaxSearchResults)
     LastSessionSearch                    = MakeShareable(new FOnlineSessionSearch());
     LastSessionSearch->MaxSearchResults  = MaxSearchResults;
     LastSessionSearch->bIsLanQuery       = IsUsingNullSubsystem();
-    // El filtro "presence" solo aplica a backends que lo soportan (EOS). En NULL rompe el Find.
+    // El filtro "presence" solo aplica a backends que lo soportan (Steam). En NULL rompe el Find.
     if (!IsUsingNullSubsystem())
     {
         LastSessionSearch->QuerySettings.Set(FName(TEXT("presence")), true, EOnlineComparisonOp::Equals);
