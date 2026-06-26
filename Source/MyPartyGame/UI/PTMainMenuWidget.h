@@ -15,6 +15,7 @@ class UButton;
 class UMultiplayerSessionsSubsystem;
 class UPTCreateSessionWidget;
 class UPTFindSessionsWidget;
+class UPTSettingsWidget;
 
 UCLASS()
 class MYPARTYGAME_API UPTMainMenuWidget : public UUserWidget
@@ -42,9 +43,13 @@ protected:
     UPROPERTY(meta = (BindWidget))         UButton* FindButton;
     UPROPERTY(meta = (BindWidget))         UButton* QuitButton;
 
+    // Opcional: si el WBP todavía no tiene el botón de Settings, simplemente no aparece.
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* SettingsButton;
+
     // Sub-paneles opcionales incrustados en el WBP
     UPROPERTY(meta = (BindWidgetOptional)) UPTCreateSessionWidget* CreatePanel;
     UPROPERTY(meta = (BindWidgetOptional)) UPTFindSessionsWidget*  FindPanel;
+    UPROPERTY(meta = (BindWidgetOptional)) UPTSettingsWidget*      SettingsPanel;
 
     // Fase 4 — Texto de error de conexión (ej: "Contraseña incorrecta")
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* ErrorText;
@@ -59,6 +64,7 @@ protected:
     UFUNCTION() void OnHostClicked();
     UFUNCTION() void OnFindClicked();
     UFUNCTION() void OnQuitClicked();
+    UFUNCTION() void OnSettingsClicked();
 
     // ------------------------------------------------------------------
     // Callbacks de los delegates del subsistema

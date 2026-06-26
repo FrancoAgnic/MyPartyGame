@@ -4,6 +4,8 @@
 #include "MultiplayerSessionsSubsystem.h"
 #include "PTCreateSessionWidget.h"
 #include "PTFindSessionsWidget.h"
+#include "PTSettingsWidget.h"
+#include "PTGameUserSettings.h"
 #include "PTGameInstance.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
@@ -18,9 +20,10 @@ bool UPTMainMenuWidget::Initialize()
 {
     if (!Super::Initialize()) return false;
 
-    if (HostButton) HostButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnHostClicked);
-    if (FindButton) FindButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnFindClicked);
-    if (QuitButton) QuitButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnQuitClicked);
+    if (HostButton)     HostButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnHostClicked);
+    if (FindButton)     FindButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnFindClicked);
+    if (QuitButton)     QuitButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnQuitClicked);
+    if (SettingsButton) SettingsButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnSettingsClicked);
 
     return true;
 }
@@ -33,6 +36,12 @@ void UPTMainMenuWidget::MenuSetup(int32 InNumPublicConnections, FString InLobbyP
     AddToViewport();
     SetVisibility(ESlateVisibility::Visible);
     SetIsFocusable(true);
+
+    // Settings persistentes (volumen/idioma): aplicar lo guardado al volver al menú.
+    if (UPTGameUserSettings* Settings = UPTGameUserSettings::Get())
+    {
+        Settings->ApplyAudioAndLanguage(GetWorld());
+    }
 
     // Capturar mouse y bloquear input de juego mientras el menú está abierto.
     if (UWorld* World = GetWorld())
@@ -111,6 +120,11 @@ void UPTMainMenuWidget::OnQuitClicked()
 {
     if (APlayerController* PC = GetOwningPlayer())
         UKismetSystemLibrary::QuitGame(GetWorld(), PC, EQuitPreference::Quit, false);
+}
+
+void UPTMainMenuWidget::OnSettingsClicked()
+{
+    if (SettingsPanel) SettingsPanel->ShowPanel();
 }
 
 // ==========================================================================
