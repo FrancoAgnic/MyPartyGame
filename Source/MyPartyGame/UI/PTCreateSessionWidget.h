@@ -1,5 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-// Fase 2 — Panel para ingresar nombre, contraseña y máx. jugadores al crear sesión.
+// Fase 2/5 — Panel para elegir privacidad y máx. jugadores al crear sesión.
+// El nombre de la sala NO se pide aquí: se autogenera del nombre de Steam del host.
 
 #pragma once
 #include "CoreMinimal.h"
@@ -7,7 +8,6 @@
 #include "PTCreateSessionWidget.generated.h"
 
 class UButton;
-class UEditableTextBox;
 class USpinBox;
 class UCheckBox;
 class UMultiplayerSessionsSubsystem;
@@ -25,9 +25,8 @@ public:
 protected:
     virtual bool Initialize() override;
 
-    UPROPERTY(meta = (BindWidget)) UEditableTextBox* NameInput;
-    // Fase 5 — reemplaza al viejo campo de contraseña libre: si está marcado, el subsistema
-    // genera un código aleatorio (ver UMultiplayerSessionsSubsystem::GetGeneratedSessionCode).
+    // Fase 5 — si está marcado, el subsistema genera un código aleatorio
+    // (ver UMultiplayerSessionsSubsystem::GetGeneratedSessionCode).
     UPROPERTY(meta = (BindWidget)) UCheckBox*        PrivateCheckbox;
     UPROPERTY(meta = (BindWidget)) USpinBox*         MaxPlayersInput;
     UPROPERTY(meta = (BindWidget)) UButton*          ConfirmButton;

@@ -39,9 +39,13 @@ public:
     // ------------------------------------------------------------------
     void Login();
 
+    // Tope de jugadores que el template permite por sala; cada juego define su propio mínimo.
+    static constexpr int32 MaxPlayersAllowed = 10;
+
     // Fase 5 — bPrivate=true genera un código aleatorio internamente (ver GetGeneratedSessionCode);
     // bPrivate=false crea una sesión pública sin código, visible en FindSessions sin filtrar.
-    void CreateSession(int32 NumPublicConnections, const FString& SessionName, bool bPrivate);
+    // El nombre de la sala no se pasa: se toma del nombre de Steam del host (GetLocalPlayerDisplayName).
+    void CreateSession(int32 NumPublicConnections, bool bPrivate);
     void FindSessions(int32 MaxSearchResults);
     void JoinSession(const FOnlineSessionSearchResult& SessionResult, const FString& Password);
 
@@ -135,6 +139,7 @@ private:
     bool IsUsingNullSubsystem() const;                   // true → LAN (NULL subsystem)
     static FString HashPassword(const FString& Plain);   // MD5 simple; reforzar en producción
     static FString GenerateSessionCode();                // Fase 5 — código aleatorio de 6 caracteres
+    FString GetLocalPlayerDisplayName() const;            // nombre de Steam del jugador local (host)
     void InternalCreateSession();                        // crea de verdad tras login/destroy
     void InternalFindSessions(int32 MaxSearchResults);    // Find compartido por FindSessions y JoinSessionByCode
 

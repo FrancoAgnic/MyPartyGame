@@ -92,6 +92,19 @@ FString UMultiplayerSessionsSubsystem::HashPassword(const FString& Plain)
     return FMD5::HashAnsiString(*Plain);
 }
 
+FString UMultiplayerSessionsSubsystem::GetLocalPlayerDisplayName() const
+{
+    if (IOnlineSubsystem* Subsystem = Online::GetSubsystem(GetWorld()))
+    {
+        if (IOnlineIdentityPtr Identity = Subsystem->GetIdentityInterface())
+        {
+            const FString Nickname = Identity->GetPlayerNickname(0);
+            if (!Nickname.IsEmpty()) return Nickname;
+        }
+    }
+    return TEXT("Player");
+}
+
 FString UMultiplayerSessionsSubsystem::GenerateSessionCode()
 {
     // Alfabeto sin caracteres ambiguos (sin I/L/O/0/1) para que sea fácil de dictar/transcribir.
@@ -172,8 +185,7 @@ void UMultiplayerSessionsSubsystem::HandleLoginComplete(
 // CREATE SESSION
 // ==========================================================================
 
-void UMultiplayerSessionsSubsystem::CreateSession(
-    int32 NumPublicConnections, const FString& SessionName, bool bPrivate)
+void UMultiplayerSessionsSubsystem::CreateSession(int32 NumPublicConnections, bool bPrivate)
 {
     if (!GetSessions().IsValid())
     {
@@ -188,8 +200,10 @@ void UMultiplayerSessionsSubsystem::CreateSession(
         return;
     }
 
-    PendingNumPublicConnections = NumPublicConnections;
-    PendingSessionName          = SessionName;
+    // Tope de jugadores fijado por el template (cada juego define su mínimo, no el template).
+    PendingNumPublicConnections = FMath::Clamp(NumPublicConnections, 1, MaxPlayersAllowed);
+    // El nombre de sala no lo tipea el usuario: es el nombre de Steam del host.
+    PendingSessionName          = GetLocalPlayerDisplayName();
     // Fase 5 — el código nunca lo escribe el usuario: se genera acá si la sesión es privada.
     PendingPassword             = bPrivate ? GenerateSessionCode() : FString();
 
@@ -609,18 +623,17 @@ void UMultiplayerSessionsSubsystem::RegisterDebugCommands()
         FConsoleCommandDelegate::CreateUObject(this, &UMultiplayerSessionsSubsystem::Login),
         ECVF_Default);
 
-    // PT.Debug.Create [Nombre] [Privada=0/1] [MaxJugadores]
+    // PT.Debug.Create [Privada=0/1] [MaxJugadores]
     DebugCmd_CreateSession = IConsoleManager::Get().RegisterConsoleCommand(
         TEXT("PT.Debug.Create"),
-        TEXT("[Fase1/5 Debug] Crear sesión. Args: [Nombre=TestRoom] [Privada=0] [Max=4]"),
+        TEXT("[Fase1/5 Debug] Crear sesión (nombre = Steam name del host). Args: [Privada=0] [Max=4]"),
         FConsoleCommandWithArgsDelegate::CreateLambda([this](const TArray<FString>& Args)
         {
-            const FString Name      = Args.Num() > 0 ? Args[0] : TEXT("TestRoom");
-            const bool    bPrivate  = Args.Num() > 1 && Args[1] != TEXT("0");
-            const int32   Max       = Args.Num() > 2 ? FCString::Atoi(*Args[2]) : 4;
-            UE_LOG(LogPTSessions, Log, TEXT("[Debug] CreateSession(%s, privada=%s, %d)"),
-                *Name, bPrivate ? TEXT("SÍ") : TEXT("NO"), Max);
-            CreateSession(Max, Name, bPrivate);
+            const bool    bPrivate  = Args.Num() > 0 && Args[0] != TEXT("0");
+            const int32   Max       = Args.Num() > 1 ? FCString::Atoi(*Args[1]) : 4;
+            UE_LOG(LogPTSessions, Log, TEXT("[Debug] CreateSession(privada=%s, %d)"),
+                bPrivate ? TEXT("SÍ") : TEXT("NO"), Max);
+            CreateSession(Max, bPrivate);
         }),
         ECVF_Default);
 

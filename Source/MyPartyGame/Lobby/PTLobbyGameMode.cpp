@@ -60,5 +60,18 @@ void APTLobbyGameMode::Logout(AController* Exiting)
 {
     --PlayersJoined;
     UE_LOG(LogTemp, Log, TEXT("[Lobby] Logout. Jugadores conectados: %d"), PlayersJoined);
+
+    // Se fue el último jugador: no dejar la sesión como sala fantasma.
+    // (La migración de host —cuando se va el host pero quedan otros— es trabajo aparte, todavía no hecho.)
+    if (PlayersJoined <= 0)
+    {
+        if (UMultiplayerSessionsSubsystem* Sessions =
+                GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>())
+        {
+            UE_LOG(LogTemp, Log, TEXT("[Lobby] Último jugador se fue, destruyendo la sesión."));
+            Sessions->DestroySession();
+        }
+    }
+
     Super::Logout(Exiting);
 }

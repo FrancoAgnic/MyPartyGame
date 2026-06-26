@@ -97,7 +97,7 @@ void UPTMainMenuWidget::OnHostClicked()
     else if (Sessions)
     {
         // Fallback si no hay CreatePanel en el WBP: crear pública con valores por defecto.
-        Sessions->CreateSession(NumPublicConnections, TEXT("TestRoom"), false);
+        Sessions->CreateSession(NumPublicConnections, false);
     }
 }
 
