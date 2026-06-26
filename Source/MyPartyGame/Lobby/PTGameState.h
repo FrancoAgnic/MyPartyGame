@@ -28,6 +28,11 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")
     FString SessionDisplayName;
 
+    // Vacío si la sala es pública. Replicado para que cualquier jugador (no solo el host)
+    // pueda verlo y compartirlo con quien todavía no se unió.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")
+    FString SessionCode;
+
     UFUNCTION()
     void OnRep_LobbyState();
 

@@ -21,6 +21,23 @@ APTLobbyGameMode::APTLobbyGameMode()
     bDelayedStart         = true;
 }
 
+void APTLobbyGameMode::BeginPlay()
+{
+    Super::BeginPlay();
+
+    // El nombre/código de sala vive en el subsistema del host (= GameInstance del servidor
+    // en listen-server); se replica a GameState para que cualquier jugador lo pueda ver.
+    if (APTGameState* PTGS = GetGameState<APTGameState>())
+    {
+        if (UMultiplayerSessionsSubsystem* Sessions =
+                GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>())
+        {
+            PTGS->SessionDisplayName = Sessions->GetPendingSessionName();
+            PTGS->SessionCode        = Sessions->GetGeneratedSessionCode();
+        }
+    }
+}
+
 void APTLobbyGameMode::PreLogin(const FString& Options, const FString& Address,
                                 const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
 {

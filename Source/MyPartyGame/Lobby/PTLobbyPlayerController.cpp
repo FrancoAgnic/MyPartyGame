@@ -1,7 +1,10 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "PTLobbyPlayerController.h"
+#include "PTLobbyEscapeMenuWidget.h"
 #include "EnhancedInputSubsystems.h"
+#include "EnhancedInputComponent.h"
+#include "InputActionValue.h"
 
 void APTLobbyPlayerController::BeginPlay()
 {
@@ -21,4 +24,31 @@ void APTLobbyPlayerController::BeginPlay()
         SetInputMode(FInputModeGameOnly());
         SetShowMouseCursor(false);
     }
+}
+
+void APTLobbyPlayerController::SetupInputComponent()
+{
+    Super::SetupInputComponent();
+
+    if (UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(InputComponent))
+    {
+        if (EscapeMenuAction)
+        {
+            EnhancedInput->BindAction(EscapeMenuAction, ETriggerEvent::Started,
+                this, &APTLobbyPlayerController::ToggleEscapeMenu);
+        }
+    }
+}
+
+void APTLobbyPlayerController::ToggleEscapeMenu(const FInputActionValue& Value)
+{
+    if (!IsLocalController() || !EscapeMenuWidgetClass) return;
+
+    if (!EscapeMenuWidget)
+    {
+        EscapeMenuWidget = CreateWidget<UPTLobbyEscapeMenuWidget>(this, EscapeMenuWidgetClass);
+        if (EscapeMenuWidget) EscapeMenuWidget->AddToViewport();
+    }
+
+    if (EscapeMenuWidget) EscapeMenuWidget->ToggleMenu();
 }

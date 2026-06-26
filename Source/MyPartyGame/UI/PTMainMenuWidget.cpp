@@ -4,6 +4,7 @@
 #include "MultiplayerSessionsSubsystem.h"
 #include "PTCreateSessionWidget.h"
 #include "PTFindSessionsWidget.h"
+#include "PTEnterCodeWidget.h"
 #include "PTSettingsWidget.h"
 #include "PTGameUserSettings.h"
 #include "PTGameInstance.h"
@@ -20,10 +21,21 @@ bool UPTMainMenuWidget::Initialize()
 {
     if (!Super::Initialize()) return false;
 
-    if (HostButton)     HostButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnHostClicked);
-    if (FindButton)     FindButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnFindClicked);
-    if (QuitButton)     QuitButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnQuitClicked);
-    if (SettingsButton) SettingsButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnSettingsClicked);
+    if (PlayButton)      PlayButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnPlayClicked);
+    if (HostButton)      HostButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnHostClicked);
+    if (FindButton)      FindButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnFindClicked);
+    if (EnterCodeButton) EnterCodeButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnEnterCodeClicked);
+    if (QuitButton)      QuitButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnQuitClicked);
+    if (SettingsButton)  SettingsButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnSettingsClicked);
+
+    // Si hay un PlayButton, Host/Find/EnterCode arrancan ocultos hasta tocarlo.
+    // Si el WBP todavía no tiene PlayButton, quedan visibles (comportamiento previo).
+    if (PlayButton)
+    {
+        if (HostButton)      HostButton->SetVisibility(ESlateVisibility::Collapsed);
+        if (FindButton)      FindButton->SetVisibility(ESlateVisibility::Collapsed);
+        if (EnterCodeButton) EnterCodeButton->SetVisibility(ESlateVisibility::Collapsed);
+    }
 
     return true;
 }
@@ -96,6 +108,17 @@ void UPTMainMenuWidget::NativeDestruct()
 // Handlers de botones
 // ==========================================================================
 
+void UPTMainMenuWidget::OnPlayClicked()
+{
+    // Revela Host/Find/EnterCode (alterna: si ya están visibles, los vuelve a ocultar).
+    const bool bReveal = HostButton && HostButton->GetVisibility() == ESlateVisibility::Collapsed;
+    const ESlateVisibility NewVisibility = bReveal ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
+
+    if (HostButton)      HostButton->SetVisibility(NewVisibility);
+    if (FindButton)      FindButton->SetVisibility(NewVisibility);
+    if (EnterCodeButton) EnterCodeButton->SetVisibility(NewVisibility);
+}
+
 void UPTMainMenuWidget::OnHostClicked()
 {
     if (CreatePanel)
@@ -114,6 +137,11 @@ void UPTMainMenuWidget::OnFindClicked()
 {
     if (FindPanel) FindPanel->ShowPanel();
     if (Sessions)  Sessions->FindSessions(20);
+}
+
+void UPTMainMenuWidget::OnEnterCodeClicked()
+{
+    if (EnterCodePanel) EnterCodePanel->ShowPanel();
 }
 
 void UPTMainMenuWidget::OnQuitClicked()

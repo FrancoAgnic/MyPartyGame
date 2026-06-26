@@ -17,6 +17,7 @@ class MYPARTYGAME_API APTLobbyGameMode : public AGameMode
 public:
     APTLobbyGameMode();
 
+    virtual void BeginPlay() override;
     virtual void PreLogin(const FString& Options, const FString& Address,
                           const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
     virtual void PostLogin(APlayerController* NewPlayer) override;

@@ -10,7 +10,6 @@
 
 class UScrollBox;
 class UButton;
-class UEditableTextBox;
 class UPTSessionRowWidget;
 class UMultiplayerSessionsSubsystem;
 
@@ -37,17 +36,12 @@ protected:
     UPROPERTY(meta = (BindWidget)) UButton*    RefreshButton;
     UPROPERTY(meta = (BindWidget)) UButton*    BackButton;
 
-    // Fase 5 — pestaña "unirse con código": pegar el código y unirse directo, sin lista.
-    UPROPERTY(meta = (BindWidget)) UEditableTextBox* CodeInput;
-    UPROPERTY(meta = (BindWidget)) UButton*          JoinByCodeButton;
-
     /** Clase del widget de fila. Asignar en el WBP derivado. */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sessions")
     TSubclassOf<UPTSessionRowWidget> RowWidgetClass;
 
     UFUNCTION() void OnRefreshClicked();
     UFUNCTION() void OnBackClicked();
-    UFUNCTION() void OnJoinByCodeClicked();
 
 private:
     UPROPERTY() UMultiplayerSessionsSubsystem* Sessions = nullptr;

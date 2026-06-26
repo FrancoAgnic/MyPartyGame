@@ -5,14 +5,12 @@
 #include "PTSessionRowWidget.h"
 #include "Components/ScrollBox.h"
 #include "Components/Button.h"
-#include "Components/EditableTextBox.h"
 
 bool UPTFindSessionsWidget::Initialize()
 {
     if (!Super::Initialize()) return false;
-    if (RefreshButton)      RefreshButton->OnClicked.AddDynamic(this, &UPTFindSessionsWidget::OnRefreshClicked);
-    if (BackButton)         BackButton->OnClicked.AddDynamic(this, &UPTFindSessionsWidget::OnBackClicked);
-    if (JoinByCodeButton)   JoinByCodeButton->OnClicked.AddDynamic(this, &UPTFindSessionsWidget::OnJoinByCodeClicked);
+    if (RefreshButton) RefreshButton->OnClicked.AddDynamic(this, &UPTFindSessionsWidget::OnRefreshClicked);
+    if (BackButton)    BackButton->OnClicked.AddDynamic(this, &UPTFindSessionsWidget::OnBackClicked);
 
     if (UGameInstance* GI = GetGameInstance())
         Sessions = GI->GetSubsystem<UMultiplayerSessionsSubsystem>();
@@ -35,12 +33,6 @@ void UPTFindSessionsWidget::OnBackClicked()
     SetVisibility(ESlateVisibility::Collapsed);
 }
 
-void UPTFindSessionsWidget::OnJoinByCodeClicked()
-{
-    if (!Sessions || !CodeInput) return;
-    Sessions->JoinSessionByCode(CodeInput->GetText().ToString());
-}
-
 void UPTFindSessionsWidget::PopulateResults(
     const TArray<FOnlineSessionSearchResult>& Results, bool bWasSuccessful)
 {
@@ -60,7 +52,7 @@ void UPTFindSessionsWidget::PopulateResults(
         const int32 Open   = Result.Session.NumOpenPublicConnections;
         const int32 Max    = Result.Session.SessionSettings.NumPublicConnections;
 
-        Row->Init(Result, Name, Max - Open, Max, /*bInHasPassword=*/false);
+        Row->Init(Result, Name, Max - Open, Max);
         ResultsBox->AddChild(Row);
     }
 }

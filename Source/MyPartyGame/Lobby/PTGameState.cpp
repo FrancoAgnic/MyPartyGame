@@ -8,6 +8,7 @@ void APTGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(APTGameState, LobbyState);
     DOREPLIFETIME(APTGameState, SessionDisplayName);
+    DOREPLIFETIME(APTGameState, SessionCode);
 }
 
 void APTGameState::OnRep_LobbyState()

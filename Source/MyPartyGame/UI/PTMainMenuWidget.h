@@ -15,6 +15,7 @@ class UButton;
 class UMultiplayerSessionsSubsystem;
 class UPTCreateSessionWidget;
 class UPTFindSessionsWidget;
+class UPTEnterCodeWidget;
 class UPTSettingsWidget;
 
 UCLASS()
@@ -39,16 +40,20 @@ protected:
     // ------------------------------------------------------------------
     // Botones principales (nombres deben coincidir exactamente en el WBP)
     // ------------------------------------------------------------------
-    UPROPERTY(meta = (BindWidget))         UButton* HostButton;
-    UPROPERTY(meta = (BindWidget))         UButton* FindButton;
+    // Top-level: Play/Settings/Exit. Host/Find/EnterCode se revelan al tocar Play
+    // (si el WBP todavía no tiene PlayButton, quedan visibles como antes — retrocompatible).
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* PlayButton;
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* SettingsButton;
     UPROPERTY(meta = (BindWidget))         UButton* QuitButton;
 
-    // Opcional: si el WBP todavía no tiene el botón de Settings, simplemente no aparece.
-    UPROPERTY(meta = (BindWidgetOptional)) UButton* SettingsButton;
+    UPROPERTY(meta = (BindWidget))         UButton* HostButton;
+    UPROPERTY(meta = (BindWidget))         UButton* FindButton;
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* EnterCodeButton;
 
     // Sub-paneles opcionales incrustados en el WBP
     UPROPERTY(meta = (BindWidgetOptional)) UPTCreateSessionWidget* CreatePanel;
     UPROPERTY(meta = (BindWidgetOptional)) UPTFindSessionsWidget*  FindPanel;
+    UPROPERTY(meta = (BindWidgetOptional)) UPTEnterCodeWidget*     EnterCodePanel;
     UPROPERTY(meta = (BindWidgetOptional)) UPTSettingsWidget*      SettingsPanel;
 
     // Fase 4 — Texto de error de conexión (ej: "Contraseña incorrecta")
@@ -61,8 +66,10 @@ protected:
     // ------------------------------------------------------------------
     // Handlers de botones
     // ------------------------------------------------------------------
+    UFUNCTION() void OnPlayClicked();
     UFUNCTION() void OnHostClicked();
     UFUNCTION() void OnFindClicked();
+    UFUNCTION() void OnEnterCodeClicked();
     UFUNCTION() void OnQuitClicked();
     UFUNCTION() void OnSettingsClicked();
 
