@@ -22,20 +22,16 @@ bool UPTMainMenuWidget::Initialize()
     if (!Super::Initialize()) return false;
 
     if (PlayButton)      PlayButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnPlayClicked);
+    if (PlayBackButton)  PlayBackButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnPlayBackClicked);
     if (HostButton)      HostButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnHostClicked);
     if (FindButton)      FindButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnFindClicked);
     if (EnterCodeButton) EnterCodeButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnEnterCodeClicked);
     if (QuitButton)      QuitButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnQuitClicked);
     if (SettingsButton)  SettingsButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnSettingsClicked);
 
-    // Si hay un PlayButton, Host/Find/EnterCode arrancan ocultos hasta tocarlo.
-    // Si el WBP todavía no tiene PlayButton, quedan visibles (comportamiento previo).
-    if (PlayButton)
-    {
-        if (HostButton)      HostButton->SetVisibility(ESlateVisibility::Collapsed);
-        if (FindButton)      FindButton->SetVisibility(ESlateVisibility::Collapsed);
-        if (EnterCodeButton) EnterCodeButton->SetVisibility(ESlateVisibility::Collapsed);
-    }
+    // Si hay un PlayButton, arrancar en la pantalla principal (submenú Host/Find/EnterCode oculto).
+    // Si el WBP todavía no tiene PlayButton, no se toca nada (comportamiento previo, todo visible).
+    if (PlayButton) SetPlaySubmenuVisible(false);
 
     return true;
 }
@@ -110,13 +106,31 @@ void UPTMainMenuWidget::NativeDestruct()
 
 void UPTMainMenuWidget::OnPlayClicked()
 {
-    // Revela Host/Find/EnterCode (alterna: si ya están visibles, los vuelve a ocultar).
-    const bool bReveal = HostButton && HostButton->GetVisibility() == ESlateVisibility::Collapsed;
-    const ESlateVisibility NewVisibility = bReveal ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
+    SetPlaySubmenuVisible(true);
+}
 
-    if (HostButton)      HostButton->SetVisibility(NewVisibility);
-    if (FindButton)      FindButton->SetVisibility(NewVisibility);
-    if (EnterCodeButton) EnterCodeButton->SetVisibility(NewVisibility);
+void UPTMainMenuWidget::OnPlayBackClicked()
+{
+    SetPlaySubmenuVisible(false);
+}
+
+void UPTMainMenuWidget::SetPlaySubmenuVisible(bool bVisible)
+{
+    const ESlateVisibility Shown  = ESlateVisibility::Visible;
+    const ESlateVisibility Hidden = ESlateVisibility::Collapsed;
+
+    // Pantalla "PLAY": Host/Find/EnterCode + su título + Back.
+    if (HostButton)             HostButton->SetVisibility(bVisible ? Shown : Hidden);
+    if (FindButton)             FindButton->SetVisibility(bVisible ? Shown : Hidden);
+    if (EnterCodeButton)        EnterCodeButton->SetVisibility(bVisible ? Shown : Hidden);
+    if (PlayBackButton)         PlayBackButton->SetVisibility(bVisible ? Shown : Hidden);
+    if (PlaySubmenuHeaderPanel) PlaySubmenuHeaderPanel->SetVisibility(bVisible ? Shown : Hidden);
+
+    // Pantalla principal: Play/Settings/Exit + título — se ocultan mientras está abierto "PLAY".
+    if (PlayButton)          PlayButton->SetVisibility(bVisible ? Hidden : Shown);
+    if (SettingsButton)      SettingsButton->SetVisibility(bVisible ? Hidden : Shown);
+    if (QuitButton)          QuitButton->SetVisibility(bVisible ? Hidden : Shown);
+    if (MainMenuHeaderPanel) MainMenuHeaderPanel->SetVisibility(bVisible ? Hidden : Shown);
 }
 
 void UPTMainMenuWidget::OnHostClicked()

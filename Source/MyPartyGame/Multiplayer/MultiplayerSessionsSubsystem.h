@@ -39,7 +39,8 @@ public:
     // ------------------------------------------------------------------
     void Login();
 
-    // Tope de jugadores que el template permite por sala; cada juego define su propio mínimo.
+    // Rango de jugadores que el template permite por sala (UI: Host Game "Range: 2-10").
+    static constexpr int32 MinPlayersAllowed = 2;
     static constexpr int32 MaxPlayersAllowed = 10;
 
     // Fase 5 — bPrivate=true genera un código aleatorio internamente (ver GetGeneratedSessionCode);
@@ -65,6 +66,7 @@ public:
     FString GetPendingJoinPassword()    const { return PendingJoinPassword;  }
     FString GetPendingHostPassword()    const { return PendingPassword;      }
     FString GetPendingSessionName()     const { return PendingSessionName;   }
+    int32   GetPendingMaxPlayers()      const { return PendingNumPublicConnections; }
     bool    IsLoggedIn()                const { return bIsLoggedIn;          }
 
     // Fase 5 — código de invitación recién generado para la sesión propia (vacío si es pública).

@@ -26,6 +26,10 @@ void UPTSessionRowWidget::Init(const FOnlineSessionSearchResult& InResult,
     if (PlayersText)
         PlayersText->SetText(FText::FromString(FString::Printf(TEXT("%d/%d"), InCurrent, InMax)));
 
+    const bool bFull = InCurrent >= InMax;
+    if (JoinButton)     JoinButton->SetIsEnabled(!bFull);
+    if (JoinButtonText) JoinButtonText->SetText(FText::FromString(bFull ? TEXT("FULL") : TEXT("JOIN")));
+
     if (UGameInstance* GI = GetGameInstance())
         Sessions = GI->GetSubsystem<UMultiplayerSessionsSubsystem>();
 }

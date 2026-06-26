@@ -3,16 +3,8 @@
 #include "PTSettingsWidget.h"
 #include "PTGameUserSettings.h"
 #include "Components/Slider.h"
-#include "Components/ComboBoxString.h"
 #include "Components/Button.h"
-
-namespace
-{
-    const TArray<FString> GraphicsLabels = { TEXT("Low"), TEXT("Medium"), TEXT("High"), TEXT("Epic") };
-
-    FString LanguageCodeToLabel(const FString& Code) { return Code == TEXT("es") ? TEXT("Español") : TEXT("English"); }
-    FString LanguageLabelToCode(const FString& Label) { return Label == TEXT("Español") ? TEXT("es") : TEXT("en"); }
-}
+#include "Components/TextBlock.h"
 
 bool UPTSettingsWidget::Initialize()
 {
@@ -25,22 +17,12 @@ bool UPTSettingsWidget::Initialize()
         VolumeSlider->OnValueChanged.AddDynamic(this, &UPTSettingsWidget::OnVolumeChanged);
     }
 
-    if (LanguageCombo)
-    {
-        LanguageCombo->ClearOptions();
-        LanguageCombo->AddOption(TEXT("English"));
-        LanguageCombo->AddOption(TEXT("Español"));
-        LanguageCombo->OnSelectionChanged.AddDynamic(this, &UPTSettingsWidget::OnLanguageChanged);
-    }
-
-    if (GraphicsCombo)
-    {
-        GraphicsCombo->ClearOptions();
-        for (const FString& Label : GraphicsLabels) GraphicsCombo->AddOption(Label);
-        GraphicsCombo->OnSelectionChanged.AddDynamic(this, &UPTSettingsWidget::OnGraphicsChanged);
-    }
-
-    if (BackButton) BackButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnBackClicked);
+    if (EnglishButton) EnglishButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnEnglishClicked);
+    if (SpanishButton) SpanishButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnSpanishClicked);
+    if (LowButton)     LowButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnLowClicked);
+    if (MediumButton)  MediumButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnMediumClicked);
+    if (HighButton)    HighButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnHighClicked);
+    if (BackButton)    BackButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnBackClicked);
 
     return true;
 }
@@ -49,13 +31,12 @@ void UPTSettingsWidget::ShowPanel()
 {
     if (UPTGameUserSettings* Settings = UPTGameUserSettings::Get())
     {
-        if (VolumeSlider)   VolumeSlider->SetValue(Settings->GetMasterVolume());
-        if (LanguageCombo)  LanguageCombo->SetSelectedOption(LanguageCodeToLabel(Settings->GetLanguageCode()));
-        if (GraphicsCombo)
-        {
-            const int32 Quality = FMath::Clamp(Settings->GetGraphicsQuality(), 0, GraphicsLabels.Num() - 1);
-            GraphicsCombo->SetSelectedOption(GraphicsLabels[Quality]);
-        }
+        const float Volume = Settings->GetMasterVolume();
+        if (VolumeSlider)    VolumeSlider->SetValue(Volume);
+        if (VolumeValueText) VolumeValueText->SetText(FText::AsNumber(FMath::RoundToInt(Volume * 100.0f)));
+
+        OnLanguageStateChanged(Settings->GetLanguageCode() != TEXT("es"));
+        OnGraphicsStateChanged(FMath::Clamp(Settings->GetGraphicsQuality(), 0, 2));
     }
 
     SetVisibility(ESlateVisibility::Visible);
@@ -67,24 +48,32 @@ void UPTSettingsWidget::OnVolumeChanged(float NewValue)
     {
         Settings->SetMasterVolume(NewValue);
     }
+    if (VolumeValueText) VolumeValueText->SetText(FText::AsNumber(FMath::RoundToInt(NewValue * 100.0f)));
 }
 
-void UPTSettingsWidget::OnLanguageChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+void UPTSettingsWidget::ApplyLanguage(const FString& Code)
 {
     if (UPTGameUserSettings* Settings = UPTGameUserSettings::Get())
     {
-        Settings->SetLanguageCode(LanguageLabelToCode(SelectedItem));
+        Settings->SetLanguageCode(Code);
     }
+    OnLanguageStateChanged(Code != TEXT("es"));
 }
 
-void UPTSettingsWidget::OnGraphicsChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+void UPTSettingsWidget::ApplyGraphics(int32 Quality)
 {
     if (UPTGameUserSettings* Settings = UPTGameUserSettings::Get())
     {
-        const int32 Quality = GraphicsLabels.IndexOfByKey(SelectedItem);
-        if (Quality != INDEX_NONE) Settings->SetGraphicsQuality(Quality);
+        Settings->SetGraphicsQuality(Quality);
     }
+    OnGraphicsStateChanged(Quality);
 }
+
+void UPTSettingsWidget::OnEnglishClicked() { ApplyLanguage(TEXT("en")); }
+void UPTSettingsWidget::OnSpanishClicked() { ApplyLanguage(TEXT("es")); }
+void UPTSettingsWidget::OnLowClicked()     { ApplyGraphics(0); }
+void UPTSettingsWidget::OnMediumClicked()  { ApplyGraphics(1); }
+void UPTSettingsWidget::OnHighClicked()    { ApplyGraphics(2); }
 
 void UPTSettingsWidget::OnBackClicked()
 {

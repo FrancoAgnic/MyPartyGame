@@ -46,9 +46,16 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UButton* SettingsButton;
     UPROPERTY(meta = (BindWidget))         UButton* QuitButton;
 
+    // Agrupa título+subtítulo de la pantalla principal (se oculta junto con Play/Settings/Exit).
+    UPROPERTY(meta = (BindWidgetOptional)) UWidget* MainMenuHeaderPanel;
+
     UPROPERTY(meta = (BindWidget))         UButton* HostButton;
     UPROPERTY(meta = (BindWidget))         UButton* FindButton;
     UPROPERTY(meta = (BindWidgetOptional)) UButton* EnterCodeButton;
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* PlayBackButton;
+
+    // Agrupa el título "PLAY" del submenú (se muestra junto con Host/Find/EnterCode/Back).
+    UPROPERTY(meta = (BindWidgetOptional)) UWidget* PlaySubmenuHeaderPanel;
 
     // Sub-paneles opcionales incrustados en el WBP
     UPROPERTY(meta = (BindWidgetOptional)) UPTCreateSessionWidget* CreatePanel;
@@ -67,11 +74,14 @@ protected:
     // Handlers de botones
     // ------------------------------------------------------------------
     UFUNCTION() void OnPlayClicked();
+    UFUNCTION() void OnPlayBackClicked();
     UFUNCTION() void OnHostClicked();
     UFUNCTION() void OnFindClicked();
     UFUNCTION() void OnEnterCodeClicked();
     UFUNCTION() void OnQuitClicked();
     UFUNCTION() void OnSettingsClicked();
+
+    void SetPlaySubmenuVisible(bool bVisible);
 
     // ------------------------------------------------------------------
     // Callbacks de los delegates del subsistema

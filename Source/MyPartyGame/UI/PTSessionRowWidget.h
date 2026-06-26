@@ -25,9 +25,11 @@ public:
 protected:
     virtual bool Initialize() override;
 
-    UPROPERTY(meta = (BindWidget)) UTextBlock* NameText;
-    UPROPERTY(meta = (BindWidget)) UTextBlock* PlayersText;
-    UPROPERTY(meta = (BindWidget)) UButton*    JoinButton;
+    UPROPERTY(meta = (BindWidget))         UTextBlock* NameText;
+    UPROPERTY(meta = (BindWidget))         UTextBlock* PlayersText;
+    UPROPERTY(meta = (BindWidget))         UButton*    JoinButton;
+    // Texto del botón Join: si la sala está llena, se cambia a "FULL" y se deshabilita el botón.
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* JoinButtonText;
 
     UFUNCTION() void OnJoinClicked();
 

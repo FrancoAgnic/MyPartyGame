@@ -3,20 +3,16 @@
 #include "PTCreateSessionWidget.h"
 #include "MultiplayerSessionsSubsystem.h"
 #include "Components/Button.h"
-#include "Components/SpinBox.h"
 #include "Components/CheckBox.h"
+#include "Components/TextBlock.h"
 
 bool UPTCreateSessionWidget::Initialize()
 {
     if (!Super::Initialize()) return false;
     if (ConfirmButton) ConfirmButton->OnClicked.AddDynamic(this, &UPTCreateSessionWidget::OnConfirmClicked);
     if (BackButton)    BackButton->OnClicked.AddDynamic(this, &UPTCreateSessionWidget::OnBackClicked);
-
-    if (MaxPlayersInput)
-    {
-        MaxPlayersInput->SetMinValue(1.0f);
-        MaxPlayersInput->SetMaxValue(static_cast<float>(UMultiplayerSessionsSubsystem::MaxPlayersAllowed));
-    }
+    if (MinusButton)   MinusButton->OnClicked.AddDynamic(this, &UPTCreateSessionWidget::OnMinusClicked);
+    if (PlusButton)    PlusButton->OnClicked.AddDynamic(this, &UPTCreateSessionWidget::OnPlusClicked);
 
     return true;
 }
@@ -27,19 +23,37 @@ void UPTCreateSessionWidget::ShowPanel(int32 DefaultMaxPlayers)
         Sessions = GI->GetSubsystem<UMultiplayerSessionsSubsystem>();
 
     if (PrivateCheckbox) PrivateCheckbox->SetIsChecked(false);
-    if (MaxPlayersInput) MaxPlayersInput->SetValue(static_cast<float>(DefaultMaxPlayers));
+
+    CurrentMaxPlayers = FMath::Clamp(DefaultMaxPlayers,
+        UMultiplayerSessionsSubsystem::MinPlayersAllowed, UMultiplayerSessionsSubsystem::MaxPlayersAllowed);
+    RefreshMaxPlayersText();
 
     SetVisibility(ESlateVisibility::Visible);
+}
+
+void UPTCreateSessionWidget::RefreshMaxPlayersText()
+{
+    if (MaxPlayersText) MaxPlayersText->SetText(FText::AsNumber(CurrentMaxPlayers));
+}
+
+void UPTCreateSessionWidget::OnMinusClicked()
+{
+    CurrentMaxPlayers = FMath::Max(UMultiplayerSessionsSubsystem::MinPlayersAllowed, CurrentMaxPlayers - 1);
+    RefreshMaxPlayersText();
+}
+
+void UPTCreateSessionWidget::OnPlusClicked()
+{
+    CurrentMaxPlayers = FMath::Min(UMultiplayerSessionsSubsystem::MaxPlayersAllowed, CurrentMaxPlayers + 1);
+    RefreshMaxPlayersText();
 }
 
 void UPTCreateSessionWidget::OnConfirmClicked()
 {
     if (!Sessions) return;
 
-    const bool  bPrivate = PrivateCheckbox && PrivateCheckbox->IsChecked();
-    const int32 Max      = MaxPlayersInput  ? FMath::RoundToInt(MaxPlayersInput->GetValue()) : 4;
-
-    Sessions->CreateSession(Max, bPrivate);
+    const bool bPrivate = PrivateCheckbox && PrivateCheckbox->IsChecked();
+    Sessions->CreateSession(CurrentMaxPlayers, bPrivate);
 }
 
 void UPTCreateSessionWidget::OnBackClicked()

@@ -34,6 +34,7 @@ void APTLobbyGameMode::BeginPlay()
         {
             PTGS->SessionDisplayName = Sessions->GetPendingSessionName();
             PTGS->SessionCode        = Sessions->GetGeneratedSessionCode();
+            PTGS->MaxPlayers         = Sessions->GetPendingMaxPlayers();
         }
     }
 }

@@ -200,8 +200,8 @@ void UMultiplayerSessionsSubsystem::CreateSession(int32 NumPublicConnections, bo
         return;
     }
 
-    // Tope de jugadores fijado por el template (cada juego define su mínimo, no el template).
-    PendingNumPublicConnections = FMath::Clamp(NumPublicConnections, 1, MaxPlayersAllowed);
+    // Rango de jugadores fijado por el template (cada juego define su propia lógica de mínimo de arranque).
+    PendingNumPublicConnections = FMath::Clamp(NumPublicConnections, MinPlayersAllowed, MaxPlayersAllowed);
     // El nombre de sala no lo tipea el usuario: es el nombre de Steam del host.
     PendingSessionName          = GetLocalPlayerDisplayName();
     // Fase 5 — el código nunca lo escribe el usuario: se genera acá si la sesión es privada.

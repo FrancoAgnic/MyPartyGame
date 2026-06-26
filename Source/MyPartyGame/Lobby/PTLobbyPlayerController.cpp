@@ -2,9 +2,22 @@
 
 #include "PTLobbyPlayerController.h"
 #include "PTLobbyEscapeMenuWidget.h"
+#include "PTGameState.h"
+#include "PTPlayerState.h"
 #include "EnhancedInputSubsystems.h"
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
+
+void APTLobbyPlayerController::Server_RequestStartGame_Implementation()
+{
+    const APTPlayerState* PS = GetPlayerState<APTPlayerState>();
+    if (!PS || !PS->bIsHost) return; // solo el host puede arrancar
+
+    if (APTGameState* PTGS = GetWorld()->GetGameState<APTGameState>())
+    {
+        PTGS->LobbyState = EPTLobbyState::Starting;
+    }
+}
 
 void APTLobbyPlayerController::BeginPlay()
 {

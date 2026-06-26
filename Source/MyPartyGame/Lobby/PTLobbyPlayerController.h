@@ -16,6 +16,15 @@ class MYPARTYGAME_API APTLobbyPlayerController : public APlayerController
 {
     GENERATED_BODY()
 
+public:
+    /**
+     * Hook de arranque del template: solo flippea APTGameState::LobbyState a Starting si quien
+     * llama es el host. El template no decide qué pasa después de eso — eso es trabajo de cada
+     * juego (ver bUseSeamlessTravel en PTLobbyGameMode).
+     */
+    UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Lobby")
+    void Server_RequestStartGame();
+
 protected:
     virtual void BeginPlay() override;
     virtual void SetupInputComponent() override;

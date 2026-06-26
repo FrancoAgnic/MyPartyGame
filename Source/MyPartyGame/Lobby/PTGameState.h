@@ -33,6 +33,10 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")
     FString SessionCode;
 
+    // Tope de jugadores elegido al crear la sesión (para el "4/8" del HUD del lobby).
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")
+    int32 MaxPlayers = 0;
+
     UFUNCTION()
     void OnRep_LobbyState();
 
