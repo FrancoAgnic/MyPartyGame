@@ -200,6 +200,12 @@ void UPTMainMenuWidget::OnJoinSession(EOnJoinSessionCompleteResult::Type Result)
 
         if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
         {
+            // Guardar la URL para que el GameInstance pueda reintentar si la conexión se cae.
+            if (UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance()))
+            {
+                GI->NotifyJoinedServer(TravelURL);
+            }
+
             MenuTearDown();
             // Cliente viaja al servidor con la contraseña en la URL (validación real en Fase 4).
             PC->ClientTravel(TravelURL, ETravelType::TRAVEL_Absolute);

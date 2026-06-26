@@ -14,7 +14,11 @@ APTLobbyGameMode::APTLobbyGameMode()
     PlayerControllerClass = APTLobbyPlayerController::StaticClass();
     PlayerStateClass      = APTPlayerState::StaticClass();
     GameStateClass        = APTGameState::StaticClass();
-    bUseSeamlessTravel    = true; // Preparado para el viaje lobby→minijuego (Fase 6).
+    bUseSeamlessTravel    = true; // Preparado para el viaje lobby→minijuego (cosa de cada juego, no del template).
+    // El lobby no usa el flujo de MatchState de AGameMode (StartMatch/EndMatch); esto evita que
+    // arranque "match" solo automáticamente con el primer jugador. Solo nos interesa heredar el
+    // InactivePlayerArray para la reconexión.
+    bDelayedStart         = true;
 }
 
 void APTLobbyGameMode::PreLogin(const FString& Options, const FString& Address,

@@ -1,13 +1,16 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 // Fase 3 — GameMode del mapa Lobby. Registra clases, gestiona PostLogin/Logout y marca al host.
+// Hereda de AGameMode (no AGameModeBase) para aprovechar su InactivePlayerArray/FindInactivePlayer
+// nativo: si un jugador se desconecta y vuelve a entrar con el mismo Steam ID dentro de
+// InactivePlayerStateLifeSpan, el motor le devuelve su PlayerState (Fase de reconexión).
 
 #pragma once
 #include "CoreMinimal.h"
-#include "GameFramework/GameModeBase.h"
+#include "GameFramework/GameMode.h"
 #include "PTLobbyGameMode.generated.h"
 
 UCLASS()
-class MYPARTYGAME_API APTLobbyGameMode : public AGameModeBase
+class MYPARTYGAME_API APTLobbyGameMode : public AGameMode
 {
     GENERATED_BODY()
 
