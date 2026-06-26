@@ -68,9 +68,13 @@ void APTLobbyGameMode::PostLogin(APlayerController* NewPlayer)
         const bool bIsHost = NewPlayer->IsLocalController();
         PS->Server_SetHost(bIsHost);
 
-        const FString Name = bIsHost
-            ? TEXT("Host")
-            : FString::Printf(TEXT("Player_%d"), PlayersJoined + 1);
+        // El nombre real de Steam llega como "?Name=" en la URL de travel (ver PTMainMenuWidget);
+        // el motor ya lo deja en PlayerState->GetPlayerName() antes de PostLogin (InitNewPlayer).
+        FString Name = NewPlayer->PlayerState ? NewPlayer->PlayerState->GetPlayerName() : FString();
+        if (Name.IsEmpty())
+        {
+            Name = bIsHost ? TEXT("Host") : FString::Printf(TEXT("Player_%d"), PlayersJoined + 1);
+        }
         PS->Server_SetDisplayName(Name);
     }
 

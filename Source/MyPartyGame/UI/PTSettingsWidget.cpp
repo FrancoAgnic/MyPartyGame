@@ -22,6 +22,7 @@ bool UPTSettingsWidget::Initialize()
     if (LowButton)     LowButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnLowClicked);
     if (MediumButton)  MediumButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnMediumClicked);
     if (HighButton)    HighButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnHighClicked);
+    if (ApplyButton)   ApplyButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnApplyClicked);
     if (BackButton)    BackButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnBackClicked);
 
     return true;
@@ -75,12 +76,16 @@ void UPTSettingsWidget::OnLowClicked()     { ApplyGraphics(0); }
 void UPTSettingsWidget::OnMediumClicked()  { ApplyGraphics(1); }
 void UPTSettingsWidget::OnHighClicked()    { ApplyGraphics(2); }
 
-void UPTSettingsWidget::OnBackClicked()
+void UPTSettingsWidget::OnApplyClicked()
 {
+    // Volumen/idioma/gráficos ya se aplicaron en caliente al tocarlos; esto solo persiste a disco.
     if (UPTGameUserSettings* Settings = UPTGameUserSettings::Get())
     {
         Settings->SaveSettings();
     }
+}
 
+void UPTSettingsWidget::OnBackClicked()
+{
     SetVisibility(ESlateVisibility::Collapsed);
 }

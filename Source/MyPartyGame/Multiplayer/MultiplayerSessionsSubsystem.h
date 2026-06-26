@@ -67,6 +67,10 @@ public:
     FString GetPendingHostPassword()    const { return PendingPassword;      }
     FString GetPendingSessionName()     const { return PendingSessionName;   }
     int32   GetPendingMaxPlayers()      const { return PendingNumPublicConnections; }
+
+    // Nombre de Steam del jugador local — la UI lo manda como "?Name=" al viajar (host y clientes)
+    // para que PTLobbyGameMode lo lea de PlayerState->GetPlayerName() en vez de un placeholder.
+    FString GetLocalPlayerDisplayName() const;
     bool    IsLoggedIn()                const { return bIsLoggedIn;          }
 
     // Fase 5 — código de invitación recién generado para la sesión propia (vacío si es pública).
@@ -141,7 +145,6 @@ private:
     bool IsUsingNullSubsystem() const;                   // true → LAN (NULL subsystem)
     static FString HashPassword(const FString& Plain);   // MD5 simple; reforzar en producción
     static FString GenerateSessionCode();                // Fase 5 — código aleatorio de 6 caracteres
-    FString GetLocalPlayerDisplayName() const;            // nombre de Steam del jugador local (host)
     void InternalCreateSession();                        // crea de verdad tras login/destroy
     void InternalFindSessions(int32 MaxSearchResults);    // Find compartido por FindSessions y JoinSessionByCode
 

@@ -12,6 +12,7 @@
 #include "Components/TextBlock.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "HAL/PlatformApplicationMisc.h"
+#include "GenericPlatform/GenericPlatformHttp.h"
 
 // ==========================================================================
 // Inicialización
@@ -219,6 +220,9 @@ void UPTMainMenuWidget::OnCreateSession(bool bWasSuccessful)
             {
                 TravelURL += TEXT("?Password=") + HostPassword;
             }
+            // "Name" lo reconoce el motor nativamente (AGameModeBase::InitNewPlayer) y deja el
+            // nombre real de Steam en PlayerState->GetPlayerName() antes de PostLogin.
+            TravelURL += TEXT("&Name=") + FGenericPlatformHttp::UrlEncode(Sessions->GetLocalPlayerDisplayName());
         }
         World->ServerTravel(TravelURL);
     }
@@ -252,7 +256,8 @@ void UPTMainMenuWidget::OnJoinSession(EOnJoinSessionCompleteResult::Type Result)
     {
         const FString TravelURL = ConnectString
             + TEXT("?Password=")
-            + Sessions->GetPendingJoinPassword();
+            + Sessions->GetPendingJoinPassword()
+            + TEXT("&Name=") + FGenericPlatformHttp::UrlEncode(Sessions->GetLocalPlayerDisplayName());
 
         if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
         {

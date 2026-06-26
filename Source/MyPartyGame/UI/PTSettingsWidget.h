@@ -36,6 +36,7 @@ protected:
     UPROPERTY(meta = (BindWidget)) UButton* MediumButton;
     UPROPERTY(meta = (BindWidget)) UButton* HighButton;
 
+    UPROPERTY(meta = (BindWidget)) UButton* ApplyButton;
     UPROPERTY(meta = (BindWidget)) UButton* BackButton;
 
     UFUNCTION() void OnVolumeChanged(float NewValue);
@@ -44,6 +45,7 @@ protected:
     UFUNCTION() void OnLowClicked();
     UFUNCTION() void OnMediumClicked();
     UFUNCTION() void OnHighClicked();
+    UFUNCTION() void OnApplyClicked();
     UFUNCTION() void OnBackClicked();
 
     /** Blueprint resalta el botón activo (estilo visual, no lógica) — llamado en ShowPanel y tras cada cambio. */

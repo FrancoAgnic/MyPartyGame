@@ -61,10 +61,11 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
             APTPlayerState* PTPS = Cast<APTPlayerState>(PS);
             if (!PTPS) continue;
 
+            // El estado de "ready" queda fuera del template (cada juego decide si lo usa);
+            // acá solo mostramos nombre + si es el host.
             UTextBlock* Row = NewObject<UTextBlock>(this);
             FString Label = PTPS->DisplayName;
-            if (PTPS->bIsHost)       Label += TEXT(" (Host)");
-            else if (PTPS->bIsReady) Label += TEXT(" ✓");
+            if (PTPS->bIsHost) Label += TEXT(" (Host)");
             Row->SetText(FText::FromString(Label));
             PlayersBox->AddChildToVerticalBox(Row);
         }
