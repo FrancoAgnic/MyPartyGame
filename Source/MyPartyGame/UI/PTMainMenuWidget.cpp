@@ -233,7 +233,11 @@ void UPTMainMenuWidget::OnCreateSession(bool bWasSuccessful)
             // nombre real de Steam en PlayerState->GetPlayerName() antes de PostLogin.
             // No usar UrlEncode: CanServerTravel rechaza cualquier '%' en la URL (tildes/emojis
             // codificados la rompen entera) — sanitizar en su lugar (ver SanitizeNameForTravelURL).
-            TravelURL += TEXT("&Name=") + UMultiplayerSessionsSubsystem::SanitizeNameForTravelURL(Sessions->GetLocalPlayerDisplayName());
+            // IMPORTANTE: las opciones de FURL se separan con '?', no con '&' (eso es para URLs
+            // web normales). Usar '&' acá hace que "Name=..." quede pegado como parte del VALOR
+            // de la opción anterior (p.ej. Password="XXXX&Name=Yyyy"), rompiendo la validación de
+            // contraseña en PreLogin para sesiones privadas.
+            TravelURL += TEXT("?Name=") + UMultiplayerSessionsSubsystem::SanitizeNameForTravelURL(Sessions->GetLocalPlayerDisplayName());
         }
         World->ServerTravel(TravelURL);
     }
@@ -270,10 +274,12 @@ void UPTMainMenuWidget::OnJoinSession(EOnJoinSessionCompleteResult::Type Result)
     FString ConnectString;
     if (Sessions->GetResolvedConnectString(ConnectString))
     {
+        // Las opciones de FURL se separan con '?', no con '&' (ver mismo comentario en
+        // OnCreateSession) — si no, "Name=..." queda pegado al valor de "Password=...".
         const FString TravelURL = ConnectString
             + TEXT("?Password=")
             + Sessions->GetPendingJoinPassword()
-            + TEXT("&Name=") + UMultiplayerSessionsSubsystem::SanitizeNameForTravelURL(Sessions->GetLocalPlayerDisplayName());
+            + TEXT("?Name=") + UMultiplayerSessionsSubsystem::SanitizeNameForTravelURL(Sessions->GetLocalPlayerDisplayName());
 
         if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
         {

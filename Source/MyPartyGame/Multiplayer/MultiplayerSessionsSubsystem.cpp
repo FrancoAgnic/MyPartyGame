@@ -355,6 +355,13 @@ void UMultiplayerSessionsSubsystem::InternalFindSessions(int32 MaxSearchResults)
     if (!IsUsingNullSubsystem())
     {
         LastSessionSearch->QuerySettings.Set(SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);
+
+        // El AppID 480 (Spacewar) lo comparten miles de proyectos de Steamworks/UE para pruebas;
+        // sin este filtro, RequestLobbyList trae también las lobbies ajenas de cualquiera que esté
+        // probando algo con ese mismo AppID, y el viaje (RequestLobbyData de cada una) puede agotar
+        // el tiempo antes de llegar a la nuestra. KEY_MATCH_TYPE ya se graba en InternalCreateSession;
+        // acá lo usamos del lado del filtro para que Steam descarte todo lo que no sea de este juego.
+        LastSessionSearch->QuerySettings.Set(KEY_MATCH_TYPE, FString("PartyLobby"), EOnlineComparisonOp::Equals);
     }
 
     FindSessionsCompleteHandle = GetSessions()->AddOnFindSessionsCompleteDelegate_Handle(
