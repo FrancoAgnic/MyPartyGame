@@ -242,9 +242,14 @@ void UPTMainMenuWidget::OnJoinSession(EOnJoinSessionCompleteResult::Type Result)
         if (ErrorText)
         {
             const FString Msg = (Result == EOnJoinSessionCompleteResult::SessionDoesNotExist)
-                ? TEXT("Código inválido o sesión no encontrada")
+                ? TEXT("Invalid Code")
                 : TEXT("No se pudo unir a la sesión");
             ErrorText->SetText(FText::FromString(Msg));
+
+            if (UWorld* World = GetWorld())
+            {
+                World->GetTimerManager().SetTimer(ErrorTextTimerHandle, this, &UPTMainMenuWidget::HideErrorText, 2.f, false);
+            }
         }
         return;
     }
@@ -300,4 +305,14 @@ void UPTMainMenuWidget::MenuTearDown()
         Sessions->OnFindSessionsComplete.RemoveAll(this);
         Sessions->OnJoinSessionComplete.RemoveAll(this);
     }
+
+    if (UWorld* World = GetWorld())
+    {
+        World->GetTimerManager().ClearTimer(ErrorTextTimerHandle);
+    }
+}
+
+void UPTMainMenuWidget::HideErrorText()
+{
+    if (ErrorText) ErrorText->SetText(FText::GetEmpty());
 }

@@ -93,9 +93,13 @@ protected:
 
     void MenuTearDown();
 
+    void HideErrorText();
+
 private:
     UPROPERTY() UMultiplayerSessionsSubsystem* Sessions = nullptr;
 
     int32   NumPublicConnections = 4;
     FString LobbyPath;
+
+    FTimerHandle ErrorTextTimerHandle;
 };
