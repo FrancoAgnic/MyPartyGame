@@ -11,8 +11,3 @@ void APTGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
     DOREPLIFETIME(APTGameState, SessionCode);
     DOREPLIFETIME(APTGameState, MaxPlayers);
 }
-
-void APTGameState::OnRep_LobbyState()
-{
-    // TODO (Fase 5): notificar a la UI del lobby el cambio de estado.
-}

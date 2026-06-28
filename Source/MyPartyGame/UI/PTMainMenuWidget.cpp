@@ -177,7 +177,17 @@ void UPTMainMenuWidget::OnLogin(bool bWasSuccessful)
 {
     if (HostButton) HostButton->SetIsEnabled(bWasSuccessful);
     if (FindButton) FindButton->SetIsEnabled(bWasSuccessful);
-    // TODO Fase UI: si !bWasSuccessful mostrar mensaje de error.
+
+    if (!bWasSuccessful && ErrorText)
+    {
+        // Causa típica: el cliente de Steam no está corriendo en esta PC.
+        ErrorText->SetText(FText::FromString(TEXT("No se pudo conectar con Steam")));
+
+        if (UWorld* World = GetWorld())
+        {
+            World->GetTimerManager().SetTimer(ErrorTextTimerHandle, this, &UPTMainMenuWidget::HideErrorText, 2.f, false);
+        }
+    }
 }
 
 void UPTMainMenuWidget::OnCreateSession(bool bWasSuccessful)

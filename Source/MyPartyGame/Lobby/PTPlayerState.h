@@ -17,17 +17,12 @@ public:
     UPROPERTY(ReplicatedUsing=OnRep_DisplayName, BlueprintReadOnly, Category="Lobby")
     FString DisplayName;
 
-    UPROPERTY(ReplicatedUsing=OnRep_IsReady, BlueprintReadOnly, Category="Lobby")
-    bool bIsReady = false;
-
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")
     bool bIsHost = false;
 
     // Llamar solo desde el servidor (HasAuthority).
     void Server_SetDisplayName(const FString& InName);
-    void Server_SetReady(bool bInReady);
     void Server_SetHost(bool bInHost);
 
     UFUNCTION() void OnRep_DisplayName();
-    UFUNCTION() void OnRep_IsReady();
 };

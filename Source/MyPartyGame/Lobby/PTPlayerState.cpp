@@ -7,7 +7,6 @@ void APTPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(APTPlayerState, DisplayName);
-    DOREPLIFETIME(APTPlayerState, bIsReady);
     DOREPLIFETIME(APTPlayerState, bIsHost);
 }
 
@@ -20,19 +19,9 @@ void APTPlayerState::Server_SetDisplayName(const FString& InName)
     }
 }
 
-void APTPlayerState::Server_SetReady(bool bInReady)
-{
-    if (HasAuthority())
-    {
-        bIsReady = bInReady;
-        OnRep_IsReady();
-    }
-}
-
 void APTPlayerState::Server_SetHost(bool bInHost)
 {
     if (HasAuthority()) { bIsHost = bInHost; }
 }
 
-void APTPlayerState::OnRep_DisplayName() { /* TODO (Fase 5): refrescar UI del lobby */ }
-void APTPlayerState::OnRep_IsReady()     { /* TODO (Fase 5): refrescar UI del lobby */ }
+void APTPlayerState::OnRep_DisplayName() { /* El HUD del lobby lee DisplayName por polling, no necesita reaccionar acá. */ }

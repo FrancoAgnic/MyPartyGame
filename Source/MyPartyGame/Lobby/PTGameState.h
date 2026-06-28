@@ -22,7 +22,7 @@ class MYPARTYGAME_API APTGameState : public AGameStateBase
 public:
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-    UPROPERTY(ReplicatedUsing=OnRep_LobbyState, BlueprintReadOnly, Category="Lobby")
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")
     EPTLobbyState LobbyState = EPTLobbyState::WaitingForPlayers;
 
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")
@@ -36,9 +36,6 @@ public:
     // Tope de jugadores elegido al crear la sesión (para el "4/8" del HUD del lobby).
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")
     int32 MaxPlayers = 0;
-
-    UFUNCTION()
-    void OnRep_LobbyState();
 
     // La lista de jugadores vive en PlayerArray (heredado de AGameStateBase). No replicar aparte.
 };
