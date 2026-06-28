@@ -81,6 +81,13 @@ public:
     static FString GetServerNameFromResult(const FOnlineSessionSearchResult& Result);
     static bool    GetHasPasswordFromResult(const FOnlineSessionSearchResult& Result);
 
+    // AGameModeBase::CanServerTravel rechaza cualquier URL de travel que contenga '%', ':' o '\'
+    // (ver GameModeBase.cpp) — por eso NO se puede URL-encodear el nombre de Steam (UrlEncode
+    // mete '%XX' para tildes/símbolos/emojis, y eso tira el travel entero). En vez de codificar,
+    // se descartan los caracteres no seguros directamente; el motor tampoco decodifica '%XX' del
+    // lado de PlayerState->GetPlayerName(), así que encodear no serviría de nada de todos modos.
+    static FString SanitizeNameForTravelURL(const FString& Name);
+
     // Fase 4 — Compara un intento de contraseña contra la del host.
     // Devuelve true si coincide, o si el host no puso contraseña.
     bool DoesHostPasswordMatch(const FString& Attempt) const;

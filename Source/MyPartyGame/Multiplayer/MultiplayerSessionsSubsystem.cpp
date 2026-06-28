@@ -608,6 +608,21 @@ bool UMultiplayerSessionsSubsystem::GetHasPasswordFromResult(const FOnlineSessio
     return bHas;
 }
 
+FString UMultiplayerSessionsSubsystem::SanitizeNameForTravelURL(const FString& Name)
+{
+    FString Result;
+    Result.Reserve(Name.Len());
+    for (const TCHAR Ch : Name)
+    {
+        if (FChar::IsAlnum(Ch) || Ch == TEXT('-') || Ch == TEXT('_') || Ch == TEXT(' '))
+        {
+            Result.AppendChar(Ch);
+        }
+    }
+    Result.TrimStartAndEndInline();
+    return Result.IsEmpty() ? TEXT("Player") : Result;
+}
+
 // ==========================================================================
 // DEBUG — Comandos de consola (solo en builds no-shipping)
 // ==========================================================================

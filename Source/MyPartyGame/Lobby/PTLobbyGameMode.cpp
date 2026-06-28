@@ -80,6 +80,13 @@ void APTLobbyGameMode::PostLogin(APlayerController* NewPlayer)
 
     ++PlayersJoined;
     UE_LOG(LogTemp, Log, TEXT("[Lobby] PostLogin. Jugadores conectados: %d"), PlayersJoined);
+
+    // bDelayedStart evita que AGameMode arranque el "Match" solo (ver comentario en el
+    // constructor), pero como efecto secundario también le impide a HandleStartingNewPlayer
+    // llamar a RestartPlayer — sin esto el jugador nunca posee a su Pawn (DefaultPawnClass).
+    // Acá sí queremos el Pawn enseguida (el lobby es la sala de espera visible), así que lo
+    // forzamos manualmente.
+    RestartPlayer(NewPlayer);
 }
 
 void APTLobbyGameMode::Logout(AController* Exiting)

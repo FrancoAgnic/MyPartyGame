@@ -25,9 +25,7 @@ public class MyPartyGame : ModuleRules
 			"OnlineSubsystemUtils",
 			"CoreOnline",
 			// Fase 5 — FPlatformApplicationMisc::ClipboardCopy (compartir código de sesión privada)
-			"ApplicationCore",
-			// FGenericPlatformHttp::UrlEncode (nombre de Steam en la URL de travel, ver "?Name=")
-			"HTTP"
+			"ApplicationCore"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });

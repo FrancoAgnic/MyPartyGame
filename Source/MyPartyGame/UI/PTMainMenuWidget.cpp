@@ -12,7 +12,6 @@
 #include "Components/TextBlock.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "HAL/PlatformApplicationMisc.h"
-#include "GenericPlatform/GenericPlatformHttp.h"
 
 // ==========================================================================
 // Inicialización
@@ -222,7 +221,9 @@ void UPTMainMenuWidget::OnCreateSession(bool bWasSuccessful)
             }
             // "Name" lo reconoce el motor nativamente (AGameModeBase::InitNewPlayer) y deja el
             // nombre real de Steam en PlayerState->GetPlayerName() antes de PostLogin.
-            TravelURL += TEXT("&Name=") + FGenericPlatformHttp::UrlEncode(Sessions->GetLocalPlayerDisplayName());
+            // No usar UrlEncode: CanServerTravel rechaza cualquier '%' en la URL (tildes/emojis
+            // codificados la rompen entera) — sanitizar en su lugar (ver SanitizeNameForTravelURL).
+            TravelURL += TEXT("&Name=") + UMultiplayerSessionsSubsystem::SanitizeNameForTravelURL(Sessions->GetLocalPlayerDisplayName());
         }
         World->ServerTravel(TravelURL);
     }
@@ -262,7 +263,7 @@ void UPTMainMenuWidget::OnJoinSession(EOnJoinSessionCompleteResult::Type Result)
         const FString TravelURL = ConnectString
             + TEXT("?Password=")
             + Sessions->GetPendingJoinPassword()
-            + TEXT("&Name=") + FGenericPlatformHttp::UrlEncode(Sessions->GetLocalPlayerDisplayName());
+            + TEXT("&Name=") + UMultiplayerSessionsSubsystem::SanitizeNameForTravelURL(Sessions->GetLocalPlayerDisplayName());
 
         if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
         {
