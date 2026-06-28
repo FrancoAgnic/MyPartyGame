@@ -27,7 +27,7 @@ void UPTGameInstance::HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver,
     // una contraseña incorrecta, así que va directo al menú.
     if (FailureType == ENetworkFailure::FailureReceived)
     {
-        ReturnToMainMenu(ErrorString);
+        ReturnToMainMenuWithError(ErrorString);
         return;
     }
 
@@ -45,7 +45,7 @@ void UPTGameInstance::HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver,
 
     if (bDroppedConnection)
     {
-        ReturnToMainMenu(ErrorString);
+        ReturnToMainMenuWithError(ErrorString);
     }
 }
 
@@ -96,11 +96,11 @@ void UPTGameInstance::HandleTravelFailure(UWorld* World, ETravelFailure::Type Fa
     // Solo actuar si hay un error real (string no vacío).
     if (!ErrorString.IsEmpty())
     {
-        ReturnToMainMenu(ErrorString);
+        ReturnToMainMenuWithError(ErrorString);
     }
 }
 
-void UPTGameInstance::ReturnToMainMenu(const FString& ErrorString)
+void UPTGameInstance::ReturnToMainMenuWithError(const FString& ErrorString)
 {
     // Traducir el token del servidor a un mensaje amigable.
     if (ErrorString.Contains(TEXT("WrongPassword")))

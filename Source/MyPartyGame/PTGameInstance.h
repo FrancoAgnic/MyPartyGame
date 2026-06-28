@@ -27,7 +27,7 @@ private:
                               ENetworkFailure::Type FailureType, const FString& ErrorString);
     void HandleTravelFailure(UWorld* World, ETravelFailure::Type FailureType,
                              const FString& ErrorString);
-    void ReturnToMainMenu(const FString& ErrorString);
+    void ReturnToMainMenuWithError(const FString& ErrorString);
 
     // Reconexión — solo aplica a clientes (el host no se reconecta a sí mismo).
     bool TryReconnect(UWorld* World);
