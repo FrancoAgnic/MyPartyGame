@@ -146,6 +146,16 @@ private:
     static const FName KEY_HAS_PASSWORD;
     static const FName KEY_MATCH_TYPE;
     static const FName KEY_CODE_HASH;    // Fase 5 — hash del código; nunca se anuncia en claro
+    static const FName KEY_LOBBY_ID;     // ID interno de lobby Steam para join directo worldwide
+
+    // URL de SteamSockets calculada por FPTSteamDirectJoin tras join directo worldwide.
+    FString WorldwideConnectURL;
+#if PT_WITH_STEAM
+    // Punteros opacos (raw) — TUniquePtr requeriría tipo completo en este header,
+    // pero UHT genera código que no puede incluir steam_api.h.
+    struct FPTSteamWorldwideSearch* WorldwideSearch = nullptr;
+    struct FPTSteamDirectJoin*      WorldwideJoin   = nullptr;
+#endif
 
     // Helpers privados
     IOnlineSessionPtr GetSessions() const;
@@ -154,6 +164,7 @@ private:
     static FString GenerateSessionCode();                // Fase 5 — código aleatorio de 6 caracteres
     void InternalCreateSession();                        // crea de verdad tras login/destroy
     void InternalFindSessions(int32 MaxSearchResults);    // Find compartido por FindSessions y JoinSessionByCode
+    void InternalJoinByLobbyId(uint64 LobbyId);          // Join directo worldwide (sin SessionInterface)
 
 #if !UE_BUILD_SHIPPING
     // ------------------------------------------------------------------
