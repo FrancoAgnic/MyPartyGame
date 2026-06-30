@@ -3,6 +3,7 @@
 // INVARIANTE: único archivo del proyecto que toca IOnlineSubsystem / IOnlineSession.
 
 #include "MultiplayerSessionsSubsystem.h"
+#include "PTSteamWorldwideSearch.h"             // FPTSteamWorldwideSearch / FPTSteamDirectJoin
 #include "OnlineSubsystem.h"
 #include "OnlineSubsystemUtils.h"
 #include "OnlineSessionSettings.h"              // FOnlineSessionSettings
@@ -17,6 +18,7 @@ const FName UMultiplayerSessionsSubsystem::KEY_SERVER_NAME  = FName("SERVER_NAME
 const FName UMultiplayerSessionsSubsystem::KEY_HAS_PASSWORD = FName("HAS_PASSWORD");
 const FName UMultiplayerSessionsSubsystem::KEY_MATCH_TYPE   = FName("MATCH_TYPE");
 const FName UMultiplayerSessionsSubsystem::KEY_CODE_HASH    = FName("CODE_HASH");
+const FName UMultiplayerSessionsSubsystem::KEY_LOBBY_ID     = FName("PT_LOBBY_ID");
 
 // ==========================================================================
 // Lifecycle
@@ -47,6 +49,12 @@ void UMultiplayerSessionsSubsystem::Deinitialize()
 {
 #if !UE_BUILD_SHIPPING
     UnregisterDebugCommands();
+#endif
+
+    // Cancelar búsquedas/joins worldwide en curso
+#if PT_WITH_STEAM
+    delete WorldwideSearch; WorldwideSearch = nullptr;
+    delete WorldwideJoin;   WorldwideJoin   = nullptr;
 #endif
 
     // Limpiar cualquier handle de OSS pendiente por seguridad
@@ -131,6 +139,21 @@ void UMultiplayerSessionsSubsystem::Login()
         return;
     }
 
+    // Si el .ini pide Steam pero terminamos en NULL, es porque el cliente de Steam no
+    // estaba listo en el instante exacto en que arrancó el motor (carrera de arranque muy
+    // común: "Cannot create IPC pipe to Steam client process. Steam is probably not
+    // running."). Sin este chequeo, el juego sigue andando con un backend NULL (sin red
+    // real) sin avisar nada — el usuario ve el menú normal, puede "crear"/"buscar"
+    // sesiones, pero nunca son reales y nunca se encuentran entre dos PCs.
+    FString ConfiguredPlatform;
+    GConfig->GetString(TEXT("OnlineSubsystem"), TEXT("DefaultPlatformService"), ConfiguredPlatform, GEngineIni);
+    if (Subsystem->GetSubsystemName() == FName("NULL") && ConfiguredPlatform.Equals(TEXT("Steam"), ESearchCase::IgnoreCase))
+    {
+        UE_LOG(LogPTSessions, Error, TEXT("Login: se esperaba Steam pero el subsistema activo es NULL (Steam no estaba listo al arrancar). Reiniciar el juego con Steam ya abierto."));
+        OnLoginComplete.Broadcast(false);
+        return;
+    }
+
     IOnlineIdentityPtr Identity = Subsystem->GetIdentityInterface();
     if (!Identity.IsValid())
     {
@@ -206,6 +229,8 @@ void UMultiplayerSessionsSubsystem::CreateSession(int32 NumPublicConnections, bo
     PendingSessionName          = GetLocalPlayerDisplayName();
     // Fase 5 — el código nunca lo escribe el usuario: se genera acá si la sesión es privada.
     PendingPassword             = bPrivate ? GenerateSessionCode() : FString();
+
+    WorldwideConnectURL.Reset(); // limpiar URL de join previo al crear una sesión nueva
 
     // Si ya existe una sesión activa, destruirla primero y recrear en el callback de destroy.
     if (GetSessions()->GetNamedSession(NAME_GameSession) != nullptr)
@@ -318,8 +343,6 @@ void UMultiplayerSessionsSubsystem::JoinSessionByCode(const FString& Code)
 
 void UMultiplayerSessionsSubsystem::InternalFindSessions(int32 MaxSearchResults)
 {
-    // Fase 5 — JoinSessionByCode reutiliza este mismo Find; si falla, el error debe ir
-    // por OnJoinSessionComplete (no por OnFindSessionsComplete) para esa ruta.
     auto BroadcastFailure = [this]()
     {
         if (bSearchingByCode)
@@ -333,12 +356,6 @@ void UMultiplayerSessionsSubsystem::InternalFindSessions(int32 MaxSearchResults)
         }
     };
 
-    if (!GetSessions().IsValid())
-    {
-        UE_LOG(LogPTSessions, Error, TEXT("FindSessions: SessionInterface no válida."));
-        BroadcastFailure();
-        return;
-    }
     if (!bIsLoggedIn)
     {
         UE_LOG(LogPTSessions, Warning, TEXT("FindSessions: llamado sin login previo."));
@@ -346,21 +363,109 @@ void UMultiplayerSessionsSubsystem::InternalFindSessions(int32 MaxSearchResults)
         return;
     }
 
+#if PT_WITH_STEAM
+    // Búsqueda directa con k_ELobbyDistanceFilterWorldwide para que amigos de cualquier
+    // región del mundo aparezcan — el engine hardcodea k_ELobbyDistanceFilterDefault
+    // (misma región / regiones cercanas) y no expone ningún override.
+    if (!IsUsingNullSubsystem() && SteamMatchmaking())
+    {
+        const bool   bByCode  = bSearchingByCode;
+        const FString CodeHash = bByCode ? HashPassword(PendingJoinCode) : FString();
+
+        UE_LOG(LogPTSessions, Log, TEXT("FindSessions: usando búsqueda worldwide directa (Steam). bByCode=%s"),
+            bByCode ? TEXT("SÍ") : TEXT("NO"));
+
+        delete WorldwideSearch;
+        WorldwideSearch = new FPTSteamWorldwideSearch();
+        WorldwideSearch->Start(MaxSearchResults, CodeHash,
+            [this, bByCode](TArray<FPTLobbyEntry>&& Entries, bool bOk)
+            {
+                delete WorldwideSearch; WorldwideSearch = nullptr;
+
+                if (!bOk)
+                {
+                    UE_LOG(LogPTSessions, Warning, TEXT("FindSessions (worldwide): búsqueda fallida."));
+                    if (bByCode)
+                    {
+                        bSearchingByCode = false;
+                        OnJoinSessionComplete.Broadcast(EOnJoinSessionCompleteResult::UnknownError);
+                    }
+                    else
+                    {
+                        OnFindSessionsComplete.Broadcast({}, false);
+                    }
+                    return;
+                }
+
+                UE_LOG(LogPTSessions, Log, TEXT("FindSessions (worldwide): %d resultado(s)."), Entries.Num());
+
+                // Convertir FPTLobbyEntry → FOnlineSessionSearchResult para mantener
+                // la misma interfaz que usa la UI (PTMainMenuWidget).
+                TArray<FOnlineSessionSearchResult> Results;
+                for (const FPTLobbyEntry& E : Entries)
+                {
+                    FOnlineSessionSearchResult R;
+                    R.Session.OwningUserName                    = E.Name;
+                    R.Session.SessionSettings.NumPublicConnections = E.NumPublicConnections;
+                    R.Session.NumOpenPublicConnections           = E.NumOpenPublic;
+                    R.Session.SessionSettings.Set(KEY_SERVER_NAME,  E.Name,         EOnlineDataAdvertisementType::DontAdvertise);
+                    R.Session.SessionSettings.Set(KEY_HAS_PASSWORD, E.bHasPassword, EOnlineDataAdvertisementType::DontAdvertise);
+                    R.Session.SessionSettings.Set(KEY_CODE_HASH,    E.CodeHash,     EOnlineDataAdvertisementType::DontAdvertise);
+                    // Guardar lobby ID como string para que InternalJoinByLobbyId lo lea.
+                    R.Session.SessionSettings.Set(KEY_LOBBY_ID,
+                        FString::Printf(TEXT("%llu"), E.LobbyId),
+                        EOnlineDataAdvertisementType::DontAdvertise);
+                    Results.Add(MoveTemp(R));
+                }
+
+                if (bByCode)
+                {
+                    bSearchingByCode = false;
+                    const FString Code = PendingJoinCode;
+                    PendingJoinCode.Reset();
+                    const FString WantedHash = HashPassword(Code);
+
+                    for (const FOnlineSessionSearchResult& R : Results)
+                    {
+                        FString StoredHash;
+                        R.Session.SessionSettings.Get(KEY_CODE_HASH, StoredHash);
+                        if (StoredHash == WantedHash)
+                        {
+                            UE_LOG(LogPTSessions, Log, TEXT("JoinSessionByCode (worldwide): código válido, uniendo..."));
+                            JoinSession(R, Code);
+                            return;
+                        }
+                    }
+
+                    UE_LOG(LogPTSessions, Log, TEXT("JoinSessionByCode (worldwide): código sin coincidencia."));
+                    OnJoinSessionComplete.Broadcast(EOnJoinSessionCompleteResult::SessionDoesNotExist);
+                }
+                else
+                {
+#if !UE_BUILD_SHIPPING
+                    CachedSearchResults = Results;
+#endif
+                    OnFindSessionsComplete.Broadcast(Results, true);
+                }
+            });
+        return;
+    }
+#endif // PT_WITH_STEAM
+
+    // Ruta de respaldo: NULL subsystem (LAN) o plataformas sin Steamworks.
+    if (!GetSessions().IsValid())
+    {
+        UE_LOG(LogPTSessions, Error, TEXT("FindSessions: SessionInterface no válida."));
+        BroadcastFailure();
+        return;
+    }
+
     LastSessionSearch                    = MakeShareable(new FOnlineSessionSearch());
     LastSessionSearch->MaxSearchResults  = MaxSearchResults;
     LastSessionSearch->bIsLanQuery       = IsUsingNullSubsystem();
-    // Las sesiones se crean como Steam Lobbies (bUseLobbiesIfAvailable=true en InternalCreateSession);
-    // sin este filtro, FOnlineSessionSteam::FindInternetSession busca en la lista de game servers
-    // dedicados en vez de lobbies, y nunca encuentra nada aunque la sesión exista de verdad.
     if (!IsUsingNullSubsystem())
     {
         LastSessionSearch->QuerySettings.Set(SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);
-
-        // El AppID 480 (Spacewar) lo comparten miles de proyectos de Steamworks/UE para pruebas;
-        // sin este filtro, RequestLobbyList trae también las lobbies ajenas de cualquiera que esté
-        // probando algo con ese mismo AppID, y el viaje (RequestLobbyData de cada una) puede agotar
-        // el tiempo antes de llegar a la nuestra. KEY_MATCH_TYPE ya se graba en InternalCreateSession;
-        // acá lo usamos del lado del filtro para que Steam descarte todo lo que no sea de este juego.
         LastSessionSearch->QuerySettings.Set(KEY_MATCH_TYPE, FString("PartyLobby"), EOnlineComparisonOp::Equals);
     }
 
@@ -455,15 +560,27 @@ void UMultiplayerSessionsSubsystem::HandleFindSessionsComplete(bool bWasSuccessf
 void UMultiplayerSessionsSubsystem::JoinSession(
     const FOnlineSessionSearchResult& SessionResult, const FString& Password)
 {
+    PendingJoinPassword = Password;
+    PendingSessionName  = GetServerNameFromResult(SessionResult);
+
+    // Si el resultado viene de nuestra búsqueda worldwide directa, tiene KEY_LOBBY_ID —
+    // en ese caso usamos el join directo por Steamworks (sin pasar por SessionInterface,
+    // que también llamaría a JoinLobby pero primero filtraría por región).
+    FString LobbyIdStr;
+    if (SessionResult.Session.SessionSettings.Get(KEY_LOBBY_ID, LobbyIdStr) && !LobbyIdStr.IsEmpty())
+    {
+        const uint64 LobbyId = FCString::Strtoui64(*LobbyIdStr, nullptr, 10);
+        InternalJoinByLobbyId(LobbyId);
+        return;
+    }
+
+    // Ruta estándar del engine (NULL subsystem / LAN o fallback).
     if (!GetSessions().IsValid())
     {
         UE_LOG(LogPTSessions, Error, TEXT("JoinSession: SessionInterface no válida."));
         OnJoinSessionComplete.Broadcast(EOnJoinSessionCompleteResult::UnknownError);
         return;
     }
-
-    PendingJoinPassword = Password;
-    PendingSessionName  = GetServerNameFromResult(SessionResult);
 
     JoinSessionCompleteHandle = GetSessions()->AddOnJoinSessionCompleteDelegate_Handle(
         FOnJoinSessionCompleteDelegate::CreateUObject(
@@ -484,6 +601,34 @@ void UMultiplayerSessionsSubsystem::JoinSession(
         UE_LOG(LogPTSessions, Warning, TEXT("JoinSession: JoinSession() devolvió false."));
         OnJoinSessionComplete.Broadcast(EOnJoinSessionCompleteResult::UnknownError);
     }
+}
+
+void UMultiplayerSessionsSubsystem::InternalJoinByLobbyId(uint64 LobbyId)
+{
+#if PT_WITH_STEAM
+    UE_LOG(LogPTSessions, Log, TEXT("JoinSession (worldwide): uniendo lobby %llu directamente."), LobbyId);
+    WorldwideConnectURL.Reset();
+    delete WorldwideJoin;
+    WorldwideJoin = new FPTSteamDirectJoin();
+    WorldwideJoin->JoinLobby(LobbyId, [this](bool bOk, FString URL)
+    {
+        delete WorldwideJoin; WorldwideJoin = nullptr;
+        if (bOk)
+        {
+            WorldwideConnectURL = URL;
+            UE_LOG(LogPTSessions, Log, TEXT("JoinSession (worldwide): lobby unida, URL=%s"), *URL);
+            OnJoinSessionComplete.Broadcast(EOnJoinSessionCompleteResult::Success);
+        }
+        else
+        {
+            UE_LOG(LogPTSessions, Warning, TEXT("JoinSession (worldwide): falló al unirse a la lobby."));
+            OnJoinSessionComplete.Broadcast(EOnJoinSessionCompleteResult::UnknownError);
+        }
+    });
+#else
+    UE_LOG(LogPTSessions, Error, TEXT("InternalJoinByLobbyId: Steamworks no disponible."));
+    OnJoinSessionComplete.Broadcast(EOnJoinSessionCompleteResult::UnknownError);
+#endif
 }
 
 void UMultiplayerSessionsSubsystem::HandleJoinSessionComplete(
@@ -591,6 +736,12 @@ void UMultiplayerSessionsSubsystem::HandleStartSessionComplete(FName SessionName
 
 bool UMultiplayerSessionsSubsystem::GetResolvedConnectString(FString& OutConnectString) const
 {
+    // Tras un join directo worldwide, la URL ya está calculada (steam.[id]:[port]).
+    if (!WorldwideConnectURL.IsEmpty())
+    {
+        OutConnectString = WorldwideConnectURL;
+        return true;
+    }
     if (!SessionInterface.IsValid()) return false;
     return SessionInterface->GetResolvedConnectString(NAME_GameSession, OutConnectString);
 }

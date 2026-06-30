@@ -30,6 +30,19 @@ public class MyPartyGame : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
 
+		// Steamworks SDK directo — para FPTSteamWorldwideSearch/FPTSteamDirectJoin que llaman
+		// a RequestLobbyList con k_ELobbyDistanceFilterWorldwide, bypasseando el filtro regional
+		// hardcodeado en OnlineSessionAsyncLobbySteam.cpp del engine.
+		if (Target.Platform == UnrealTargetPlatform.Win64)
+		{
+			PublicDefinitions.Add("PT_WITH_STEAM=1");
+			AddEngineThirdPartyPrivateStaticDependencies(Target, "Steamworks");
+		}
+		else
+		{
+			PublicDefinitions.Add("PT_WITH_STEAM=0");
+		}
+
 		PublicIncludePaths.AddRange(new string[] {
 			"MyPartyGame",
 			"MyPartyGame/Multiplayer",
