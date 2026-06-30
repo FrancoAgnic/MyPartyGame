@@ -3,7 +3,7 @@
 
 #pragma once
 #include "CoreMinimal.h"
-#include "GameFramework/GameStateBase.h"
+#include "GameFramework/GameState.h"
 #include "PTGameState.generated.h"
 
 UENUM(BlueprintType)
@@ -15,7 +15,7 @@ enum class EPTLobbyState : uint8
 };
 
 UCLASS()
-class MYPARTYGAME_API APTGameState : public AGameStateBase
+class MYPARTYGAME_API APTGameState : public AGameState
 {
     GENERATED_BODY()
 

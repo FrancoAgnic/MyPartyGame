@@ -65,10 +65,15 @@ void FPTSteamWorldwideSearch::Start(int32 MaxResults, const FString& InCodeHash,
 
 void FPTSteamWorldwideSearch::OnLobbyMatchList(LobbyMatchList_t* pParam, bool bIOFailure)
 {
+	// Los callbacks de Steam (CCallResult / STEAM_CALLBACK_MANUAL) se disparan desde el hilo
+	// OnlineAsyncTaskThreadSteam, no desde el GameThread. Callback() termina tocando UMG/Slate
+	// (UPTMainMenuWidget::OnJoinSession), accesible solo desde el GameThread — invocarlo
+	// directo desde acá crashea con "Slate can only be accessed from the GameThread".
 	if (bIOFailure || !pParam || !SteamMatchmaking())
 	{
 		LobbyDataCallback.Unregister();
-		Callback({}, false);
+		TFunction<void(TArray<FPTLobbyEntry>&&, bool)> CB = MoveTemp(Callback);
+		AsyncTask(ENamedThreads::GameThread, [CB = MoveTemp(CB)]() mutable { CB({}, false); });
 		return;
 	}
 
@@ -78,7 +83,8 @@ void FPTSteamWorldwideSearch::OnLobbyMatchList(LobbyMatchList_t* pParam, bool bI
 	if (Count == 0)
 	{
 		LobbyDataCallback.Unregister();
-		Callback({}, true);
+		TFunction<void(TArray<FPTLobbyEntry>&&, bool)> CB = MoveTemp(Callback);
+		AsyncTask(ENamedThreads::GameThread, [CB = MoveTemp(CB)]() mutable { CB({}, true); });
 		return;
 	}
 
@@ -148,7 +154,12 @@ void FPTSteamWorldwideSearch::CheckComplete()
 	if (PendingIds.IsEmpty())
 	{
 		LobbyDataCallback.Unregister();
-		Callback(MoveTemp(Collected), true);
+		TFunction<void(TArray<FPTLobbyEntry>&&, bool)> CB = MoveTemp(Callback);
+		TArray<FPTLobbyEntry> Result = MoveTemp(Collected);
+		AsyncTask(ENamedThreads::GameThread, [CB = MoveTemp(CB), Result = MoveTemp(Result)]() mutable
+		{
+			CB(MoveTemp(Result), true);
+		});
 	}
 }
 
@@ -174,15 +185,20 @@ void FPTSteamDirectJoin::JoinLobby(uint64 LobbyId,
 
 void FPTSteamDirectJoin::OnLobbyEnter(LobbyEnter_t* pParam, bool bIOFailure)
 {
+	// Igual que en FPTSteamWorldwideSearch: este callback corre en OnlineAsyncTaskThreadSteam,
+	// no en el GameThread, y Callback() termina llamando a ServerTravel/ClientTravel y código
+	// de UMG — hay que despacharlo al GameThread o crashea.
 	if (bIOFailure || !pParam || pParam->m_EChatRoomEnterResponse != k_EChatRoomEnterResponseSuccess)
 	{
-		Callback(false, {});
+		TFunction<void(bool, FString)> CB = MoveTemp(Callback);
+		AsyncTask(ENamedThreads::GameThread, [CB = MoveTemp(CB)]() mutable { CB(false, {}); });
 		return;
 	}
 
 	if (!SteamMatchmaking())
 	{
-		Callback(false, {});
+		TFunction<void(bool, FString)> CB = MoveTemp(Callback);
+		AsyncTask(ENamedThreads::GameThread, [CB = MoveTemp(CB)]() mutable { CB(false, {}); });
 		return;
 	}
 
@@ -205,15 +221,17 @@ void FPTSteamDirectJoin::OnLobbyEnter(LobbyEnter_t* pParam, bool bIOFailure)
 	const FString PortStr = FString(UTF8_TO_TCHAR(SteamMatchmaking()->GetLobbyData(LobbyId, PT_STEAMKEY_P2PPORT)));
 	const int32   Port    = PortStr.IsEmpty() ? 7777 : FCString::Atoi(*PortStr);
 
+	TFunction<void(bool, FString)> CB = MoveTemp(Callback);
+
 	if (P2PAddr.IsEmpty())
 	{
-		Callback(false, {});
+		AsyncTask(ENamedThreads::GameThread, [CB = MoveTemp(CB)]() mutable { CB(false, {}); });
 		return;
 	}
 
 	// URL de viaje compatible con SteamSockets: "steam.[Steam64Id]:[Port]"
 	const FString ConnectURL = FString::Printf(TEXT("steam.%s:%d"), *P2PAddr, Port);
-	Callback(true, ConnectURL);
+	AsyncTask(ENamedThreads::GameThread, [CB = MoveTemp(CB), ConnectURL]() mutable { CB(true, ConnectURL); });
 }
 
 #endif // PT_WITH_STEAM
