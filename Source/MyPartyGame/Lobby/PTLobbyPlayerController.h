@@ -42,6 +42,7 @@ protected:
     TSubclassOf<UPTLobbyEscapeMenuWidget> EscapeMenuWidgetClass;
 
     void ToggleEscapeMenu(const FInputActionValue& Value);
+    void OnPressedStartGame();
 
 private:
     UPROPERTY() UPTLobbyEscapeMenuWidget* EscapeMenuWidget = nullptr;

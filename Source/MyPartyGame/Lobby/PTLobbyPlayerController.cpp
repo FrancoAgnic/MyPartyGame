@@ -53,6 +53,14 @@ void APTLobbyPlayerController::SetupInputComponent()
                 this, &APTLobbyPlayerController::ToggleEscapeMenu);
         }
     }
+
+    // Tecla P: el host arranca la partida (temporal hasta que exista el botón en el HUD).
+    InputComponent->BindKey(EKeys::P, IE_Pressed, this, &APTLobbyPlayerController::OnPressedStartGame);
+}
+
+void APTLobbyPlayerController::OnPressedStartGame()
+{
+    Server_RequestStartGame();
 }
 
 void APTLobbyPlayerController::ToggleEscapeMenu(const FInputActionValue& Value)
