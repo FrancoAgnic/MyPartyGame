@@ -27,6 +27,13 @@ public:
     void ApplyBrush(FVector WorldPos, EPTBrushMode Mode, float Radius, float Strength, float DeltaTime);
     void RebuildMesh();
 
+    // ─── Replicación: el cliente llama Server_ApplyBrush, el servidor aplica y multicastea.
+    UFUNCTION(Server, Reliable, WithValidation)
+    void Server_ApplyBrush(FVector WorldPos, EPTBrushMode Mode, float Radius, float Strength, float DeltaTime);
+
+    UFUNCTION(NetMulticast, Reliable)
+    void Multicast_ApplyBrush(FVector WorldPos, EPTBrushMode Mode, float Radius, float Strength, float DeltaTime);
+
 protected:
     virtual void BeginPlay() override;
     virtual void Tick(float DeltaTime) override;

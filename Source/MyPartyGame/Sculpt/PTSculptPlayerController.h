@@ -4,12 +4,18 @@
 #include "PTSculptVolume.h"
 #include "PTSculptPlayerController.generated.h"
 
+class UInputMappingContext;
+
 UCLASS()
 class MYPARTYGAME_API APTSculptPlayerController : public APlayerController
 {
     GENERATED_BODY()
 public:
     APTSculptPlayerController();
+
+    /** Asignar el mismo IMC de movimiento del personaje (ej. IMC_Lobby) en el Blueprint derivado. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input")
+    UInputMappingContext* MovementMappingContext;
 
     UPROPERTY(EditAnywhere, Category="Sculpt")
     float BrushRadius = 80.f;

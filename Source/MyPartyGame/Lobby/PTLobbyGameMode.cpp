@@ -108,3 +108,10 @@ void APTLobbyGameMode::Logout(AController* Exiting)
 
     Super::Logout(Exiting);
 }
+
+void APTLobbyGameMode::TravelToGame()
+{
+    const FString URL = GameMapPath + TEXT("?listen");
+    UE_LOG(LogTemp, Log, TEXT("[LobbyGameMode] ServerTravel → %s"), *URL);
+    GetWorld()->ServerTravel(URL, /*bAbsolute=*/true);
+}

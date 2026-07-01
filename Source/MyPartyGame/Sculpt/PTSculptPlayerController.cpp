@@ -1,5 +1,6 @@
 #include "PTSculptPlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "EnhancedInputSubsystems.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -17,6 +18,13 @@ void APTSculptPlayerController::BeginPlay()
     Super::BeginPlay();
 
     SetInputMode(FInputModeGameOnly());
+
+    if (UEnhancedInputLocalPlayerSubsystem* Sub =
+        ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
+    {
+        if (MovementMappingContext)
+            Sub->AddMappingContext(MovementMappingContext, 0);
+    }
 
     // Find the sculpt volume placed in the level.
     Volume = Cast<APTSculptVolume>(UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
@@ -47,7 +55,9 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
     FVector HitPoint;
     if (GetSculptHitPoint(HitPoint))
     {
-        Volume->ApplyBrush(HitPoint, CurrentMode, BrushRadius, BrushStrength, DeltaTime);
+        // Server_ApplyBrush: si somos cliente va al servidor; si somos servidor (host) ejecuta localmente.
+        // El servidor luego multicastea a todos, manteniendo el SDF en sync.
+        Volume->Server_ApplyBrush(HitPoint, CurrentMode, BrushRadius, BrushStrength, DeltaTime);
 #if WITH_EDITOR
         DrawDebugSphere(GetWorld(), HitPoint, BrushRadius, 12, FColor::Green, false, 0.05f);
 #endif

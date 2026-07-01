@@ -23,6 +23,12 @@ public:
     virtual void PostLogin(APlayerController* NewPlayer) override;
     virtual void Logout(AController* Exiting) override;
 
+    /** Ruta del mapa de juego. Asignar en BP_LobbyGameMode si se quiere cambiar sin recompilar. */
+    UPROPERTY(EditDefaultsOnly, Category="Travel")
+    FString GameMapPath = TEXT("/Game/Maps/Lvl-01");
+
+    void TravelToGame();
+
 private:
     int32 PlayersJoined = 0;
 };

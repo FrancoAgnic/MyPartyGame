@@ -303,6 +303,7 @@ const int32 APTSculptVolume::TriTable[256][16] = {
 APTSculptVolume::APTSculptVolume()
 {
     PrimaryActorTick.bCanEverTick = true;
+    bReplicates = true;
     Mesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("Mesh"));
     SetRootComponent(Mesh);
     Mesh->bUseAsyncCooking = true;
@@ -543,6 +544,25 @@ void APTSculptVolume::RunMarchingCubes(TArray<FVector>& OutVerts,
             OutTris.Add(base + 2);
         }
     }
+}
+
+// ─── RPCs de replicación ──────────────────────────────────────────────────────
+
+bool APTSculptVolume::Server_ApplyBrush_Validate(FVector, EPTBrushMode, float, float, float)
+{
+    return true;
+}
+
+void APTSculptVolume::Server_ApplyBrush_Implementation(FVector WorldPos, EPTBrushMode Mode,
+                                                        float Radius, float Strength, float DeltaTime)
+{
+    Multicast_ApplyBrush(WorldPos, Mode, Radius, Strength, DeltaTime);
+}
+
+void APTSculptVolume::Multicast_ApplyBrush_Implementation(FVector WorldPos, EPTBrushMode Mode,
+                                                           float Radius, float Strength, float DeltaTime)
+{
+    ApplyBrush(WorldPos, Mode, Radius, Strength, DeltaTime);
 }
 
 void APTSculptVolume::RebuildMesh()
