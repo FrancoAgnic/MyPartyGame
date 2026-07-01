@@ -14,6 +14,7 @@ public class MyPartyGame : ModuleRules
 			"Engine",
 			"InputCore",
 			"EnhancedInput",
+			"ProceduralMeshComponent",
 			"AIModule",
 			"StateTreeModule",
 			"GameplayStateTreeModule",
@@ -60,7 +61,8 @@ public class MyPartyGame : ModuleRules
 			"MyPartyGame/Variant_SideScrolling/AI",
 			"MyPartyGame/Variant_SideScrolling/Gameplay",
 			"MyPartyGame/Variant_SideScrolling/Interfaces",
-			"MyPartyGame/Variant_SideScrolling/UI"
+			"MyPartyGame/Variant_SideScrolling/UI",
+			"MyPartyGame/Sculpt"
 		});
 	}
 }
