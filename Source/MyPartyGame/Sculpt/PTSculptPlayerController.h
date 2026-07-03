@@ -34,9 +34,28 @@ public:
     UPROPERTY(EditAnywhere, Category="Sculpt")
     UMaterialInterface* BrushDecalMaterial = nullptr;
 
-    /** Material semitransparente para la preview de la forma. */
+    /** Material semitransparente para la preview de la forma (fallback). */
     UPROPERTY(EditAnywhere, Category="Sculpt")
     UMaterialInterface* PreviewMeshMaterial = nullptr;
+
+    /** Materiales de preview por modo, para diferenciar la tool activa. Si alguno
+     *  es null, se usa PreviewMeshMaterial. Asignar en el Blueprint. */
+    UPROPERTY(EditAnywhere, Category="Sculpt") UMaterialInterface* PreviewMatAdd    = nullptr;
+    UPROPERTY(EditAnywhere, Category="Sculpt") UMaterialInterface* PreviewMatErase  = nullptr;
+    UPROPERTY(EditAnywhere, Category="Sculpt") UMaterialInterface* PreviewMatSmooth = nullptr;
+    UPROPERTY(EditAnywhere, Category="Sculpt") UMaterialInterface* PreviewMatPaint  = nullptr;
+
+    /** Meshes de preview propios. Si se asignan, reemplazan al mesh procedural.
+     *  Prioridad: mesh por tool > mesh por stamp > procedural. Todos opcionales. */
+    UPROPERTY(EditAnywhere, Category="Sculpt|PreviewMesh") float PreviewMeshBaseSize = 100.f; // tamaño nativo del mesh (UU)
+    UPROPERTY(EditAnywhere, Category="Sculpt|PreviewMesh") UStaticMesh* PreviewMeshSphere   = nullptr;
+    UPROPERTY(EditAnywhere, Category="Sculpt|PreviewMesh") UStaticMesh* PreviewMeshCube     = nullptr;
+    UPROPERTY(EditAnywhere, Category="Sculpt|PreviewMesh") UStaticMesh* PreviewMeshCylinder = nullptr;
+    UPROPERTY(EditAnywhere, Category="Sculpt|PreviewMesh") UStaticMesh* PreviewMeshTriPrism = nullptr;
+    UPROPERTY(EditAnywhere, Category="Sculpt|PreviewMesh") UStaticMesh* PreviewToolMeshAdd    = nullptr;
+    UPROPERTY(EditAnywhere, Category="Sculpt|PreviewMesh") UStaticMesh* PreviewToolMeshErase  = nullptr;
+    UPROPERTY(EditAnywhere, Category="Sculpt|PreviewMesh") UStaticMesh* PreviewToolMeshSmooth = nullptr;
+    UPROPERTY(EditAnywhere, Category="Sculpt|PreviewMesh") UStaticMesh* PreviewToolMeshPaint  = nullptr;
 
     // ── Color picker ────────────────────────────────────────────────────────
     UPROPERTY(EditAnywhere, Category="UI")
@@ -79,12 +98,16 @@ private:
 
     EPTStampShape CachedPreviewShape = EPTStampShape::Sphere;
     float         CachedPreviewSize  = 0.f;
+    EPTEditMode   CachedPreviewMode  = EPTEditMode::Add;
 
-    UPROPERTY() AActor*                   PreviewActor = nullptr;
-    UPROPERTY() UProceduralMeshComponent* PreviewMesh  = nullptr;
-    UPROPERTY() UUserWidget*              ColorPicker  = nullptr;
+    UPROPERTY() AActor*                   PreviewActor      = nullptr;
+    UPROPERTY() UProceduralMeshComponent* PreviewMesh       = nullptr;
+    UPROPERTY() UStaticMeshComponent*     PreviewStaticMesh = nullptr;
+    UPROPERTY() UUserWidget*              ColorPicker       = nullptr;
 
     void RebuildPreviewMesh();
+    void UpdatePreviewVisual();  // elige mesh (tool/stamp/procedural) y material
+    void ApplyPreviewMaterial(); // aplica el material según EditMode
     bool    GetCameraRay(FVector& Start, FVector& Dir) const;
     FVector GetStampPoint(FVector& OutNormal) const;
     float   VoxelHint() const;

@@ -9,7 +9,7 @@
 
 APTLobbyCharacter::APTLobbyCharacter()
 {
-    PrimaryActorTick.bCanEverTick = false;
+    PrimaryActorTick.bCanEverTick = true; // vuelo aplica input vertical por tick
 
     // Spring arm + cámara en tercera persona
     SpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm"));
@@ -24,6 +24,11 @@ APTLobbyCharacter::APTLobbyCharacter()
     bUseControllerRotationYaw = false;
     GetCharacterMovement()->bOrientRotationToMovement = true;
     GetCharacterMovement()->RotationRate = FRotator(0.f, 540.f, 0.f);
+
+    // Vuelo sin inercia: frenar apenas se sueltan los inputs (para/arranca al toque).
+    GetCharacterMovement()->BrakingDecelerationFlying = 100000.f;
+    GetCharacterMovement()->bUseSeparateBrakingFriction = true;
+    GetCharacterMovement()->BrakingFriction = 10.f;
 
     // ACharacter + CharacterMovementComponent replican movimiento y rotación automáticamente.
     SetReplicates(true);
@@ -62,8 +67,55 @@ void APTLobbyCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
             EIC->BindAction(LookAction, ETriggerEvent::Triggered, this, &APTLobbyCharacter::Look);
         if (JumpAction)
         {
-            EIC->BindAction(JumpAction, ETriggerEvent::Started,   this, &ACharacter::Jump);
-            EIC->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+            EIC->BindAction(JumpAction, ETriggerEvent::Started,   this, &APTLobbyCharacter::OnJumpPressed);
+            EIC->BindAction(JumpAction, ETriggerEvent::Completed, this, &APTLobbyCharacter::OnJumpReleased);
         }
     }
+
+    // Descenso en vuelo: Shift izquierdo (tecla legacy, no interfiere con Enhanced Input).
+    PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Pressed,  this, &APTLobbyCharacter::OnDescendPressed);
+    PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Released, this, &APTLobbyCharacter::OnDescendReleased);
+}
+
+// ── Vuelo (modo creativo Minecraft) ─────────────────────────────────────────
+
+void APTLobbyCharacter::OnJumpPressed()
+{
+    const float Now = GetWorld()->GetTimeSeconds();
+    if (Now - LastJumpTime < DoubleTapWindow)
+        ToggleFly(); // doble toque de espacio → alterna vuelo
+    LastJumpTime = Now;
+
+    if (bFlying) bAscend = true;
+    else         Jump();
+}
+
+void APTLobbyCharacter::OnJumpReleased()
+{
+    bAscend = false;
+    if (!bFlying) StopJumping();
+}
+
+void APTLobbyCharacter::ToggleFly()
+{
+    bFlying = !bFlying;
+    UCharacterMovementComponent* M = GetCharacterMovement();
+    if (bFlying)
+    {
+        M->MaxFlySpeed = FlySpeed;
+        M->SetMovementMode(MOVE_Flying);
+    }
+    else
+    {
+        M->SetMovementMode(MOVE_Walking);
+        bAscend = bDescend = false;
+    }
+}
+
+void APTLobbyCharacter::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+    if (!bFlying) return;
+    if (bAscend)  AddMovementInput(FVector::UpVector,  1.f);
+    if (bDescend) AddMovementInput(FVector::UpVector, -1.f);
 }

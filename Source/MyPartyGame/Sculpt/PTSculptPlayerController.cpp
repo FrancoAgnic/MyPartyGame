@@ -5,6 +5,8 @@
 #include "GameFramework/Character.h"
 #include "Engine/World.h"
 #include "Blueprint/UserWidget.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 
 APTSculptPlayerController::APTSculptPlayerController()
 {
@@ -44,6 +46,14 @@ void APTSculptPlayerController::BeginPlay()
         PreviewActor->SetRootComponent(PreviewMesh);
         if (PreviewMeshMaterial)
             PreviewMesh->SetMaterial(0, PreviewMeshMaterial);
+
+        // Mesh estático opcional (cuando el usuario asigna sus propios meshes).
+        PreviewStaticMesh = NewObject<UStaticMeshComponent>(PreviewActor, TEXT("PreviewStaticMesh"));
+        PreviewStaticMesh->SetupAttachment(PreviewMesh);
+        PreviewStaticMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        PreviewStaticMesh->SetCastShadow(false);
+        PreviewStaticMesh->RegisterComponent();
+        PreviewStaticMesh->SetVisibility(false);
     }
 }
 
@@ -84,12 +94,16 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
     FVector Normal;
     FVector StampPos = GetStampPoint(Normal);
 
-    // Preview: reconstruir solo cuando cambia forma o tamaño
-    if (PreviewMesh && (bPreviewDirty || CachedPreviewShape != StampShape || CachedPreviewSize != StampSize))
+    // Preview: actualizar cuando cambia forma, tamaño o modo (tool).
+    if (PreviewMesh && (bPreviewDirty
+        || CachedPreviewShape != StampShape
+        || CachedPreviewSize  != StampSize
+        || CachedPreviewMode  != EditMode))
     {
-        RebuildPreviewMesh();
+        UpdatePreviewVisual();
         CachedPreviewShape = StampShape;
         CachedPreviewSize  = StampSize;
+        CachedPreviewMode  = EditMode;
         bPreviewDirty      = false;
     }
 
@@ -137,9 +151,9 @@ FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
         return Start + Dir * AirDepth;
     }
 
-    // ── Modo eje: trazo recto sobre un plano alineado a ejes del mundo ──────
-    // Mientras se esculpe, el rayo se interseca con el plano bloqueado al inicio
-    // y se engancha al eje dominante → líneas rectas, sin curvatura de cámara.
+    // ── Modo eje: trazo recto sobre el plano vertical bloqueado al inicio ───
+    // El rayo se interseca con el plano (contiene Z mundo). Movimiento libre y
+    // recto dentro del plano: vertical plomada + diagonales verticales rectas.
     if (bAxisLock && bIsStamping)
     {
         const float denom = FVector::DotProduct(Dir, AxisPlaneN);
@@ -149,18 +163,8 @@ FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
             const float t = FVector::DotProduct(AxisOrigin - Start, AxisPlaneN) / denom;
             if (t > 0.f) Pf = Start + Dir * t;
         }
-        FVector delta = Pf - AxisOrigin;
-        const float du = FVector::DotProduct(delta, AxisU);
-        const float dv = FVector::DotProduct(delta, AxisV);
-
-        // Elegir eje dominante y fijarlo tras superar un umbral (línea limpia).
-        if (AxisChosen < 0 && FMath::Max(FMath::Abs(du), FMath::Abs(dv)) > VoxelHint())
-            AxisChosen = (FMath::Abs(du) >= FMath::Abs(dv)) ? 0 : 1;
-
         OutNormal = AxisPlaneN;
-        if (AxisChosen == 0) return AxisOrigin + AxisU * du;
-        if (AxisChosen == 1) return AxisOrigin + AxisV * dv;
-        return AxisOrigin; // aún sin dirección definida
+        return Pf;
     }
 
     // Cursor tipo SculptrVR: siempre a distancia fija (brazo extendido).
@@ -185,8 +189,64 @@ void APTSculptPlayerController::RebuildPreviewMesh()
     APTSculptVolume::BuildStampPreview(StampShape, StampSize, Volume->VoxelSize, Verts, Tris, Normals);
     PreviewMesh->CreateMeshSection(0, Verts, Tris, Normals, {}, {}, {}, false);
 
-    if (PreviewMeshMaterial)
-        PreviewMesh->SetMaterial(0, PreviewMeshMaterial);
+    ApplyPreviewMaterial();
+}
+
+void APTSculptPlayerController::ApplyPreviewMaterial()
+{
+    UMaterialInterface* Mat = PreviewMeshMaterial;
+    switch (EditMode)
+    {
+    case EPTEditMode::Add:    if (PreviewMatAdd)    Mat = PreviewMatAdd;    break;
+    case EPTEditMode::Erase:  if (PreviewMatErase)  Mat = PreviewMatErase;  break;
+    case EPTEditMode::Smooth: if (PreviewMatSmooth) Mat = PreviewMatSmooth; break;
+    case EPTEditMode::Paint:  if (PreviewMatPaint)  Mat = PreviewMatPaint;  break;
+    }
+    if (!Mat) return;
+    if (PreviewMesh)       PreviewMesh->SetMaterial(0, Mat);
+    if (PreviewStaticMesh) PreviewStaticMesh->SetMaterial(0, Mat);
+}
+
+// Elige el mesh de preview: override por tool > override por stamp > procedural.
+void APTSculptPlayerController::UpdatePreviewVisual()
+{
+    if (!PreviewMesh) return;
+
+    UStaticMesh* ToolMesh = nullptr;
+    switch (EditMode)
+    {
+    case EPTEditMode::Add:    ToolMesh = PreviewToolMeshAdd;    break;
+    case EPTEditMode::Erase:  ToolMesh = PreviewToolMeshErase;  break;
+    case EPTEditMode::Smooth: ToolMesh = PreviewToolMeshSmooth; break;
+    case EPTEditMode::Paint:  ToolMesh = PreviewToolMeshPaint;  break;
+    }
+    UStaticMesh* ShapeMesh = nullptr;
+    switch (StampShape)
+    {
+    case EPTStampShape::Sphere:   ShapeMesh = PreviewMeshSphere;   break;
+    case EPTStampShape::Cube:     ShapeMesh = PreviewMeshCube;     break;
+    case EPTStampShape::Cylinder: ShapeMesh = PreviewMeshCylinder; break;
+    case EPTStampShape::TriPrism: ShapeMesh = PreviewMeshTriPrism; break;
+    }
+    UStaticMesh* Chosen = ToolMesh ? ToolMesh : ShapeMesh;
+
+    if (Chosen && PreviewStaticMesh)
+    {
+        // Usar el mesh estático del usuario, escalado al tamaño de brocha.
+        PreviewStaticMesh->SetStaticMesh(Chosen);
+        const float Base = FMath::Max(PreviewMeshBaseSize, 1.f);
+        PreviewStaticMesh->SetWorldScale3D(FVector(StampSize / Base));
+        PreviewStaticMesh->SetVisibility(true);
+        PreviewMesh->SetVisibility(false);
+    }
+    else
+    {
+        // Mesh procedural (forma SDF del sello).
+        if (PreviewStaticMesh) PreviewStaticMesh->SetVisibility(false);
+        PreviewMesh->SetVisibility(true);
+        RebuildPreviewMesh();
+    }
+    ApplyPreviewMaterial();
 }
 
 // ── Acciones de input ─────────────────────────────────────────────────────────
@@ -195,19 +255,19 @@ void APTSculptPlayerController::OnStampPressed()
 {
     bIsStamping = true;
 
-    // En modo eje: bloquear el plano alineado a ejes del mundo al inicio del trazo.
+    // En modo eje: bloquear un plano VERTICAL (que contiene el eje Z global) y
+    // que mira hacia la cámara. Dentro del plano el movimiento es libre y recto:
+    // vertical = plomada exacta (Z mundo), y diagonales verticales rectas entre
+    // el horizontal y Z. Sin snap a un solo eje, sin curvatura de cámara.
     if (bAxisLock)
     {
         FVector Start, Dir;
         if (GetCameraRay(Start, Dir))
         {
             AxisOrigin = Start + Dir * AirDepth;
-            // Plano perpendicular al eje del mundo más alineado con la cámara.
-            const FVector aF(FMath::Abs(Dir.X), FMath::Abs(Dir.Y), FMath::Abs(Dir.Z));
-            if (aF.X >= aF.Y && aF.X >= aF.Z) { AxisPlaneN = FVector(1,0,0); AxisU = FVector(0,1,0); AxisV = FVector(0,0,1); }
-            else if (aF.Y >= aF.Z)            { AxisPlaneN = FVector(0,1,0); AxisU = FVector(1,0,0); AxisV = FVector(0,0,1); }
-            else                              { AxisPlaneN = FVector(0,0,1); AxisU = FVector(1,0,0); AxisV = FVector(0,1,0); }
-            AxisChosen = -1;
+            FVector N(Dir.X, Dir.Y, 0.f);            // normal horizontal → plano vertical
+            AxisPlaneN = N.GetSafeNormal();
+            if (AxisPlaneN.IsNearlyZero()) AxisPlaneN = FVector(1, 0, 0); // mirando recto arriba/abajo
         }
     }
 }
@@ -250,6 +310,7 @@ void APTSculptPlayerController::CycleModes()
     case EPTEditMode::Smooth: EditMode = EPTEditMode::Paint;  break;
     case EPTEditMode::Paint:  EditMode = EPTEditMode::Add;    break;
     }
+    ApplyPreviewMaterial();
     UE_LOG(LogTemp, Log, TEXT("[Sculpt] Mode: %d"), (int32)EditMode);
 }
 
@@ -277,6 +338,7 @@ void APTSculptPlayerController::OnColorConfirmed(FLinearColor NewColor)
 {
     CurrentPaintColor = NewColor;
     EditMode          = EPTEditMode::Paint;
+    ApplyPreviewMaterial();
 
     if (ColorPicker)
     {

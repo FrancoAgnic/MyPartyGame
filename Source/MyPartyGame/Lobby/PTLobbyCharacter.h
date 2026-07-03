@@ -21,6 +21,15 @@ public:
 
 protected:
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
+    virtual void Tick(float DeltaSeconds) override;
+
+    // Velocidad de vuelo (modo creativo).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Fly")
+    float FlySpeed = 900.f;
+
+    // Ventana para el doble toque de espacio que activa el vuelo.
+    UPROPERTY(EditAnywhere, Category="Fly")
+    float DoubleTapWindow = 0.30f;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera")
     USpringArmComponent* SpringArm;
@@ -41,4 +50,16 @@ protected:
 private:
     void Move(const FInputActionValue& Value);
     void Look(const FInputActionValue& Value);
+
+    // ── Vuelo (modo creativo Minecraft) ─────────────────────────────────────
+    void OnJumpPressed();
+    void OnJumpReleased();
+    void OnDescendPressed()  { bDescend = true;  }
+    void OnDescendReleased() { bDescend = false; }
+    void ToggleFly();
+
+    bool  bFlying   = false;
+    bool  bAscend   = false;
+    bool  bDescend  = false;
+    float LastJumpTime = -10.f;
 };
