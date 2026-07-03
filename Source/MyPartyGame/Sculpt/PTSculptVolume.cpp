@@ -316,9 +316,8 @@ APTSculptVolume::APTSculptVolume()
     // Caja que define el lienzo de esculpido. Visible en editor, oculta en juego.
     BoundsBox = CreateDefaultSubobject<UBoxComponent>(TEXT("BoundsBox"));
     BoundsBox->SetupAttachment(Mesh);
-    const float HalfExt = GridSize * VoxelSize * 0.5f; // 480 UU por defecto
-    BoundsBox->SetRelativeLocation(FVector(HalfExt)); // centrar respecto al mesh
-    BoundsBox->SetBoxExtent(FVector(HalfExt));
+    BoundsBox->SetRelativeLocation(FVector::ZeroVector); // centrado en el origen
+    BoundsBox->SetBoxExtent(FVector(480.f));             // lienzo por defecto (960 UU/lado)
     BoundsBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     BoundsBox->ShapeColor = FColor(0, 200, 255);
     BoundsBox->bDrawOnlyIfSelected = false; // siempre visible en editor
@@ -328,136 +327,57 @@ APTSculptVolume::APTSculptVolume()
 void APTSculptVolume::OnConstruction(const FTransform& Transform)
 {
     Super::OnConstruction(Transform);
-    if (!BoundsBox) return;
-
-    // El usuario cambió Box Extent en el panel de detalles → recalcular VoxelSize.
-    const float HalfExt = BoundsBox->GetUnscaledBoxExtent().X;
-    if (HalfExt > 0.f)
-    {
-        VoxelSize = (HalfExt * 2.f) / GridSize;
-        // Mantener la caja cúbica y recentrada
-        BoundsBox->SetBoxExtent(FVector(HalfExt));
-        BoundsBox->SetRelativeLocation(FVector(HalfExt));
-    }
+    // La caja define el lienzo. La resolución (VoxelSize) es independiente del
+    // tamaño de la caja: agrandarla da más volumen esculpible, no menos detalle.
 }
 
 void APTSculptVolume::BeginPlay()
 {
     Super::BeginPlay();
+    Field.VoxelSize = VoxelSize;
     if (ClayMaterial)
         Mesh->SetMaterial(0, ClayMaterial);
-    InitGrid();
 }
 
 void APTSculptVolume::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
-    if (DirtyChunks.Num() == 0 || bRebuildInProgress) return;
+    if (!Field.HasDirty() || bRebuildInProgress) return;
     TimeSinceRebuild += DeltaTime;
     if (TimeSinceRebuild >= RebuildInterval)
     {
         TimeSinceRebuild = 0.f;
-        RebuildDirtyChunks();
+        RebuildDirty();
     }
 }
 
-int32 APTSculptVolume::ChunkIndex(int32 CX, int32 CY, int32 CZ) const
-{
-    return CX + CY * ChunksPerAxis + CZ * ChunksPerAxis * ChunksPerAxis;
-}
+// ─── Coordenadas ──────────────────────────────────────────────────────────────
 
-void APTSculptVolume::MarkDirtyRegion(int32 X0, int32 Y0, int32 Z0, int32 X1, int32 Y1, int32 Z1)
-{
-    // Convierte un rango de celdas a los chunks que lo contienen y los marca.
-    const int32 cx0 = FMath::Clamp(X0 / ChunkSize, 0, ChunksPerAxis - 1);
-    const int32 cy0 = FMath::Clamp(Y0 / ChunkSize, 0, ChunksPerAxis - 1);
-    const int32 cz0 = FMath::Clamp(Z0 / ChunkSize, 0, ChunksPerAxis - 1);
-    const int32 cx1 = FMath::Clamp(X1 / ChunkSize, 0, ChunksPerAxis - 1);
-    const int32 cy1 = FMath::Clamp(Y1 / ChunkSize, 0, ChunksPerAxis - 1);
-    const int32 cz1 = FMath::Clamp(Z1 / ChunkSize, 0, ChunksPerAxis - 1);
-
-    for (int32 cz = cz0; cz <= cz1; ++cz)
-    for (int32 cy = cy0; cy <= cy1; ++cy)
-    for (int32 cx = cx0; cx <= cx1; ++cx)
-        DirtyChunks.Add(ChunkIndex(cx, cy, cz));
-}
-
-// ─── Grid helpers ─────────────────────────────────────────────────────────────
-
-void APTSculptVolume::InitGrid()
-{
-    const int32 N = GridSize * GridSize * GridSize;
-    Grid.SetNum(N);
-    ColorGrid.Init(FLinearColor::White, N);
-    for (int32 z = 0; z < GridSize; ++z)
-        for (int32 y = 0; y < GridSize; ++y)
-            for (int32 x = 0; x < GridSize; ++x)
-                Grid[Idx(x, y, z)] = -1.f; // grid vacio — se esculpe en el aire
-}
-
-FLinearColor APTSculptVolume::GetColor(int32 X, int32 Y, int32 Z) const
-{
-    return InBounds(X, Y, Z) ? ColorGrid[Idx(X, Y, Z)] : FLinearColor::White;
-}
-
-void APTSculptVolume::SetColor(int32 X, int32 Y, int32 Z, FLinearColor C)
-{
-    if (InBounds(X, Y, Z)) ColorGrid[Idx(X, Y, Z)] = C;
-}
-
-FLinearColor APTSculptVolume::SampleWorldColor(FVector WorldPos) const
-{
-    FVector GP = WorldToGrid(WorldPos);
-    int32 x = FMath::RoundToInt(GP.X), y = FMath::RoundToInt(GP.Y), z = FMath::RoundToInt(GP.Z);
-    return GetColor(x, y, z);
-}
-
-bool APTSculptVolume::InBounds(int32 X, int32 Y, int32 Z) const
-{
-    return X >= 0 && X < GridSize && Y >= 0 && Y < GridSize && Z >= 0 && Z < GridSize;
-}
-
-int32 APTSculptVolume::Idx(int32 X, int32 Y, int32 Z) const
-{
-    return X + Y * GridSize + Z * GridSize * GridSize;
-}
-
-float APTSculptVolume::GetVal(int32 X, int32 Y, int32 Z) const
-{
-    return InBounds(X, Y, Z) ? Grid[Idx(X, Y, Z)] : -1.f;
-}
-
-void APTSculptVolume::SetVal(int32 X, int32 Y, int32 Z, float V)
-{
-    if (InBounds(X, Y, Z))
-        Grid[Idx(X, Y, Z)] = FMath::Clamp(V, -1.f, 1.f);
-}
-
-FVector APTSculptVolume::WorldToGrid(FVector W) const
+FVector APTSculptVolume::WorldToCell(FVector W) const
 {
     return GetActorTransform().InverseTransformPosition(W) / VoxelSize;
 }
 
+void APTSculptVolume::CellBounds(FIntVector& OutMin, FIntVector& OutMax) const
+{
+    const FVector Center = BoundsBox ? BoundsBox->GetRelativeLocation() : FVector::ZeroVector;
+    const FVector Half   = BoundsBox ? BoundsBox->GetUnscaledBoxExtent() : FVector(480.f);
+    const FVector LMin = (Center - Half) / VoxelSize;
+    const FVector LMax = (Center + Half) / VoxelSize;
+    OutMin = FIntVector(FMath::FloorToInt(LMin.X), FMath::FloorToInt(LMin.Y), FMath::FloorToInt(LMin.Z));
+    OutMax = FIntVector(FMath::CeilToInt(LMax.X),  FMath::CeilToInt(LMax.Y),  FMath::CeilToInt(LMax.Z));
+}
+
 float APTSculptVolume::SampleWorldDensity(FVector WorldPos) const
 {
-    FVector GP = WorldToGrid(WorldPos);
-    return SampleGrid(Grid, GP.X, GP.Y, GP.Z);
+    const FVector C = WorldToCell(WorldPos);
+    return Field.SampleSDF(C.X, C.Y, C.Z);
 }
 
-float APTSculptVolume::SampleGrid(const TArray<float>& G, float X, float Y, float Z) const
+FLinearColor APTSculptVolume::SampleWorldColor(FVector WorldPos) const
 {
-    int32 x0=FMath::FloorToInt(X), y0=FMath::FloorToInt(Y), z0=FMath::FloorToInt(Z);
-    float fx=X-x0, fy=Y-y0, fz=Z-z0;
-    auto V=[&](int32 xi,int32 yi,int32 zi)->float{ return InBounds(xi,yi,zi)?G[Idx(xi,yi,zi)]:-1.f; };
-    return FMath::Lerp(
-        FMath::Lerp(FMath::Lerp(V(x0,y0,z0),V(x0+1,y0,z0),fx),FMath::Lerp(V(x0,y0+1,z0),V(x0+1,y0+1,z0),fx),fy),
-        FMath::Lerp(FMath::Lerp(V(x0,y0,z0+1),V(x0+1,y0,z0+1),fx),FMath::Lerp(V(x0,y0+1,z0+1),V(x0+1,y0+1,z0+1),fx),fy),
-        fz);
-}
-
-FVector APTSculptVolume::GridToLocal(float X, float Y, float Z) const
-{
-    return FVector(X, Y, Z) * VoxelSize;
+    const FVector C = WorldToCell(WorldPos);
+    return FLinearColor(Field.GetColor(FMath::RoundToInt(C.X), FMath::RoundToInt(C.Y), FMath::RoundToInt(C.Z)));
 }
 
 // ─── Stamp operations ─────────────────────────────────────────────────────────
@@ -506,57 +426,71 @@ float APTSculptVolume::StampSDF(EPTStampShape Shape, FVector P, float HalfSize)
 void APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
                                   EPTEditMode Mode, FLinearColor PaintColor)
 {
-    FVector GC = WorldToGrid(WorldPos);
-    const float HalfSize = (Size * 0.5f) / VoxelSize; // radio en unidades de grid
+    const FVector GC = WorldToCell(WorldPos);
+    const float HalfSize = (Size * 0.5f) / VoxelSize; // radio en celdas
     const int32 R = FMath::CeilToInt(HalfSize) + 1;
 
-    const int32 x0 = FMath::Max(0, FMath::FloorToInt(GC.X) - R);
-    const int32 y0 = FMath::Max(0, FMath::FloorToInt(GC.Y) - R);
-    const int32 z0 = FMath::Max(0, FMath::FloorToInt(GC.Z) - R);
-    const int32 x1 = FMath::Min(GridSize-1, FMath::CeilToInt(GC.X) + R);
-    const int32 y1 = FMath::Min(GridSize-1, FMath::CeilToInt(GC.Y) + R);
-    const int32 z1 = FMath::Min(GridSize-1, FMath::CeilToInt(GC.Z) + R);
+    // Clamp al lienzo (BoundsBox).
+    FIntVector BMin, BMax;
+    CellBounds(BMin, BMax);
+    const int32 x0 = FMath::Max(BMin.X, FMath::FloorToInt(GC.X) - R);
+    const int32 y0 = FMath::Max(BMin.Y, FMath::FloorToInt(GC.Y) - R);
+    const int32 z0 = FMath::Max(BMin.Z, FMath::FloorToInt(GC.Z) - R);
+    const int32 x1 = FMath::Min(BMax.X, FMath::CeilToInt(GC.X) + R);
+    const int32 y1 = FMath::Min(BMax.Y, FMath::CeilToInt(GC.Y) + R);
+    const int32 z1 = FMath::Min(BMax.Z, FMath::CeilToInt(GC.Z) + R);
 
-    bool bChanged = false;
+    bool bAnyChange = false;
     for (int32 z = z0; z <= z1; ++z)
     for (int32 y = y0; y <= y1; ++y)
     for (int32 x = x0; x <= x1; ++x)
     {
-        FVector LP(x - GC.X, y - GC.Y, z - GC.Z);
+        const FVector LP(x - GC.X, y - GC.Y, z - GC.Z);
         const float sdf  = StampSDF(Shape, LP, HalfSize);
-        const float prev = GetVal(x, y, z);
+        const float prev = Field.GetSDF(x, y, z);
 
         if (Mode == EPTEditMode::Add)
         {
             const float next = FMath::Max(prev, sdf);
-            if (next != prev) { SetVal(x, y, z, next); bChanged = true; }
-            // Aplica color al borde del sello (zona de fusión)
+            if (next != prev) { Field.SetSDF(x, y, z, next); bAnyChange = true; }
             if (sdf > -1.f)
             {
                 const float blend = FMath::Clamp(sdf + 1.f, 0.f, 1.f) * 0.8f;
-                SetColor(x, y, z, FLinearColor::LerpUsingHSV(GetColor(x,y,z), PaintColor, blend));
+                const FColor cur = Field.GetColor(x, y, z);
+                Field.SetColor(x, y, z, FLinearColor::LerpUsingHSV(FLinearColor(cur), PaintColor, blend).ToFColor(true));
+                bAnyChange = true;
             }
         }
         else if (Mode == EPTEditMode::Erase)
         {
             const float next = FMath::Min(prev, -sdf);
-            if (next != prev) { SetVal(x, y, z, next); bChanged = true; }
+            if (next != prev) { Field.SetSDF(x, y, z, next); bAnyChange = true; }
         }
-        else // Paint — solo pinta donde hay material
+        else // Paint
         {
             if (prev > 0.f && sdf > -1.f)
             {
                 const float blend = FMath::Clamp(sdf + 1.f, 0.f, 1.f) * 0.5f;
-                SetColor(x, y, z, FLinearColor::LerpUsingHSV(GetColor(x,y,z), PaintColor, blend));
-                bChanged = true;
+                const FColor cur = Field.GetColor(x, y, z);
+                Field.SetColor(x, y, z, FLinearColor::LerpUsingHSV(FLinearColor(cur), PaintColor, blend).ToFColor(true));
+                bAnyChange = true;
             }
         }
     }
 
-    // Marca los chunks afectados (rango expandido -1 porque el cubo MC en la celda
-    // p usa los valores p y p+1, así que una celda toca la malla del chunk anterior).
-    if (bChanged)
-        MarkDirtyRegion(x0 - 1, y0 - 1, z0 - 1, x1, y1, z1);
+    if (!bAnyChange) return;
+
+    // Marca todos los bricks que cubren el bbox del sello (+1 celda de borde para
+    // que los bricks vecinos re-mallen su costura). Bricks vacíos hacen early-out.
+    const int32 BS = FPTBrick::BrickSize;
+    auto FloorDivBS = [BS](int32 v){ return (v >= 0) ? v / BS : -(( -v + BS - 1) / BS); };
+    const int32 bx0 = FloorDivBS(x0 - 1), bx1 = FloorDivBS(x1 + 1);
+    const int32 by0 = FloorDivBS(y0 - 1), by1 = FloorDivBS(y1 + 1);
+    const int32 bz0 = FloorDivBS(z0 - 1), bz1 = FloorDivBS(z1 + 1);
+    for (int32 bz = bz0; bz <= bz1; ++bz)
+    for (int32 by = by0; by <= by1; ++by)
+    for (int32 bx = bx0; bx <= bx1; ++bx)
+        Field.MarkDirty(FPTBrickKey(bx, by, bz));
 }
 
 // ─── Marching Cubes ───────────────────────────────────────────────────────────
@@ -698,57 +632,48 @@ void APTSculptVolume::BuildStampPreview(EPTStampShape Shape, float Size, float V
     for (FVector& V : OutVerts) V -= Offset;
 }
 
-void APTSculptVolume::RebuildDirtyChunks()
+void APTSculptVolume::RebuildDirty()
 {
     bRebuildInProgress = true;
 
-    // Snapshot compartido del grid (thread-safe) para el batch de chunks.
-    TSharedPtr<TArray<float>, ESPMode::ThreadSafe>        SnapG = MakeShared<TArray<float>, ESPMode::ThreadSafe>(Grid);
-    TSharedPtr<TArray<FLinearColor>, ESPMode::ThreadSafe> SnapC = MakeShared<TArray<FLinearColor>, ESPMode::ThreadSafe>(ColorGrid);
+    // Snapshot de cada brick dirty en el GameThread (sin tocar el mapa desde el thread).
+    TArray<FPTBrickKey> Keys;
+    Field.TakeDirty(Keys);
 
-    TArray<int32> Chunks = DirtyChunks.Array();
-    DirtyChunks.Reset();
-
-    const float VoxSz = VoxelSize;
-    UProceduralMeshComponent* MeshPtr = Mesh;
-
-    Async(EAsyncExecution::ThreadPool,
-        [this, SnapG, SnapC, VoxSz, MeshPtr, Chunks = MoveTemp(Chunks)]() mutable
+    TSharedPtr<TArray<FPTSculptField::FBrickSnapshot>, ESPMode::ThreadSafe> Snaps =
+        MakeShared<TArray<FPTSculptField::FBrickSnapshot>, ESPMode::ThreadSafe>();
+    Snaps->Reserve(Keys.Num());
+    for (const FPTBrickKey& K : Keys)
     {
-        struct FChunkResult
+        FPTSculptField::FBrickSnapshot S;
+        S.Section = Field.SectionIndex(K);
+        Field.SnapshotBrick(K, S);
+        Snaps->Add(MoveTemp(S));
+    }
+
+    UProceduralMeshComponent* MeshPtr = Mesh;
+    UMaterialInterface* Mat = ClayMaterial;
+
+    Async(EAsyncExecution::ThreadPool, [this, MeshPtr, Mat, Snaps]()
+    {
+        TSharedPtr<TArray<FPTBrickMesh>, ESPMode::ThreadSafe> Results =
+            MakeShared<TArray<FPTBrickMesh>, ESPMode::ThreadSafe>();
+        Results->Reserve(Snaps->Num());
+        for (const FPTSculptField::FBrickSnapshot& S : *Snaps)
         {
-            int32 Section;
-            TArray<FVector> Verts, Normals;
-            TArray<int32>   Tris;
-            TArray<FColor>  Colors;
-        };
-        TSharedPtr<TArray<FChunkResult>, ESPMode::ThreadSafe> Results =
-            MakeShared<TArray<FChunkResult>, ESPMode::ThreadSafe>();
-
-        for (int32 CI : Chunks)
-        {
-            const int32 cx =  CI % ChunksPerAxis;
-            const int32 cy = (CI / ChunksPerAxis) % ChunksPerAxis;
-            const int32 cz =  CI / (ChunksPerAxis * ChunksPerAxis);
-
-            const int32 x0 = cx * ChunkSize, y0 = cy * ChunkSize, z0 = cz * ChunkSize;
-            const int32 x1 = FMath::Min((cx + 1) * ChunkSize, GridSize - 1);
-            const int32 y1 = FMath::Min((cy + 1) * ChunkSize, GridSize - 1);
-            const int32 z1 = FMath::Min((cz + 1) * ChunkSize, GridSize - 1);
-
-            FChunkResult R; R.Section = CI;
-            RunMarchingCubes(*SnapG, *SnapC, GridSize, VoxSz, x0, y0, z0, x1, y1, z1,
-                             R.Verts, R.Tris, R.Normals, R.Colors);
-            Results->Add(MoveTemp(R));
+            FPTBrickMesh M;
+            FPTSculptField::MeshBrick(S, M);
+            Results->Add(MoveTemp(M));
         }
 
-        UMaterialInterface* Mat = ClayMaterial;
         AsyncTask(ENamedThreads::GameThread, [this, MeshPtr, Mat, Results]()
         {
-            for (FChunkResult& R : *Results)
+            for (FPTBrickMesh& M : *Results)
             {
-                MeshPtr->CreateMeshSection(R.Section, R.Verts, R.Tris, R.Normals, {}, R.Colors, {}, /*collision=*/true);
-                if (Mat) MeshPtr->SetMaterial(R.Section, Mat);
+                // Colisión OFF durante el esculpido: el hit usa raymarching SDF,
+                // y cocinar colisión por rebuild era el mayor costo de FPS.
+                MeshPtr->CreateMeshSection(M.Section, M.Verts, M.Tris, M.Normals, {}, M.Colors, {}, /*collision=*/false);
+                if (Mat) MeshPtr->SetMaterial(M.Section, Mat);
             }
             bRebuildInProgress = false;
         });
