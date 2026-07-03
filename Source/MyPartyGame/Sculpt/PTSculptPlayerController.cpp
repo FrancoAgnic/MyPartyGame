@@ -8,6 +8,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "../UI/PTColorPickerWidget.h"
+#include "../Lobby/PTLobbyEscapeMenuWidget.h"
 
 APTSculptPlayerController::APTSculptPlayerController()
 {
@@ -91,24 +92,15 @@ void APTSculptPlayerController::SetupInputComponent()
 
 void APTSculptPlayerController::OnPausePressed()
 {
-    // Toggle directo del menú de pausa (WBP_Settings u otro).
-    if (PauseMenu && PauseMenu->IsInViewport())
-    {
-        PauseMenu->RemoveFromParent();
-        PauseMenu = nullptr;
-        SetInputMode(FInputModeGameOnly());
-        bShowMouseCursor = false;
-        return;
-    }
+    if (!IsLocalController() || !PauseMenuClass) return;
 
-    if (!PauseMenuClass) return;
-    PauseMenu = CreateWidget<UUserWidget>(this, PauseMenuClass);
-    if (PauseMenu)
+    if (!EscapeMenu)
     {
-        PauseMenu->AddToViewport(10);
-        SetInputMode(FInputModeGameAndUI());
-        bShowMouseCursor = true;
+        EscapeMenu = CreateWidget<UPTLobbyEscapeMenuWidget>(this, PauseMenuClass);
+        if (EscapeMenu) EscapeMenu->AddToViewport(10);
     }
+    // Navegación de dos niveles + manejo de input/cursor lo hace el propio widget.
+    if (EscapeMenu) EscapeMenu->HandleEscape();
 }
 
 // ── Tick ─────────────────────────────────────────────────────────────────────
@@ -116,15 +108,6 @@ void APTSculptPlayerController::OnPausePressed()
 void APTSculptPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
-
-    // Si el menú de pausa se cerró desde adentro (ej. botón Back), restaurar input.
-    if (PauseMenu && !PauseMenu->IsInViewport())
-    {
-        PauseMenu = nullptr;
-        SetInputMode(FInputModeGameOnly());
-        bShowMouseCursor = false;
-    }
-
     if (!Volume) return;
 
     FVector Normal;

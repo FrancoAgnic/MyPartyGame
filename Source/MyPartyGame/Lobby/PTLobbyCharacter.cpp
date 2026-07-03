@@ -21,10 +21,11 @@ APTLobbyCharacter::APTLobbyCharacter()
     GetCharacterMovement()->bOrientRotationToMovement = true;
     GetCharacterMovement()->RotationRate = FRotator(0.f, 540.f, 0.f);
 
-    // Vuelo sin inercia: frenar apenas se sueltan los inputs (para/arranca al toque).
-    GetCharacterMovement()->BrakingDecelerationFlying = 100000.f;
+    // Vuelo con inercia sutil: frena rápido pero con un pequeño deslizamiento.
+    GetCharacterMovement()->BrakingDecelerationFlying = 2500.f;
     GetCharacterMovement()->bUseSeparateBrakingFriction = true;
-    GetCharacterMovement()->BrakingFriction = 10.f;
+    GetCharacterMovement()->BrakingFriction = 2.f;
+    DefaultMaxAccel = GetCharacterMovement()->MaxAcceleration; // para restaurar al caminar
 
     // ACharacter + CharacterMovementComponent replican movimiento y rotación automáticamente.
     SetReplicates(true);
@@ -68,9 +69,9 @@ void APTLobbyCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
         }
     }
 
-    // Descenso en vuelo: Shift izquierdo (tecla legacy, no interfiere con Enhanced Input).
-    PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Pressed,  this, &APTLobbyCharacter::OnDescendPressed);
-    PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Released, this, &APTLobbyCharacter::OnDescendReleased);
+    // Descenso en vuelo: Ctrl izquierdo (tecla legacy, no interfiere con Enhanced Input).
+    PlayerInputComponent->BindKey(EKeys::LeftControl, IE_Pressed,  this, &APTLobbyCharacter::OnDescendPressed);
+    PlayerInputComponent->BindKey(EKeys::LeftControl, IE_Released, this, &APTLobbyCharacter::OnDescendReleased);
 }
 
 // ── Vuelo (modo creativo Minecraft) ─────────────────────────────────────────
@@ -98,11 +99,13 @@ void APTLobbyCharacter::ToggleFly()
     UCharacterMovementComponent* M = GetCharacterMovement();
     if (bFlying)
     {
-        M->MaxFlySpeed = FlySpeed;
+        M->MaxFlySpeed     = FlySpeed;
+        M->MaxAcceleration = FlyAcceleration; // rampa progresiva de 0 a máxima
         M->SetMovementMode(MOVE_Flying);
     }
     else
     {
+        M->MaxAcceleration = DefaultMaxAccel; // restaurar para caminar
         M->SetMovementMode(MOVE_Walking);
         bAscend = bDescend = false;
     }

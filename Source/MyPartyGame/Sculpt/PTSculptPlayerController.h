@@ -61,9 +61,9 @@ public:
     UPROPERTY(EditAnywhere, Category="UI")
     TSubclassOf<UUserWidget> ColorPickerClass;
 
-    /** Menú de pausa (asignar WBP_Settings). Esc lo muestra/oculta. Solo en Lvl-01. */
+    /** Menú de pausa (asignar WBP_LobbyEscapeMenu). Esc maneja la navegación de dos niveles. */
     UPROPERTY(EditAnywhere, Category="UI")
-    TSubclassOf<UUserWidget> PauseMenuClass;
+    TSubclassOf<class UPTLobbyEscapeMenuWidget> PauseMenuClass;
 
     /** Llamado desde el widget BP cuando el usuario confirma un color. */
     UFUNCTION(BlueprintCallable, Category="Sculpt")
@@ -88,7 +88,7 @@ protected:
 
 private:
     APTSculptVolume* Volume = nullptr;
-    UPROPERTY() UUserWidget* PauseMenu = nullptr;
+    UPROPERTY() class UPTLobbyEscapeMenuWidget* EscapeMenu = nullptr;
     void OnPausePressed();
 
     bool bIsStamping        = false;

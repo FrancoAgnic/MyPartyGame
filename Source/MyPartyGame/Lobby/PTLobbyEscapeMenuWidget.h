@@ -19,6 +19,11 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Lobby")
     void ToggleMenu();
 
+    /** Navegación por Esc de dos niveles: si el settings está abierto vuelve al menú;
+     *  si no, abre/cierra el menú completo. Ambos levels llaman a esto. */
+    UFUNCTION(BlueprintCallable, Category = "Lobby")
+    void HandleEscape();
+
     bool IsMenuOpen() const;
 
 protected:

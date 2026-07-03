@@ -73,5 +73,5 @@ void APTLobbyPlayerController::ToggleEscapeMenu(const FInputActionValue& Value)
         if (EscapeMenuWidget) EscapeMenuWidget->AddToViewport();
     }
 
-    if (EscapeMenuWidget) EscapeMenuWidget->ToggleMenu();
+    if (EscapeMenuWidget) EscapeMenuWidget->HandleEscape();
 }

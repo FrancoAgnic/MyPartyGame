@@ -45,6 +45,20 @@ void UPTLobbyEscapeMenuWidget::ToggleMenu()
     }
 }
 
+void UPTLobbyEscapeMenuWidget::HandleEscape()
+{
+    // Si el settings está abierto → volver atrás (cerrar settings, seguir en el menú).
+    if (SettingsPanel && SettingsPanel->GetVisibility() != ESlateVisibility::Collapsed)
+    {
+        SettingsPanel->SetVisibility(ESlateVisibility::Collapsed);
+        return;
+    }
+    // Si no, alternar el menú completo. Al abrir, asegurar el settings oculto.
+    ToggleMenu();
+    if (IsMenuOpen() && SettingsPanel)
+        SettingsPanel->SetVisibility(ESlateVisibility::Collapsed);
+}
+
 void UPTLobbyEscapeMenuWidget::OnLeaveGameClicked()
 {
     // OpenLevel local desconecta del server (cierra la conexión); en el servidor esto

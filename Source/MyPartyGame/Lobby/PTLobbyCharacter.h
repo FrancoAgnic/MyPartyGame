@@ -27,6 +27,10 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Fly")
     float FlySpeed = 900.f;
 
+    // Aceleración en vuelo (menor = rampa de 0 a máxima más progresiva).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Fly")
+    float FlyAcceleration = 1500.f;
+
     // Ventana para el doble toque de espacio que activa el vuelo.
     UPROPERTY(EditAnywhere, Category="Fly")
     float DoubleTapWindow = 0.30f;
@@ -60,4 +64,5 @@ private:
     bool  bAscend   = false;
     bool  bDescend  = false;
     float LastJumpTime = -10.f;
+    float DefaultMaxAccel = 2048.f; // MaxAcceleration para caminar (se restaura al salir de vuelo)
 };
