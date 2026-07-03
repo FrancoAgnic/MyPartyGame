@@ -93,22 +93,31 @@ float FPTSculptField::SampleSDF(float X, float Y, float Z) const
 }
 
 // ─── Snapshot ─────────────────────────────────────────────────────────────────
-// Copia el brick con 1 celda de borde extra en el lado -/+ para poder mallar
-// costuras con los vecinos. Rango de esquinas global: [b*BS-1 .. b*BS+BS].
+// Copia el brick con SNMargin celdas de borde extra en el lado - para poder
+// mallar a paso grueso (hasta MaxStep) y las costuras con vecinos. Rango de
+// esquinas global: [b*BS - SNMargin .. b*BS + BS].
+//
+// SNMargin = MaxStep para que el muestreo grueso tenga su celda fantasma.
 
-void FPTSculptField::SnapshotBrick(const FPTBrickKey& Key, FBrickSnapshot& Out) const
+static constexpr int32 SNMaxStep = 2;          // paso de mallado más grueso (zonas lisas)
+static constexpr int32 SNMargin  = SNMaxStep;  // borde fantasma en celdas finas
+static constexpr float SNFlatThreshold = 0.985f;
+
+static float BrickFlatness(const FPTSculptField::FBrickSnapshot& Snap, int32 SS);
+
+void FPTSculptField::SnapshotBrick(const FPTBrickKey& Key, FBrickSnapshot& Out)
 {
     const int32 BS = FPTBrick::BrickSize;
-    const int32 SS = BS + 2; // 18 muestras por eje (índices 0..17 → global b*BS-1 .. b*BS+16)
+    const int32 SS = BS + SNMargin + 1; // muestras por eje (índices 0..BS+SNMargin)
 
     Out.Key       = Key;
     Out.VoxelSize = VoxelSize;
     Out.SDF.SetNumUninitialized(SS * SS * SS);
     Out.Color.SetNumUninitialized(SS * SS * SS);
 
-    const int32 baseX = Key.X * BS - 1;
-    const int32 baseY = Key.Y * BS - 1;
-    const int32 baseZ = Key.Z * BS - 1;
+    const int32 baseX = Key.X * BS - SNMargin;
+    const int32 baseY = Key.Y * BS - SNMargin;
+    const int32 baseZ = Key.Z * BS - SNMargin;
 
     bool bHasPos = false, bHasNeg = false;
     for (int32 k = 0; k < SS; ++k)
@@ -122,6 +131,24 @@ void FPTSculptField::SnapshotBrick(const FPTBrickKey& Key, FBrickSnapshot& Out) 
         if (v > 0.f) bHasPos = true; else bHasNeg = true;
     }
     Out.bEmpty = !(bHasPos && bHasNeg);
+
+    // Cache de flatness para decidir el paso (vacío = liso, no fuerza vecinos a fino).
+    Flatness.Add(Key, Out.bEmpty ? 1.f : BrickFlatness(Out, SS));
+}
+
+int32 FPTSculptField::DecideStep(const FPTBrickKey& Key) const
+{
+    if (SNMaxStep < 2) return 1;
+    auto F = [&](const FPTBrickKey& K) -> float {
+        const float* p = Flatness.Find(K);
+        return p ? *p : 1.f; // desconocido/vacío = liso
+    };
+    if (F(Key) <= SNFlatThreshold) return 1;
+    static const FIntVector N6[6] = {
+        {1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1} };
+    for (const FIntVector& d : N6)
+        if (F(Key + d) <= SNFlatThreshold) return 1;
+    return 2;
 }
 
 // ─── Surface Nets ─────────────────────────────────────────────────────────────
@@ -130,6 +157,45 @@ void FPTSculptField::SnapshotBrick(const FPTBrickKey& Key, FBrickSnapshot& Out) 
 // globales, el vecino emite los del lado + con vértices idénticos → sin costuras
 // ni duplicados.
 
+// Tablas de esquinas/aristas del cubo unitario (índice de esquina = x + 2y + 4z).
+static const int32 GCornerX[8] = {0,1,0,1,0,1,0,1};
+static const int32 GCornerY[8] = {0,0,1,1,0,0,1,1};
+static const int32 GCornerZ[8] = {0,0,0,0,1,1,1,1};
+static const int32 GEdgeA[12]  = {0,1,2,3, 0,1,4,5, 0,2,4,6};
+static const int32 GEdgeB[12]  = {1,3,3,2, 4,5,5,7, 2,6,6,7};
+
+// Coherencia de normales del brick a resolución fina: 1 = superficie muy lisa,
+// →0 = superficie con mucho detalle/curvatura. Decide el paso de mallado.
+static float BrickFlatness(const FPTSculptField::FBrickSnapshot& Snap, int32 SS)
+{
+    const int32 BS = FPTBrick::BrickSize;
+    auto S = [&](int32 i, int32 j, int32 k){ return Snap.SDF[i + j*SS + k*SS*SS]; };
+
+    FVector sum = FVector::ZeroVector;
+    int32 count = 0;
+    // Celdas finas propias del brick: min-corner en [SNMargin, SNMargin+BS).
+    for (int32 cz = SNMargin; cz < SNMargin + BS; ++cz)
+    for (int32 cy = SNMargin; cy < SNMargin + BS; ++cy)
+    for (int32 cx = SNMargin; cx < SNMargin + BS; ++cx)
+    {
+        float cv[8]; int32 mask = 0;
+        for (int32 c = 0; c < 8; ++c)
+        {
+            cv[c] = S(cx + GCornerX[c], cy + GCornerY[c], cz + GCornerZ[c]);
+            if (cv[c] > 0.f) mask |= (1 << c);
+        }
+        if (mask == 0 || mask == 0xFF) continue;
+        const FVector grad(
+            (cv[1]+cv[3]+cv[5]+cv[7]) - (cv[0]+cv[2]+cv[4]+cv[6]),
+            (cv[2]+cv[3]+cv[6]+cv[7]) - (cv[0]+cv[1]+cv[4]+cv[5]),
+            (cv[4]+cv[5]+cv[6]+cv[7]) - (cv[0]+cv[1]+cv[2]+cv[3]));
+        sum += (-grad).GetSafeNormal();
+        ++count;
+    }
+    if (count == 0) return 0.f;
+    return sum.Size() / count; // |Σn|/N ∈ [0,1]
+}
+
 void FPTSculptField::MeshBrick(const FBrickSnapshot& Snap, FPTBrickMesh& Out)
 {
     Out.Section = Snap.Section;
@@ -137,36 +203,43 @@ void FPTSculptField::MeshBrick(const FBrickSnapshot& Snap, FPTBrickMesh& Out)
     if (Snap.bEmpty) return;
 
     const int32 BS = FPTBrick::BrickSize;
-    const int32 SS = BS + 2;                 // stride de muestras (18)
-    const int32 CN = BS + 1;                 // celdas por eje: lc 0..BS (17)
+    const int32 SS = BS + SNMargin + 1; // stride de muestras finas
     const float Vx = Snap.VoxelSize;
 
-    const int32 baseX = Snap.Key.X * BS - 1; // origen global de la muestra (0,0,0)
-    const int32 baseY = Snap.Key.Y * BS - 1;
-    const int32 baseZ = Snap.Key.Z * BS - 1;
+    // Paso decidido en el GameThread con info de vecinos (evita costuras LOD).
+    int32 step = FMath::Clamp(Snap.Step, 1, SNMaxStep);
+    if (BS % step != 0) step = 1;
 
-    auto SDFAt = [&](int32 i, int32 j, int32 k) -> float {
+    const int32 CPA = BS / step;      // celdas gruesas por eje
+    const int32 CN  = CPA + 1;        // + celda fantasma en el lado -
+    // origen global de la esquina fina (0,0,0) del snapshot:
+    const int32 gBaseX = Snap.Key.X * BS - SNMargin;
+    const int32 gBaseY = Snap.Key.Y * BS - SNMargin;
+    const int32 gBaseZ = Snap.Key.Z * BS - SNMargin;
+
+    // Muestra en coordenada de esquina GRUESA (kx en [0,CPA]).
+    // Esquina gruesa kx → esquina fina = (SNMargin - step) + kx*step.
+    auto FineIdx = [&](int32 k){ return (SNMargin - step) + k * step; };
+    auto SDFAt = [&](int32 kx, int32 ky, int32 kz) -> float {
+        const int32 i = FineIdx(kx), j = FineIdx(ky), k = FineIdx(kz);
         return Snap.SDF[i + j * SS + k * SS * SS];
     };
-    auto ColAt = [&](int32 i, int32 j, int32 k) -> FColor {
+    auto ColAt = [&](int32 kx, int32 ky, int32 kz) -> FColor {
+        const int32 i = FineIdx(kx), j = FineIdx(ky), k = FineIdx(kz);
         return Snap.Color[i + j * SS + k * SS * SS];
     };
+    // Coord fina (float) de una esquina gruesa, para posicionar vértices.
+    auto FineCoordX = [&](float k){ return gBaseX + FineIdx(0) + k * step; };
+    auto FineCoordY = [&](float k){ return gBaseY + FineIdx(0) + k * step; };
+    auto FineCoordZ = [&](float k){ return gBaseZ + FineIdx(0) + k * step; };
 
-    // Índice de vértice por celda (lc en [0,BS] cada eje). -1 = sin vértice.
     TArray<int32> VertIdx;
     VertIdx.Init(-1, CN * CN * CN);
     auto CellSlot = [&](int32 cx, int32 cy, int32 cz) -> int32& {
         return VertIdx[cx + cy * CN + cz * CN * CN];
     };
 
-    // 12 aristas del cubo por índices de esquina 0..7 (x + 2y + 4z).
-    static const int32 CornerX[8] = {0,1,0,1,0,1,0,1};
-    static const int32 CornerY[8] = {0,0,1,1,0,0,1,1};
-    static const int32 CornerZ[8] = {0,0,0,0,1,1,1,1};
-    static const int32 EdgeA[12]  = {0,1,2,3, 0,1,4,5, 0,2,4,6};
-    static const int32 EdgeB[12]  = {1,3,3,2, 4,5,5,7, 2,6,6,7};
-
-    // 1) Generar vértices por celda.
+    // 1) Vértice por celda gruesa (incluye celda fantasma cc=0).
     for (int32 cz = 0; cz < CN; ++cz)
     for (int32 cy = 0; cy < CN; ++cy)
     for (int32 cx = 0; cx < CN; ++cx)
@@ -175,24 +248,23 @@ void FPTSculptField::MeshBrick(const FBrickSnapshot& Snap, FPTBrickMesh& Out)
         int32 mask = 0;
         for (int32 c = 0; c < 8; ++c)
         {
-            cv[c] = SDFAt(cx + CornerX[c], cy + CornerY[c], cz + CornerZ[c]);
-            cc[c] = ColAt(cx + CornerX[c], cy + CornerY[c], cz + CornerZ[c]);
+            cv[c] = SDFAt(cx + GCornerX[c], cy + GCornerY[c], cz + GCornerZ[c]);
+            cc[c] = ColAt(cx + GCornerX[c], cy + GCornerY[c], cz + GCornerZ[c]);
             if (cv[c] > 0.f) mask |= (1 << c);
         }
-        if (mask == 0 || mask == 0xFF) continue; // sin cruce
+        if (mask == 0 || mask == 0xFF) continue;
 
-        FVector accumPos = FVector::ZeroVector;
         FVector4 accumCol(0,0,0,0);
+        FVector  accumOff = FVector::ZeroVector; // offset dentro de la celda [0,1]
         int32 crossings = 0;
         for (int32 e = 0; e < 12; ++e)
         {
-            const int32 a = EdgeA[e], b = EdgeB[e];
-            const bool sa = cv[a] > 0.f, sb = cv[b] > 0.f;
-            if (sa == sb) continue;
-            const float t = cv[a] / (cv[a] - cv[b]); // punto de cruce (SDF=0)
-            const FVector pa(cx + CornerX[a], cy + CornerY[a], cz + CornerZ[a]);
-            const FVector pb(cx + CornerX[b], cy + CornerY[b], cz + CornerZ[b]);
-            accumPos += pa + (pb - pa) * t;
+            const int32 a = GEdgeA[e], b = GEdgeB[e];
+            if ((cv[a] > 0.f) == (cv[b] > 0.f)) continue;
+            const float t = cv[a] / (cv[a] - cv[b]);
+            const FVector pa(GCornerX[a], GCornerY[a], GCornerZ[a]);
+            const FVector pb(GCornerX[b], GCornerY[b], GCornerZ[b]);
+            accumOff += pa + (pb - pa) * t;
             const FColor ca = cc[a], cb = cc[b];
             accumCol += FVector4(
                 FMath::Lerp((float)ca.R, (float)cb.R, t),
@@ -202,15 +274,15 @@ void FPTSculptField::MeshBrick(const FBrickSnapshot& Snap, FPTBrickMesh& Out)
             ++crossings;
         }
         if (crossings == 0) continue;
-        accumPos /= crossings;
+        accumOff /= crossings;
         accumCol /= crossings;
 
-        // Posición local (espacio del actor): (baseCell + offset) * VoxelSize.
-        const FVector localPos((baseX + accumPos.X) * Vx,
-                               (baseY + accumPos.Y) * Vx,
-                               (baseZ + accumPos.Z) * Vx);
+        // Posición local: coord fina de la celda + offset*step, × VoxelSize.
+        const FVector localPos(
+            FineCoordX(cx + accumOff.X) * Vx,
+            FineCoordY(cy + accumOff.Y) * Vx,
+            FineCoordZ(cz + accumOff.Z) * Vx);
 
-        // Normal = -gradiente del SDF (positivo=dentro → gradiente apunta hacia adentro).
         const FVector grad(
             (cv[1]+cv[3]+cv[5]+cv[7]) - (cv[0]+cv[2]+cv[4]+cv[6]),
             (cv[2]+cv[3]+cv[6]+cv[7]) - (cv[0]+cv[1]+cv[4]+cv[5]),
@@ -228,8 +300,7 @@ void FPTSculptField::MeshBrick(const FBrickSnapshot& Snap, FPTBrickMesh& Out)
             (uint8)FMath::Clamp(accumCol.W, 0.f, 255.f)));
     }
 
-    // 2) Emitir quads (solo celdas reales lc en [1,BS]). Para cada eje, si la
-    //    arista en la esquina mínima cruza, conectar las 4 celdas que la comparten.
+    // 2) Quads: solo celdas reales cc en [1,CPA]. Lado - (min) para dedupe con vecinos.
     auto EmitQuad = [&](int32 v0, int32 v1, int32 v2, int32 v3, bool flip)
     {
         if (v0 < 0 || v1 < 0 || v2 < 0 || v3 < 0) return;
@@ -245,39 +316,19 @@ void FPTSculptField::MeshBrick(const FBrickSnapshot& Snap, FPTBrickMesh& Out)
         }
     };
 
-    for (int32 cz = 1; cz <= BS; ++cz)
-    for (int32 cy = 1; cy <= BS; ++cy)
-    for (int32 cx = 1; cx <= BS; ++cx)
+    for (int32 cz = 1; cz <= CPA; ++cz)
+    for (int32 cy = 1; cy <= CPA; ++cy)
+    for (int32 cx = 1; cx <= CPA; ++cx)
     {
-        const float s000 = SDFAt(cx, cy, cz);
-        const bool  in000 = s000 > 0.f;
-
-        // Arista en X: esquina (cx,cy,cz) → (cx+1,cy,cz)
-        {
-            const bool in1 = SDFAt(cx + 1, cy, cz) > 0.f;
-            if (in000 != in1)
-                EmitQuad(CellSlot(cx, cy,   cz),
-                         CellSlot(cx, cy-1, cz),
-                         CellSlot(cx, cy-1, cz-1),
-                         CellSlot(cx, cy,   cz-1), in000);
-        }
-        // Arista en Y: (cx,cy,cz) → (cx,cy+1,cz)
-        {
-            const bool in1 = SDFAt(cx, cy + 1, cz) > 0.f;
-            if (in000 != in1)
-                EmitQuad(CellSlot(cx,   cy, cz),
-                         CellSlot(cx,   cy, cz-1),
-                         CellSlot(cx-1, cy, cz-1),
-                         CellSlot(cx-1, cy, cz), in000);
-        }
-        // Arista en Z: (cx,cy,cz) → (cx,cy,cz+1)
-        {
-            const bool in1 = SDFAt(cx, cy, cz + 1) > 0.f;
-            if (in000 != in1)
-                EmitQuad(CellSlot(cx,   cy,   cz),
-                         CellSlot(cx-1, cy,   cz),
-                         CellSlot(cx-1, cy-1, cz),
-                         CellSlot(cx,   cy-1, cz), in000);
-        }
+        const bool in000 = SDFAt(cx, cy, cz) > 0.f;
+        if (in000 != (SDFAt(cx + 1, cy, cz) > 0.f))
+            EmitQuad(CellSlot(cx, cy,   cz), CellSlot(cx, cy-1, cz),
+                     CellSlot(cx, cy-1, cz-1), CellSlot(cx, cy, cz-1), in000);
+        if (in000 != (SDFAt(cx, cy + 1, cz) > 0.f))
+            EmitQuad(CellSlot(cx, cy, cz), CellSlot(cx, cy, cz-1),
+                     CellSlot(cx-1, cy, cz-1), CellSlot(cx-1, cy, cz), in000);
+        if (in000 != (SDFAt(cx, cy, cz + 1) > 0.f))
+            EmitQuad(CellSlot(cx, cy, cz), CellSlot(cx-1, cy, cz),
+                     CellSlot(cx-1, cy-1, cz), CellSlot(cx, cy-1, cz), in000);
     }
 }

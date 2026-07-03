@@ -84,11 +84,17 @@ public:
         FPTBrickKey Key;
         int32       Section = INDEX_NONE;
         float       VoxelSize = 8.f;
-        TArray<float>  SDF;    // (BrickSize+1)³ ya está en el brick; usamos eso
+        int32       Step = 1;         // paso de mallado (1=fino, 2=grueso)
+        TArray<float>  SDF;
         TArray<FColor> Color;
         bool           bEmpty = true; // sin superficie → sección vacía
     };
-    void SnapshotBrick(const FPTBrickKey& Key, FBrickSnapshot& Out) const;
+    // Actualiza el cache de "flatness" del brick (por eso no es const).
+    void SnapshotBrick(const FPTBrickKey& Key, FBrickSnapshot& Out);
+
+    // Decide el paso de mallado: 2 solo si el brick y sus 6 vecinos son lisos
+    // (evita costuras LOD en bordes de detalle).
+    int32 DecideStep(const FPTBrickKey& Key) const;
 
     // Convierte coord global de celda → (brick key, coord local dentro del brick).
     static void CellToBrick(int32 X, int32 Y, int32 Z, FPTBrickKey& OutKey, int32& lx, int32& ly, int32& lz);
@@ -99,7 +105,8 @@ public:
 private:
     TMap<FPTBrickKey, TSharedPtr<FPTBrick>> Bricks;
     TSet<FPTBrickKey>                       DirtyBricks;
-    TMap<FPTBrickKey, int32>                SectionOf; // key → sección estable
+    TMap<FPTBrickKey, int32>                SectionOf;  // key → sección estable
+    TMap<FPTBrickKey, float>                Flatness;   // key → coherencia [0,1]
     int32                                   NextSection = 0;
 
     const FPTBrick* FindBrick(const FPTBrickKey& Key) const;

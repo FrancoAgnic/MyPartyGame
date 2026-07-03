@@ -647,9 +647,12 @@ void APTSculptVolume::RebuildDirty()
     {
         FPTSculptField::FBrickSnapshot S;
         S.Section = Field.SectionIndex(K);
-        Field.SnapshotBrick(K, S);
+        Field.SnapshotBrick(K, S); // actualiza flatness del brick
         Snaps->Add(MoveTemp(S));
     }
+    // Decidir el paso con flatness ya actualizada de todos los bricks dirty.
+    for (FPTSculptField::FBrickSnapshot& S : *Snaps)
+        S.Step = Field.DecideStep(S.Key);
 
     UProceduralMeshComponent* MeshPtr = Mesh;
     UMaterialInterface* Mat = ClayMaterial;
