@@ -37,7 +37,7 @@ protected:
     UPROPERTY(meta = (BindWidget)) UButton* HighButton;
 
     UPROPERTY(meta = (BindWidget)) UButton* ApplyButton;
-    UPROPERTY(meta = (BindWidget)) UButton* BackButton;
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* BackButton; // opcional: se cierra con Esc
 
     UFUNCTION() void OnVolumeChanged(float NewValue);
     UFUNCTION() void OnEnglishClicked();

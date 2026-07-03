@@ -1,7 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "PTLobbyCharacter.h"
-#include "GameFramework/SpringArmComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "EnhancedInputComponent.h"
@@ -11,14 +10,11 @@ APTLobbyCharacter::APTLobbyCharacter()
 {
     PrimaryActorTick.bCanEverTick = true; // vuelo aplica input vertical por tick
 
-    // Spring arm + cámara en tercera persona
-    SpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm"));
-    SpringArm->SetupAttachment(RootComponent);
-    SpringArm->TargetArmLength = 350.f;
-    SpringArm->bUsePawnControlRotation = true;
-
+    // Cámara en primera persona: directo en el pawn, a la altura de los ojos.
     Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
-    Camera->SetupAttachment(SpringArm);
+    Camera->SetupAttachment(RootComponent);
+    Camera->SetRelativeLocation(FVector(0.f, 0.f, BaseEyeHeight));
+    Camera->bUsePawnControlRotation = true;
 
     // El personaje gira hacia donde se mueve, no hacia donde apunta la cámara
     bUseControllerRotationYaw = false;
@@ -52,7 +48,7 @@ void APTLobbyCharacter::Look(const FInputActionValue& Value)
 {
     const FVector2D Axis = Value.Get<FVector2D>();
     AddControllerYawInput(Axis.X);
-    AddControllerPitchInput(Axis.Y);
+    AddControllerPitchInput(-Axis.Y); // no invertido (default, igual que Lvl-01)
 }
 
 void APTLobbyCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)

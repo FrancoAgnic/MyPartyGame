@@ -31,9 +31,7 @@ protected:
     UPROPERTY(EditAnywhere, Category="Fly")
     float DoubleTapWindow = 0.30f;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera")
-    USpringArmComponent* SpringArm;
-
+    // Primera persona: cámara directo en el pawn (sin spring arm).
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera")
     UCameraComponent* Camera;
 

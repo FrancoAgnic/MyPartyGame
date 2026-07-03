@@ -61,6 +61,10 @@ public:
     UPROPERTY(EditAnywhere, Category="UI")
     TSubclassOf<UUserWidget> ColorPickerClass;
 
+    /** Menú de pausa (asignar WBP_Settings). Esc lo muestra/oculta. Solo en Lvl-01. */
+    UPROPERTY(EditAnywhere, Category="UI")
+    TSubclassOf<UUserWidget> PauseMenuClass;
+
     /** Llamado desde el widget BP cuando el usuario confirma un color. */
     UFUNCTION(BlueprintCallable, Category="Sculpt")
     void OnColorConfirmed(FLinearColor NewColor);
@@ -77,18 +81,16 @@ public:
     UPROPERTY(BlueprintReadOnly, Category="Sculpt")
     EPTStampShape StampShape = EPTStampShape::Sphere;
 
-    // ── Cámara ──────────────────────────────────────────────────────────────
-    UPROPERTY(EditAnywhere, Category="Camera")
-    bool bInvertPitch = true;
-
 protected:
     virtual void BeginPlay()          override;
     virtual void SetupInputComponent() override;
     virtual void PlayerTick(float DeltaTime) override;
-    virtual void AddPitchInput(float Val)    override;
 
 private:
     APTSculptVolume* Volume = nullptr;
+    UPROPERTY() UUserWidget* PauseMenu = nullptr;
+    void OnPausePressed();
+
     bool bIsStamping        = false;
     bool bPreviewDirty      = true;
 

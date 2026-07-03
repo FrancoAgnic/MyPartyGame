@@ -7,6 +7,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "../UI/PTColorPickerWidget.h"
 
 APTSculptPlayerController::APTSculptPlayerController()
 {
@@ -31,6 +32,7 @@ void APTSculptPlayerController::BeginPlay()
         UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
     if (!Volume)
         UE_LOG(LogTemp, Warning, TEXT("[PTSculptPC] No APTSculptVolume in level!"));
+
 
     // Actor para la preview de la forma del stamp
     FActorSpawnParameters SP;
@@ -82,6 +84,31 @@ void APTSculptPlayerController::SetupInputComponent()
 
     // Color picker: C
     InputComponent->BindKey(EKeys::C, IE_Pressed, this, &APTSculptPlayerController::OpenColorPicker);
+
+    // Menú de pausa: Esc
+    InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &APTSculptPlayerController::OnPausePressed);
+}
+
+void APTSculptPlayerController::OnPausePressed()
+{
+    // Toggle directo del menú de pausa (WBP_Settings u otro).
+    if (PauseMenu && PauseMenu->IsInViewport())
+    {
+        PauseMenu->RemoveFromParent();
+        PauseMenu = nullptr;
+        SetInputMode(FInputModeGameOnly());
+        bShowMouseCursor = false;
+        return;
+    }
+
+    if (!PauseMenuClass) return;
+    PauseMenu = CreateWidget<UUserWidget>(this, PauseMenuClass);
+    if (PauseMenu)
+    {
+        PauseMenu->AddToViewport(10);
+        SetInputMode(FInputModeGameAndUI());
+        bShowMouseCursor = true;
+    }
 }
 
 // ── Tick ─────────────────────────────────────────────────────────────────────
@@ -89,6 +116,15 @@ void APTSculptPlayerController::SetupInputComponent()
 void APTSculptPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
+
+    // Si el menú de pausa se cerró desde adentro (ej. botón Back), restaurar input.
+    if (PauseMenu && !PauseMenu->IsInViewport())
+    {
+        PauseMenu = nullptr;
+        SetInputMode(FInputModeGameOnly());
+        bShowMouseCursor = false;
+    }
+
     if (!Volume) return;
 
     FVector Normal;
@@ -318,10 +354,20 @@ void APTSculptPlayerController::OpenColorPicker()
 {
     if (!ColorPickerClass) return;
 
+    // Segunda C con el menú abierto → confirma el color actual y cierra (como Apply).
     if (ColorPicker)
     {
-        ColorPicker->RemoveFromParent();
-        ColorPicker = nullptr;
+        if (UPTColorPickerWidget* CP = Cast<UPTColorPickerWidget>(ColorPicker))
+        {
+            CP->Confirm(); // aplica color, pasa a Paint, cierra y restaura input
+        }
+        else
+        {
+            ColorPicker->RemoveFromParent();
+            ColorPicker = nullptr;
+            SetInputMode(FInputModeGameOnly());
+            bShowMouseCursor = false;
+        }
         return;
     }
 
@@ -352,7 +398,3 @@ void APTSculptPlayerController::OnColorConfirmed(FLinearColor NewColor)
     UE_LOG(LogTemp, Log, TEXT("[Sculpt] Paint color set, mode=Paint"));
 }
 
-void APTSculptPlayerController::AddPitchInput(float Val)
-{
-    Super::AddPitchInput(bInvertPitch ? -Val : Val);
-}
