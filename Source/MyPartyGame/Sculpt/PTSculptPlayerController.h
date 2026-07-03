@@ -1,10 +1,12 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "ProceduralMeshComponent.h"
 #include "PTSculptVolume.h"
 #include "PTSculptPlayerController.generated.h"
 
 class UInputMappingContext;
+class UUserWidget;
 
 UCLASS()
 class MYPARTYGAME_API APTSculptPlayerController : public APlayerController
@@ -13,39 +15,87 @@ class MYPARTYGAME_API APTSculptPlayerController : public APlayerController
 public:
     APTSculptPlayerController();
 
-    /** Asignar el mismo IMC de movimiento del personaje (ej. IMC_Lobby) en el Blueprint derivado. */
+    // ── Input ───────────────────────────────────────────────────────────────
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input")
     UInputMappingContext* MovementMappingContext;
 
-    UPROPERTY(EditAnywhere, Category="Sculpt")
-    float BrushRadius = 80.f;
+    // ── Stamp ───────────────────────────────────────────────────────────────
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt")
+    float StampSize = 160.f;
 
     UPROPERTY(EditAnywhere, Category="Sculpt")
-    float BrushStrength = 2.5f;
+    float SizeStep = 20.f;
 
     UPROPERTY(EditAnywhere, Category="Sculpt")
-    float RadiusStep = 10.f;
+    float AirDepth = 400.f; // distancia brazo cuando no hay superficie
 
+    // ── Materiales ──────────────────────────────────────────────────────────
+    /** Decal del brush indicator. */
     UPROPERTY(EditAnywhere, Category="Sculpt")
-    float TraceDistance = 5000.f;
+    UMaterialInterface* BrushDecalMaterial = nullptr;
+
+    /** Material semitransparente para la preview de la forma. */
+    UPROPERTY(EditAnywhere, Category="Sculpt")
+    UMaterialInterface* PreviewMeshMaterial = nullptr;
+
+    // ── Color picker ────────────────────────────────────────────────────────
+    UPROPERTY(EditAnywhere, Category="UI")
+    TSubclassOf<UUserWidget> ColorPickerClass;
+
+    /** Llamado desde el widget BP cuando el usuario confirma un color. */
+    UFUNCTION(BlueprintCallable, Category="Sculpt")
+    void OnColorConfirmed(FLinearColor NewColor);
+
+    /** Color actual de pintura (leer desde el widget BP). */
+    UPROPERTY(BlueprintReadOnly, Category="Sculpt")
+    FLinearColor CurrentPaintColor = FLinearColor::White;
+
+    /** Modo activo. Leer desde Blueprint para mostrar HUD. */
+    UPROPERTY(BlueprintReadOnly, Category="Sculpt")
+    EPTEditMode EditMode = EPTEditMode::Add;
+
+    /** Forma activa. Leer desde Blueprint para mostrar HUD. */
+    UPROPERTY(BlueprintReadOnly, Category="Sculpt")
+    EPTStampShape StampShape = EPTStampShape::Sphere;
+
+    // ── Cámara ──────────────────────────────────────────────────────────────
+    UPROPERTY(EditAnywhere, Category="Camera")
+    bool bInvertPitch = true;
 
 protected:
-    virtual void BeginPlay() override;
+    virtual void BeginPlay()          override;
     virtual void SetupInputComponent() override;
     virtual void PlayerTick(float DeltaTime) override;
+    virtual void AddPitchInput(float Val)    override;
 
 private:
-    EPTBrushMode   CurrentMode = EPTBrushMode::Add;
-    APTSculptVolume* Volume    = nullptr;
-    bool bIsSculpting          = false;
+    APTSculptVolume* Volume = nullptr;
+    bool bIsStamping        = false;
+    bool bPreviewDirty      = true;
 
-    void SetModeAdd()     { CurrentMode = EPTBrushMode::Add;    UE_LOG(LogTemp, Log, TEXT("[Sculpt] Mode: Add")); }
-    void SetModeRemove()  { CurrentMode = EPTBrushMode::Remove; UE_LOG(LogTemp, Log, TEXT("[Sculpt] Mode: Remove")); }
-    void SetModeSmooth()  { CurrentMode = EPTBrushMode::Smooth; UE_LOG(LogTemp, Log, TEXT("[Sculpt] Mode: Smooth")); }
-    void OnSculptPressed()  { bIsSculpting = true;  }
-    void OnSculptReleased() { bIsSculpting = false; }
-    void OnScrollUp()   { BrushRadius = FMath::Max(20.f, BrushRadius + RadiusStep); UE_LOG(LogTemp, Log, TEXT("[Sculpt] Radius: %.0f"), BrushRadius); }
-    void OnScrollDown() { BrushRadius = FMath::Max(20.f, BrushRadius - RadiusStep); UE_LOG(LogTemp, Log, TEXT("[Sculpt] Radius: %.0f"), BrushRadius); }
+    // Plano de esculpido bloqueado al inicio del trazo (evita que el stamp se acerque a la cámara)
+    FVector SculptPlaneOrigin = FVector::ZeroVector;
+    FVector SculptPlaneNormal = FVector::ForwardVector;
 
-    bool GetSculptHitPoint(FVector& OutHit) const;
+    EPTStampShape CachedPreviewShape = EPTStampShape::Sphere;
+    float         CachedPreviewSize  = 0.f;
+
+    UPROPERTY() AActor*                   PreviewActor = nullptr;
+    UPROPERTY() UProceduralMeshComponent* PreviewMesh  = nullptr;
+    UPROPERTY() UUserWidget*              ColorPicker  = nullptr;
+
+    void RebuildPreviewMesh();
+    FVector GetStampPoint(FVector& OutNormal) const;
+
+    void OnStampPressed();
+    void OnStampReleased();
+    void OnScrollUp();
+    void OnScrollDown();
+    void SetShapeSphere()  { SetShape(EPTStampShape::Sphere);  }
+    void SetShapeCube()    { SetShape(EPTStampShape::Cube);    }
+    void SetShapeCylinder(){ SetShape(EPTStampShape::Cylinder);}
+    void SetShapeTriPrism(){ SetShape(EPTStampShape::TriPrism);}
+    void SetShape(EPTStampShape S);
+    void CycleModes();
+    void OpenColorPicker();
 };

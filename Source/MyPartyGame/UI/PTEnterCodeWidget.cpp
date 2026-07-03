@@ -27,7 +27,7 @@ void UPTEnterCodeWidget::ShowPanel()
 void UPTEnterCodeWidget::OnJoinClicked()
 {
     if (!Sessions || !CodeInput) return;
-    Sessions->JoinSessionByCode(CodeInput->GetText().ToString());
+    Sessions->JoinSessionByCode(CodeInput->GetText().ToString().ToUpper());
 }
 
 void UPTEnterCodeWidget::OnBackClicked()
