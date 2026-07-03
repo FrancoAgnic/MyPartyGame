@@ -11,7 +11,7 @@ UENUM(BlueprintType)
 enum class EPTStampShape : uint8 { Sphere, Cube, Cylinder, TriPrism };
 
 UENUM(BlueprintType)
-enum class EPTEditMode : uint8 { Add, Erase, Paint };
+enum class EPTEditMode : uint8 { Add, Erase, Paint, Smooth };
 
 UCLASS()
 class MYPARTYGAME_API APTSculptVolume : public AActor
@@ -23,6 +23,10 @@ public:
     // Resolución fina del campo (tamaño de celda en UU). Etapa 1: uniforme.
     UPROPERTY(EditAnywhere, Category="Sculpt") float VoxelSize = 8.f;
     UPROPERTY(EditAnywhere, Category="Sculpt") UMaterialInterface* ClayMaterial = nullptr;
+
+    // Modo Smooth: intensidad del suavizado por aplicación y empuje anti-erosión.
+    UPROPERTY(EditAnywhere, Category="Sculpt") float SmoothStrength = 0.4f;
+    UPROPERTY(EditAnywhere, Category="Sculpt") float SmoothBias     = 0.05f; // hacia afuera, evita que encoja
 
     void ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
                     EPTEditMode Mode, FLinearColor PaintColor);
@@ -62,6 +66,7 @@ private:
     static constexpr float RebuildInterval = 0.05f;
 
     void RebuildDirty();
+    void MarkStampDirty(int32 x0, int32 y0, int32 z0, int32 x1, int32 y1, int32 z1);
 
     // Coordenadas: mundo → celda (float) en espacio local del actor.
     FVector WorldToCell(FVector W) const;

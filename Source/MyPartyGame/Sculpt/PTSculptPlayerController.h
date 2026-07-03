@@ -85,7 +85,18 @@ private:
     UPROPERTY() UUserWidget*              ColorPicker  = nullptr;
 
     void RebuildPreviewMesh();
+    bool    GetCameraRay(FVector& Start, FVector& Dir) const;
     FVector GetStampPoint(FVector& OutNormal) const;
+    float   VoxelHint() const;
+
+    // ── Modo eje (tecla X): trazos rectos sin curvatura de cámara ───────────
+    bool            bAxisLock = false;
+    FVector         AxisOrigin = FVector::ZeroVector;
+    FVector         AxisPlaneN = FVector::ForwardVector;
+    FVector         AxisU      = FVector::RightVector;
+    FVector         AxisV      = FVector::UpVector;
+    mutable int32   AxisChosen = -1; // -1 sin definir, 0=U, 1=V
+    void ToggleAxisLock();
 
     void OnStampPressed();
     void OnStampReleased();

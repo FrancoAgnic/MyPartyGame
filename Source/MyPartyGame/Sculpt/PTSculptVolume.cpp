@@ -441,6 +441,45 @@ void APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
     const int32 z1 = FMath::Min(BMax.Z, FMath::CeilToInt(GC.Z) + R);
 
     bool bAnyChange = false;
+
+    // ── Smooth: Laplaciano suave de dos pasos con falloff radial y leve empuje
+    //    hacia afuera (SmoothBias) para que suavice sin encoger el modelo. ────
+    if (Mode == EPTEditMode::Smooth)
+    {
+        const int32 nx = x1 - x0 + 1, ny = y1 - y0 + 1, nz = z1 - z0 + 1;
+        TArray<float> NewV; NewV.SetNumUninitialized(nx * ny * nz);
+        auto WI = [&](int32 x, int32 y, int32 z){ return (x-x0) + (y-y0)*nx + (z-z0)*nx*ny; };
+
+        for (int32 z = z0; z <= z1; ++z)
+        for (int32 y = y0; y <= y1; ++y)
+        for (int32 x = x0; x <= x1; ++x)
+        {
+            const float prev = Field.GetSDF(x, y, z);
+            const FVector LP(x - GC.X, y - GC.Y, z - GC.Z);
+            const float sdf  = StampSDF(Shape, LP, HalfSize);
+            const float fall = FMath::Clamp(sdf / FMath::Max(HalfSize, 1.f), 0.f, 1.f);
+            if (fall <= 0.f) { NewV[WI(x,y,z)] = prev; continue; }
+
+            const float avg = (Field.GetSDF(x+1,y,z) + Field.GetSDF(x-1,y,z)
+                             + Field.GetSDF(x,y+1,z) + Field.GetSDF(x,y-1,z)
+                             + Field.GetSDF(x,y,z+1) + Field.GetSDF(x,y,z-1)) / 6.f;
+            const float target = avg + SmoothBias;
+            NewV[WI(x,y,z)] = FMath::Lerp(prev, target, fall * SmoothStrength);
+        }
+
+        for (int32 z = z0; z <= z1; ++z)
+        for (int32 y = y0; y <= y1; ++y)
+        for (int32 x = x0; x <= x1; ++x)
+        {
+            const float nv = NewV[WI(x,y,z)];
+            if (nv != Field.GetSDF(x, y, z)) { Field.SetSDF(x, y, z, nv); bAnyChange = true; }
+        }
+
+        if (!bAnyChange) return;
+        MarkStampDirty(x0, y0, z0, x1, y1, z1);
+        return;
+    }
+
     for (int32 z = z0; z <= z1; ++z)
     for (int32 y = y0; y <= y1; ++y)
     for (int32 x = x0; x <= x1; ++x)
@@ -479,9 +518,13 @@ void APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
     }
 
     if (!bAnyChange) return;
+    MarkStampDirty(x0, y0, z0, x1, y1, z1);
+}
 
-    // Marca todos los bricks que cubren el bbox del sello (+1 celda de borde para
-    // que los bricks vecinos re-mallen su costura). Bricks vacíos hacen early-out.
+// Marca todos los bricks que cubren el bbox de celdas (+1 de borde para que los
+// bricks vecinos re-mallen su costura). Bricks vacíos hacen early-out al mallar.
+void APTSculptVolume::MarkStampDirty(int32 x0, int32 y0, int32 z0, int32 x1, int32 y1, int32 z1)
+{
     const int32 BS = FPTBrick::BrickSize;
     auto FloorDivBS = [BS](int32 v){ return (v >= 0) ? v / BS : -(( -v + BS - 1) / BS); };
     const int32 bx0 = FloorDivBS(x0 - 1), bx1 = FloorDivBS(x1 + 1);

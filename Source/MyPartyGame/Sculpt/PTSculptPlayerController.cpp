@@ -68,6 +68,7 @@ void APTSculptPlayerController::SetupInputComponent()
 
     // Modos: Tab cicla Add→Erase→Paint
     InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &APTSculptPlayerController::CycleModes);
+    InputComponent->BindKey(EKeys::X,   IE_Pressed, this, &APTSculptPlayerController::ToggleAxisLock);
 
     // Color picker: C
     InputComponent->BindKey(EKeys::C, IE_Pressed, this, &APTSculptPlayerController::OpenColorPicker);
@@ -113,33 +114,64 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
 
 // ── Lógica de cursor ─────────────────────────────────────────────────────────
 
-FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
+bool APTSculptPlayerController::GetCameraRay(FVector& Start, FVector& Dir) const
 {
     ACharacter* MyChar = Cast<ACharacter>(GetPawn());
-    FVector Start, Dir;
-
-    UCameraComponent* Cam = MyChar ? MyChar->FindComponentByClass<UCameraComponent>() : nullptr;
-    if (Cam)
+    if (UCameraComponent* Cam = MyChar ? MyChar->FindComponentByClass<UCameraComponent>() : nullptr)
     {
         Start = Cam->GetComponentLocation();
         Dir   = Cam->GetForwardVector();
+        return true;
     }
-    else
+    int32 W, H;
+    GetViewportSize(W, H);
+    return DeprojectScreenPositionToWorld(W * 0.5f, H * 0.5f, Start, Dir);
+}
+
+FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
+{
+    FVector Start, Dir;
+    if (!GetCameraRay(Start, Dir))
     {
-        int32 W, H;
-        GetViewportSize(W, H);
-        if (!DeprojectScreenPositionToWorld(W * 0.5f, H * 0.5f, Start, Dir))
+        OutNormal = FVector::UpVector;
+        return Start + Dir * AirDepth;
+    }
+
+    // ── Modo eje: trazo recto sobre un plano alineado a ejes del mundo ──────
+    // Mientras se esculpe, el rayo se interseca con el plano bloqueado al inicio
+    // y se engancha al eje dominante → líneas rectas, sin curvatura de cámara.
+    if (bAxisLock && bIsStamping)
+    {
+        const float denom = FVector::DotProduct(Dir, AxisPlaneN);
+        FVector Pf = AxisOrigin;
+        if (FMath::Abs(denom) > 1e-4f)
         {
-            OutNormal = FVector::UpVector;
-            return Start + Dir * AirDepth;
+            const float t = FVector::DotProduct(AxisOrigin - Start, AxisPlaneN) / denom;
+            if (t > 0.f) Pf = Start + Dir * t;
         }
+        FVector delta = Pf - AxisOrigin;
+        const float du = FVector::DotProduct(delta, AxisU);
+        const float dv = FVector::DotProduct(delta, AxisV);
+
+        // Elegir eje dominante y fijarlo tras superar un umbral (línea limpia).
+        if (AxisChosen < 0 && FMath::Max(FMath::Abs(du), FMath::Abs(dv)) > VoxelHint())
+            AxisChosen = (FMath::Abs(du) >= FMath::Abs(dv)) ? 0 : 1;
+
+        OutNormal = AxisPlaneN;
+        if (AxisChosen == 0) return AxisOrigin + AxisU * du;
+        if (AxisChosen == 1) return AxisOrigin + AxisV * dv;
+        return AxisOrigin; // aún sin dirección definida
     }
 
     // Cursor tipo SculptrVR: siempre a distancia fija (brazo extendido).
-    // No se snapea a la superficie — el stamp se aplica justo donde está la preview.
-    // La normal apunta hacia la cámara para orientar el decal.
     OutNormal = -Dir;
     return Start + Dir * AirDepth;
+}
+
+// Umbral (en UU) para fijar el eje del trazo: ~medio tamaño de brocha.
+float APTSculptPlayerController::VoxelHint() const
+{
+    return StampSize * 0.15f;
 }
 
 // ── Preview mesh ─────────────────────────────────────────────────────────────
@@ -159,8 +191,34 @@ void APTSculptPlayerController::RebuildPreviewMesh()
 
 // ── Acciones de input ─────────────────────────────────────────────────────────
 
-void APTSculptPlayerController::OnStampPressed()  { bIsStamping = true;  }
-void APTSculptPlayerController::OnStampReleased() { bIsStamping = false; }
+void APTSculptPlayerController::OnStampPressed()
+{
+    bIsStamping = true;
+
+    // En modo eje: bloquear el plano alineado a ejes del mundo al inicio del trazo.
+    if (bAxisLock)
+    {
+        FVector Start, Dir;
+        if (GetCameraRay(Start, Dir))
+        {
+            AxisOrigin = Start + Dir * AirDepth;
+            // Plano perpendicular al eje del mundo más alineado con la cámara.
+            const FVector aF(FMath::Abs(Dir.X), FMath::Abs(Dir.Y), FMath::Abs(Dir.Z));
+            if (aF.X >= aF.Y && aF.X >= aF.Z) { AxisPlaneN = FVector(1,0,0); AxisU = FVector(0,1,0); AxisV = FVector(0,0,1); }
+            else if (aF.Y >= aF.Z)            { AxisPlaneN = FVector(0,1,0); AxisU = FVector(1,0,0); AxisV = FVector(0,0,1); }
+            else                              { AxisPlaneN = FVector(0,0,1); AxisU = FVector(1,0,0); AxisV = FVector(0,1,0); }
+            AxisChosen = -1;
+        }
+    }
+}
+
+void APTSculptPlayerController::OnStampReleased() { bIsStamping = false; AxisChosen = -1; }
+
+void APTSculptPlayerController::ToggleAxisLock()
+{
+    bAxisLock = !bAxisLock;
+    UE_LOG(LogTemp, Log, TEXT("[Sculpt] Axis lock: %s"), bAxisLock ? TEXT("ON") : TEXT("OFF"));
+}
 
 void APTSculptPlayerController::OnScrollUp()
 {
@@ -187,9 +245,10 @@ void APTSculptPlayerController::CycleModes()
 {
     switch (EditMode)
     {
-    case EPTEditMode::Add:   EditMode = EPTEditMode::Erase; break;
-    case EPTEditMode::Erase: EditMode = EPTEditMode::Paint; break;
-    case EPTEditMode::Paint: EditMode = EPTEditMode::Add;   break;
+    case EPTEditMode::Add:    EditMode = EPTEditMode::Erase;  break;
+    case EPTEditMode::Erase:  EditMode = EPTEditMode::Smooth; break;
+    case EPTEditMode::Smooth: EditMode = EPTEditMode::Paint;  break;
+    case EPTEditMode::Paint:  EditMode = EPTEditMode::Add;    break;
     }
     UE_LOG(LogTemp, Log, TEXT("[Sculpt] Mode: %d"), (int32)EditMode);
 }
