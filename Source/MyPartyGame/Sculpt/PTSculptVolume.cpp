@@ -312,6 +312,7 @@ APTSculptVolume::APTSculptVolume()
     Mesh->SetMobility(EComponentMobility::Movable);
     Mesh->SetCastShadow(true);
     Mesh->bCastDynamicShadow = true;
+    Mesh->bUseAsyncCooking = true; // cocinar colisión fuera del hilo del juego (barato)
 
     // Caja que define el lienzo de esculpido. Visible en editor, oculta en juego.
     BoundsBox = CreateDefaultSubobject<UBoxComponent>(TEXT("BoundsBox"));
@@ -334,7 +335,8 @@ void APTSculptVolume::OnConstruction(const FTransform& Transform)
 void APTSculptVolume::BeginPlay()
 {
     Super::BeginPlay();
-    Field.VoxelSize = VoxelSize;
+    Field.VoxelSize        = VoxelSize;
+    Field.DisplaySmoothing = DisplaySmoothing;
     if (ClayMaterial)
         Mesh->SetMaterial(0, ClayMaterial);
 }
@@ -505,13 +507,14 @@ void APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
             const float next = FMath::Min(prev, -sdf);
             if (next != prev) { Field.SetSDF(x, y, z, next); bAnyChange = true; }
         }
-        else // Paint
+        else // Paint — color PLENO (sin degradado) con la forma exacta del sello.
         {
-            if (prev > 0.f && sdf > -1.f)
+            // Pinta dentro del sello (+1 voxel de margen) donde haya material o su
+            // borde, para que ambos lados de la superficie queden del color y el
+            // trazo salga nítido, con la figura del stamp (cono/cilindro/etc.).
+            if (sdf > -1.f && prev > -1.f)
             {
-                const float blend = FMath::Clamp(sdf + 1.f, 0.f, 1.f) * 0.5f;
-                const FColor cur = Field.GetColor(x, y, z);
-                Field.SetColor(x, y, z, FLinearColor::LerpUsingHSV(FLinearColor(cur), PaintColor, blend).ToFColor(true));
+                Field.SetColor(x, y, z, PaintColor.ToFColor(true));
                 bAnyChange = true;
             }
         }
@@ -716,9 +719,9 @@ void APTSculptVolume::RebuildDirty()
         {
             for (FPTBrickMesh& M : *Results)
             {
-                // Colisión OFF durante el esculpido: el hit usa raymarching SDF,
-                // y cocinar colisión por rebuild era el mayor costo de FPS.
-                MeshPtr->CreateMeshSection(M.Section, M.Verts, M.Tris, M.Normals, {}, M.Colors, {}, /*collision=*/false);
+                // Colisión ON con cocinado asíncrono (barato). Con VoxelSize alto
+                // la malla ya es de baja densidad, así que la colisión es liviana.
+                MeshPtr->CreateMeshSection(M.Section, M.Verts, M.Tris, M.Normals, {}, M.Colors, {}, /*collision=*/true);
                 if (Mat) MeshPtr->SetMaterial(M.Section, Mat);
             }
             bRebuildInProgress = false;

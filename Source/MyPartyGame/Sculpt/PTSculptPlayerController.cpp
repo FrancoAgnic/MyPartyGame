@@ -57,6 +57,15 @@ void APTSculptPlayerController::BeginPlay()
         PreviewStaticMesh->SetCastShadow(false);
         PreviewStaticMesh->RegisterComponent();
         PreviewStaticMesh->SetVisibility(false);
+
+        // Gizmo de ejes (modo eje). Mesh asignable, se muestra solo cuando aplica.
+        AxisGizmo = NewObject<UStaticMeshComponent>(PreviewActor, TEXT("AxisGizmo"));
+        AxisGizmo->SetupAttachment(PreviewMesh);
+        AxisGizmo->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        AxisGizmo->SetCastShadow(false);
+        if (AxisGizmoMesh) AxisGizmo->SetStaticMesh(AxisGizmoMesh);
+        AxisGizmo->RegisterComponent();
+        AxisGizmo->SetVisibility(false);
     }
 }
 
@@ -130,6 +139,31 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
     if (PreviewActor)
         PreviewActor->SetActorLocation(StampPos);
 
+    // Gizmo de ejes: visible solo en modo eje con la herramienta Add.
+    if (AxisGizmo)
+    {
+        const bool bShowGizmo = bAxisLock && EditMode == EPTEditMode::Add;
+        AxisGizmo->SetVisibility(bShowGizmo);
+        if (bShowGizmo)
+        {
+            // Orientar al plano vertical activo (bloqueado si se esculpe, o el actual).
+            FVector N = AxisPlaneN;
+            if (!bIsStamping)
+            {
+                FVector S, D;
+                if (GetCameraRay(S, D))
+                {
+                    N = FVector(D.X, D.Y, 0.f).GetSafeNormal();
+                    if (N.IsNearlyZero()) N = FVector(1.f, 0.f, 0.f);
+                }
+            }
+            AxisGizmo->SetWorldLocation(StampPos);
+            AxisGizmo->SetWorldRotation(N.Rotation());
+            const float Base = FMath::Max(PreviewMeshBaseSize, 1.f);
+            AxisGizmo->SetWorldScale3D(FVector(StampSize / Base));
+        }
+    }
+
     // Decal indicador
     if (BrushDecalMaterial)
     {
@@ -171,9 +205,9 @@ FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
     }
 
     // ── Modo eje: trazo recto sobre el plano vertical bloqueado al inicio ───
-    // El rayo se interseca con el plano (contiene Z mundo). Movimiento libre y
-    // recto dentro del plano: vertical plomada + diagonales verticales rectas.
-    if (bAxisLock && bIsStamping)
+    // Solo con la herramienta de esculpir (Add). El rayo se interseca con el
+    // plano (contiene Z mundo): vertical plomada + diagonales verticales rectas.
+    if (bAxisLock && bIsStamping && EditMode == EPTEditMode::Add)
     {
         const float denom = FVector::DotProduct(Dir, AxisPlaneN);
         FVector Pf = AxisOrigin;
@@ -184,6 +218,41 @@ FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
         }
         OutNormal = AxisPlaneN;
         return Pf;
+    }
+
+    // ── Paint: pegar el cursor a la superficie (raymarch) para pintar preciso ──
+    // Así el sello queda exactamente sobre la malla donde apuntás; con brocha
+    // chica salen trazos finos y detallados.
+    if (EditMode == EPTEditMode::Paint && Volume)
+    {
+        static constexpr float StepSize = 8.f;  // ~1 voxel: preciso
+        static constexpr int32 MaxSteps = 700;
+        float prevD = Volume->SampleWorldDensity(Start);
+        for (int32 i = 1; i <= MaxSteps; ++i)
+        {
+            const FVector P = Start + Dir * (StepSize * i);
+            const float   d = Volume->SampleWorldDensity(P);
+            if (prevD <= 0.f && d > 0.f)
+            {
+                FVector lo = P - Dir * StepSize, hi = P;
+                for (int32 j = 0; j < 5; ++j)
+                {
+                    const FVector mid = (lo + hi) * 0.5f;
+                    (Volume->SampleWorldDensity(mid) > 0.f ? hi : lo) = mid;
+                }
+                const FVector Surf = (lo + hi) * 0.5f;
+                const float E = Volume->VoxelSize * 0.5f;
+                FVector N(
+                    Volume->SampleWorldDensity(Surf + FVector(E,0,0)) - Volume->SampleWorldDensity(Surf - FVector(E,0,0)),
+                    Volume->SampleWorldDensity(Surf + FVector(0,E,0)) - Volume->SampleWorldDensity(Surf - FVector(0,E,0)),
+                    Volume->SampleWorldDensity(Surf + FVector(0,0,E)) - Volume->SampleWorldDensity(Surf - FVector(0,0,E)));
+                N = (-N).GetSafeNormal();
+                OutNormal = N.IsNearlyZero() ? -Dir : N;
+                return Surf;
+            }
+            prevD = d;
+        }
+        // Sin superficie a la vista → brazo extendido (no pinta nada igual).
     }
 
     // Cursor tipo SculptrVR: siempre a distancia fija (brazo extendido).
@@ -274,11 +343,9 @@ void APTSculptPlayerController::OnStampPressed()
 {
     bIsStamping = true;
 
-    // En modo eje: bloquear un plano VERTICAL (que contiene el eje Z global) y
-    // que mira hacia la cámara. Dentro del plano el movimiento es libre y recto:
-    // vertical = plomada exacta (Z mundo), y diagonales verticales rectas entre
-    // el horizontal y Z. Sin snap a un solo eje, sin curvatura de cámara.
-    if (bAxisLock)
+    // En modo eje (solo Add): bloquear un plano VERTICAL (que contiene el eje Z
+    // global) que mira hacia la cámara. Movimiento libre y recto dentro del plano.
+    if (bAxisLock && EditMode == EPTEditMode::Add)
     {
         FVector Start, Dir;
         if (GetCameraRay(Start, Dir))

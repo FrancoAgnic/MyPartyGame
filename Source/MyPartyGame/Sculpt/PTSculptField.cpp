@@ -124,10 +124,22 @@ void FPTSculptField::SnapshotBrick(const FPTBrickKey& Key, FBrickSnapshot& Out)
     for (int32 j = 0; j < SS; ++j)
     for (int32 i = 0; i < SS; ++i)
     {
-        const float v = GetSDF(baseX + i, baseY + j, baseZ + k);
+        const int32 gx = baseX + i, gy = baseY + j, gz = baseZ + k;
+        float v = GetSDF(gx, gy, gz);
+
+        // Suavizado de display: mezcla con el promedio de vecinos (lectura GLOBAL
+        // → consistente entre bricks, sin costuras). No modifica los datos guardados.
+        if (DisplaySmoothing > 0.f)
+        {
+            const float avg = (GetSDF(gx+1,gy,gz) + GetSDF(gx-1,gy,gz)
+                             + GetSDF(gx,gy+1,gz) + GetSDF(gx,gy-1,gz)
+                             + GetSDF(gx,gy,gz+1) + GetSDF(gx,gy,gz-1)) / 6.f;
+            v = FMath::Lerp(v, avg, DisplaySmoothing);
+        }
+
         const int32 idx = i + j * SS + k * SS * SS;
         Out.SDF[idx]   = v;
-        Out.Color[idx] = GetColor(baseX + i, baseY + j, baseZ + k);
+        Out.Color[idx] = GetColor(gx, gy, gz);
         if (v > 0.f) bHasPos = true; else bHasNeg = true;
     }
     Out.bEmpty = !(bHasPos && bHasNeg);
@@ -330,54 +342,5 @@ void FPTSculptField::MeshBrick(const FBrickSnapshot& Snap, FPTBrickMesh& Out)
         if (in000 != (SDFAt(cx, cy, cz + 1) > 0.f))
             EmitQuad(CellSlot(cx, cy, cz), CellSlot(cx-1, cy, cz),
                      CellSlot(cx-1, cy-1, cz), CellSlot(cx, cy-1, cz), in000);
-    }
-
-    // 3) Skirts: cortina hacia adentro en cada arista de borde ABIERTA (una que
-    //    pertenece a un solo triángulo = perímetro del parche del brick). Tapa
-    //    las costuras entre bricks de distinto paso. En zonas uniformes queda
-    //    detrás de la superficie coincidente del vecino → invisible.
-    {
-        TMap<uint64, int32> EdgeCount;
-        EdgeCount.Reserve(Out.Tris.Num());
-        auto AddEdge = [&](int32 a, int32 b) {
-            const uint32 lo = (uint32)FMath::Min(a, b);
-            const uint32 hi = (uint32)FMath::Max(a, b);
-            EdgeCount.FindOrAdd(((uint64)lo << 32) | hi)++;
-        };
-        for (int32 t = 0; t + 2 < Out.Tris.Num(); t += 3)
-        {
-            AddEdge(Out.Tris[t],   Out.Tris[t+1]);
-            AddEdge(Out.Tris[t+1], Out.Tris[t+2]);
-            AddEdge(Out.Tris[t+2], Out.Tris[t]);
-        }
-
-        const float depth = Vx * step; // ~1 voxel del paso actual
-        TArray<TPair<int32,int32>> Border;
-        for (const TPair<uint64,int32>& KV : EdgeCount)
-            if (KV.Value == 1)
-                Border.Emplace((int32)(KV.Key >> 32), (int32)(KV.Key & 0xffffffffu));
-
-        for (const TPair<int32,int32>& E : Border)
-        {
-            const int32 a = E.Key, b = E.Value;
-            // Copiar a locales ANTES de Add (Add puede reubicar el array y
-            // pasar una referencia a un elemento propio dispara el check de aliasing).
-            const FVector pa = Out.Verts[a],   pb = Out.Verts[b];
-            const FVector na = Out.Normals[a], nb = Out.Normals[b];
-            const FColor  ca = Out.Colors[a],  cb = Out.Colors[b];
-
-            const int32 a2 = Out.Verts.Num();
-            Out.Verts.Add(pa - na * depth);
-            Out.Normals.Add(na); Out.Colors.Add(ca);
-            const int32 b2 = Out.Verts.Num();
-            Out.Verts.Add(pb - nb * depth);
-            Out.Normals.Add(nb); Out.Colors.Add(cb);
-
-            // Quad (a,b,b2,a2) a doble cara para no depender del winding.
-            Out.Tris.Add(a); Out.Tris.Add(b);  Out.Tris.Add(b2);
-            Out.Tris.Add(a); Out.Tris.Add(b2); Out.Tris.Add(a2);
-            Out.Tris.Add(a); Out.Tris.Add(b2); Out.Tris.Add(b);
-            Out.Tris.Add(a); Out.Tris.Add(a2); Out.Tris.Add(b2);
-        }
     }
 }

@@ -57,6 +57,9 @@ public:
     UPROPERTY(EditAnywhere, Category="Sculpt|PreviewMesh") UStaticMesh* PreviewToolMeshSmooth = nullptr;
     UPROPERTY(EditAnywhere, Category="Sculpt|PreviewMesh") UStaticMesh* PreviewToolMeshPaint  = nullptr;
 
+    /** Mesh indicador de ejes (se muestra en modo eje con la herramienta Add). */
+    UPROPERTY(EditAnywhere, Category="Sculpt|PreviewMesh") UStaticMesh* AxisGizmoMesh = nullptr;
+
     // ── Color picker ────────────────────────────────────────────────────────
     UPROPERTY(EditAnywhere, Category="UI")
     TSubclassOf<UUserWidget> ColorPickerClass;
@@ -105,6 +108,7 @@ private:
     UPROPERTY() AActor*                   PreviewActor      = nullptr;
     UPROPERTY() UProceduralMeshComponent* PreviewMesh       = nullptr;
     UPROPERTY() UStaticMeshComponent*     PreviewStaticMesh = nullptr;
+    UPROPERTY() UStaticMeshComponent*     AxisGizmo         = nullptr;
     UPROPERTY() UUserWidget*              ColorPicker       = nullptr;
 
     void RebuildPreviewMesh();

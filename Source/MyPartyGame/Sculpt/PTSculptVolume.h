@@ -20,13 +20,17 @@ class MYPARTYGAME_API APTSculptVolume : public AActor
 public:
     APTSculptVolume();
 
-    // Resolución fina del campo (tamaño de celda en UU). Etapa 1: uniforme.
-    UPROPERTY(EditAnywhere, Category="Sculpt") float VoxelSize = 8.f;
+    // Resolución del campo (tamaño de celda en UU). Menor = más geometría/detalle.
+    UPROPERTY(EditAnywhere, Category="Sculpt") float VoxelSize = 5.f;
     UPROPERTY(EditAnywhere, Category="Sculpt") UMaterialInterface* ClayMaterial = nullptr;
 
     // Modo Smooth: intensidad del suavizado por aplicación y empuje anti-erosión.
     UPROPERTY(EditAnywhere, Category="Sculpt") float SmoothStrength = 0.4f;
     UPROPERTY(EditAnywhere, Category="Sculpt") float SmoothBias     = 0.05f; // hacia afuera, evita que encoja
+
+    // Suavizado visual de la malla al generarla (0 = off, ~0.5 = suave). No borra detalle guardado.
+    UPROPERTY(EditAnywhere, Category="Sculpt", meta=(ClampMin="0.0", ClampMax="1.0"))
+    float DisplaySmoothing = 0.5f;
 
     void ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
                     EPTEditMode Mode, FLinearColor PaintColor);

@@ -57,6 +57,9 @@ public:
     // Tamaño de celda en unidades de mundo (local del actor). Fijo en Etapa 1.
     float VoxelSize = 8.f;
 
+    // Suavizado de display al mallar (0 = off, 1 = máximo). No altera los datos.
+    float DisplaySmoothing = 0.f;
+
     // ── Acceso a muestras (coordenadas globales de celda) ──────────────────
     float  GetSDF  (int32 X, int32 Y, int32 Z) const;
     FColor GetColor(int32 X, int32 Y, int32 Z) const;
