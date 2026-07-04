@@ -21,9 +21,6 @@ Saved/
 *.dll
 *.pdb
 
-# Content - assets binarios de Unreal (grandes, no se trackean en git)
-Content/
-
 # OS files
 .DS_Store
 Thumbs.db
