@@ -411,32 +411,46 @@ void APTSculptVolume::SetupClayMID()
     ClayMID->SetScalarParameterValue(TEXT("PaintRes"),   (float)PaintResolution);
 }
 
-void APTSculptVolume::WritePaintStamp(FVector WorldPos, EPTStampShape Shape, float Size, FLinearColor Color)
+void APTSculptVolume::WritePaintStamp(FVector WorldPos, EPTStampShape Shape, float Size, FLinearColor Color, bool bFull)
 {
     if (PaintVolume.Num() == 0) return;
     const int32 N = PaintResolution;
     const FVector Local  = GetActorTransform().InverseTransformPosition(WorldPos);
-    const FVector VoxUU  = CanvasSizeLocal / (float)N;         // UU por celda de pintura
+    const FVector VoxUU  = CanvasSizeLocal / (float)N;         // UU por celda (puede no ser cúbico)
     const FVector C      = (Local - CanvasMinLocal) / VoxUU;    // centro en celdas de pintura
-    const float   Half   = (Size * 0.5f) / VoxUU.X;             // radio en celdas (asume cúbico)
-    const int32   R      = FMath::CeilToInt(Half) + 1;
+    const float   HalfUU = Size * 0.5f;                        // radio en UU (círculo real)
+    // Rango de celdas por eje (bbox), según el radio en UU y el UU/celda de cada eje.
+    const int32 Rx = FMath::CeilToInt(HalfUU / VoxUU.X) + 1;
+    const int32 Ry = FMath::CeilToInt(HalfUU / VoxUU.Y) + 1;
+    const int32 Rz = FMath::CeilToInt(HalfUU / VoxUU.Z) + 1;
     const FColor  Col(   (uint8)FMath::Clamp(Color.R*255.f,0.f,255.f),
                          (uint8)FMath::Clamp(Color.G*255.f,0.f,255.f),
                          (uint8)FMath::Clamp(Color.B*255.f,0.f,255.f), 255);
 
-    const int32 x0 = FMath::Max(0, FMath::FloorToInt(C.X) - R), x1 = FMath::Min(N-1, FMath::CeilToInt(C.X) + R);
-    const int32 y0 = FMath::Max(0, FMath::FloorToInt(C.Y) - R), y1 = FMath::Min(N-1, FMath::CeilToInt(C.Y) + R);
-    const int32 z0 = FMath::Max(0, FMath::FloorToInt(C.Z) - R), z1 = FMath::Min(N-1, FMath::CeilToInt(C.Z) + R);
+    const int32 x0 = FMath::Max(0, FMath::FloorToInt(C.X) - Rx), x1 = FMath::Min(N-1, FMath::CeilToInt(C.X) + Rx);
+    const int32 y0 = FMath::Max(0, FMath::FloorToInt(C.Y) - Ry), y1 = FMath::Min(N-1, FMath::CeilToInt(C.Y) + Ry);
+    const int32 z0 = FMath::Max(0, FMath::FloorToInt(C.Z) - Rz), z1 = FMath::Min(N-1, FMath::CeilToInt(C.Z) + Rz);
+
+    // Ancho del borde suave en UU. Dureza 1 → borde nítido.
+    const float SoftW = FMath::Max((1.f - PaintHardness) * HalfUU, VoxUU.GetMin() * 0.5f);
 
     bool bChanged = false;
     for (int32 z = z0; z <= z1; ++z)
     for (int32 y = y0; y <= y1; ++y)
     for (int32 x = x0; x <= x1; ++x)
     {
-        const FVector LP(x - C.X, y - C.Y, z - C.Z);
-        if (StampSDF(Shape, LP, Half) > 0.f)
+        // Offset del centro en UU reales → esfera perfecta (no óvalo).
+        const FVector LP((x - C.X) * VoxUU.X, (y - C.Y) * VoxUU.Y, (z - C.Z) * VoxUU.Z);
+        const float sdf = StampSDF(Shape, LP, HalfUU); // >0 dentro; distancia al borde en UU
+        if (sdf <= 0.f) continue;
+
+        // bFull (Add): cobertura plena en todo el interior (cubre toda la superficie).
+        const uint8 cov = bFull ? 255 : (uint8)FMath::Clamp((sdf / SoftW) * 255.f, 0.f, 255.f);
+        const int32 idx = x + y*N + z*N*N;
+        // El color más "cubridor" gana (bordes suaves y solapes limpios).
+        if (cov >= PaintVolume[idx].A)
         {
-            PaintVolume[x + y*N + z*N*N] = Col;
+            PaintVolume[idx] = FColor(Col.R, Col.G, Col.B, cov);
             bChanged = true;
         }
     }
@@ -523,21 +537,14 @@ float APTSculptVolume::StampSDF(EPTStampShape Shape, FVector P, float HalfSize)
         return FMath::Min(radial, axial);
     }
 
-    case EPTStampShape::TriPrism: // sección triangular equilátera en XY, extruida en Z
+    case EPTStampShape::TriPrism: // CONO (eje Z, punta arriba en +Z, base en -Z)
     {
-        const float k = 1.7320508f; // sqrt(3)
-        float px = FMath::Abs(P.X) - HalfSize;
-        float py = P.Y + HalfSize / k;
-        if (px + k * py > 0.f)
-        {
-            float tx = px; float ty = py;
-            px = (tx - k * ty) * 0.5f;
-            py = (-k * tx - ty) * 0.5f;
-        }
-        px -= FMath::Clamp(px, -2.f * HalfSize, 0.f);
-        float triSDF = -FMath::Sqrt(px*px + py*py) * FMath::Sign(py);
-        float axial  = HalfSize - FMath::Abs(P.Z);
-        return FMath::Min(triSDF, axial);
+        const float h = HalfSize;
+        // Radio permitido según la altura: máx en la base (z=-h), 0 en la punta (z=+h).
+        const float rAllow = HalfSize * FMath::Clamp((h - P.Z) / (2.f * h), 0.f, 1.f);
+        const float radial = rAllow - FVector2D(P.X, P.Y).Size();
+        const float axial  = FMath::Min(P.Z + h, h - P.Z);
+        return FMath::Min(radial, axial);
     }
 
     default:
@@ -593,7 +600,10 @@ void APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
                              + Field.GetSDF(x,y+1,z) + Field.GetSDF(x,y-1,z)
                              + Field.GetSDF(x,y,z+1) + Field.GetSDF(x,y,z-1)) / 6.f;
             const float target = avg + SmoothBias;
-            NewV[WI(x,y,z)] = FMath::Lerp(prev, target, fall * SmoothStrength);
+            float nv = FMath::Lerp(prev, target, fall * SmoothStrength);
+            // Tope de cambio por celda por aplicación (no se dispara al mantener).
+            nv = prev + FMath::Clamp(nv - prev, -SmoothMaxDelta, SmoothMaxDelta);
+            NewV[WI(x,y,z)] = nv;
         }
 
         for (int32 z = z0; z <= z1; ++z)
@@ -621,29 +631,18 @@ void APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
         {
             const float next = FMath::Max(prev, sdf);
             if (next != prev) { Field.SetSDF(x, y, z, next); bAnyChange = true; }
+            // Color pleno directo sobre la geometría, ambos lados de la superficie
+            // (sdf > -1 = dentro del sello + 1 celda) → toda la malla nueva del color.
             if (sdf > -1.f)
-            {
-                const float blend = FMath::Clamp(sdf + 1.f, 0.f, 1.f) * 0.8f;
-                const FColor cur = Field.GetColor(x, y, z);
-                Field.SetColor(x, y, z, FLinearColor::LerpUsingHSV(FLinearColor(cur), PaintColor, blend).ToFColor(true));
-                bAnyChange = true;
-            }
-        }
-        else if (Mode == EPTEditMode::Erase)
-        {
-            const float next = FMath::Min(prev, -sdf);
-            if (next != prev) { Field.SetSDF(x, y, z, next); bAnyChange = true; }
-        }
-        else // Paint — color PLENO (sin degradado) con la forma exacta del sello.
-        {
-            // Pinta dentro del sello (+1 voxel de margen) donde haya material o su
-            // borde, para que ambos lados de la superficie queden del color y el
-            // trazo salga nítido, con la figura del stamp (cono/cilindro/etc.).
-            if (sdf > -1.f && prev > -1.f)
             {
                 Field.SetColor(x, y, z, PaintColor.ToFColor(true));
                 bAnyChange = true;
             }
+        }
+        else // Erase
+        {
+            const float next = FMath::Min(prev, -sdf);
+            if (next != prev) { Field.SetSDF(x, y, z, next); bAnyChange = true; }
         }
     }
 

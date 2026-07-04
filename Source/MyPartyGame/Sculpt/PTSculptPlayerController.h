@@ -26,6 +26,11 @@ public:
     UPROPERTY(EditAnywhere, Category="Sculpt")
     float SizeStep = 20.f;
 
+    // Mínimo de brocha: 100 para las tools de geometría, más chico para Paint.
+    UPROPERTY(EditAnywhere, Category="Sculpt") float MinSize      = 100.f;
+    UPROPERTY(EditAnywhere, Category="Sculpt") float PaintMinSize = 20.f;
+    UPROPERTY(EditAnywhere, Category="Sculpt") float MaxSize      = 500.f;
+
     UPROPERTY(EditAnywhere, Category="Sculpt")
     float AirDepth = 400.f; // distancia brazo cuando no hay superficie
 
@@ -34,9 +39,15 @@ public:
     UPROPERTY(EditAnywhere, Category="Sculpt")
     UMaterialInterface* BrushDecalMaterial = nullptr;
 
-    /** Decal exclusivo del modo Smooth (reemplaza la malla de preview). */
-    UPROPERTY(EditAnywhere, Category="Sculpt")
-    UMaterialInterface* SmoothDecalMaterial = nullptr;
+    /** Meshes de preview del modo PAINT, por shape. Se alinean a la superficie,
+     *  escalan con la brocha y toman el color del picker (material con param "Color"). */
+    UPROPERTY(EditAnywhere, Category="Sculpt|PaintPreview") UStaticMesh* PaintMeshSphere   = nullptr;
+    UPROPERTY(EditAnywhere, Category="Sculpt|PaintPreview") UStaticMesh* PaintMeshCube     = nullptr;
+    UPROPERTY(EditAnywhere, Category="Sculpt|PaintPreview") UStaticMesh* PaintMeshCylinder = nullptr;
+    UPROPERTY(EditAnywhere, Category="Sculpt|PaintPreview") UStaticMesh* PaintMeshCone     = nullptr;
+
+    /** Mesh de preview del modo SMOOTH (se alinea a la superficie, escala con la brocha). */
+    UPROPERTY(EditAnywhere, Category="Sculpt|PaintPreview") UStaticMesh* SmoothRingMesh    = nullptr;
 
     /** Material semitransparente para la preview de la forma (fallback). */
     UPROPERTY(EditAnywhere, Category="Sculpt")
@@ -88,6 +99,13 @@ public:
     UPROPERTY(BlueprintReadOnly, Category="Sculpt")
     EPTStampShape StampShape = EPTStampShape::Sphere;
 
+    /** Forma efectiva: Add/Paint usan la seleccionada; Erase/Smooth siempre esfera. */
+    EPTStampShape EffectiveShape() const
+    {
+        return (EditMode == EPTEditMode::Add || EditMode == EPTEditMode::Paint)
+             ? StampShape : EPTStampShape::Sphere;
+    }
+
 protected:
     virtual void BeginPlay()          override;
     virtual void SetupInputComponent() override;
@@ -114,6 +132,9 @@ private:
     UPROPERTY() UProceduralMeshComponent* PreviewMesh       = nullptr;
     UPROPERTY() UStaticMeshComponent*     PreviewStaticMesh = nullptr;
     UPROPERTY() UStaticMeshComponent*     AxisGizmo         = nullptr;
+    UPROPERTY() UStaticMeshComponent*     PaintRing         = nullptr;
+    UPROPERTY() class UMaterialInstanceDynamic* PaintRingMID = nullptr;
+    UPROPERTY() UStaticMesh*              CachedRingMesh    = nullptr;
     UPROPERTY() UUserWidget*              ColorPicker       = nullptr;
 
     void RebuildPreviewMesh();
@@ -136,6 +157,8 @@ private:
     void OnStampReleased();
     void OnScrollUp();
     void OnScrollDown();
+    float MinForMode() const { return (EditMode == EPTEditMode::Paint) ? PaintMinSize : MinSize; }
+    void  ClampStampSize()   { StampSize = FMath::Clamp(StampSize, MinForMode(), MaxSize); }
     void SetShapeSphere()  { SetShape(EPTStampShape::Sphere);  }
     void SetShapeCube()    { SetShape(EPTStampShape::Cube);    }
     void SetShapeCylinder(){ SetShape(EPTStampShape::Cylinder);}

@@ -15,6 +15,8 @@ public class MyPartyGame : ModuleRules
 			"InputCore",
 			"EnhancedInput",
 			"ProceduralMeshComponent",
+			"RHI",
+			"RenderCore",
 			"AIModule",
 			"StateTreeModule",
 			"GameplayStateTreeModule",

@@ -27,9 +27,16 @@ public:
     UPROPERTY(EditAnywhere, Category="Sculpt") float VoxelSize = 5.f;
     UPROPERTY(EditAnywhere, Category="Sculpt") UMaterialInterface* ClayMaterial = nullptr;
 
-    // Modo Smooth: intensidad del suavizado por aplicación y empuje anti-erosión.
-    UPROPERTY(EditAnywhere, Category="Sculpt") float SmoothStrength = 0.4f;
-    UPROPERTY(EditAnywhere, Category="Sculpt") float SmoothBias     = 0.05f; // hacia afuera, evita que encoja
+    // ── Modo Smooth (tuneables) ─────────────────────────────────────────────
+    // Intensidad del suavizado por aplicación (0..1). Más alto = suaviza más rápido.
+    UPROPERTY(EditAnywhere, Category="Sculpt|Smooth", meta=(ClampMin="0.0", ClampMax="1.0"))
+    float SmoothStrength = 0.35f;
+    // Empuje por aplicación: >0 infla (crece), <0 encoge, 0 = neutro (recomendado).
+    UPROPERTY(EditAnywhere, Category="Sculpt|Smooth", meta=(ClampMin="-0.2", ClampMax="0.2"))
+    float SmoothBias = 0.f;
+    // Tope de cambio por celda por aplicación (evita que se dispare al mantener).
+    UPROPERTY(EditAnywhere, Category="Sculpt|Smooth", meta=(ClampMin="0.0", ClampMax="1.0"))
+    float SmoothMaxDelta = 0.15f;
 
     // Suavizado visual de la malla al generarla (0 = off, ~0.5 = suave). No borra detalle guardado.
     UPROPERTY(EditAnywhere, Category="Sculpt", meta=(ClampMin="0.0", ClampMax="1.0"))
@@ -38,6 +45,10 @@ public:
     // Pintura por volumen 3D (per-pixel, independiente del VoxelSize).
     UPROPERTY(EditAnywhere, Category="Sculpt|Paint", meta=(ClampMin="32", ClampMax="128"))
     int32 PaintResolution = 128;
+
+    // Dureza del borde del pincel: 0 = suave (degradé), 1 = duro (borde nítido).
+    UPROPERTY(EditAnywhere, Category="Sculpt|Paint", meta=(ClampMin="0.0", ClampMax="1.0"))
+    float PaintHardness = 0.6f;
 
     void ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
                     EPTEditMode Mode, FLinearColor PaintColor);
@@ -93,7 +104,7 @@ private:
 
     void InitPaintVolume();
     void SetupClayMID();
-    void WritePaintStamp(FVector WorldPos, EPTStampShape Shape, float Size, FLinearColor Color);
+    void WritePaintStamp(FVector WorldPos, EPTStampShape Shape, float Size, FLinearColor Color, bool bFull = false);
     void UploadPaintTexture();
 
     // Coordenadas: mundo → celda (float) en espacio local del actor.

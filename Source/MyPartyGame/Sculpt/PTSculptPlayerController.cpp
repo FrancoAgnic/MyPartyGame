@@ -36,6 +36,7 @@ void APTSculptPlayerController::BeginPlay()
         UE_LOG(LogTemp, Warning, TEXT("[PTSculptPC] No APTSculptVolume in level!"));
 
 
+
     // Actor para la preview de la forma del stamp
     FActorSpawnParameters SP;
     SP.bNoFail = true;
@@ -67,6 +68,14 @@ void APTSculptPlayerController::BeginPlay()
         if (AxisGizmoMesh) AxisGizmo->SetStaticMesh(AxisGizmoMesh);
         AxisGizmo->RegisterComponent();
         AxisGizmo->SetVisibility(false);
+
+        // Preview de superficie de Paint/Smooth (mesh + alineación a la superficie).
+        PaintRing = NewObject<UStaticMeshComponent>(PreviewActor, TEXT("PaintRing"));
+        PaintRing->SetupAttachment(PreviewMesh);
+        PaintRing->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        PaintRing->SetCastShadow(false);
+        PaintRing->RegisterComponent();
+        PaintRing->SetVisibility(false);
     }
 }
 
@@ -167,21 +176,65 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         }
     }
 
-    // Decal indicador. En Smooth se usa el decal exclusivo (reemplaza la malla).
-    UMaterialInterface* DecalMat =
-        (EditMode == EPTEditMode::Smooth && SmoothDecalMaterial) ? SmoothDecalMaterial : BrushDecalMaterial;
-    if (DecalMat)
+    // Decal indicador: solo Add/Erase (Paint y Smooth usan mesh de superficie).
+    if (BrushDecalMaterial && (EditMode == EPTEditMode::Add || EditMode == EPTEditMode::Erase))
     {
         FRotator DecalRot = (-Normal).Rotation();
         UGameplayStatics::SpawnDecalAtLocation(
-            GetWorld(), DecalMat,
+            GetWorld(), BrushDecalMaterial,
             FVector(StampSize * 0.5f),
             StampPos, DecalRot, 0.12f);
     }
 
-    // Aplicar stamp si se está presionando
+    // Preview de superficie (Paint por shape + color; Smooth su propio mesh):
+    // alineado a la normal, escalado con la brocha.
+    if (PaintRing)
+    {
+        UStaticMesh* RingMesh = nullptr;
+        bool bTint = false;
+        if (EditMode == EPTEditMode::Paint)
+        {
+            switch (StampShape)
+            {
+            case EPTStampShape::Sphere:   RingMesh = PaintMeshSphere;   break;
+            case EPTStampShape::Cube:     RingMesh = PaintMeshCube;     break;
+            case EPTStampShape::Cylinder: RingMesh = PaintMeshCylinder; break;
+            case EPTStampShape::TriPrism: RingMesh = PaintMeshCone;     break;
+            }
+            bTint = true;
+        }
+        else if (EditMode == EPTEditMode::Smooth)
+        {
+            RingMesh = SmoothRingMesh;
+        }
+
+        const bool bShow = (RingMesh != nullptr);
+        PaintRing->SetVisibility(bShow);
+        if (bShow)
+        {
+            if (CachedRingMesh != RingMesh)
+            {
+                PaintRing->SetStaticMesh(RingMesh);
+                // MID solo para Paint (toma el color); Smooth usa su material tal cual.
+                PaintRingMID = nullptr;
+                if (bTint)
+                {
+                    if (UMaterialInterface* M = PaintRing->GetMaterial(0))
+                        PaintRingMID = PaintRing->CreateDynamicMaterialInstance(0, M);
+                }
+                CachedRingMesh = RingMesh;
+            }
+            PaintRing->SetWorldLocation(StampPos);
+            PaintRing->SetWorldRotation(FRotationMatrix::MakeFromZ(Normal).Rotator());
+            const float Base = FMath::Max(PreviewMeshBaseSize, 1.f);
+            PaintRing->SetWorldScale3D(FVector(StampSize / Base));
+            if (bTint && PaintRingMID) PaintRingMID->SetVectorParameterValue(TEXT("Color"), CurrentPaintColor);
+        }
+    }
+
+    // Aplicar stamp si se está presionando (Erase/Smooth usan siempre esfera).
     if (bIsStamping)
-        Volume->Server_ApplyStamp(StampPos, StampShape, StampSize, EditMode, CurrentPaintColor);
+        Volume->Server_ApplyStamp(StampPos, EffectiveShape(), StampSize, EditMode, CurrentPaintColor);
 }
 
 // ── Lógica de cursor ─────────────────────────────────────────────────────────
@@ -278,7 +331,7 @@ void APTSculptPlayerController::RebuildPreviewMesh()
 
     TArray<FVector> Verts, Normals;
     TArray<int32>   Tris;
-    APTSculptVolume::BuildStampPreview(StampShape, StampSize, Volume->VoxelSize, Verts, Tris, Normals);
+    APTSculptVolume::BuildStampPreview(EffectiveShape(), StampSize, Volume->VoxelSize, Verts, Tris, Normals);
 
     // Add/Paint: teñir la preview con el color del picker (por vertex color).
     // Otras tools: blanco (el material del tool decide su propio look).
@@ -329,8 +382,8 @@ void APTSculptPlayerController::UpdatePreviewVisual()
 {
     if (!PreviewMesh) return;
 
-    // Smooth: sin malla de preview (se usa un decal, ver PlayerTick).
-    if (EditMode == EPTEditMode::Smooth)
+    // Smooth (decal) y Paint (cursor 2D): sin malla de preview 3D.
+    if (EditMode == EPTEditMode::Smooth || EditMode == EPTEditMode::Paint)
     {
         PreviewMesh->SetVisibility(false);
         if (PreviewStaticMesh) PreviewStaticMesh->SetVisibility(false);
@@ -346,14 +399,16 @@ void APTSculptPlayerController::UpdatePreviewVisual()
     case EPTEditMode::Paint:  ToolMesh = PreviewToolMeshPaint;  break;
     }
     UStaticMesh* ShapeMesh = nullptr;
-    switch (StampShape)
+    switch (EffectiveShape()) // Erase siempre esfera
     {
     case EPTStampShape::Sphere:   ShapeMesh = PreviewMeshSphere;   break;
     case EPTStampShape::Cube:     ShapeMesh = PreviewMeshCube;     break;
     case EPTStampShape::Cylinder: ShapeMesh = PreviewMeshCylinder; break;
     case EPTStampShape::TriPrism: ShapeMesh = PreviewMeshTriPrism; break;
     }
-    UStaticMesh* Chosen = ToolMesh ? ToolMesh : ShapeMesh;
+    // Prioridad SHAPE > TOOL: así al cambiar de shape el preview cambia (bug fix).
+    // Si no hay mesh por shape ni por tool, se usa el procedural (también por shape).
+    UStaticMesh* Chosen = ShapeMesh ? ShapeMesh : ToolMesh;
 
     if (Chosen && PreviewStaticMesh)
     {
@@ -405,14 +460,16 @@ void APTSculptPlayerController::ToggleAxisLock()
 
 void APTSculptPlayerController::OnScrollUp()
 {
-    StampSize = FMath::Clamp(StampSize + SizeStep, 100.f, 500.f);
+    StampSize += SizeStep;
+    ClampStampSize();
     bPreviewDirty = true;
     UE_LOG(LogTemp, Log, TEXT("[Sculpt] Size: %.0f"), StampSize);
 }
 
 void APTSculptPlayerController::OnScrollDown()
 {
-    StampSize = FMath::Clamp(StampSize - SizeStep, 100.f, 500.f);
+    StampSize -= SizeStep;
+    ClampStampSize();
     bPreviewDirty = true;
     UE_LOG(LogTemp, Log, TEXT("[Sculpt] Size: %.0f"), StampSize);
 }
@@ -433,6 +490,8 @@ void APTSculptPlayerController::CycleModes()
     case EPTEditMode::Smooth: EditMode = EPTEditMode::Paint;  break;
     case EPTEditMode::Paint:  EditMode = EPTEditMode::Add;    break;
     }
+    ClampStampSize(); // respetar el mínimo del nuevo modo (Paint permite más chico)
+    bPreviewDirty = true;
     ApplyPreviewMaterial();
     UE_LOG(LogTemp, Log, TEXT("[Sculpt] Mode: %d"), (int32)EditMode);
 }
