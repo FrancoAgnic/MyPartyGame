@@ -34,6 +34,10 @@ public:
     UPROPERTY(EditAnywhere, Category="Sculpt")
     UMaterialInterface* BrushDecalMaterial = nullptr;
 
+    /** Decal exclusivo del modo Smooth (reemplaza la malla de preview). */
+    UPROPERTY(EditAnywhere, Category="Sculpt")
+    UMaterialInterface* SmoothDecalMaterial = nullptr;
+
     /** Material semitransparente para la preview de la forma (fallback). */
     UPROPERTY(EditAnywhere, Category="Sculpt")
     UMaterialInterface* PreviewMeshMaterial = nullptr;
@@ -104,6 +108,7 @@ private:
     EPTStampShape CachedPreviewShape = EPTStampShape::Sphere;
     float         CachedPreviewSize  = 0.f;
     EPTEditMode   CachedPreviewMode  = EPTEditMode::Add;
+    FLinearColor  CachedPreviewColor = FLinearColor::White;
 
     UPROPERTY() AActor*                   PreviewActor      = nullptr;
     UPROPERTY() UProceduralMeshComponent* PreviewMesh       = nullptr;

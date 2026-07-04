@@ -7,6 +7,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "../UI/PTColorPickerWidget.h"
 #include "../Lobby/PTLobbyEscapeMenuWidget.h"
 
@@ -126,12 +127,14 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
     if (PreviewMesh && (bPreviewDirty
         || CachedPreviewShape != StampShape
         || CachedPreviewSize  != StampSize
-        || CachedPreviewMode  != EditMode))
+        || CachedPreviewMode  != EditMode
+        || CachedPreviewColor != CurrentPaintColor))
     {
         UpdatePreviewVisual();
         CachedPreviewShape = StampShape;
         CachedPreviewSize  = StampSize;
         CachedPreviewMode  = EditMode;
+        CachedPreviewColor = CurrentPaintColor;
         bPreviewDirty      = false;
     }
 
@@ -164,12 +167,14 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         }
     }
 
-    // Decal indicador
-    if (BrushDecalMaterial)
+    // Decal indicador. En Smooth se usa el decal exclusivo (reemplaza la malla).
+    UMaterialInterface* DecalMat =
+        (EditMode == EPTEditMode::Smooth && SmoothDecalMaterial) ? SmoothDecalMaterial : BrushDecalMaterial;
+    if (DecalMat)
     {
         FRotator DecalRot = (-Normal).Rotation();
         UGameplayStatics::SpawnDecalAtLocation(
-            GetWorld(), BrushDecalMaterial,
+            GetWorld(), DecalMat,
             FVector(StampSize * 0.5f),
             StampPos, DecalRot, 0.12f);
     }
@@ -220,10 +225,9 @@ FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
         return Pf;
     }
 
-    // ── Paint: pegar el cursor a la superficie (raymarch) para pintar preciso ──
-    // Así el sello queda exactamente sobre la malla donde apuntás; con brocha
-    // chica salen trazos finos y detallados.
-    if (EditMode == EPTEditMode::Paint && Volume)
+    // ── Paint y Smooth: pegar el cursor a la superficie (raymarch) para trabajar
+    // preciso sobre la malla donde apuntás. ────────────────────────────────────
+    if ((EditMode == EPTEditMode::Paint || EditMode == EPTEditMode::Smooth) && Volume)
     {
         static constexpr float StepSize = 8.f;  // ~1 voxel: preciso
         static constexpr int32 MaxSteps = 700;
@@ -275,7 +279,14 @@ void APTSculptPlayerController::RebuildPreviewMesh()
     TArray<FVector> Verts, Normals;
     TArray<int32>   Tris;
     APTSculptVolume::BuildStampPreview(StampShape, StampSize, Volume->VoxelSize, Verts, Tris, Normals);
-    PreviewMesh->CreateMeshSection(0, Verts, Tris, Normals, {}, {}, {}, false);
+
+    // Add/Paint: teñir la preview con el color del picker (por vertex color).
+    // Otras tools: blanco (el material del tool decide su propio look).
+    TArray<FColor> Colors;
+    const bool bTint = (EditMode == EPTEditMode::Add || EditMode == EPTEditMode::Paint);
+    const FColor VC = bTint ? CurrentPaintColor.ToFColor(true) : FColor::White;
+    Colors.Init(VC, Verts.Num());
+    PreviewMesh->CreateMeshSection(0, Verts, Tris, Normals, {}, Colors, {}, false);
 
     ApplyPreviewMaterial();
 }
@@ -291,14 +302,40 @@ void APTSculptPlayerController::ApplyPreviewMaterial()
     case EPTEditMode::Paint:  if (PreviewMatPaint)  Mat = PreviewMatPaint;  break;
     }
     if (!Mat) return;
-    if (PreviewMesh)       PreviewMesh->SetMaterial(0, Mat);
-    if (PreviewStaticMesh) PreviewStaticMesh->SetMaterial(0, Mat);
+
+    // En Add/Paint teñir con el color del picker vía Material Instance Dinámico
+    // (parámetro "Color"). Funciona tanto en el mesh procedural como en uno custom.
+    const bool bTint = (EditMode == EPTEditMode::Add || EditMode == EPTEditMode::Paint);
+
+    auto ApplyTo = [&](UMeshComponent* Comp)
+    {
+        if (!Comp) return;
+        if (bTint)
+        {
+            UMaterialInstanceDynamic* MID = Comp->CreateDynamicMaterialInstance(0, Mat);
+            if (MID) MID->SetVectorParameterValue(TEXT("Color"), CurrentPaintColor);
+        }
+        else
+        {
+            Comp->SetMaterial(0, Mat);
+        }
+    };
+    ApplyTo(PreviewMesh);
+    ApplyTo(PreviewStaticMesh);
 }
 
 // Elige el mesh de preview: override por tool > override por stamp > procedural.
 void APTSculptPlayerController::UpdatePreviewVisual()
 {
     if (!PreviewMesh) return;
+
+    // Smooth: sin malla de preview (se usa un decal, ver PlayerTick).
+    if (EditMode == EPTEditMode::Smooth)
+    {
+        PreviewMesh->SetVisibility(false);
+        if (PreviewStaticMesh) PreviewStaticMesh->SetVisibility(false);
+        return;
+    }
 
     UStaticMesh* ToolMesh = nullptr;
     switch (EditMode)
@@ -368,14 +405,14 @@ void APTSculptPlayerController::ToggleAxisLock()
 
 void APTSculptPlayerController::OnScrollUp()
 {
-    StampSize = FMath::Max(20.f, StampSize + SizeStep);
+    StampSize = FMath::Clamp(StampSize + SizeStep, 100.f, 500.f);
     bPreviewDirty = true;
     UE_LOG(LogTemp, Log, TEXT("[Sculpt] Size: %.0f"), StampSize);
 }
 
 void APTSculptPlayerController::OnScrollDown()
 {
-    StampSize = FMath::Max(20.f, StampSize - SizeStep);
+    StampSize = FMath::Clamp(StampSize - SizeStep, 100.f, 500.f);
     bPreviewDirty = true;
     UE_LOG(LogTemp, Log, TEXT("[Sculpt] Size: %.0f"), StampSize);
 }

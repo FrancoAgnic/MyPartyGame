@@ -1,5 +1,9 @@
 #include "PTSculptVolume.h"
 #include "Async/Async.h"
+#include "Engine/Texture2D.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "TextureResource.h"
+#include "RenderUtils.h"
 
 // ─── Marching Cubes lookup tables (Bourke / Lorensen & Cline) ──────────────
 // EdgeTable[i]: bitmask of the 12 edges intersected when corners have sign pattern i.
@@ -337,13 +341,28 @@ void APTSculptVolume::BeginPlay()
     Super::BeginPlay();
     Field.VoxelSize        = VoxelSize;
     Field.DisplaySmoothing = DisplaySmoothing;
-    if (ClayMaterial)
-        Mesh->SetMaterial(0, ClayMaterial);
+    InitPaintVolume();
+    SetupClayMID();
+    if (UMaterialInterface* M = ClayMID ? (UMaterialInterface*)ClayMID : ClayMaterial)
+        Mesh->SetMaterial(0, M);
 }
 
 void APTSculptVolume::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
+
+    // Subida throttled de la textura de pintura.
+    if (bPaintDirty)
+    {
+        TimeSincePaintUpload += DeltaTime;
+        if (TimeSincePaintUpload >= PaintUploadInterval)
+        {
+            TimeSincePaintUpload = 0.f;
+            bPaintDirty = false;
+            UploadPaintTexture();
+        }
+    }
+
     if (!Field.HasDirty() || bRebuildInProgress) return;
     TimeSinceRebuild += DeltaTime;
     if (TimeSinceRebuild >= RebuildInterval)
@@ -351,6 +370,91 @@ void APTSculptVolume::Tick(float DeltaTime)
         TimeSinceRebuild = 0.f;
         RebuildDirty();
     }
+}
+
+// ─── Pintura por volumen 3D ───────────────────────────────────────────────────
+
+void APTSculptVolume::InitPaintVolume()
+{
+    const int32 N = FMath::Clamp(PaintResolution, 32, 128);
+    PaintResolution = N;
+    PaintVolume.Init(FColor(0, 0, 0, 0), N * N * N); // A=0 → sin pintar
+
+    // Textura: slices Z apilados en vertical (N × N*N). El layout lineal del
+    // array coincide exacto con el de la textura, así se sube directo.
+    PaintTexture = UTexture2D::CreateTransient(N, N * N, PF_B8G8R8A8);
+    PaintTexture->SRGB       = true;
+    PaintTexture->Filter     = TF_Bilinear;
+    PaintTexture->AddressX   = TA_Clamp;
+    PaintTexture->AddressY   = TA_Clamp;
+    PaintTexture->UpdateResource();
+
+    // Lienzo en UU local (a partir del BoundsBox).
+    FIntVector BMin, BMax;
+    CellBounds(BMin, BMax);
+    CanvasMinLocal  = FVector(BMin) * VoxelSize;
+    CanvasSizeLocal = FVector(BMax - BMin) * VoxelSize;
+    if (CanvasSizeLocal.GetMin() <= 0.f) CanvasSizeLocal = FVector(960.f);
+
+    bPaintDirty = true; // subir el estado inicial (vacío)
+}
+
+void APTSculptVolume::SetupClayMID()
+{
+    if (!ClayMaterial) return;
+    ClayMID = UMaterialInstanceDynamic::Create(ClayMaterial, this);
+    if (!ClayMID) return;
+    ClayMID->SetTextureParameterValue(TEXT("PaintTex"), PaintTexture);
+    ClayMID->SetVectorParameterValue(TEXT("CanvasMin"),  CanvasMinLocal);
+    ClayMID->SetVectorParameterValue(TEXT("CanvasSize"), CanvasSizeLocal);
+    ClayMID->SetScalarParameterValue(TEXT("PaintRes"),   (float)PaintResolution);
+}
+
+void APTSculptVolume::WritePaintStamp(FVector WorldPos, EPTStampShape Shape, float Size, FLinearColor Color)
+{
+    if (PaintVolume.Num() == 0) return;
+    const int32 N = PaintResolution;
+    const FVector Local  = GetActorTransform().InverseTransformPosition(WorldPos);
+    const FVector VoxUU  = CanvasSizeLocal / (float)N;         // UU por celda de pintura
+    const FVector C      = (Local - CanvasMinLocal) / VoxUU;    // centro en celdas de pintura
+    const float   Half   = (Size * 0.5f) / VoxUU.X;             // radio en celdas (asume cúbico)
+    const int32   R      = FMath::CeilToInt(Half) + 1;
+    const FColor  Col(   (uint8)FMath::Clamp(Color.R*255.f,0.f,255.f),
+                         (uint8)FMath::Clamp(Color.G*255.f,0.f,255.f),
+                         (uint8)FMath::Clamp(Color.B*255.f,0.f,255.f), 255);
+
+    const int32 x0 = FMath::Max(0, FMath::FloorToInt(C.X) - R), x1 = FMath::Min(N-1, FMath::CeilToInt(C.X) + R);
+    const int32 y0 = FMath::Max(0, FMath::FloorToInt(C.Y) - R), y1 = FMath::Min(N-1, FMath::CeilToInt(C.Y) + R);
+    const int32 z0 = FMath::Max(0, FMath::FloorToInt(C.Z) - R), z1 = FMath::Min(N-1, FMath::CeilToInt(C.Z) + R);
+
+    bool bChanged = false;
+    for (int32 z = z0; z <= z1; ++z)
+    for (int32 y = y0; y <= y1; ++y)
+    for (int32 x = x0; x <= x1; ++x)
+    {
+        const FVector LP(x - C.X, y - C.Y, z - C.Z);
+        if (StampSDF(Shape, LP, Half) > 0.f)
+        {
+            PaintVolume[x + y*N + z*N*N] = Col;
+            bChanged = true;
+        }
+    }
+    if (bChanged) bPaintDirty = true;
+}
+
+void APTSculptVolume::UploadPaintTexture()
+{
+    if (!PaintTexture || PaintVolume.Num() == 0) return;
+    const int32 N = PaintResolution;
+    const int32 NumBytes = PaintVolume.Num() * sizeof(FColor);
+
+    // Copia para el render thread (el array puede cambiar mientras se copia).
+    uint8* Copy = (uint8*)FMemory::Malloc(NumBytes);
+    FMemory::Memcpy(Copy, PaintVolume.GetData(), NumBytes);
+
+    FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, 0, 0, 0, N, N * N);
+    PaintTexture->UpdateTextureRegions(0, 1, Region, N * sizeof(FColor), sizeof(FColor), Copy,
+        [](uint8* Data, const FUpdateTextureRegion2D* Reg) { FMemory::Free(Data); delete Reg; });
 }
 
 // ─── Coordenadas ──────────────────────────────────────────────────────────────
@@ -428,6 +532,13 @@ float APTSculptVolume::StampSDF(EPTStampShape Shape, FVector P, float HalfSize)
 void APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
                                   EPTEditMode Mode, FLinearColor PaintColor)
 {
+    // Paint: escribe en el volumen 3D de pintura (per-pixel, no toca la geometría).
+    if (Mode == EPTEditMode::Paint)
+    {
+        WritePaintStamp(WorldPos, Shape, Size, PaintColor);
+        return;
+    }
+
     const FVector GC = WorldToCell(WorldPos);
     const float HalfSize = (Size * 0.5f) / VoxelSize; // radio en celdas
     const int32 R = FMath::CeilToInt(HalfSize) + 1;
@@ -701,7 +812,7 @@ void APTSculptVolume::RebuildDirty()
         S.Step = Field.DecideStep(S.Key);
 
     UProceduralMeshComponent* MeshPtr = Mesh;
-    UMaterialInterface* Mat = ClayMaterial;
+    UMaterialInterface* Mat = ClayMID ? (UMaterialInterface*)ClayMID : ClayMaterial;
 
     Async(EAsyncExecution::ThreadPool, [this, MeshPtr, Mat, Snaps]()
     {

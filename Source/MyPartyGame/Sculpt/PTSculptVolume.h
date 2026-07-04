@@ -7,6 +7,9 @@
 #include "PTSculptField.h"
 #include "PTSculptVolume.generated.h"
 
+class UTexture2D;
+class UMaterialInstanceDynamic;
+
 UENUM(BlueprintType)
 enum class EPTStampShape : uint8 { Sphere, Cube, Cylinder, TriPrism };
 
@@ -31,6 +34,10 @@ public:
     // Suavizado visual de la malla al generarla (0 = off, ~0.5 = suave). No borra detalle guardado.
     UPROPERTY(EditAnywhere, Category="Sculpt", meta=(ClampMin="0.0", ClampMax="1.0"))
     float DisplaySmoothing = 0.5f;
+
+    // Pintura por volumen 3D (per-pixel, independiente del VoxelSize).
+    UPROPERTY(EditAnywhere, Category="Sculpt|Paint", meta=(ClampMin="32", ClampMax="128"))
+    int32 PaintResolution = 128;
 
     void ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
                     EPTEditMode Mode, FLinearColor PaintColor);
@@ -71,6 +78,21 @@ private:
 
     void RebuildDirty();
     void MarkStampDirty(int32 x0, int32 y0, int32 z0, int32 x1, int32 y1, int32 z1);
+
+    // ── Pintura por volumen ─────────────────────────────────────────────────
+    UPROPERTY(Transient) UTexture2D* PaintTexture = nullptr;
+    UPROPERTY(Transient) UMaterialInstanceDynamic* ClayMID = nullptr;
+    TArray<FColor> PaintVolume;          // PaintResolution³, RGBA (A = cobertura)
+    bool  bPaintDirty          = false;
+    float TimeSincePaintUpload = 0.f;
+    static constexpr float PaintUploadInterval = 0.1f;
+    FVector CanvasMinLocal  = FVector::ZeroVector; // esquina min del lienzo (UU local)
+    FVector CanvasSizeLocal = FVector(960.f);       // tamaño del lienzo (UU local)
+
+    void InitPaintVolume();
+    void SetupClayMID();
+    void WritePaintStamp(FVector WorldPos, EPTStampShape Shape, float Size, FLinearColor Color);
+    void UploadPaintTexture();
 
     // Coordenadas: mundo → celda (float) en espacio local del actor.
     FVector WorldToCell(FVector W) const;
