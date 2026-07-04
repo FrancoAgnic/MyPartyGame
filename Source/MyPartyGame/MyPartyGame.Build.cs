@@ -23,7 +23,7 @@ public class MyPartyGame : ModuleRules
 			"UMG",
 			"Slate",
 			"SlateCore",
-			// Online Subsystem — cargados dinámicamente vía plugin/config, NO se enlaza NULL ni EOS directamente.
+			// Online Subsystem — Steam (cargado dinámicamente vía plugin/config).
 			"OnlineSubsystem",
 			"OnlineSubsystemUtils",
 			"CoreOnline",
