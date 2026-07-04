@@ -85,6 +85,8 @@ private:
     TArray<FColor> PaintVolume;          // PaintResolution³, RGBA (A = cobertura)
     bool  bPaintDirty          = false;
     float TimeSincePaintUpload = 0.f;
+    int32 PaintDirtyZMin       = INT32_MAX; // rango de slices Z pintados (subida parcial)
+    int32 PaintDirtyZMax       = -1;
     static constexpr float PaintUploadInterval = 0.1f;
     FVector CanvasMinLocal  = FVector::ZeroVector; // esquina min del lienzo (UU local)
     FVector CanvasSizeLocal = FVector(960.f);       // tamaño del lienzo (UU local)

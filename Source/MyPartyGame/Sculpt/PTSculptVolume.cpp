@@ -396,7 +396,8 @@ void APTSculptVolume::InitPaintVolume()
     CanvasSizeLocal = FVector(BMax - BMin) * VoxelSize;
     if (CanvasSizeLocal.GetMin() <= 0.f) CanvasSizeLocal = FVector(960.f);
 
-    bPaintDirty = true; // subir el estado inicial (vacío)
+    PaintDirtyZMin = 0; PaintDirtyZMax = N - 1; // primer upload completo
+    bPaintDirty = true;
 }
 
 void APTSculptVolume::SetupClayMID()
@@ -439,20 +440,35 @@ void APTSculptVolume::WritePaintStamp(FVector WorldPos, EPTStampShape Shape, flo
             bChanged = true;
         }
     }
-    if (bChanged) bPaintDirty = true;
+    if (bChanged)
+    {
+        bPaintDirty = true;
+        PaintDirtyZMin = FMath::Min(PaintDirtyZMin, z0);
+        PaintDirtyZMax = FMath::Max(PaintDirtyZMax, z1);
+    }
 }
 
 void APTSculptVolume::UploadPaintTexture()
 {
     if (!PaintTexture || PaintVolume.Num() == 0) return;
     const int32 N = PaintResolution;
-    const int32 NumBytes = PaintVolume.Num() * sizeof(FColor);
 
-    // Copia para el render thread (el array puede cambiar mientras se copia).
+    // Subir solo la banda de slices Z pintados (filas [z0*N, (z1+1)*N)).
+    const int32 z0 = FMath::Clamp(PaintDirtyZMin, 0, N - 1);
+    const int32 z1 = FMath::Clamp(PaintDirtyZMax, 0, N - 1);
+    PaintDirtyZMin = INT32_MAX; PaintDirtyZMax = -1;
+    if (z1 < z0) return;
+
+    const int32 RowStart = z0 * N;                 // primera fila de la banda
+    const int32 Rows     = (z1 - z0 + 1) * N;       // filas de la banda
+    const int32 SrcIndex = z0 * N * N;              // índice lineal (contiguo)
+    const int32 NumBytes = Rows * N * sizeof(FColor);
+
     uint8* Copy = (uint8*)FMemory::Malloc(NumBytes);
-    FMemory::Memcpy(Copy, PaintVolume.GetData(), NumBytes);
+    FMemory::Memcpy(Copy, PaintVolume.GetData() + SrcIndex, NumBytes);
 
-    FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, 0, 0, 0, N, N * N);
+    // Dest en (0, RowStart); el src es una imagen (N × Rows) desde su propio 0,0.
+    FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, RowStart, 0, 0, N, Rows);
     PaintTexture->UpdateTextureRegions(0, 1, Region, N * sizeof(FColor), sizeof(FColor), Copy,
         [](uint8* Data, const FUpdateTextureRegion2D* Reg) { FMemory::Free(Data); delete Reg; });
 }
