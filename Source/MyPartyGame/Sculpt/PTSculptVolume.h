@@ -109,6 +109,8 @@ private:
     TArray<FColor> AtlasBuf;           // mirror CPU del atlas
     TSet<int32>    DirtyTiles;         // slots con tile sucio (subida parcial)
     TArray<int32>  DirtyPageIdx;       // texels de page table nuevos (subida incremental)
+    TArray<int32>  FreeSlots;          // slots liberados (brick borrado) para reusar
+    TArray<int32>  SlotUsed;           // voxels pintados por slot → liberar al llegar a 0
     int32 NextSlot      = 0;
     int32 AtlasCapacity = 4096;
     bool  bPageDirty           = false;
@@ -129,6 +131,10 @@ private:
     void WritePaintStamp(FVector WorldPos, EPTStampShape Shape, float Size, FLinearColor Color, bool bFull = false);
     // Escribe un voxel de color (alloca brick si hace falta). false = atlas lleno.
     bool WriteColorVoxel(int32 vx, int32 vy, int32 vz, const FColor& C);
+    // Limpia un voxel de color (libera el brick si queda vacío).
+    void ClearColorVoxel(int32 vx, int32 vy, int32 vz);
+    // Borra la pintura dentro del volumen del sello (al usar Erase).
+    void ClearPaintStamp(FVector WorldPos, EPTStampShape Shape, float Size);
     void UploadColorField();
 
     // Coordenadas: mundo → celda (float) en espacio local del actor.

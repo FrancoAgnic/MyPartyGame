@@ -415,6 +415,8 @@ void APTSculptVolume::InitColorField()
     BrickSlot.Empty();
     DirtyTiles.Empty();
     DirtyPageIdx.Reset();
+    FreeSlots.Reset();
+    SlotUsed.Init(0, AtlasCapacity);
     NextSlot = 0;
     bPaintDirty = true;
 
@@ -460,9 +462,11 @@ bool APTSculptVolume::WriteColorVoxel(int32 vx, int32 vy, int32 vz, const FColor
     }
     else
     {
-        if (NextSlot >= AtlasCapacity) return false; // atlas lleno → dejar de allocar
-        Slot = NextSlot++;
+        if (FreeSlots.Num() > 0)      Slot = FreeSlots.Pop(EAllowShrinking::No); // reusar slot liberado
+        else if (NextSlot < AtlasCapacity) Slot = NextSlot++;
+        else return false;            // atlas lleno → dejar de allocar
         BrickSlot.Add(BC, Slot);
+        if (SlotUsed.IsValidIndex(Slot)) SlotUsed[Slot] = 0;
         const int32 PgIdx = BC.X + (BC.Y + BC.Z * ColorBrickDim.Y) * ColorBrickDim.X;
         if (PageBuf.IsValidIndex(PgIdx)) { PageBuf[PgIdx] = (float)(Slot + 1); DirtyPageIdx.Add(PgIdx); bPaintDirty = true; }
     }
@@ -474,6 +478,7 @@ bool APTSculptVolume::WriteColorVoxel(int32 vx, int32 vy, int32 vz, const FColor
     const int32 AIdx = ax + ay * AtlasW;
     if (AtlasBuf.IsValidIndex(AIdx) && C.A >= AtlasBuf[AIdx].A)
     {
+        if (AtlasBuf[AIdx].A == 0 && C.A > 0 && SlotUsed.IsValidIndex(Slot)) ++SlotUsed[Slot];
         AtlasBuf[AIdx] = C;
         DirtyTiles.Add(Slot);
         bPaintDirty = true;
@@ -503,6 +508,7 @@ void APTSculptVolume::WritePaintStamp(FVector WorldPos, EPTStampShape Shape, flo
 
     const float SoftUU  = FMath::Max((1.f - PaintHardness) * HalfUU, CV);       // borde suave (UU)
     const float ShellUU = FMath::Max(1.5f * CV, 0.75f * VoxelSize);             // grosor a cada lado
+    const float SurfBand = 0.95f; // en celdas: solo pinta si hay superficie cerca (no aire)
 
     // Iteración O(radio²): disco en el plano tangente × grosor fino a lo largo de la normal.
     // La sección del sello se evalúa en el plano (u,v); la normal es el eje "Z" del stamp.
@@ -518,10 +524,77 @@ void APTSculptVolume::WritePaintStamp(FVector WorldPos, EPTStampShape Shape, flo
         for (float n = -ShellUU; n <= ShellUU; n += CV)
         {
             const FVector P = Local + u * T + v * B + n * LocalN;
+            // Solo pintar si hay geometría cerca (evita pintar el aire → sin fantasmas).
+            const FVector Cell = P / VoxelSize;
+            if (FMath::Abs(Field.SampleSDF(Cell.X, Cell.Y, Cell.Z)) >= SurfBand) continue;
             const int32 vx = FMath::FloorToInt((P.X - CanvasMinLocal.X) / CV);
             const int32 vy = FMath::FloorToInt((P.Y - CanvasMinLocal.Y) / CV);
             const int32 vz = FMath::FloorToInt((P.Z - CanvasMinLocal.Z) / CV);
             WriteColorVoxel(vx, vy, vz, Out);
+        }
+    }
+}
+
+void APTSculptVolume::ClearColorVoxel(int32 vx, int32 vy, int32 vz)
+{
+    if (vx < 0 || vy < 0 || vz < 0 ||
+        vx >= ColorVoxDim.X || vy >= ColorVoxDim.Y || vz >= ColorVoxDim.Z) return;
+
+    const FIntVector BC(vx / CB, vy / CB, vz / CB);
+    int32* Found = BrickSlot.Find(BC);
+    if (!Found) return;
+    const int32 Slot = *Found;
+
+    const int32 TileX = Slot % AtlasTilesPerRow, TileY = Slot / AtlasTilesPerRow;
+    const int32 lx = vx - BC.X * CB, ly = vy - BC.Y * CB, lz = vz - BC.Z * CB;
+    const int32 AIdx = (TileX * CB + lx) + (TileY * (CB * CB) + lz * CB + ly) * AtlasW;
+    if (!AtlasBuf.IsValidIndex(AIdx) || AtlasBuf[AIdx].A == 0) return; // ya vacío
+
+    AtlasBuf[AIdx] = FColor(0, 0, 0, 0);
+    DirtyTiles.Add(Slot);
+    bPaintDirty = true;
+
+    if (SlotUsed.IsValidIndex(Slot) && --SlotUsed[Slot] <= 0)
+    {
+        // Brick vacío → liberar el slot y su entrada de page table.
+        BrickSlot.Remove(BC);
+        const int32 PgIdx = BC.X + (BC.Y + BC.Z * ColorBrickDim.Y) * ColorBrickDim.X;
+        if (PageBuf.IsValidIndex(PgIdx)) { PageBuf[PgIdx] = 0.f; DirtyPageIdx.Add(PgIdx); }
+        FreeSlots.Add(Slot);
+    }
+}
+
+void APTSculptVolume::ClearPaintStamp(FVector WorldPos, EPTStampShape Shape, float Size)
+{
+    if (!AtlasTex || BrickSlot.Num() == 0) return;
+    const float CV = FMath::Max(ColorVoxel, 0.5f);
+    const FVector Local = GetActorTransform().InverseTransformPosition(WorldPos);
+    const float HalfUU = Size * 0.5f;
+
+    const FVector Center = (Local - CanvasMinLocal) / CV;
+    const int32 Rv  = FMath::CeilToInt(HalfUU / CV) + 1;
+    const int32 vcx = FMath::RoundToInt(Center.X), vcy = FMath::RoundToInt(Center.Y), vcz = FMath::RoundToInt(Center.Z);
+    const int32 x0 = FMath::Max(0, vcx - Rv), x1 = FMath::Min(ColorVoxDim.X - 1, vcx + Rv);
+    const int32 y0 = FMath::Max(0, vcy - Rv), y1 = FMath::Min(ColorVoxDim.Y - 1, vcy + Rv);
+    const int32 z0 = FMath::Max(0, vcz - Rv), z1 = FMath::Min(ColorVoxDim.Z - 1, vcz + Rv);
+    if (x1 < x0 || y1 < y0 || z1 < z0) return;
+
+    // Recorre solo los bricks EXISTENTES del bbox → barato aunque la brocha sea grande.
+    for (int32 bz = z0 / CB; bz <= z1 / CB; ++bz)
+    for (int32 by = y0 / CB; by <= y1 / CB; ++by)
+    for (int32 bx = x0 / CB; bx <= x1 / CB; ++bx)
+    {
+        if (!BrickSlot.Contains(FIntVector(bx, by, bz))) continue;
+        const int32 vxs = bx * CB, vys = by * CB, vzs = bz * CB;
+        for (int32 lz = 0; lz < CB; ++lz)
+        for (int32 ly = 0; ly < CB; ++ly)
+        for (int32 lx = 0; lx < CB; ++lx)
+        {
+            const int32 vx = vxs + lx, vy = vys + ly, vz = vzs + lz;
+            if (vx < x0 || vx > x1 || vy < y0 || vy > y1 || vz < z0 || vz > z1) continue;
+            const FVector VoxLocal = CanvasMinLocal + FVector(vx + 0.5f, vy + 0.5f, vz + 0.5f) * CV;
+            if (StampSDF(Shape, VoxLocal - Local, HalfUU) < 0.f) continue; // fuera del sello
+            ClearColorVoxel(vx, vy, vz);
         }
     }
 }
@@ -652,6 +725,10 @@ void APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
         WritePaintStamp(WorldPos, Shape, Size, PaintColor);
         return;
     }
+
+    // Erase también borra la pintura de esa zona (libera bricks, sin fantasmas).
+    if (Mode == EPTEditMode::Erase)
+        ClearPaintStamp(WorldPos, Shape, Size);
 
     const FVector GC = WorldToCell(WorldPos);
     const float HalfSize = (Size * 0.5f) / VoxelSize; // radio en celdas
