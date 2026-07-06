@@ -1,0 +1,290 @@
+#include "PTSculptGameMode.h"
+#include "PTSculptGameState.h"
+#include "PTSculptPlayerController.h"
+#include "../Lobby/PTPlayerState.h"
+#include "GameFramework/PlayerState.h"
+#include "TimerManager.h"
+#include "Engine/World.h"
+
+APTSculptGameMode::APTSculptGameMode()
+{
+    PlayerControllerClass = APTSculptPlayerController::StaticClass();
+    PlayerStateClass      = APTPlayerState::StaticClass();
+    GameStateClass        = APTSculptGameState::StaticClass();
+    bUseSeamlessTravel    = true; // simétrico con el lobby, mantiene PlayerState al viajar.
+    // DefaultPawnClass lo define BP_SculptGameMode (el pawn/cámara del jugador).
+}
+
+void APTSculptGameMode::BeginPlay()
+{
+    Super::BeginPlay();
+    if (WordBank.Num() == 0) SeedDefaultWords();
+}
+
+APTSculptGameState* APTSculptGameMode::GS() const
+{
+    return GetGameState<APTSculptGameState>();
+}
+
+TArray<APTPlayerState*> APTSculptGameMode::GetActivePlayers() const
+{
+    TArray<APTPlayerState*> Out;
+    if (const APTSculptGameState* G = GS())
+    {
+        for (APlayerState* PS : G->PlayerArray)
+        {
+            if (APTPlayerState* PT = Cast<APTPlayerState>(PS))
+            {
+                if (!PT->IsInactive() && !PT->IsOnlyASpectator())
+                    Out.Add(PT);
+            }
+        }
+    }
+    return Out;
+}
+
+void APTSculptGameMode::PostLogin(APlayerController* NewPlayer)
+{
+    Super::PostLogin(NewPlayer);
+    CheckStart();
+}
+
+void APTSculptGameMode::HandleSeamlessTravelPlayer(AController*& C)
+{
+    Super::HandleSeamlessTravelPlayer(C);
+    CheckStart();
+}
+
+void APTSculptGameMode::Logout(AController* Exiting)
+{
+    APTSculptGameState* G = GS();
+    const bool bWasSculptor =
+        (G && Exiting && Exiting->PlayerState && Exiting->PlayerState == G->CurrentSculptor);
+
+    Super::Logout(Exiting);
+
+    if (!G) return;
+
+    if (GetActivePlayers().Num() < MinPlayersToStart)
+    {
+        GoToWaiting();
+    }
+    else if (bWasSculptor &&
+             (G->TurnPhase == EPTTurnPhase::Drawing || G->TurnPhase == EPTTurnPhase::ChoosingWord))
+    {
+        // Se fue el que esculpía en pleno turno: cerrar y pasar al siguiente.
+        GetWorldTimerManager().ClearTimer(PhaseTimer);
+        EndTurn();
+    }
+}
+
+void APTSculptGameMode::CheckStart()
+{
+    APTSculptGameState* G = GS();
+    if (!G) return;
+    if (G->TurnPhase == EPTTurnPhase::WaitingForPlayers &&
+        GetActivePlayers().Num() >= MinPlayersToStart)
+    {
+        StartChoosingPhase();
+    }
+}
+
+void APTSculptGameMode::GoToWaiting()
+{
+    APTSculptGameState* G = GS();
+    if (!G) return;
+    GetWorldTimerManager().ClearTimer(PhaseTimer);
+    G->TurnPhase         = EPTTurnPhase::WaitingForPlayers;
+    G->CurrentSculptor   = nullptr;
+    G->MaskedWord        = FString();
+    G->TurnEndServerTime = 0.0;
+    G->OnTurnPhaseChanged.Broadcast();
+    UE_LOG(LogTemp, Log, TEXT("[SculptGM] Esperando jugadores (%d/%d)."),
+           GetActivePlayers().Num(), MinPlayersToStart);
+}
+
+void APTSculptGameMode::StartChoosingPhase()
+{
+    APTSculptGameState* G = GS();
+    if (!G) return;
+
+    TArray<APTPlayerState*> Players = GetActivePlayers();
+    if (Players.Num() < MinPlayersToStart) { GoToWaiting(); return; }
+
+    // Resetear "adivinó" de todos al empezar el turno.
+    for (APTPlayerState* PT : Players) PT->bHasGuessedThisTurn = false;
+
+    // Elegir el próximo escultor: el siguiente al actual en la lista (rota); si no hay
+    // actual (primer turno o se fue), uno al azar.
+    int32 NextIdx = FMath::RandRange(0, Players.Num() - 1);
+    if (G->CurrentSculptor)
+    {
+        const int32 PrevIdx = Players.IndexOfByKey(G->CurrentSculptor);
+        if (PrevIdx != INDEX_NONE) NextIdx = (PrevIdx + 1) % Players.Num();
+    }
+    APTPlayerState* Sculptor = Players[NextIdx];
+
+    // Elegir N palabras distintas al azar.
+    CurrentChoices.Reset();
+    TArray<FString> Pool = WordBank;
+    const int32 Want = FMath::Min(WordChoiceCount, Pool.Num());
+    for (int32 i = 0; i < Want; ++i)
+    {
+        const int32 P = FMath::RandRange(0, Pool.Num() - 1);
+        CurrentChoices.Add(Pool[P]);
+        Pool.RemoveAtSwap(P);
+    }
+
+    CurrentWord          = FString();
+    G->CurrentSculptor   = Sculptor;
+    G->TurnPhase         = EPTTurnPhase::ChoosingWord;
+    G->MaskedWord        = FString();
+    G->TurnEndServerTime = 0.0;
+    G->OnTurnPhaseChanged.Broadcast();
+
+    // Mandarle las opciones SOLO al escultor.
+    if (APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(Sculptor->GetOwningController()))
+        PC->Client_ReceiveWordChoices(CurrentChoices);
+
+    UE_LOG(LogTemp, Log, TEXT("[SculptGM] Turno: esculpe '%s'. Eligiendo palabra (%d opciones)."),
+           *Sculptor->GetPlayerName(), CurrentChoices.Num());
+
+    // Si no elige a tiempo, se elige la primera automáticamente.
+    GetWorldTimerManager().ClearTimer(PhaseTimer);
+    GetWorldTimerManager().SetTimer(PhaseTimer, this, &APTSculptGameMode::AutoChooseWord,
+                                    ChooseDuration, false);
+}
+
+void APTSculptGameMode::AutoChooseWord()
+{
+    BeginDrawing(0);
+}
+
+void APTSculptGameMode::HandleWordChosen(APTPlayerState* Chooser, int32 ChoiceIndex)
+{
+    APTSculptGameState* G = GS();
+    if (!G || G->TurnPhase != EPTTurnPhase::ChoosingWord) return;
+    if (Chooser != G->CurrentSculptor) return; // solo el escultor elige
+    GetWorldTimerManager().ClearTimer(PhaseTimer);
+    BeginDrawing(ChoiceIndex);
+}
+
+void APTSculptGameMode::BeginDrawing(int32 ChoiceIndex)
+{
+    APTSculptGameState* G = GS();
+    if (!G || CurrentChoices.Num() == 0) return;
+
+    ChoiceIndex = FMath::Clamp(ChoiceIndex, 0, CurrentChoices.Num() - 1);
+    CurrentWord = CurrentChoices[ChoiceIndex];
+
+    G->MaskedWord        = MakeMasked(CurrentWord);
+    G->TurnPhase         = EPTTurnPhase::Drawing;
+    G->TurnEndServerTime = G->GetServerWorldTimeSeconds() + TurnDuration;
+    G->OnTurnPhaseChanged.Broadcast();
+
+    // El escultor recibe la palabra real (nadie más).
+    if (G->CurrentSculptor)
+        if (APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(G->CurrentSculptor->GetOwningController()))
+            PC->Client_ReceiveSecretWord(CurrentWord);
+
+    // TODO Fase 3: resetear la escultura (limpiar el Volume) acá.
+
+    UE_LOG(LogTemp, Log, TEXT("[SculptGM] Esculpiendo '%s' por %.0fs."), *CurrentWord, TurnDuration);
+
+    GetWorldTimerManager().ClearTimer(PhaseTimer);
+    GetWorldTimerManager().SetTimer(PhaseTimer, this, &APTSculptGameMode::EndTurn,
+                                    TurnDuration, false);
+}
+
+void APTSculptGameMode::EndTurn()
+{
+    APTSculptGameState* G = GS();
+    if (!G) return;
+
+    G->TurnPhase  = EPTTurnPhase::TurnEnd;
+    G->MaskedWord = CurrentWord; // revelar la palabra a todos durante la pausa.
+    G->OnTurnPhaseChanged.Broadcast();
+
+    // TODO Fase 4: anunciar por chat "la palabra era X".
+    UE_LOG(LogTemp, Log, TEXT("[SculptGM] Fin de turno. La palabra era '%s'."), *CurrentWord);
+
+    GetWorldTimerManager().ClearTimer(PhaseTimer);
+    GetWorldTimerManager().SetTimer(PhaseTimer, this, &APTSculptGameMode::StartChoosingPhase,
+                                    TurnEndDuration, false);
+}
+
+void APTSculptGameMode::HandlePlayerGuessedCorrectly(APTPlayerState* Guesser)
+{
+    APTSculptGameState* G = GS();
+    if (!G || G->TurnPhase != EPTTurnPhase::Drawing) return;
+    if (!Guesser || Guesser == G->CurrentSculptor || Guesser->bHasGuessedThisTurn) return;
+
+    Guesser->bHasGuessedThisTurn = true;
+
+    // ¿Adivinaron todos los que no esculpen? → cerrar el turno antes de tiempo.
+    bool bAllGuessed = true;
+    for (APTPlayerState* PT : GetActivePlayers())
+    {
+        if (PT == G->CurrentSculptor) continue;
+        if (!PT->bHasGuessedThisTurn) { bAllGuessed = false; break; }
+    }
+    if (bAllGuessed)
+    {
+        GetWorldTimerManager().ClearTimer(PhaseTimer);
+        EndTurn();
+    }
+}
+
+bool APTSculptGameMode::DoesGuessMatch(const FString& Guess) const
+{
+    if (CurrentWord.IsEmpty()) return false;
+    return Normalize(Guess) == Normalize(CurrentWord);
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+FString APTSculptGameMode::MakeMasked(const FString& Word)
+{
+    FString Out;
+    for (const TCHAR C : Word)
+    {
+        if (FChar::IsWhitespace(C)) Out += TEXT("   ");
+        else                        Out += TEXT("_ ");
+    }
+    return Out.TrimStartAndEnd();
+}
+
+FString APTSculptGameMode::Normalize(const FString& In)
+{
+    FString S = In.TrimStartAndEnd().ToLower();
+    FString Out;
+    Out.Reserve(S.Len());
+    for (TCHAR C : S)
+    {
+        switch (C)
+        {
+            case TCHAR(0x00E1): case TCHAR(0x00E0): case TCHAR(0x00E4): case TCHAR(0x00E2): C = 'a'; break; // á à ä â
+            case TCHAR(0x00E9): case TCHAR(0x00E8): case TCHAR(0x00EB): case TCHAR(0x00EA): C = 'e'; break; // é è ë ê
+            case TCHAR(0x00ED): case TCHAR(0x00EC): case TCHAR(0x00EF): case TCHAR(0x00EE): C = 'i'; break; // í ì ï î
+            case TCHAR(0x00F3): case TCHAR(0x00F2): case TCHAR(0x00F6): case TCHAR(0x00F4): C = 'o'; break; // ó ò ö ô
+            case TCHAR(0x00FA): case TCHAR(0x00F9): case TCHAR(0x00FC): case TCHAR(0x00FB): C = 'u'; break; // ú ù ü û
+            case TCHAR(0x00F1): C = 'n'; break; // ñ → n (para ser tolerante al escribir)
+            default: break;
+        }
+        Out.AppendChar(C);
+    }
+    return Out;
+}
+
+void APTSculptGameMode::SeedDefaultWords()
+{
+    WordBank = {
+        TEXT("perro"), TEXT("gato"), TEXT("casa"), TEXT("arbol"), TEXT("auto"),
+        TEXT("pelota"), TEXT("silla"), TEXT("mesa"), TEXT("sol"), TEXT("luna"),
+        TEXT("estrella"), TEXT("pescado"), TEXT("flor"), TEXT("barco"), TEXT("avion"),
+        TEXT("corazon"), TEXT("sombrero"), TEXT("guitarra"), TEXT("zapato"), TEXT("taza"),
+        TEXT("montaña"), TEXT("cohete"), TEXT("dinosaurio"), TEXT("robot"), TEXT("fantasma"),
+        TEXT("hamburguesa"), TEXT("helado"), TEXT("llave"), TEXT("martillo"), TEXT("paraguas"),
+        TEXT("serpiente"), TEXT("tortuga"), TEXT("elefante"), TEXT("araña"), TEXT("cactus")
+    };
+}

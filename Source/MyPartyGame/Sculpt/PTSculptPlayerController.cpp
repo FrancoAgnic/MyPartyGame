@@ -10,6 +10,8 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "../UI/PTColorPickerWidget.h"
 #include "../Lobby/PTLobbyEscapeMenuWidget.h"
+#include "../Lobby/PTPlayerState.h"
+#include "PTSculptGameMode.h"
 
 APTSculptPlayerController::APTSculptPlayerController()
 {
@@ -20,6 +22,11 @@ APTSculptPlayerController::APTSculptPlayerController()
 void APTSculptPlayerController::BeginPlay()
 {
     Super::BeginPlay();
+
+    // Marcador de llegada a Lvl-01 (diagnóstico del travel Lobby→juego). Aparece en el log
+    // de cada instancia que realmente llegó al nivel: si un cliente no lo imprime, no viajó.
+    UE_LOG(LogTemp, Log, TEXT("[SculptPC] BeginPlay en Lvl-01 — NetMode=%d LocalController=%d"),
+           (int32)GetNetMode(), IsLocalController() ? 1 : 0);
 
     SetInputMode(FInputModeGameOnly());
 
@@ -576,5 +583,26 @@ void APTSculptPlayerController::OnColorConfirmed(FLinearColor NewColor)
     bShowMouseCursor = false;
 
     UE_LOG(LogTemp, Log, TEXT("[Sculpt] Paint color set, mode=Paint"));
+}
+
+// ── Partida (Sculpturillo) ───────────────────────────────────────────────────
+
+void APTSculptPlayerController::Client_ReceiveWordChoices_Implementation(const TArray<FString>& Choices)
+{
+    UE_LOG(LogTemp, Log, TEXT("[SculptPC] Palabras para elegir: %s"), *FString::Join(Choices, TEXT(", ")));
+    OnWordChoicesReceived(Choices);
+}
+
+void APTSculptPlayerController::Client_ReceiveSecretWord_Implementation(const FString& Word)
+{
+    CurrentSecretWord = Word;
+    UE_LOG(LogTemp, Log, TEXT("[SculptPC] Tu palabra a esculpir: %s"), *Word);
+    OnSecretWordReceived(Word);
+}
+
+void APTSculptPlayerController::Server_ChooseWord_Implementation(int32 Index)
+{
+    if (APTSculptGameMode* GM = GetWorld()->GetAuthGameMode<APTSculptGameMode>())
+        GM->HandleWordChosen(GetPlayerState<APTPlayerState>(), Index);
 }
 

@@ -112,6 +112,29 @@ public:
              ? StampShape : EPTStampShape::Sphere;
     }
 
+    // ── Partida (Sculpturillo) ──────────────────────────────────────────────
+    /** El servidor manda las 3 palabras SOLO al escultor. */
+    UFUNCTION(Client, Reliable)
+    void Client_ReceiveWordChoices(const TArray<FString>& Choices);
+
+    /** El servidor confirma la palabra elegida (solo la ve el escultor). */
+    UFUNCTION(Client, Reliable)
+    void Client_ReceiveSecretWord(const FString& Word);
+
+    /** El escultor elige una de las 3 (cliente → servidor). Llamar desde el HUD. */
+    UFUNCTION(Server, Reliable, BlueprintCallable, Category="Game")
+    void Server_ChooseWord(int32 Index);
+
+    /** Palabra secreta del turno (solo se setea en el cliente del escultor). Para el HUD. */
+    UPROPERTY(BlueprintReadOnly, Category="Game")
+    FString CurrentSecretWord;
+
+    /** Ganchos para el HUD (Fase 6); implementar en el WBP. */
+    UFUNCTION(BlueprintImplementableEvent, Category="Game")
+    void OnWordChoicesReceived(const TArray<FString>& Choices);
+    UFUNCTION(BlueprintImplementableEvent, Category="Game")
+    void OnSecretWordReceived(const FString& Word);
+
 protected:
     virtual void BeginPlay()          override;
     virtual void SetupInputComponent() override;

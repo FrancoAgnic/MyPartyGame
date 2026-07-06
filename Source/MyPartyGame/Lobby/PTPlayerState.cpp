@@ -8,6 +8,18 @@ void APTPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(APTPlayerState, DisplayName);
     DOREPLIFETIME(APTPlayerState, bIsHost);
+    DOREPLIFETIME(APTPlayerState, bHasGuessedThisTurn);
+}
+
+void APTPlayerState::CopyProperties(APlayerState* NewPlayerState)
+{
+    Super::CopyProperties(NewPlayerState);
+    if (APTPlayerState* PT = Cast<APTPlayerState>(NewPlayerState))
+    {
+        PT->DisplayName = DisplayName;
+        PT->bIsHost     = bIsHost;
+        // bHasGuessedThisTurn NO se copia: es estado por-turno, arranca en false en el juego.
+    }
 }
 
 void APTPlayerState::Server_SetDisplayName(const FString& InName)
