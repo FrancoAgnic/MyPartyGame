@@ -13,6 +13,7 @@
 #include "../Lobby/PTPlayerState.h"
 #include "PTSculptGameMode.h"
 #include "PTSculptGameState.h"
+#include "PTGameplayHUDWidget.h"
 
 APTSculptPlayerController::APTSculptPlayerController()
 {
@@ -93,6 +94,14 @@ void APTSculptPlayerController::BeginPlay()
             AxisGizmo->SetOverlayMaterial(PreviewOverlayMaterial);
             PaintRing->SetOverlayMaterial(PreviewOverlayMaterial);
         }
+    }
+
+    // HUD de la partida: solo el jugador local lo crea. Maneja fase/reloj/chat/elección
+    // e input mode por su cuenta (ver UPTGameplayHUDWidget).
+    if (IsLocalController() && GameplayHUDClass)
+    {
+        GameplayHUD = CreateWidget<UPTGameplayHUDWidget>(this, GameplayHUDClass);
+        if (GameplayHUD) GameplayHUD->ShowHUD();
     }
 }
 

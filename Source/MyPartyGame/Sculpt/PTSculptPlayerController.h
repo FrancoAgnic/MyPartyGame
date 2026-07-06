@@ -86,6 +86,11 @@ public:
     /** Mesh indicador de ejes (se muestra en modo eje con la herramienta Add). */
     UPROPERTY(EditAnywhere, Category="Sculpt|PreviewMesh") UStaticMesh* AxisGizmoMesh = nullptr;
 
+    // ── HUD de la partida ───────────────────────────────────────────────────
+    /** Asignar WBP_GameplayHUD (reparentado a UPTGameplayHUDWidget). Se crea solo en BeginPlay. */
+    UPROPERTY(EditAnywhere, Category="UI")
+    TSubclassOf<class UPTGameplayHUDWidget> GameplayHUDClass;
+
     // ── Color picker ────────────────────────────────────────────────────────
     UPROPERTY(EditAnywhere, Category="UI")
     TSubclassOf<UUserWidget> ColorPickerClass;
@@ -190,6 +195,7 @@ private:
     UPROPERTY() class UMaterialInstanceDynamic* PaintRingMID = nullptr;
     UPROPERTY() UStaticMesh*              CachedRingMesh    = nullptr;
     UPROPERTY() UUserWidget*              ColorPicker       = nullptr;
+    UPROPERTY() class UPTGameplayHUDWidget* GameplayHUD     = nullptr;
 
     void RebuildPreviewMesh();
     void UpdatePreviewVisual();  // elige mesh (tool/stamp/procedural) y material
