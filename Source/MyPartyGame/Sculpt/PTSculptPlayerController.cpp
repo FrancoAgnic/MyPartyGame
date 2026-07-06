@@ -590,15 +590,16 @@ void APTSculptPlayerController::OnColorConfirmed(FLinearColor NewColor)
 
 void APTSculptPlayerController::Client_ReceiveWordChoices_Implementation(const TArray<FString>& Choices)
 {
+    CurrentWordChoices = Choices;
     UE_LOG(LogTemp, Log, TEXT("[SculptPC] Palabras para elegir: %s"), *FString::Join(Choices, TEXT(", ")));
-    OnWordChoicesReceived(Choices);
+    OnWordChoicesReceived.Broadcast(Choices);
 }
 
 void APTSculptPlayerController::Client_ReceiveSecretWord_Implementation(const FString& Word)
 {
     CurrentSecretWord = Word;
     UE_LOG(LogTemp, Log, TEXT("[SculptPC] Tu palabra a esculpir: %s"), *Word);
-    OnSecretWordReceived(Word);
+    OnSecretWordReceived.Broadcast(Word);
 }
 
 void APTSculptPlayerController::Server_ChooseWord_Implementation(int32 Index)

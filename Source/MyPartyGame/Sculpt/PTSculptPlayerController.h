@@ -8,6 +8,11 @@
 class UInputMappingContext;
 class UUserWidget;
 
+// El HUD se suscribe a estos para reaccionar cuando llegan (solo al escultor) las 3
+// palabras y la palabra confirmada. Todo el cableado del HUD vive en el propio WBP.
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FPTOnWordChoices, const TArray<FString>&, Choices);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FPTOnSecretWord,  const FString&,         Word);
+
 UCLASS()
 class MYPARTYGAME_API APTSculptPlayerController : public APlayerController
 {
@@ -137,15 +142,19 @@ public:
     void Server_ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
                            EPTEditMode Mode, FLinearColor PaintColor);
 
-    /** Palabra secreta del turno (solo se setea en el cliente del escultor). Para el HUD. */
+    /** Palabra secreta del turno y las 3 opciones (solo se setean en el cliente del
+     *  escultor). El HUD puede leerlas directo, o suscribirse a los delegates de abajo. */
     UPROPERTY(BlueprintReadOnly, Category="Game")
     FString CurrentSecretWord;
+    UPROPERTY(BlueprintReadOnly, Category="Game")
+    TArray<FString> CurrentWordChoices;
 
-    /** Ganchos para el HUD (Fase 6); implementar en el WBP. */
-    UFUNCTION(BlueprintImplementableEvent, Category="Game")
-    void OnWordChoicesReceived(const TArray<FString>& Choices);
-    UFUNCTION(BlueprintImplementableEvent, Category="Game")
-    void OnSecretWordReceived(const FString& Word);
+    /** El HUD se suscribe: llegan las 3 palabras (solo al escultor). */
+    UPROPERTY(BlueprintAssignable, Category="Game")
+    FPTOnWordChoices OnWordChoicesReceived;
+    /** El HUD se suscribe: llega la palabra secreta confirmada (solo al escultor). */
+    UPROPERTY(BlueprintAssignable, Category="Game")
+    FPTOnSecretWord OnSecretWordReceived;
 
 protected:
     virtual void BeginPlay()          override;
