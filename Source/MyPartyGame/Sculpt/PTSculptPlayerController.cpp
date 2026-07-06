@@ -76,6 +76,15 @@ void APTSculptPlayerController::BeginPlay()
         PaintRing->SetCastShadow(false);
         PaintRing->RegisterComponent();
         PaintRing->SetVisibility(false);
+
+        // Overlay X-ray: capa extra encima de cada preview (material base intacto).
+        if (PreviewOverlayMaterial)
+        {
+            PreviewMesh->SetOverlayMaterial(PreviewOverlayMaterial);
+            PreviewStaticMesh->SetOverlayMaterial(PreviewOverlayMaterial);
+            AxisGizmo->SetOverlayMaterial(PreviewOverlayMaterial);
+            PaintRing->SetOverlayMaterial(PreviewOverlayMaterial);
+        }
     }
 }
 
@@ -232,9 +241,34 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         }
     }
 
-    // Aplicar stamp si se está presionando (Erase/Smooth usan siempre esfera).
+    // Aplicar stamp si se está presionando. Se INTERPOLAN sellos entre la posición
+    // del frame anterior y la actual → trazos fluidos y continuos (sin huecos al
+    // mover rápido, sobre todo con brocha chica en Paint).
     if (bIsStamping)
-        Volume->Server_ApplyStamp(StampPos, EffectiveShape(), StampSize, EditMode, CurrentPaintColor);
+    {
+        const EPTStampShape Sh = EffectiveShape();
+        if (bStrokeActive)
+        {
+            const float Dist = FVector::Dist(LastStampPos, StampPos);
+            const float Step = FMath::Max(StampSize * 0.2f, 2.f); // solape entre sellos
+            const int32 N = FMath::Clamp(FMath::CeilToInt(Dist / Step), 1, 32);
+            for (int32 i = 1; i <= N; ++i)
+            {
+                const FVector P = FMath::Lerp(LastStampPos, StampPos, (float)i / N);
+                Volume->Server_ApplyStamp(P, Sh, StampSize, EditMode, CurrentPaintColor);
+            }
+        }
+        else
+        {
+            Volume->Server_ApplyStamp(StampPos, Sh, StampSize, EditMode, CurrentPaintColor);
+            bStrokeActive = true;
+        }
+        LastStampPos = StampPos;
+    }
+    else
+    {
+        bStrokeActive = false;
+    }
 }
 
 // ── Lógica de cursor ─────────────────────────────────────────────────────────

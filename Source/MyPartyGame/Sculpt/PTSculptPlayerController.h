@@ -39,6 +39,12 @@ public:
     UPROPERTY(EditAnywhere, Category="Sculpt")
     UMaterialInterface* BrushDecalMaterial = nullptr;
 
+    /** Material overlay X-ray: se dibuja encima de todos los previews (sin tocar
+     *  su material base) y muestra un color sólido donde el preview está tapado
+     *  por otros objetos. Translucent + Disable Depth Test. */
+    UPROPERTY(EditAnywhere, Category="Sculpt")
+    UMaterialInterface* PreviewOverlayMaterial = nullptr;
+
     /** Meshes de preview del modo PAINT, por shape. Se alinean a la superficie,
      *  escalan con la brocha y toman el color del picker (material con param "Color"). */
     UPROPERTY(EditAnywhere, Category="Sculpt|PaintPreview") UStaticMesh* PaintMeshSphere   = nullptr;
@@ -118,6 +124,10 @@ private:
 
     bool bIsStamping        = false;
     bool bPreviewDirty      = true;
+
+    // Interpolación de trazo (sellos continuos entre frames).
+    bool    bStrokeActive = false;
+    FVector LastStampPos  = FVector::ZeroVector;
 
     // Plano de esculpido bloqueado al inicio del trazo (evita que el stamp se acerque a la cámara)
     FVector SculptPlaneOrigin = FVector::ZeroVector;

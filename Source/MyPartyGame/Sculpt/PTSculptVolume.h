@@ -42,9 +42,13 @@ public:
     UPROPERTY(EditAnywhere, Category="Sculpt", meta=(ClampMin="0.0", ClampMax="1.0"))
     float DisplaySmoothing = 0.5f;
 
-    // Pintura por volumen 3D (per-pixel, independiente del VoxelSize).
-    UPROPERTY(EditAnywhere, Category="Sculpt|Paint", meta=(ClampMin="32", ClampMax="128"))
-    int32 PaintResolution = 128;
+    // Tamaño del voxel de color (UU). Menor = detalle más fino, más atlas/VRAM.
+    UPROPERTY(EditAnywhere, Category="Sculpt|Paint", meta=(ClampMin="1.0", ClampMax="10.0"))
+    float ColorVoxel = 3.f;
+
+    // Capacidad máxima de bricks de color allocados (define el tamaño del atlas).
+    UPROPERTY(EditAnywhere, Category="Sculpt|Paint", meta=(ClampMin="256", ClampMax="131072"))
+    int32 MaxColorBricks = 32768;
 
     // Dureza del borde del pincel: 0 = suave (degradé), 1 = duro (borde nítido).
     UPROPERTY(EditAnywhere, Category="Sculpt|Paint", meta=(ClampMin="0.0", ClampMax="1.0"))
@@ -90,22 +94,42 @@ private:
     void RebuildDirty();
     void MarkStampDirty(int32 x0, int32 y0, int32 z0, int32 x1, int32 y1, int32 z1);
 
-    // ── Pintura por volumen ─────────────────────────────────────────────────
-    UPROPERTY(Transient) UTexture2D* PaintTexture = nullptr;
+    // ── Pintura por campo de color 3D DISPERSO (bricks + page table + atlas) ──
+    // El color vive en un campo 3D real (sin bleed), pero solo se allocan bricks
+    // donde se pinta (disperso → memoria ∝ superficie). El material hace 2 lecturas:
+    // page table (brick → slot) y atlas (voxel → color).
+    static constexpr int32 CB = 8; // voxels de color por brick, por eje
+
+    UPROPERTY(Transient) UTexture2D* PageTex  = nullptr; // R16, point: brickCoord → slot+1
+    UPROPERTY(Transient) UTexture2D* AtlasTex = nullptr; // RGBA8, bilinear: voxels de color
     UPROPERTY(Transient) UMaterialInstanceDynamic* ClayMID = nullptr;
-    TArray<FColor> PaintVolume;          // PaintResolution³, RGBA (A = cobertura)
+
+    TMap<FIntVector,int32> BrickSlot;  // brick coord → slot en el atlas
+    TArray<float>  PageBuf;            // mirror CPU de la page table (R32F: slot+1)
+    TArray<FColor> AtlasBuf;           // mirror CPU del atlas
+    TSet<int32>    DirtyTiles;         // slots con tile sucio (subida parcial)
+    TArray<int32>  DirtyPageIdx;       // texels de page table nuevos (subida incremental)
+    int32 NextSlot      = 0;
+    int32 AtlasCapacity = 4096;
+    bool  bPageDirty           = false;
     bool  bPaintDirty          = false;
     float TimeSincePaintUpload = 0.f;
-    int32 PaintDirtyZMin       = INT32_MAX; // rango de slices Z pintados (subida parcial)
-    int32 PaintDirtyZMax       = -1;
-    static constexpr float PaintUploadInterval = 0.1f;
-    FVector CanvasMinLocal  = FVector::ZeroVector; // esquina min del lienzo (UU local)
-    FVector CanvasSizeLocal = FVector(960.f);       // tamaño del lienzo (UU local)
+    static constexpr float PaintUploadInterval = 0.05f;
 
-    void InitPaintVolume();
+    // Dimensiones derivadas del lienzo.
+    FVector    CanvasMinLocal  = FVector::ZeroVector;
+    FVector    CanvasSizeLocal = FVector(960.f);
+    FIntVector ColorVoxDim     = FIntVector(320); // voxels de color por eje
+    FIntVector ColorBrickDim   = FIntVector(40);  // bricks por eje (= dims page table)
+    int32 AtlasTilesPerRow     = 64;
+    int32 AtlasW = 512, AtlasH = 4096;
+
+    void InitColorField();
     void SetupClayMID();
     void WritePaintStamp(FVector WorldPos, EPTStampShape Shape, float Size, FLinearColor Color, bool bFull = false);
-    void UploadPaintTexture();
+    // Escribe un voxel de color (alloca brick si hace falta). false = atlas lleno.
+    bool WriteColorVoxel(int32 vx, int32 vy, int32 vz, const FColor& C);
+    void UploadColorField();
 
     // Coordenadas: mundo → celda (float) en espacio local del actor.
     FVector WorldToCell(FVector W) const;

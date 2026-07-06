@@ -341,7 +341,7 @@ void APTSculptVolume::BeginPlay()
     Super::BeginPlay();
     Field.VoxelSize        = VoxelSize;
     Field.DisplaySmoothing = DisplaySmoothing;
-    InitPaintVolume();
+    InitColorField();
     SetupClayMID();
     if (UMaterialInterface* M = ClayMID ? (UMaterialInterface*)ClayMID : ClayMaterial)
         Mesh->SetMaterial(0, M);
@@ -359,7 +359,7 @@ void APTSculptVolume::Tick(float DeltaTime)
         {
             TimeSincePaintUpload = 0.f;
             bPaintDirty = false;
-            UploadPaintTexture();
+            UploadColorField();
         }
     }
 
@@ -372,32 +372,60 @@ void APTSculptVolume::Tick(float DeltaTime)
     }
 }
 
-// ─── Pintura por volumen 3D ───────────────────────────────────────────────────
+// ─── Pintura por campo de color 3D DISPERSO (bricks + page table + atlas) ─────
+// El color vive en un campo 3D real (cero bleed) pero solo se allocan bricks donde
+// se pinta. Layout GPU:
+//   • Page table: textura 2D empaquetada (w=BrickDim.X, h=BrickDim.Y*BrickDim.Z),
+//     cada texel R16 = slot+1 (0 = vacío). Point-sampled.
+//   • Atlas: cada brick = tile de CB × (CB*CB); el voxel (lx,ly,lz) va al texel
+//     (tileX*CB + lx, tileY*CB*CB + lz*CB + ly). RGBA8 bilinear.
 
-void APTSculptVolume::InitPaintVolume()
+void APTSculptVolume::InitColorField()
 {
-    const int32 N = FMath::Clamp(PaintResolution, 32, 128);
-    PaintResolution = N;
-    PaintVolume.Init(FColor(0, 0, 0, 0), N * N * N); // A=0 → sin pintar
-
-    // Textura: slices Z apilados en vertical (N × N*N). El layout lineal del
-    // array coincide exacto con el de la textura, así se sube directo.
-    PaintTexture = UTexture2D::CreateTransient(N, N * N, PF_B8G8R8A8);
-    PaintTexture->SRGB       = true;
-    PaintTexture->Filter     = TF_Bilinear;
-    PaintTexture->AddressX   = TA_Clamp;
-    PaintTexture->AddressY   = TA_Clamp;
-    PaintTexture->UpdateResource();
-
-    // Lienzo en UU local (a partir del BoundsBox).
-    FIntVector BMin, BMax;
-    CellBounds(BMin, BMax);
+    // Lienzo en espacio local (del BoundsBox).
+    FIntVector BMin, BMax; CellBounds(BMin, BMax);
     CanvasMinLocal  = FVector(BMin) * VoxelSize;
     CanvasSizeLocal = FVector(BMax - BMin) * VoxelSize;
     if (CanvasSizeLocal.GetMin() <= 0.f) CanvasSizeLocal = FVector(960.f);
 
-    PaintDirtyZMin = 0; PaintDirtyZMax = N - 1; // primer upload completo
+    const float CV = FMath::Max(ColorVoxel, 0.5f);
+    ColorVoxDim = FIntVector(
+        FMath::Max(1, FMath::CeilToInt(CanvasSizeLocal.X / CV)),
+        FMath::Max(1, FMath::CeilToInt(CanvasSizeLocal.Y / CV)),
+        FMath::Max(1, FMath::CeilToInt(CanvasSizeLocal.Z / CV)));
+    ColorBrickDim = FIntVector(
+        FMath::DivideAndRoundUp(ColorVoxDim.X, CB),
+        FMath::DivideAndRoundUp(ColorVoxDim.Y, CB),
+        FMath::DivideAndRoundUp(ColorVoxDim.Z, CB));
+
+    // Page table (empaquetada 2D).
+    const int32 PGW = ColorBrickDim.X;
+    const int32 PGH = ColorBrickDim.Y * ColorBrickDim.Z;
+    PageBuf.Init(0.f, PGW * PGH);
+    bPageDirty = true;
+
+    // Atlas: capacidad = MaxColorBricks, tiles cuadriculados.
+    const int32 Cap  = FMath::Max(MaxColorBricks, 16);
+    AtlasTilesPerRow = FMath::Clamp(FMath::CeilToInt(FMath::Sqrt((float)Cap)), 1, 256);
+    const int32 Rows = FMath::DivideAndRoundUp(Cap, AtlasTilesPerRow);
+    AtlasW = AtlasTilesPerRow * CB;
+    AtlasH = Rows * CB * CB;
+    AtlasCapacity = AtlasTilesPerRow * Rows;
+    AtlasBuf.Init(FColor(0,0,0,0), AtlasW * AtlasH);
+    BrickSlot.Empty();
+    DirtyTiles.Empty();
+    DirtyPageIdx.Reset();
+    NextSlot = 0;
     bPaintDirty = true;
+
+    // Texturas GPU.
+    PageTex = UTexture2D::CreateTransient(PGW, PGH, PF_R32_FLOAT);
+    PageTex->SRGB = false; PageTex->Filter = TF_Nearest; PageTex->AddressX = TA_Clamp; PageTex->AddressY = TA_Clamp;
+    PageTex->UpdateResource();
+
+    AtlasTex = UTexture2D::CreateTransient(AtlasW, AtlasH, PF_B8G8R8A8);
+    AtlasTex->SRGB = true; AtlasTex->Filter = TF_Bilinear; AtlasTex->AddressX = TA_Clamp; AtlasTex->AddressY = TA_Clamp;
+    AtlasTex->UpdateResource();
 }
 
 void APTSculptVolume::SetupClayMID()
@@ -405,86 +433,149 @@ void APTSculptVolume::SetupClayMID()
     if (!ClayMaterial) return;
     ClayMID = UMaterialInstanceDynamic::Create(ClayMaterial, this);
     if (!ClayMID) return;
-    ClayMID->SetTextureParameterValue(TEXT("PaintTex"), PaintTexture);
+    ClayMID->SetTextureParameterValue(TEXT("PageTable"), PageTex);
+    ClayMID->SetTextureParameterValue(TEXT("Atlas"),     AtlasTex);
     ClayMID->SetVectorParameterValue(TEXT("CanvasMin"),  CanvasMinLocal);
-    ClayMID->SetVectorParameterValue(TEXT("CanvasSize"), CanvasSizeLocal);
-    ClayMID->SetScalarParameterValue(TEXT("PaintRes"),   (float)PaintResolution);
+    ClayMID->SetScalarParameterValue(TEXT("ColorVoxel"), FMath::Max(ColorVoxel, 0.5f));
+    ClayMID->SetVectorParameterValue(TEXT("VoxDim"),     FVector(ColorVoxDim));
+    ClayMID->SetVectorParameterValue(TEXT("BrickDim"),   FVector(ColorBrickDim));
+    ClayMID->SetScalarParameterValue(TEXT("PageW"),      ColorBrickDim.X);
+    ClayMID->SetScalarParameterValue(TEXT("PageH"),      ColorBrickDim.Y * ColorBrickDim.Z);
+    ClayMID->SetScalarParameterValue(TEXT("TilesPerRow"), AtlasTilesPerRow);
+    ClayMID->SetScalarParameterValue(TEXT("AtlasW"),     AtlasW);
+    ClayMID->SetScalarParameterValue(TEXT("AtlasH"),     AtlasH);
+    ClayMID->SetScalarParameterValue(TEXT("CB"),         CB);
+}
+
+bool APTSculptVolume::WriteColorVoxel(int32 vx, int32 vy, int32 vz, const FColor& C)
+{
+    if (vx < 0 || vy < 0 || vz < 0 ||
+        vx >= ColorVoxDim.X || vy >= ColorVoxDim.Y || vz >= ColorVoxDim.Z) return true;
+
+    const FIntVector BC(vx / CB, vy / CB, vz / CB);
+    int32 Slot;
+    if (int32* Found = BrickSlot.Find(BC))
+    {
+        Slot = *Found;
+    }
+    else
+    {
+        if (NextSlot >= AtlasCapacity) return false; // atlas lleno → dejar de allocar
+        Slot = NextSlot++;
+        BrickSlot.Add(BC, Slot);
+        const int32 PgIdx = BC.X + (BC.Y + BC.Z * ColorBrickDim.Y) * ColorBrickDim.X;
+        if (PageBuf.IsValidIndex(PgIdx)) { PageBuf[PgIdx] = (float)(Slot + 1); DirtyPageIdx.Add(PgIdx); bPaintDirty = true; }
+    }
+
+    const int32 TileX = Slot % AtlasTilesPerRow, TileY = Slot / AtlasTilesPerRow;
+    const int32 lx = vx - BC.X * CB, ly = vy - BC.Y * CB, lz = vz - BC.Z * CB;
+    const int32 ax = TileX * CB + lx;
+    const int32 ay = TileY * (CB * CB) + lz * CB + ly;
+    const int32 AIdx = ax + ay * AtlasW;
+    if (AtlasBuf.IsValidIndex(AIdx) && C.A >= AtlasBuf[AIdx].A)
+    {
+        AtlasBuf[AIdx] = C;
+        DirtyTiles.Add(Slot);
+        bPaintDirty = true;
+    }
+    return true;
 }
 
 void APTSculptVolume::WritePaintStamp(FVector WorldPos, EPTStampShape Shape, float Size, FLinearColor Color, bool bFull)
 {
-    if (PaintVolume.Num() == 0) return;
-    const int32 N = PaintResolution;
-    const FVector Local  = GetActorTransform().InverseTransformPosition(WorldPos);
-    const FVector VoxUU  = CanvasSizeLocal / (float)N;         // UU por celda (puede no ser cúbico)
-    const FVector C      = (Local - CanvasMinLocal) / VoxUU;    // centro en celdas de pintura
-    const float   HalfUU = Size * 0.5f;                        // radio en UU (círculo real)
-    // Rango de celdas por eje (bbox), según el radio en UU y el UU/celda de cada eje.
-    const int32 Rx = FMath::CeilToInt(HalfUU / VoxUU.X) + 1;
-    const int32 Ry = FMath::CeilToInt(HalfUU / VoxUU.Y) + 1;
-    const int32 Rz = FMath::CeilToInt(HalfUU / VoxUU.Z) + 1;
-    const FColor  Col(   (uint8)FMath::Clamp(Color.R*255.f,0.f,255.f),
-                         (uint8)FMath::Clamp(Color.G*255.f,0.f,255.f),
-                         (uint8)FMath::Clamp(Color.B*255.f,0.f,255.f), 255);
+    if (!AtlasTex) return;
+    const float CV = FMath::Max(ColorVoxel, 0.5f);
+    const FVector Local = GetActorTransform().InverseTransformPosition(WorldPos);
+    const FColor  FCol  = Color.ToFColor(true);
+    const float   HalfUU = Size * 0.5f;
 
-    const int32 x0 = FMath::Max(0, FMath::FloorToInt(C.X) - Rx), x1 = FMath::Min(N-1, FMath::CeilToInt(C.X) + Rx);
-    const int32 y0 = FMath::Max(0, FMath::FloorToInt(C.Y) - Ry), y1 = FMath::Min(N-1, FMath::CeilToInt(C.Y) + Ry);
-    const int32 z0 = FMath::Max(0, FMath::FloorToInt(C.Z) - Rz), z1 = FMath::Min(N-1, FMath::CeilToInt(C.Z) + Rz);
+    // Normal de la superficie (gradiente del SDF), en espacio local. Una sola vez por sello.
+    const float E = VoxelSize;
+    FVector N(
+        SampleWorldDensity(WorldPos + FVector(E,0,0)) - SampleWorldDensity(WorldPos - FVector(E,0,0)),
+        SampleWorldDensity(WorldPos + FVector(0,E,0)) - SampleWorldDensity(WorldPos - FVector(0,E,0)),
+        SampleWorldDensity(WorldPos + FVector(0,0,E)) - SampleWorldDensity(WorldPos - FVector(0,0,E)));
+    N = (-N).GetSafeNormal();
+    if (N.IsNearlyZero()) N = FVector::UpVector;
+    FVector LocalN = GetActorTransform().InverseTransformVectorNoScale(N).GetSafeNormal();
+    FVector T, B;
+    LocalN.FindBestAxisVectors(T, B);
 
-    // Ancho del borde suave en UU. Dureza 1 → borde nítido.
-    const float SoftW = FMath::Max((1.f - PaintHardness) * HalfUU, VoxUU.GetMin() * 0.5f);
+    const float SoftUU  = FMath::Max((1.f - PaintHardness) * HalfUU, CV);       // borde suave (UU)
+    const float ShellUU = FMath::Max(1.5f * CV, 0.75f * VoxelSize);             // grosor a cada lado
 
-    bool bChanged = false;
-    for (int32 z = z0; z <= z1; ++z)
-    for (int32 y = y0; y <= y1; ++y)
-    for (int32 x = x0; x <= x1; ++x)
+    // Iteración O(radio²): disco en el plano tangente × grosor fino a lo largo de la normal.
+    // La sección del sello se evalúa en el plano (u,v); la normal es el eje "Z" del stamp.
+    for (float u = -HalfUU; u <= HalfUU; u += CV)
+    for (float v = -HalfUU; v <= HalfUU; v += CV)
     {
-        // Offset del centro en UU reales → esfera perfecta (no óvalo).
-        const FVector LP((x - C.X) * VoxUU.X, (y - C.Y) * VoxUU.Y, (z - C.Z) * VoxUU.Z);
-        const float sdf = StampSDF(Shape, LP, HalfUU); // >0 dentro; distancia al borde en UU
-        if (sdf <= 0.f) continue;
+        const float sdf2d = StampSDF(Shape, FVector(u, v, 0.f), HalfUU);
+        if (sdf2d < 0.f) continue;
+        const uint8 cov = bFull ? 255 : (uint8)FMath::Clamp(sdf2d / SoftUU * 255.f, 0.f, 255.f);
+        if (cov == 0) continue;
 
-        // bFull (Add): cobertura plena en todo el interior (cubre toda la superficie).
-        const uint8 cov = bFull ? 255 : (uint8)FMath::Clamp((sdf / SoftW) * 255.f, 0.f, 255.f);
-        const int32 idx = x + y*N + z*N*N;
-        // El color más "cubridor" gana (bordes suaves y solapes limpios).
-        if (cov >= PaintVolume[idx].A)
+        const FColor Out(FCol.R, FCol.G, FCol.B, cov);
+        for (float n = -ShellUU; n <= ShellUU; n += CV)
         {
-            PaintVolume[idx] = FColor(Col.R, Col.G, Col.B, cov);
-            bChanged = true;
+            const FVector P = Local + u * T + v * B + n * LocalN;
+            const int32 vx = FMath::FloorToInt((P.X - CanvasMinLocal.X) / CV);
+            const int32 vy = FMath::FloorToInt((P.Y - CanvasMinLocal.Y) / CV);
+            const int32 vz = FMath::FloorToInt((P.Z - CanvasMinLocal.Z) / CV);
+            WriteColorVoxel(vx, vy, vz, Out);
         }
-    }
-    if (bChanged)
-    {
-        bPaintDirty = true;
-        PaintDirtyZMin = FMath::Min(PaintDirtyZMin, z0);
-        PaintDirtyZMax = FMath::Max(PaintDirtyZMax, z1);
     }
 }
 
-void APTSculptVolume::UploadPaintTexture()
+void APTSculptVolume::UploadColorField()
 {
-    if (!PaintTexture || PaintVolume.Num() == 0) return;
-    const int32 N = PaintResolution;
+    const int32 PGW = ColorBrickDim.X;
+    if (bPageDirty && PageTex)
+    {
+        // Subida COMPLETA (una vez, para limpiar la textura GPU recién creada).
+        bPageDirty = false;
+        DirtyPageIdx.Reset();
+        const int32 PGH = ColorBrickDim.Y * ColorBrickDim.Z;
+        const int32 Bytes = PGW * PGH * sizeof(float);
+        uint8* Copy = (uint8*)FMemory::Malloc(Bytes);
+        FMemory::Memcpy(Copy, PageBuf.GetData(), Bytes);
+        FUpdateTextureRegion2D* Reg = new FUpdateTextureRegion2D(0, 0, 0, 0, PGW, PGH);
+        PageTex->UpdateTextureRegions(0, 1, Reg, PGW * sizeof(float), sizeof(float), Copy,
+            [](uint8* D, const FUpdateTextureRegion2D* R) { FMemory::Free(D); delete R; });
+    }
+    else if (DirtyPageIdx.Num() && PageTex)
+    {
+        // Subida INCREMENTAL: solo los texels de bricks nuevos (1×1 cada uno).
+        for (int32 PgIdx : DirtyPageIdx)
+        {
+            const int32 px = PgIdx % PGW, py = PgIdx / PGW;
+            float* Copy = (float*)FMemory::Malloc(sizeof(float));
+            *Copy = PageBuf[PgIdx];
+            FUpdateTextureRegion2D* Reg = new FUpdateTextureRegion2D(px, py, 0, 0, 1, 1);
+            PageTex->UpdateTextureRegions(0, 1, Reg, sizeof(float), sizeof(float), (uint8*)Copy,
+                [](uint8* D, const FUpdateTextureRegion2D* R) { FMemory::Free(D); delete R; });
+        }
+        DirtyPageIdx.Reset();
+    }
 
-    // Subir solo la banda de slices Z pintados (filas [z0*N, (z1+1)*N)).
-    const int32 z0 = FMath::Clamp(PaintDirtyZMin, 0, N - 1);
-    const int32 z1 = FMath::Clamp(PaintDirtyZMax, 0, N - 1);
-    PaintDirtyZMin = INT32_MAX; PaintDirtyZMax = -1;
-    if (z1 < z0) return;
-
-    const int32 RowStart = z0 * N;                 // primera fila de la banda
-    const int32 Rows     = (z1 - z0 + 1) * N;       // filas de la banda
-    const int32 SrcIndex = z0 * N * N;              // índice lineal (contiguo)
-    const int32 NumBytes = Rows * N * sizeof(FColor);
-
-    uint8* Copy = (uint8*)FMemory::Malloc(NumBytes);
-    FMemory::Memcpy(Copy, PaintVolume.GetData() + SrcIndex, NumBytes);
-
-    // Dest en (0, RowStart); el src es una imagen (N × Rows) desde su propio 0,0.
-    FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, RowStart, 0, 0, N, Rows);
-    PaintTexture->UpdateTextureRegions(0, 1, Region, N * sizeof(FColor), sizeof(FColor), Copy,
-        [](uint8* Data, const FUpdateTextureRegion2D* Reg) { FMemory::Free(Data); delete Reg; });
+    // Tiles del atlas sucios (subida parcial).
+    if (DirtyTiles.Num() && AtlasTex)
+    {
+        const int32 TW = CB, TH = CB * CB;
+        for (int32 Slot : DirtyTiles)
+        {
+            const int32 ox = (Slot % AtlasTilesPerRow) * CB;
+            const int32 oy = (Slot / AtlasTilesPerRow) * (CB * CB);
+            const int32 Bytes = TW * TH * sizeof(FColor);
+            uint8* Copy = (uint8*)FMemory::Malloc(Bytes);
+            for (int32 row = 0; row < TH; ++row)
+                FMemory::Memcpy(Copy + row * TW * sizeof(FColor),
+                                AtlasBuf.GetData() + (oy + row) * AtlasW + ox, TW * sizeof(FColor));
+            FUpdateTextureRegion2D* Reg = new FUpdateTextureRegion2D(ox, oy, 0, 0, TW, TH);
+            AtlasTex->UpdateTextureRegions(0, 1, Reg, TW * sizeof(FColor), sizeof(FColor), Copy,
+                [](uint8* D, const FUpdateTextureRegion2D* R) { FMemory::Free(D); delete R; });
+        }
+        DirtyTiles.Empty();
+    }
 }
 
 // ─── Coordenadas ──────────────────────────────────────────────────────────────
