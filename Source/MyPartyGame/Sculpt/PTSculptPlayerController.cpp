@@ -133,6 +133,14 @@ void APTSculptPlayerController::SetupInputComponent()
 
     // Menú de pausa: Esc
     InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &APTSculptPlayerController::OnPausePressed);
+
+    // Chat: Enter abre/enfoca el chat (al enviar vuelve el control al juego).
+    InputComponent->BindKey(EKeys::Enter, IE_Pressed, this, &APTSculptPlayerController::OnOpenChat);
+}
+
+void APTSculptPlayerController::OnOpenChat()
+{
+    if (GameplayHUD) GameplayHUD->FocusChat();
 }
 
 void APTSculptPlayerController::OnPausePressed()

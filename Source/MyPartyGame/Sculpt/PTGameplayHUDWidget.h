@@ -24,6 +24,10 @@ public:
     UFUNCTION(BlueprintCallable, Category="Game")
     void ShowHUD();
 
+    /** Abre/enfoca el chat (lo llama el PlayerController con Enter). Muestra cursor y
+     *  da foco al input; al enviar vuelve solo a Game Only. */
+    void FocusChat();
+
 protected:
     virtual bool Initialize() override;
     virtual void NativeDestruct() override;
@@ -53,6 +57,7 @@ private:
     FTimerHandle RefreshTimer;
     FString      ChatLog;
     bool         bChatBound     = false;
+    bool         bChatOpen      = false;
     bool         bInputModeInit = false;
     bool         bWantsGameOnly = false;
 

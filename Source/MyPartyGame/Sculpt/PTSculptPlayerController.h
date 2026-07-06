@@ -170,6 +170,7 @@ private:
     APTSculptVolume* Volume = nullptr;
     UPROPERTY() class UPTLobbyEscapeMenuWidget* EscapeMenu = nullptr;
     void OnPausePressed();
+    void OnOpenChat();
 
     bool bIsStamping        = false;
     bool bPreviewDirty      = true;

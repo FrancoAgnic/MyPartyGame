@@ -108,9 +108,20 @@ void UPTGameplayHUDWidget::RefreshTick()
             TxtTimer->SetText(FText::GetEmpty());
     }
 
-    // ── Modo de input: el escultor esculpe (Game Only) durante Drawing; el resto
-    //    necesita cursor/teclado para el chat y para elegir palabra. ──
-    ApplyInputMode(bSculptor && G->TurnPhase == EPTTurnPhase::Drawing);
+    // ── Modo de input ──
+    // Base = Game Only (moverse/esculpir siempre funcionan). Solo se muestra el cursor
+    // cuando de verdad hace falta la UI: el escultor eligiendo palabra, o con el chat
+    // abierto (Enter). Así los que adivinan también se pueden mover y mirar.
+    const bool bWantUI = bChatOpen || (bSculptor && G->TurnPhase == EPTTurnPhase::ChoosingWord);
+    ApplyInputMode(!bWantUI);
+}
+
+void UPTGameplayHUDWidget::FocusChat()
+{
+    if (bChatOpen) return;
+    bChatOpen = true;
+    ApplyInputMode(false); // GameAndUI + cursor
+    if (ChatInput) ChatInput->SetKeyboardFocus();
 }
 
 void UPTGameplayHUDWidget::ApplyInputMode(bool bGameOnly)
@@ -149,12 +160,18 @@ void UPTGameplayHUDWidget::ChooseWord(int32 Index)
 
 void UPTGameplayHUDWidget::OnChatCommitted(const FText& Text, ETextCommit::Type CommitMethod)
 {
-    if (CommitMethod != ETextCommit::OnEnter) return;
-    const FString Msg = Text.ToString();
-    if (!Msg.IsEmpty())
-        if (APTSculptPlayerController* PC = GetSculptPC())
-            PC->Server_SendChat(Msg);
+    if (CommitMethod == ETextCommit::OnEnter)
+    {
+        const FString Msg = Text.ToString();
+        if (!Msg.IsEmpty())
+            if (APTSculptPlayerController* PC = GetSculptPC())
+                PC->Server_SendChat(Msg);
+    }
     if (ChatInput) ChatInput->SetText(FText::GetEmpty());
+
+    // Enviar (Enter) o perder el foco: cerrar el chat y devolver el control al juego.
+    bChatOpen = false;
+    ApplyInputMode(true); // Game Only
 }
 
 void UPTGameplayHUDWidget::OnChatLine(const FString& Name, const FString& Message, EPTChatType Type)
