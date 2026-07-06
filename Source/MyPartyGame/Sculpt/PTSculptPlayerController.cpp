@@ -12,6 +12,7 @@
 #include "../Lobby/PTLobbyEscapeMenuWidget.h"
 #include "../Lobby/PTPlayerState.h"
 #include "PTSculptGameMode.h"
+#include "PTSculptGameState.h"
 
 APTSculptPlayerController::APTSculptPlayerController()
 {
@@ -251,7 +252,7 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
     // Aplicar stamp si se está presionando. Se INTERPOLAN sellos entre la posición
     // del frame anterior y la actual → trazos fluidos y continuos (sin huecos al
     // mover rápido, sobre todo con brocha chica en Paint).
-    if (bIsStamping)
+    if (bIsStamping && CanLocalPlayerSculpt())
     {
         const EPTStampShape Sh = EffectiveShape();
         if (bStrokeActive)
@@ -262,12 +263,12 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
             for (int32 i = 1; i <= N; ++i)
             {
                 const FVector P = FMath::Lerp(LastStampPos, StampPos, (float)i / N);
-                Volume->Server_ApplyStamp(P, Sh, StampSize, EditMode, CurrentPaintColor);
+                Server_ApplyStamp(P, Sh, StampSize, EditMode, CurrentPaintColor);
             }
         }
         else
         {
-            Volume->Server_ApplyStamp(StampPos, Sh, StampSize, EditMode, CurrentPaintColor);
+            Server_ApplyStamp(StampPos, Sh, StampSize, EditMode, CurrentPaintColor);
             bStrokeActive = true;
         }
         LastStampPos = StampPos;
@@ -604,5 +605,35 @@ void APTSculptPlayerController::Server_ChooseWord_Implementation(int32 Index)
 {
     if (APTSculptGameMode* GM = GetWorld()->GetAuthGameMode<APTSculptGameMode>())
         GM->HandleWordChosen(GetPlayerState<APTPlayerState>(), Index);
+}
+
+void APTSculptPlayerController::Server_SendChat_Implementation(const FString& Message)
+{
+    if (APTSculptGameMode* GM = GetWorld()->GetAuthGameMode<APTSculptGameMode>())
+        GM->HandleChat(GetPlayerState<APTPlayerState>(), Message);
+}
+
+bool APTSculptPlayerController::CanLocalPlayerSculpt() const
+{
+    const APTSculptGameState* G = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr;
+    if (!G) return true; // sin partida (testeo del mapa solo) → esculpir libre
+    return G->TurnPhase == EPTTurnPhase::Drawing && G->IsLocalPlayerSculptor();
+}
+
+void APTSculptPlayerController::Server_ApplyStamp_Implementation(FVector WorldPos, EPTStampShape Shape,
+    float Size, EPTEditMode Mode, FLinearColor PaintColor)
+{
+    // Gating de autoridad: solo el escultor del turno en curso modifica la escultura.
+    if (const APTSculptGameState* G = GetWorld()->GetGameState<APTSculptGameState>())
+    {
+        if (G->TurnPhase != EPTTurnPhase::Drawing ||
+            G->CurrentSculptor != GetPlayerState<APTPlayerState>())
+            return;
+    }
+    if (!Volume)
+        Volume = Cast<APTSculptVolume>(
+            UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
+    if (Volume)
+        Volume->Multicast_ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor);
 }
 

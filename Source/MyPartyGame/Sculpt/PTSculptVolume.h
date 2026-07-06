@@ -68,6 +68,14 @@ public:
     void Multicast_ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
                               EPTEditMode Mode, FLinearColor PaintColor);
 
+    // Limpia toda la escultura (geometría + color) dejando el lienzo en blanco.
+    // Reusa las texturas de color existentes (solo re-sube la page table vacía).
+    void ClearAll();
+
+    // Reset sincronizado en todos: el GameMode (servidor) lo llama al empezar cada turno.
+    UFUNCTION(NetMulticast, Reliable)
+    void Multicast_ClearAll();
+
     // Preview de la forma del sello (malla fantasma que sigue al cursor).
     static void BuildStampPreview(EPTStampShape Shape, float Size, float VoxSz,
                                   TArray<FVector>& OutVerts, TArray<int32>& OutTris,

@@ -1041,3 +1041,36 @@ void APTSculptVolume::Multicast_ApplyStamp_Implementation(FVector WorldPos, EPTS
 {
     ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor);
 }
+
+void APTSculptVolume::ClearAll()
+{
+    // ── Geometría: descartar el campo y vaciar todas las secciones del mesh. ──
+    // (Un rebuild async en vuelo tiene su propio snapshot copiado, así que reasignar
+    //  el campo es seguro; a lo sumo una sección tardía se recrea y se limpia al
+    //  próximo trazo/clear — inofensivo dado que los turnos están a segundos.)
+    Field = FPTSculptField();
+    Field.VoxelSize        = VoxelSize;
+    Field.DisplaySmoothing = DisplaySmoothing;
+    if (Mesh) Mesh->ClearAllMeshSections();
+    TimeSinceRebuild = 0.f;
+
+    // ── Color: vaciar los buffers y re-subir la page table en blanco. Con toda la
+    //    page table a 0 (slot vacío) el material no lee ningún brick → sin pintura,
+    //    sin necesidad de recrear texturas ni re-bindear el material. ──
+    for (float&  P : PageBuf)  P = 0.f;
+    for (FColor& C : AtlasBuf) C = FColor(0, 0, 0, 0);
+    BrickSlot.Empty();
+    DirtyTiles.Empty();
+    DirtyPageIdx.Reset();
+    FreeSlots.Reset();
+    SlotUsed.Init(0, AtlasCapacity);
+    NextSlot    = 0;
+    bPageDirty  = true;  // fuerza subida COMPLETA de la page table vacía
+    bPaintDirty = false;
+    UploadColorField();
+}
+
+void APTSculptVolume::Multicast_ClearAll_Implementation()
+{
+    ClearAll();
+}

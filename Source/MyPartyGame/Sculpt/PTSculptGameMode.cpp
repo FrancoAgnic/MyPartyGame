@@ -1,8 +1,10 @@
 #include "PTSculptGameMode.h"
 #include "PTSculptGameState.h"
 #include "PTSculptPlayerController.h"
+#include "PTSculptVolume.h"
 #include "../Lobby/PTPlayerState.h"
 #include "GameFramework/PlayerState.h"
+#include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 #include "Engine/World.h"
 
@@ -114,6 +116,9 @@ void APTSculptGameMode::StartChoosingPhase()
     // Resetear "adivinó" de todos al empezar el turno.
     for (APTPlayerState* PT : Players) PT->bHasGuessedThisTurn = false;
 
+    // Lienzo en blanco para el nuevo turno (en todos los clientes).
+    ResetSculpture();
+
     // Elegir el próximo escultor: el siguiente al actual en la lista (rota); si no hay
     // actual (primer turno o se fue), uno al azar.
     int32 NextIdx = FMath::RandRange(0, Players.Num() - 1);
@@ -205,7 +210,9 @@ void APTSculptGameMode::EndTurn()
     G->MaskedWord = CurrentWord; // revelar la palabra a todos durante la pausa.
     G->OnTurnPhaseChanged.Broadcast();
 
-    // TODO Fase 4: anunciar por chat "la palabra era X".
+    // Anunciar la palabra por el chat (línea de sistema).
+    G->Multicast_ChatLine(FString(), FString::Printf(TEXT("La palabra era: %s"), *CurrentWord),
+                          EPTChatType::System);
     UE_LOG(LogTemp, Log, TEXT("[SculptGM] Fin de turno. La palabra era '%s'."), *CurrentWord);
 
     GetWorldTimerManager().ClearTimer(PhaseTimer);
@@ -235,10 +242,51 @@ void APTSculptGameMode::HandlePlayerGuessedCorrectly(APTPlayerState* Guesser)
     }
 }
 
+void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Message)
+{
+    if (!Sender) return;
+    const FString Text = Message.TrimStartAndEnd().Left(200);
+    if (Text.IsEmpty()) return;
+
+    APTSculptGameState* G = GS();
+    const FString Name = Sender->GetPlayerName();
+
+    // Durante el dibujo: detectar aciertos y bloquear que la palabra aparezca en el chat.
+    if (G && G->TurnPhase == EPTTurnPhase::Drawing && !CurrentWord.IsEmpty())
+    {
+        const bool bEligibleGuesser = (Sender != G->CurrentSculptor && !Sender->bHasGuessedThisTurn);
+
+        if (bEligibleGuesser && DoesGuessMatch(Text))
+        {
+            // Acierto: anunciar SIN el texto, luego marcar (puede cerrar el turno).
+            G->Multicast_ChatLine(Name, FString(), EPTChatType::Correct);
+            HandlePlayerGuessedCorrectly(Sender);
+            return;
+        }
+
+        // Anti-spoiler: nadie (ni el escultor, ni un adivinador con la palabra en una
+        // frase, ni quien ya adivinó) puede hacer aparecer la palabra en el chat.
+        if (Normalize(Text).Contains(Normalize(CurrentWord)))
+            return; // se descarta silenciosamente
+    }
+
+    // Mensaje normal → a todos.
+    if (G) G->Multicast_ChatLine(Name, Text, EPTChatType::Normal);
+}
+
 bool APTSculptGameMode::DoesGuessMatch(const FString& Guess) const
 {
     if (CurrentWord.IsEmpty()) return false;
     return Normalize(Guess) == Normalize(CurrentWord);
+}
+
+void APTSculptGameMode::ResetSculpture()
+{
+    if (APTSculptVolume* Vol = Cast<APTSculptVolume>(
+            UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass())))
+    {
+        Vol->Multicast_ClearAll();
+    }
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

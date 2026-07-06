@@ -32,3 +32,8 @@ void APTSculptGameState::OnRep_TurnPhase()
 {
     OnTurnPhaseChanged.Broadcast();
 }
+
+void APTSculptGameState::Multicast_ChatLine_Implementation(const FString& Name, const FString& Message, EPTChatType Type)
+{
+    OnChatLine.Broadcast(Name, Message, Type);
+}

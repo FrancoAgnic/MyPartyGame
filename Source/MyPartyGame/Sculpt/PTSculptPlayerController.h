@@ -125,6 +125,18 @@ public:
     UFUNCTION(Server, Reliable, BlueprintCallable, Category="Game")
     void Server_ChooseWord(int32 Index);
 
+    /** Envía un mensaje de chat / intento de adivinanza (cliente → servidor).
+     *  El servidor decide si es acierto (anti-spoiler) o mensaje normal. Llamar desde el HUD. */
+    UFUNCTION(Server, Reliable, BlueprintCallable, Category="Game")
+    void Server_SendChat(const FString& Message);
+
+    /** Aplica un sello: el cliente lo pide al server, que valida el rol y lo difunde.
+     *  Reemplaza la llamada directa Volume->Server_ApplyStamp (que no funcionaba desde
+     *  clientes: el Volume no tiene owner por jugador, así que su Server RPC se descartaba). */
+    UFUNCTION(Server, Reliable)
+    void Server_ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
+                           EPTEditMode Mode, FLinearColor PaintColor);
+
     /** Palabra secreta del turno (solo se setea en el cliente del escultor). Para el HUD. */
     UPROPERTY(BlueprintReadOnly, Category="Game")
     FString CurrentSecretWord;
@@ -185,6 +197,10 @@ private:
     FVector         AxisV      = FVector::UpVector;
     mutable int32   AxisChosen = -1; // -1 sin definir, 0=U, 1=V
     void ToggleAxisLock();
+
+    // ¿El jugador local puede esculpir ahora? (es el escultor y la fase es Drawing).
+    // Sin partida en curso (testeo solo del mapa) devuelve true → esculpir libre.
+    bool CanLocalPlayerSculpt() const;
 
     void OnStampPressed();
     void OnStampReleased();

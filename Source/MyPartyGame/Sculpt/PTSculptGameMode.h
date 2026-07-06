@@ -8,6 +8,7 @@
 
 class APTPlayerState;
 class APTSculptGameState;
+class APTSculptVolume;
 
 UCLASS()
 class MYPARTYGAME_API APTSculptGameMode : public AGameModeBase
@@ -33,6 +34,10 @@ public:
     // Llamado desde el sistema de chat (Fase 4) cuando alguien acierta.
     void HandlePlayerGuessedCorrectly(APTPlayerState* Guesser);
 
+    // Procesa un mensaje de chat en el servidor: detecta aciertos (anti-spoiler) y
+    // difunde las líneas visibles a todos. Llamado por Server_SendChat del PC.
+    void HandleChat(APTPlayerState* Sender, const FString& Message);
+
     // ¿El texto coincide con la palabra secreta del turno? (normaliza mayúsc./tildes).
     // Server-only: la palabra real nunca sale de acá.
     bool DoesGuessMatch(const FString& Guess) const;
@@ -52,6 +57,7 @@ private:
 
     APTSculptGameState* GS() const;
     TArray<APTPlayerState*> GetActivePlayers() const;
+    void ResetSculpture(); // limpia el Volume en todos (Multicast) al empezar el turno
 
     void CheckStart();          // arranca si hay suficientes jugadores
     void StartChoosingPhase();  // elige escultor + 3 palabras
