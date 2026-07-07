@@ -70,6 +70,17 @@ public:
     UPROPERTY(EditAnywhere, Category="Sculpt|Shadow")
     float HeightStickMeshLength = 100.f;
 
+    // ── Límite del área de esculpido (grilla tipo chaperone) ─────────────────
+    /** Material de la grilla de límite. Debe tener un parámetro Vector "CursorPos"
+     *  (posición del cursor en mundo). Two-Sided (se ve desde adentro); la grilla
+     *  aparece cerca del cursor. Solo lo ve el escultor. */
+    UPROPERTY(EditAnywhere, Category="Sculpt|Boundary")
+    UMaterialInterface* BoundaryMaterial = nullptr;
+
+    /** Mesh del box de límite (si null, usa el cubo básico del motor de 100³). */
+    UPROPERTY(EditAnywhere, Category="Sculpt|Boundary")
+    UStaticMesh* BoundaryBoxMesh = nullptr;
+
     /** Material overlay X-ray: se dibuja encima de todos los previews (sin tocar
      *  su material base) y muestra un color sólido donde el preview está tapado
      *  por otros objetos. Translucent + Disable Depth Test. */
@@ -226,6 +237,8 @@ private:
     UPROPERTY() class UPTGameplayHUDWidget* GameplayHUD     = nullptr;
     UPROPERTY() class UDecalComponent*    ShadowDecal       = nullptr;
     UPROPERTY() class UStaticMeshComponent* HeightStick     = nullptr;
+    UPROPERTY() class UStaticMeshComponent* BoundaryMesh    = nullptr;
+    UPROPERTY() class UMaterialInstanceDynamic* BoundaryMID = nullptr;
 
     void RebuildPreviewMesh();
     void UpdatePreviewVisual();  // elige mesh (tool/stamp/procedural) y material

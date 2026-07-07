@@ -8,6 +8,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/DecalComponent.h"
+#include "Components/BoxComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "../UI/PTColorPickerWidget.h"
@@ -115,6 +116,23 @@ void APTSculptPlayerController::BeginPlay()
         }
         HeightStick->RegisterComponent();
         HeightStick->SetVisibility(false);
+
+        // Límite del área de esculpido: box con grilla (aparece cerca del cursor).
+        BoundaryMesh = NewObject<UStaticMeshComponent>(PreviewActor, TEXT("BoundaryMesh"));
+        BoundaryMesh->SetupAttachment(PreviewMesh);
+        BoundaryMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        BoundaryMesh->SetCastShadow(false);
+        BoundaryMesh->SetReceivesDecals(false);
+        {
+            UStaticMesh* BoxMesh = BoundaryBoxMesh;
+            if (!BoxMesh)
+                BoxMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+            if (BoxMesh) BoundaryMesh->SetStaticMesh(BoxMesh);
+            if (BoundaryMaterial)
+                BoundaryMID = BoundaryMesh->CreateDynamicMaterialInstance(0, BoundaryMaterial);
+        }
+        BoundaryMesh->RegisterComponent();
+        BoundaryMesh->SetVisibility(false);
     }
 
     // HUD de la partida: solo el jugador local lo crea. Maneja fase/reloj/chat/elección
@@ -316,6 +334,20 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
                 HeightStick->SetWorldScale3D(FVector(HeightStickThickness, HeightStickThickness, ZScale));
             }
             else HeightStick->SetVisibility(false);
+        }
+    }
+
+    // Límite del área: ubicar el box en el BoundsBox del volumen y pasarle el cursor al
+    // material (la grilla aparece cerca del cursor). El cubo básico del motor mide 100³
+    // (semi-extensión 50), así que la escala = extensión del box / 50.
+    if (BoundaryMesh && BoundaryMID)
+    {
+        if (UBoxComponent* Box = Volume->FindComponentByClass<UBoxComponent>())
+        {
+            BoundaryMesh->SetVisibility(true);
+            BoundaryMesh->SetWorldLocationAndRotation(Box->GetComponentLocation(), Box->GetComponentRotation());
+            BoundaryMesh->SetWorldScale3D(Box->GetScaledBoxExtent() / 50.f);
+            BoundaryMID->SetVectorParameterValue(TEXT("CursorPos"), StampPos);
         }
     }
 
