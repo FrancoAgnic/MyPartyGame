@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/DecalComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "../UI/PTColorPickerWidget.h"
@@ -86,6 +87,13 @@ void APTSculptPlayerController::BeginPlay()
             AxisGizmo->SetOverlayMaterial(PreviewOverlayMaterial);
             PaintRing->SetOverlayMaterial(PreviewOverlayMaterial);
         }
+
+        // Sombra falsa: decal que se proyecta en el piso justo debajo del cursor.
+        ShadowDecal = NewObject<UDecalComponent>(PreviewActor, TEXT("ShadowDecal"));
+        ShadowDecal->SetupAttachment(PreviewMesh);
+        if (ShadowDecalMaterial) ShadowDecal->SetDecalMaterial(ShadowDecalMaterial);
+        ShadowDecal->RegisterComponent();
+        ShadowDecal->SetVisibility(false);
     }
 
     // HUD de la partida: solo el jugador local lo crea. Maneja fase/reloj/chat/elección
@@ -178,6 +186,16 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
 
     if (!Volume) return;
 
+    // Solo el escultor del turno ve los previews de las herramientas. Para el resto,
+    // ocultar el actor de preview y no calcular nada de la brocha.
+    if (!CanLocalPlayerSculpt())
+    {
+        if (PreviewActor) PreviewActor->SetActorHiddenInGame(true);
+        bStrokeActive = false;
+        return;
+    }
+    if (PreviewActor) PreviewActor->SetActorHiddenInGame(false);
+
     FVector Normal;
     FVector StampPos = GetStampPoint(Normal);
 
@@ -233,6 +251,32 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
             GetWorld(), BrushDecalMaterial,
             FVector(StampSize * 0.5f),
             StampPos, DecalRot, 0.12f);
+    }
+
+    // Sombra falsa: proyectar un decal en el piso justo debajo del cursor. Traza recto
+    // hacia abajo ignorando el volumen de arcilla (la sombra cae en el piso del nivel).
+    if (ShadowDecal && ShadowDecalMaterial)
+    {
+        FHitResult Down;
+        FCollisionQueryParams QP;
+        QP.bTraceComplex = false;
+        QP.AddIgnoredActor(Volume);
+        if (PreviewActor)               QP.AddIgnoredActor(PreviewActor);
+        if (const APawn* Pw = GetPawn()) QP.AddIgnoredActor(Pw);
+        const FVector DownEnd = StampPos - FVector(0.f, 0.f, 100000.f);
+        if (GetWorld()->LineTraceSingleByChannel(Down, StampPos, DownEnd, ECC_Visibility, QP))
+        {
+            ShadowDecal->SetVisibility(true);
+            // Proyectar hacia abajo (eje X del decal = -Z mundo → Pitch -90).
+            ShadowDecal->SetWorldLocationAndRotation(
+                Down.ImpactPoint + FVector(0.f, 0.f, 20.f), FRotator(-90.f, 0.f, 0.f));
+            const float R = FMath::Max(1.f, StampSize * 0.5f * ShadowSizeScale);
+            ShadowDecal->DecalSize = FVector(64.f, R, R); // (proyección, ancho, alto)
+        }
+        else
+        {
+            ShadowDecal->SetVisibility(false);
+        }
     }
 
     // Preview de superficie (Paint por shape + color; Smooth su propio mesh):

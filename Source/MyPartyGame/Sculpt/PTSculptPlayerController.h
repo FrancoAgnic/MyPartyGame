@@ -44,6 +44,15 @@ public:
     UPROPERTY(EditAnywhere, Category="Sculpt")
     UMaterialInterface* BrushDecalMaterial = nullptr;
 
+    /** Sombra falsa proyectada en el piso justo debajo del cursor (da sensación de
+     *  profundidad). Asignar un material de DECAL tipo mancha/gradiente radial oscuro. */
+    UPROPERTY(EditAnywhere, Category="Sculpt|Shadow")
+    UMaterialInterface* ShadowDecalMaterial = nullptr;
+
+    /** Tamaño de la sombra respecto de la brocha (1 = igual al radio). */
+    UPROPERTY(EditAnywhere, Category="Sculpt|Shadow")
+    float ShadowSizeScale = 1.0f;
+
     /** Material overlay X-ray: se dibuja encima de todos los previews (sin tocar
      *  su material base) y muestra un color sólido donde el preview está tapado
      *  por otros objetos. Translucent + Disable Depth Test. */
@@ -198,6 +207,7 @@ private:
     UPROPERTY() UStaticMesh*              CachedRingMesh    = nullptr;
     UPROPERTY() UUserWidget*              ColorPicker       = nullptr;
     UPROPERTY() class UPTGameplayHUDWidget* GameplayHUD     = nullptr;
+    UPROPERTY() class UDecalComponent*    ShadowDecal       = nullptr;
 
     void RebuildPreviewMesh();
     void UpdatePreviewVisual();  // elige mesh (tool/stamp/procedural) y material
