@@ -176,6 +176,30 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
 
+    // Agregar el mapping context de movimiento acá (no en BeginPlay): en PIE el
+    // LocalPlayer/subsistema puede no estar listo en BeginPlay, y entonces nunca se
+    // agregaba → sin movimiento. Reintenta cada frame hasta que se puede.
+    if (!bMovementCtxReady && MovementMappingContext)
+    {
+        if (ULocalPlayer* LP = GetLocalPlayer())
+        {
+            if (UEnhancedInputLocalPlayerSubsystem* Sub =
+                ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(LP))
+            {
+                Sub->AddMappingContext(MovementMappingContext, 0);
+                bMovementCtxReady = true;
+                UE_LOG(LogTemp, Warning, TEXT("[SculptPC-DIAG] MappingContext agregado en tick: %s"),
+                       *GetNameSafe(MovementMappingContext));
+            }
+        }
+    }
+
+    // Re-buscar el Volume si no se encontró en BeginPlay (podía no estar disponible
+    // todavía por timing de PIE / replicación). Solo itera mientras siga null.
+    if (!Volume)
+        Volume = Cast<APTSculptVolume>(
+            UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
+
     if (!bDiagLogged)
     {
         bDiagLogged = true;
