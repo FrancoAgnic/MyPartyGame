@@ -99,6 +99,11 @@ void UPTGameplayHUDWidget::RefreshTick()
     if (TxtWord)
         TxtWord->SetText(FText::FromString(WordText));
 
+    // El escultor conoce la palabra → no puede chatear. Ocultar su caja de texto
+    // (así Tab tampoco le roba el foco); igual sigue viendo el log del chat.
+    if (ChatInput)
+        ChatInput->SetVisibility(bSculptor ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+
     // ── Reloj (solo en Drawing) ──
     if (TxtTimer)
     {
@@ -119,6 +124,9 @@ void UPTGameplayHUDWidget::RefreshTick()
 void UPTGameplayHUDWidget::FocusChat()
 {
     if (bChatOpen) return;
+    // El escultor no chatea (conoce la palabra): no abrir el chat en su turno.
+    if (APTSculptGameState* G = GetGS())
+        if (G->IsLocalPlayerSculptor()) return;
     bChatOpen = true;
     ApplyInputMode(false); // GameAndUI + cursor
     if (ChatInput) ChatInput->SetKeyboardFocus();
