@@ -49,6 +49,7 @@ void APTSculptPlayerController::BeginPlay()
         PreviewMesh = NewObject<UProceduralMeshComponent>(PreviewActor, TEXT("PreviewMesh"));
         PreviewMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         PreviewMesh->SetCastShadow(false);
+        PreviewMesh->SetReceivesDecals(false); // que la sombra-decal no lo tape
         PreviewMesh->RegisterComponent();
         PreviewActor->SetRootComponent(PreviewMesh);
         if (PreviewMeshMaterial)
@@ -59,6 +60,7 @@ void APTSculptPlayerController::BeginPlay()
         PreviewStaticMesh->SetupAttachment(PreviewMesh);
         PreviewStaticMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         PreviewStaticMesh->SetCastShadow(false);
+        PreviewStaticMesh->SetReceivesDecals(false);
         PreviewStaticMesh->RegisterComponent();
         PreviewStaticMesh->SetVisibility(false);
 
@@ -68,6 +70,7 @@ void APTSculptPlayerController::BeginPlay()
         AxisGizmo->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         AxisGizmo->SetCastShadow(false);
         if (AxisGizmoMesh) AxisGizmo->SetStaticMesh(AxisGizmoMesh);
+        AxisGizmo->SetReceivesDecals(false);
         AxisGizmo->RegisterComponent();
         AxisGizmo->SetVisibility(false);
 
@@ -76,6 +79,7 @@ void APTSculptPlayerController::BeginPlay()
         PaintRing->SetupAttachment(PreviewMesh);
         PaintRing->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         PaintRing->SetCastShadow(false);
+        PaintRing->SetReceivesDecals(false);
         PaintRing->RegisterComponent();
         PaintRing->SetVisibility(false);
 
@@ -94,6 +98,23 @@ void APTSculptPlayerController::BeginPlay()
         if (ShadowDecalMaterial) ShadowDecal->SetDecalMaterial(ShadowDecalMaterial);
         ShadowDecal->RegisterComponent();
         ShadowDecal->SetVisibility(false);
+
+        // Palito indicador de altura (piso → cursor). Si no se asignó mesh, usar el
+        // cilindro básico del motor.
+        HeightStick = NewObject<UStaticMeshComponent>(PreviewActor, TEXT("HeightStick"));
+        HeightStick->SetupAttachment(PreviewMesh);
+        HeightStick->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        HeightStick->SetCastShadow(false);
+        HeightStick->SetReceivesDecals(false);
+        {
+            UStaticMesh* StickMesh = HeightStickMesh;
+            if (!StickMesh)
+                StickMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+            if (StickMesh) HeightStick->SetStaticMesh(StickMesh);
+            if (HeightStickMaterial) HeightStick->SetMaterial(0, HeightStickMaterial);
+        }
+        HeightStick->RegisterComponent();
+        HeightStick->SetVisibility(false);
     }
 
     // HUD de la partida: solo el jugador local lo crea. Maneja fase/reloj/chat/elección
@@ -253,29 +274,46 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
             StampPos, DecalRot, 0.12f);
     }
 
-    // Sombra falsa: proyectar un decal en el piso justo debajo del cursor. Traza recto
-    // hacia abajo ignorando el volumen de arcilla (la sombra cae en el piso del nivel).
-    if (ShadowDecal && ShadowDecalMaterial)
+    // Sombra falsa + palito de altura: trazar recto hacia abajo hasta el piso del nivel
+    // (ignorando la arcilla) y ubicar el decal y el palito.
     {
         FHitResult Down;
         FCollisionQueryParams QP;
         QP.bTraceComplex = false;
         QP.AddIgnoredActor(Volume);
-        if (PreviewActor)               QP.AddIgnoredActor(PreviewActor);
-        if (const APawn* Pw = GetPawn()) QP.AddIgnoredActor(Pw);
+        if (PreviewActor)                QP.AddIgnoredActor(PreviewActor);
+        if (const APawn* Pw = GetPawn())  QP.AddIgnoredActor(Pw);
         const FVector DownEnd = StampPos - FVector(0.f, 0.f, 100000.f);
-        if (GetWorld()->LineTraceSingleByChannel(Down, StampPos, DownEnd, ECC_Visibility, QP))
+        const bool bHit = GetWorld()->LineTraceSingleByChannel(Down, StampPos, DownEnd, ECC_Visibility, QP);
+
+        // Decal de sombra: tamaño FIJO (ShadowSize), no escala con la brocha.
+        if (ShadowDecal && ShadowDecalMaterial)
         {
-            ShadowDecal->SetVisibility(true);
-            // Proyectar hacia abajo (eje X del decal = -Z mundo → Pitch -90).
-            ShadowDecal->SetWorldLocationAndRotation(
-                Down.ImpactPoint + FVector(0.f, 0.f, 20.f), FRotator(-90.f, 0.f, 0.f));
-            const float R = FMath::Max(1.f, StampSize * 0.5f * ShadowSizeScale);
-            ShadowDecal->DecalSize = FVector(64.f, R, R); // (proyección, ancho, alto)
+            if (bHit)
+            {
+                ShadowDecal->SetVisibility(true);
+                // Proyectar hacia abajo (eje X del decal = -Z mundo → Pitch -90).
+                ShadowDecal->SetWorldLocationAndRotation(
+                    Down.ImpactPoint + FVector(0.f, 0.f, 20.f), FRotator(-90.f, 0.f, 0.f));
+                const float R = FMath::Max(1.f, ShadowSize);
+                ShadowDecal->DecalSize = FVector(32.f, R, R); // (proyección fina, ancho, alto)
+            }
+            else ShadowDecal->SetVisibility(false);
         }
-        else
+
+        // Palito de altura: del piso al cursor. Se estira/achica con la distancia.
+        if (HeightStick)
         {
-            ShadowDecal->SetVisibility(false);
+            const float H = bHit ? (StampPos.Z - Down.ImpactPoint.Z) : 0.f;
+            if (bHit && H > 2.f)
+            {
+                HeightStick->SetVisibility(true);
+                HeightStick->SetWorldLocation((Down.ImpactPoint + StampPos) * 0.5f);
+                HeightStick->SetWorldRotation(FRotator::ZeroRotator);
+                const float ZScale = H / FMath::Max(1.f, HeightStickMeshLength);
+                HeightStick->SetWorldScale3D(FVector(HeightStickThickness, HeightStickThickness, ZScale));
+            }
+            else HeightStick->SetVisibility(false);
         }
     }
 

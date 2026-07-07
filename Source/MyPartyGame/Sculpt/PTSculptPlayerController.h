@@ -49,9 +49,26 @@ public:
     UPROPERTY(EditAnywhere, Category="Sculpt|Shadow")
     UMaterialInterface* ShadowDecalMaterial = nullptr;
 
-    /** Tamaño de la sombra respecto de la brocha (1 = igual al radio). */
+    /** Tamaño FIJO de la sombra (radio en UU). No escala con la brocha; se ajusta a mano. */
     UPROPERTY(EditAnywhere, Category="Sculpt|Shadow")
-    float ShadowSizeScale = 1.0f;
+    float ShadowSize = 60.f;
+
+    /** Palito indicador de altura entre el piso y el cursor. Si es null, usa el cilindro
+     *  básico del motor. Se estira/achica según la distancia al piso. */
+    UPROPERTY(EditAnywhere, Category="Sculpt|Shadow")
+    UStaticMesh* HeightStickMesh = nullptr;
+
+    /** Material opcional del palito (si null, usa el material del mesh). */
+    UPROPERTY(EditAnywhere, Category="Sculpt|Shadow")
+    UMaterialInterface* HeightStickMaterial = nullptr;
+
+    /** Grosor del palito (escala X/Y). */
+    UPROPERTY(EditAnywhere, Category="Sculpt|Shadow")
+    float HeightStickThickness = 0.08f;
+
+    /** Largo nativo del mesh del palito en Z (cilindro básico del motor = 100). */
+    UPROPERTY(EditAnywhere, Category="Sculpt|Shadow")
+    float HeightStickMeshLength = 100.f;
 
     /** Material overlay X-ray: se dibuja encima de todos los previews (sin tocar
      *  su material base) y muestra un color sólido donde el preview está tapado
@@ -208,6 +225,7 @@ private:
     UPROPERTY() UUserWidget*              ColorPicker       = nullptr;
     UPROPERTY() class UPTGameplayHUDWidget* GameplayHUD     = nullptr;
     UPROPERTY() class UDecalComponent*    ShadowDecal       = nullptr;
+    UPROPERTY() class UStaticMeshComponent* HeightStick     = nullptr;
 
     void RebuildPreviewMesh();
     void UpdatePreviewVisual();  // elige mesh (tool/stamp/procedural) y material
