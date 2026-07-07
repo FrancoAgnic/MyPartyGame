@@ -12,6 +12,7 @@
 #include "../UI/PTColorPickerWidget.h"
 #include "../Lobby/PTLobbyEscapeMenuWidget.h"
 #include "../Lobby/PTPlayerState.h"
+#include "../Lobby/PTLobbyCharacter.h"
 #include "PTSculptGameMode.h"
 #include "PTSculptGameState.h"
 #include "PTGameplayHUDWidget.h"
@@ -193,6 +194,16 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
             }
         }
     }
+
+    // El nivel de esculpido es un vacío sin piso caminable: poner el pawn en modo vuelo
+    // creativo apenas se posee, así se mueve libre en 3D (si no, queda "cayendo" quieto).
+    if (!bFlightEnabled)
+        if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn()))
+        {
+            Char->SetFlyingMode(true);
+            bFlightEnabled = true;
+            UE_LOG(LogTemp, Warning, TEXT("[SculptPC-DIAG] Modo vuelo activado en el pawn."));
+        }
 
     // Re-buscar el Volume si no se encontró en BeginPlay (podía no estar disponible
     // todavía por timing de PIE / replicación). Solo itera mientras siga null.

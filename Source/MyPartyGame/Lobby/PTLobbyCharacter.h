@@ -19,6 +19,10 @@ class MYPARTYGAME_API APTLobbyCharacter : public ACharacter
 public:
     APTLobbyCharacter();
 
+    // Fuerza el modo vuelo creativo on/off (ej: el nivel de esculpido arranca volando,
+    // porque es un vacío sin piso caminable). Reutiliza la lógica de ToggleFly.
+    void SetFlyingMode(bool bEnable);
+
 protected:
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
     virtual void Tick(float DeltaSeconds) override;
@@ -65,4 +69,5 @@ private:
     bool  bDescend  = false;
     float LastJumpTime = -10.f;
     float DefaultMaxAccel = 2048.f; // MaxAcceleration para caminar (se restaura al salir de vuelo)
+    int32 DiagMoveCount = 0;        // log de diagnóstico de las primeras llamadas a Move()
 };

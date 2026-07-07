@@ -35,6 +35,17 @@ APTLobbyCharacter::APTLobbyCharacter()
 void APTLobbyCharacter::Move(const FInputActionValue& Value)
 {
     const FVector2D Axis = Value.Get<FVector2D>();
+
+    if (DiagMoveCount < 3)
+    {
+        ++DiagMoveCount;
+        UCharacterMovementComponent* M = GetCharacterMovement();
+        UE_LOG(LogTemp, Warning, TEXT("[LobbyChar-DIAG] Move() llamado. Axis=%s Controller=%s Mode=%d Vel=%s MaxAccel=%.0f"),
+               *Axis.ToString(), Controller ? TEXT("OK") : TEXT("NULL"),
+               M ? (int32)M->MovementMode.GetValue() : -1,
+               *GetVelocity().ToString(), M ? M->MaxAcceleration : -1.f);
+    }
+
     if (!Controller) return;
 
     const FRotator YawRot(0.f, Controller->GetControlRotation().Yaw, 0.f);
@@ -95,7 +106,12 @@ void APTLobbyCharacter::OnJumpReleased()
 
 void APTLobbyCharacter::ToggleFly()
 {
-    bFlying = !bFlying;
+    SetFlyingMode(!bFlying);
+}
+
+void APTLobbyCharacter::SetFlyingMode(bool bEnable)
+{
+    bFlying = bEnable;
     UCharacterMovementComponent* M = GetCharacterMovement();
     if (bFlying)
     {
