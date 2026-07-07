@@ -274,17 +274,19 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
             StampPos, DecalRot, 0.12f);
     }
 
-    // Sombra falsa + palito de altura: trazar recto hacia abajo hasta el piso del nivel
-    // (ignorando la arcilla) y ubicar el decal y el palito.
+    // Sombra falsa + palito de altura: trazar recto hacia abajo hasta lo primero que
+    // haya debajo (la malla de arcilla o el piso del nivel) para medir la altura desde ahí.
     {
         FHitResult Down;
         FCollisionQueryParams QP;
-        QP.bTraceComplex = false;
-        QP.AddIgnoredActor(Volume);
+        QP.bTraceComplex = true; // superficie real de la arcilla (ProceduralMesh)
         if (PreviewActor)                QP.AddIgnoredActor(PreviewActor);
         if (const APawn* Pw = GetPawn())  QP.AddIgnoredActor(Pw);
-        const FVector DownEnd = StampPos - FVector(0.f, 0.f, 100000.f);
-        const bool bHit = GetWorld()->LineTraceSingleByChannel(Down, StampPos, DownEnd, ECC_Visibility, QP);
+        // Arrancar el rayo 50 UU debajo del cursor: así no pega en la arcilla que estás
+        // esculpiendo justo ahí (se veía raro) y mide desde la superficie de más abajo.
+        const FVector DownStart = StampPos - FVector(0.f, 0.f, 50.f);
+        const FVector DownEnd   = DownStart - FVector(0.f, 0.f, 100000.f);
+        const bool bHit = GetWorld()->LineTraceSingleByChannel(Down, DownStart, DownEnd, ECC_Visibility, QP);
 
         // Decal de sombra: tamaño FIJO (ShadowSize), no escala con la brocha.
         if (ShadowDecal && ShadowDecalMaterial)
