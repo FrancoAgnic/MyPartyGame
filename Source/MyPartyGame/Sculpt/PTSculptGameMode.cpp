@@ -11,15 +11,11 @@
 
 APTSculptGameMode::APTSculptGameMode()
 {
+    // DefaultPawnClass, PlayerStateClass, bUseSeamlessTravel y bDelayedStart + la posesión
+    // explícita (RestartPlayer en PostLogin) se heredan de APTLobbyGameMode. Solo cambiamos
+    // el PlayerController (con las tools de esculpido) y el GameState (estado de la partida).
     PlayerControllerClass = APTSculptPlayerController::StaticClass();
-    PlayerStateClass      = APTPlayerState::StaticClass();
     GameStateClass        = APTSculptGameState::StaticClass();
-    // Mismo pawn que el lobby (personaje volador en 1ª persona con movimiento por
-    // Enhanced Input). Sin esto, reparentar el BP deja el DefaultPawn (esfera sin
-    // bindings) y el jugador queda sin poder moverse. BP_SculptGameMode puede
-    // sobreescribirlo con BP_LobbyCharacter si tiene ajustes visuales propios.
-    DefaultPawnClass      = APTLobbyCharacter::StaticClass();
-    bUseSeamlessTravel    = true; // simétrico con el lobby, mantiene PlayerState al viajar.
 }
 
 void APTSculptGameMode::BeginPlay()

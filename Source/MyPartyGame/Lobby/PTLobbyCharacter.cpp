@@ -40,10 +40,15 @@ void APTLobbyCharacter::Move(const FInputActionValue& Value)
     {
         ++DiagMoveCount;
         UCharacterMovementComponent* M = GetCharacterMovement();
-        UE_LOG(LogTemp, Warning, TEXT("[LobbyChar-DIAG] Move() llamado. Axis=%s Controller=%s Mode=%d Vel=%s MaxAccel=%.0f"),
-               *Axis.ToString(), Controller ? TEXT("OK") : TEXT("NULL"),
+        UE_LOG(LogTemp, Warning, TEXT("[LobbyChar-DIAG] Move() Axis=%s Role=%d LocalCtrl=%d Paused=%d Mode=%d CMCActive=%d Updated=%s Vel=%s"),
+               *Axis.ToString(),
+               (int32)GetLocalRole(),
+               IsLocallyControlled() ? 1 : 0,
+               (GetWorld() && GetWorld()->IsPaused()) ? 1 : 0,
                M ? (int32)M->MovementMode.GetValue() : -1,
-               *GetVelocity().ToString(), M ? M->MaxAcceleration : -1.f);
+               M ? (M->IsActive() ? 1 : 0) : -1,
+               (M && M->UpdatedComponent) ? TEXT("OK") : TEXT("NULL"),
+               *GetVelocity().ToString());
     }
 
     if (!Controller) return;

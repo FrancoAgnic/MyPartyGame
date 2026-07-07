@@ -3,15 +3,17 @@
 
 #pragma once
 #include "CoreMinimal.h"
-#include "GameFramework/GameModeBase.h"
+#include "../Lobby/PTLobbyGameMode.h"
 #include "PTSculptGameMode.generated.h"
 
 class APTPlayerState;
 class APTSculptGameState;
 class APTSculptVolume;
 
+// Hereda de APTLobbyGameMode (AGameMode) para reusar su posesión/pawn/reconexión que
+// SÍ funciona; solo cambia el PlayerController, el GameState y agrega el loop por turnos.
 UCLASS()
-class MYPARTYGAME_API APTSculptGameMode : public AGameModeBase
+class MYPARTYGAME_API APTSculptGameMode : public APTLobbyGameMode
 {
     GENERATED_BODY()
 
