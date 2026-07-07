@@ -174,6 +174,7 @@ private:
 
     bool bIsStamping        = false;
     bool bPreviewDirty      = true;
+    bool bDiagLogged        = false; // log de diagnóstico una sola vez
 
     // Interpolación de trazo (sellos continuos entre frames).
     bool    bStrokeActive = false;

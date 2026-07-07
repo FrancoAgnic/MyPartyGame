@@ -1,5 +1,6 @@
 #include "PTSculptPlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "InputMappingContext.h"
 #include "EnhancedInputSubsystems.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/Character.h"
@@ -36,7 +37,20 @@ void APTSculptPlayerController::BeginPlay()
         ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
     {
         if (MovementMappingContext)
+        {
             Sub->AddMappingContext(MovementMappingContext, 0);
+            UE_LOG(LogTemp, Warning, TEXT("[SculptPC-DIAG] MappingContext agregado: %s"),
+                   *GetNameSafe(MovementMappingContext));
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("[SculptPC-DIAG] MovementMappingContext es NULL — no hay input de movimiento."));
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[SculptPC-DIAG] Sin subsistema de EnhancedInput (LocalPlayer null). IsLocalController=%d"),
+               IsLocalController() ? 1 : 0);
     }
 
     Volume = Cast<APTSculptVolume>(
@@ -161,6 +175,14 @@ void APTSculptPlayerController::OnPausePressed()
 void APTSculptPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
+
+    if (!bDiagLogged)
+    {
+        bDiagLogged = true;
+        UE_LOG(LogTemp, Warning, TEXT("[SculptPC-DIAG] PlayerTick vivo. Pawn=%s IsLocal=%d Volume=%s"),
+               *GetNameSafe(GetPawn()), IsLocalController() ? 1 : 0, Volume ? TEXT("OK") : TEXT("NULL"));
+    }
+
     if (!Volume) return;
 
     FVector Normal;

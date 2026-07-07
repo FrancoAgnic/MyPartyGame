@@ -3,6 +3,7 @@
 #include "PTSculptPlayerController.h"
 #include "PTSculptVolume.h"
 #include "../Lobby/PTPlayerState.h"
+#include "../Lobby/PTLobbyCharacter.h"
 #include "GameFramework/PlayerState.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
@@ -13,8 +14,12 @@ APTSculptGameMode::APTSculptGameMode()
     PlayerControllerClass = APTSculptPlayerController::StaticClass();
     PlayerStateClass      = APTPlayerState::StaticClass();
     GameStateClass        = APTSculptGameState::StaticClass();
+    // Mismo pawn que el lobby (personaje volador en 1ª persona con movimiento por
+    // Enhanced Input). Sin esto, reparentar el BP deja el DefaultPawn (esfera sin
+    // bindings) y el jugador queda sin poder moverse. BP_SculptGameMode puede
+    // sobreescribirlo con BP_LobbyCharacter si tiene ajustes visuales propios.
+    DefaultPawnClass      = APTLobbyCharacter::StaticClass();
     bUseSeamlessTravel    = true; // simétrico con el lobby, mantiene PlayerState al viajar.
-    // DefaultPawnClass lo define BP_SculptGameMode (el pawn/cámara del jugador).
 }
 
 void APTSculptGameMode::BeginPlay()
@@ -109,6 +114,10 @@ void APTSculptGameMode::StartChoosingPhase()
 {
     APTSculptGameState* G = GS();
     if (!G) return;
+
+    // Los jugadores de PIE pueden loguearse antes del BeginPlay del GameMode, así que el
+    // turno puede arrancar con el banco todavía vacío. Sembrar acá lo garantiza.
+    if (WordBank.Num() == 0) SeedDefaultWords();
 
     TArray<APTPlayerState*> Players = GetActivePlayers();
     if (Players.Num() < MinPlayersToStart) { GoToWaiting(); return; }
