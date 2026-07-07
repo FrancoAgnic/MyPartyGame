@@ -69,5 +69,4 @@ private:
     bool  bDescend  = false;
     float LastJumpTime = -10.f;
     float DefaultMaxAccel = 2048.f; // MaxAcceleration para caminar (se restaura al salir de vuelo)
-    int32 DiagMoveCount = 0;        // log de diagnóstico de las primeras llamadas a Move()
 };

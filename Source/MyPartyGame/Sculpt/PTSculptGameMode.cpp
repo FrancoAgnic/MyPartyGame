@@ -331,13 +331,28 @@ FString APTSculptGameMode::Normalize(const FString& In)
 
 void APTSculptGameMode::SeedDefaultWords()
 {
+    // Banco por defecto (100 palabras, de WordBank_ES.csv). El matcheo normaliza
+    // mayúsculas/tildes, así que los jugadores pueden escribir sin acentos.
     WordBank = {
-        TEXT("perro"), TEXT("gato"), TEXT("casa"), TEXT("arbol"), TEXT("auto"),
-        TEXT("pelota"), TEXT("silla"), TEXT("mesa"), TEXT("sol"), TEXT("luna"),
-        TEXT("estrella"), TEXT("pescado"), TEXT("flor"), TEXT("barco"), TEXT("avion"),
-        TEXT("corazon"), TEXT("sombrero"), TEXT("guitarra"), TEXT("zapato"), TEXT("taza"),
-        TEXT("montaña"), TEXT("cohete"), TEXT("dinosaurio"), TEXT("robot"), TEXT("fantasma"),
-        TEXT("hamburguesa"), TEXT("helado"), TEXT("llave"), TEXT("martillo"), TEXT("paraguas"),
-        TEXT("serpiente"), TEXT("tortuga"), TEXT("elefante"), TEXT("araña"), TEXT("cactus")
+        TEXT("Pez"), TEXT("Serpiente"), TEXT("Caracol"), TEXT("Tortuga"), TEXT("Pato"),
+        TEXT("Gato"), TEXT("Perro"), TEXT("Conejo"), TEXT("Elefante"), TEXT("Jirafa"),
+        TEXT("Pingüino"), TEXT("Oso"), TEXT("Rana"), TEXT("Pulpo"), TEXT("Estrella de mar"),
+        TEXT("Cangrejo"), TEXT("Gusano"), TEXT("Vaca"), TEXT("Cerdo"), TEXT("Caballo"),
+        TEXT("Dinosaurio"), TEXT("Ballena"), TEXT("Araña"), TEXT("Abeja"), TEXT("Mariposa"),
+        TEXT("Manzana"), TEXT("Banana"), TEXT("Pera"), TEXT("Zanahoria"), TEXT("Champiñón"),
+        TEXT("Helado"), TEXT("Hamburguesa"), TEXT("Pizza"), TEXT("Dona"), TEXT("Huevo"),
+        TEXT("Galleta"), TEXT("Torta"), TEXT("Pan"), TEXT("Queso"), TEXT("Frutilla"),
+        TEXT("Taza"), TEXT("Silla"), TEXT("Mesa"), TEXT("Lámpara"), TEXT("Botella"),
+        TEXT("Vaso"), TEXT("Vela"), TEXT("Balde"), TEXT("Almohada"), TEXT("Reloj"),
+        TEXT("Llave"), TEXT("Paraguas"), TEXT("Cámara"), TEXT("Teléfono"), TEXT("Cuchara"),
+        TEXT("Árbol"), TEXT("Flor"), TEXT("Cactus"), TEXT("Montaña"), TEXT("Nube"),
+        TEXT("Sol"), TEXT("Luna"), TEXT("Hoja"), TEXT("Piña"), TEXT("Roca"),
+        TEXT("Volcán"), TEXT("Rayo"), TEXT("Auto"), TEXT("Barco"), TEXT("Avión"),
+        TEXT("Cohete"), TEXT("Bicicleta"), TEXT("Tren"), TEXT("Globo aerostático"), TEXT("Submarino"),
+        TEXT("Mano"), TEXT("Pie"), TEXT("Nariz"), TEXT("Diente"), TEXT("Calavera"),
+        TEXT("Corazón"), TEXT("Cerebro"), TEXT("Oreja"), TEXT("Sombrero"), TEXT("Zapato"),
+        TEXT("Bota"), TEXT("Corona"), TEXT("Lentes"), TEXT("Corbata"), TEXT("Mochila"),
+        TEXT("Guante"), TEXT("Martillo"), TEXT("Pala"), TEXT("Hacha"), TEXT("Lápiz"),
+        TEXT("Pincel"), TEXT("Tijera"), TEXT("Fantasma"), TEXT("Robot"), TEXT("Espada")
     };
 }

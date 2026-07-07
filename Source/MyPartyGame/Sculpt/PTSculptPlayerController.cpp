@@ -12,7 +12,6 @@
 #include "../UI/PTColorPickerWidget.h"
 #include "../Lobby/PTLobbyEscapeMenuWidget.h"
 #include "../Lobby/PTPlayerState.h"
-#include "../Lobby/PTLobbyCharacter.h"
 #include "PTSculptGameMode.h"
 #include "PTSculptGameState.h"
 #include "PTGameplayHUDWidget.h"
@@ -27,32 +26,10 @@ void APTSculptPlayerController::BeginPlay()
 {
     Super::BeginPlay();
 
-    // Marcador de llegada a Lvl-01 (diagnóstico del travel Lobby→juego). Aparece en el log
-    // de cada instancia que realmente llegó al nivel: si un cliente no lo imprime, no viajó.
-    UE_LOG(LogTemp, Log, TEXT("[SculptPC] BeginPlay en Lvl-01 — NetMode=%d LocalController=%d"),
-           (int32)GetNetMode(), IsLocalController() ? 1 : 0);
-
     SetInputMode(FInputModeGameOnly());
 
-    if (UEnhancedInputLocalPlayerSubsystem* Sub =
-        ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
-    {
-        if (MovementMappingContext)
-        {
-            Sub->AddMappingContext(MovementMappingContext, 0);
-            UE_LOG(LogTemp, Warning, TEXT("[SculptPC-DIAG] MappingContext agregado: %s"),
-                   *GetNameSafe(MovementMappingContext));
-        }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("[SculptPC-DIAG] MovementMappingContext es NULL — no hay input de movimiento."));
-        }
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("[SculptPC-DIAG] Sin subsistema de EnhancedInput (LocalPlayer null). IsLocalController=%d"),
-               IsLocalController() ? 1 : 0);
-    }
+    // El MovementMappingContext se agrega en PlayerTick (no acá): en PIE el LocalPlayer
+    // puede no estar listo en BeginPlay. Ver el reintento en PlayerTick.
 
     Volume = Cast<APTSculptVolume>(
         UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
@@ -189,34 +166,15 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
             {
                 Sub->AddMappingContext(MovementMappingContext, 0);
                 bMovementCtxReady = true;
-                UE_LOG(LogTemp, Warning, TEXT("[SculptPC-DIAG] MappingContext agregado en tick: %s"),
-                       *GetNameSafe(MovementMappingContext));
             }
         }
     }
-
-    // El nivel de esculpido es un vacío sin piso caminable: poner el pawn en modo vuelo
-    // creativo apenas se posee, así se mueve libre en 3D (si no, queda "cayendo" quieto).
-    if (!bFlightEnabled)
-        if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn()))
-        {
-            Char->SetFlyingMode(true);
-            bFlightEnabled = true;
-            UE_LOG(LogTemp, Warning, TEXT("[SculptPC-DIAG] Modo vuelo activado en el pawn."));
-        }
 
     // Re-buscar el Volume si no se encontró en BeginPlay (podía no estar disponible
     // todavía por timing de PIE / replicación). Solo itera mientras siga null.
     if (!Volume)
         Volume = Cast<APTSculptVolume>(
             UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
-
-    if (!bDiagLogged)
-    {
-        bDiagLogged = true;
-        UE_LOG(LogTemp, Warning, TEXT("[SculptPC-DIAG] PlayerTick vivo. Pawn=%s IsLocal=%d Volume=%s"),
-               *GetNameSafe(GetPawn()), IsLocalController() ? 1 : 0, Volume ? TEXT("OK") : TEXT("NULL"));
-    }
 
     if (!Volume) return;
 

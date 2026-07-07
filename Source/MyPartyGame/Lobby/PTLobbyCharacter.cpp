@@ -35,22 +35,6 @@ APTLobbyCharacter::APTLobbyCharacter()
 void APTLobbyCharacter::Move(const FInputActionValue& Value)
 {
     const FVector2D Axis = Value.Get<FVector2D>();
-
-    if (DiagMoveCount < 3)
-    {
-        ++DiagMoveCount;
-        UCharacterMovementComponent* M = GetCharacterMovement();
-        UE_LOG(LogTemp, Warning, TEXT("[LobbyChar-DIAG] Move() Axis=%s Role=%d LocalCtrl=%d Paused=%d Mode=%d CMCActive=%d Updated=%s Vel=%s"),
-               *Axis.ToString(),
-               (int32)GetLocalRole(),
-               IsLocallyControlled() ? 1 : 0,
-               (GetWorld() && GetWorld()->IsPaused()) ? 1 : 0,
-               M ? (int32)M->MovementMode.GetValue() : -1,
-               M ? (M->IsActive() ? 1 : 0) : -1,
-               (M && M->UpdatedComponent) ? TEXT("OK") : TEXT("NULL"),
-               *GetVelocity().ToString());
-    }
-
     if (!Controller) return;
 
     const FRotator YawRot(0.f, Controller->GetControlRotation().Yaw, 0.f);

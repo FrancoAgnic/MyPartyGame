@@ -174,9 +174,7 @@ private:
 
     bool bIsStamping        = false;
     bool bPreviewDirty      = true;
-    bool bDiagLogged        = false; // log de diagnóstico una sola vez
     bool bMovementCtxReady  = false; // mapping context de movimiento ya agregado
-    bool bFlightEnabled     = false; // modo vuelo ya activado en el pawn
 
     // Interpolación de trazo (sellos continuos entre frames).
     bool    bStrokeActive = false;
