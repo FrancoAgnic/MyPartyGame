@@ -11,6 +11,7 @@ class UCameraComponent;
 class UInputAction;
 class UWidgetComponent;
 class UAnimMontage;
+class UNiagaraSystem;
 struct FInputActionValue;
 
 UCLASS()
@@ -25,9 +26,14 @@ public:
     // porque es un vacío sin piso caminable). Reutiliza la lógica de ToggleFly.
     void SetFlyingMode(bool bEnable);
 
-    // Globo de chat: muestra el mensaje en el cartel del nombre ~2s (lo ven todos).
-    // Lo llama el GameMode (servidor) cuando el jugador manda un mensaje normal.
-    UFUNCTION(NetMulticast, Reliable) void Multicast_ShowChatBubble(const FString& Message);
+    // Globo de chat: muestra el texto en el cartel del nombre ~2s (lo ven todos). Si
+    // bGuess=true, va en verde ("adivinó la palabra") y spawnea el confetti. Lo llama
+    // el GameMode (servidor). El mensaje NO es la palabra (anti-spoiler).
+    UFUNCTION(NetMulticast, Reliable) void Multicast_ShowChatBubble(const FString& Text, bool bGuess);
+
+    // Sistema de partículas de confetti al adivinar. Asignar en el BP.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="FX")
+    UNiagaraSystem* ConfettiFX = nullptr;
 
 protected:
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;

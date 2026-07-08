@@ -265,6 +265,9 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
         {
             // Acierto: anunciar SIN el texto, luego marcar (puede cerrar el turno).
             G->Multicast_ChatLine(Name, FString(), EPTChatType::Correct);
+            // Globo VERDE "adivinó la palabra" (nunca la palabra) + confetti sobre su cabeza.
+            if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(Sender->GetPawn()))
+                Char->Multicast_ShowChatBubble(TEXT("¡Adivinó la palabra!"), true);
             HandlePlayerGuessedCorrectly(Sender);
             return;
         }
@@ -278,10 +281,9 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
     // Mensaje normal → a todos.
     if (G) G->Multicast_ChatLine(Name, Text, EPTChatType::Normal);
 
-    // Globo de chat sobre la cabeza del que escribió (solo mensajes normales, nunca
-    // aciertos → no spoilea). Se muestra ~2s en el name tag y vuelve al nombre.
+    // Globo de chat sobre la cabeza del que escribió (mensaje normal, color default).
     if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(Sender->GetPawn()))
-        Char->Multicast_ShowChatBubble(Text);
+        Char->Multicast_ShowChatBubble(Text, false);
 }
 
 bool APTSculptGameMode::DoesGuessMatch(const FString& Guess) const

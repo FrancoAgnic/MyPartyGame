@@ -23,6 +23,7 @@ public class MyPartyGame : ModuleRules
 			"UMG",
 			"Slate",
 			"SlateCore",
+			"Niagara",
 			// Online Subsystem — Steam (cargado dinámicamente vía plugin/config).
 			"OnlineSubsystem",
 			"OnlineSubsystemUtils",

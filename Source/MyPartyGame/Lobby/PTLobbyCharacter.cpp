@@ -6,6 +6,8 @@
 #include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/WidgetComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
 
@@ -67,13 +69,22 @@ void APTLobbyCharacter::UpdateNameTag()
             W->SetPlayerName(PS->DisplayName);
 }
 
-void APTLobbyCharacter::Multicast_ShowChatBubble_Implementation(const FString& Message)
+void APTLobbyCharacter::Multicast_ShowChatBubble_Implementation(const FString& Text, bool bGuess)
 {
-    if (!NameTag) return;
-    ChatBubbleUntil = GetWorld() ? GetWorld()->GetTimeSeconds() + 2.f : 0.f;
-    NameTag->SetVisibility(true);
-    if (UPTNameTagWidget* W = Cast<UPTNameTagWidget>(NameTag->GetUserWidgetObject()))
-        W->ShowMessage(Message);
+    if (NameTag)
+    {
+        ChatBubbleUntil = GetWorld() ? GetWorld()->GetTimeSeconds() + 2.f : 0.f;
+        NameTag->SetVisibility(true);
+        if (UPTNameTagWidget* W = Cast<UPTNameTagWidget>(NameTag->GetUserWidgetObject()))
+        {
+            if (bGuess) W->ShowGuessMessage(Text); // verde
+            else        W->ShowMessage(Text);
+        }
+    }
+
+    // Confetti al adivinar, desde la posición del jugador.
+    if (bGuess && ConfettiFX)
+        UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ConfettiFX, GetActorLocation());
 }
 
 void APTLobbyCharacter::Move(const FInputActionValue& Value)

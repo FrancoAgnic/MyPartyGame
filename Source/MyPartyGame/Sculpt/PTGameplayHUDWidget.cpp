@@ -190,7 +190,7 @@ void UPTGameplayHUDWidget::OnChatLine(const FString& Name, const FString& Messag
     FString Line;
     switch (Type)
     {
-    case EPTChatType::Correct: Line = FString::Printf(TEXT("<name>%s</> adivinó la palabra!"), *ShortName); break;
+    case EPTChatType::Correct: Line = FString::Printf(TEXT("<correct>%s adivinó la palabra!</>"), *ShortName); break;
     case EPTChatType::System:  Line = Message; break;
     default:                   Line = FString::Printf(TEXT("<name>%s</>: %s"), *ShortName, *Message); break; // Normal
     }

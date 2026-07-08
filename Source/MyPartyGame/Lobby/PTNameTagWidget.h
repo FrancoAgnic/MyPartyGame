@@ -14,12 +14,20 @@ class MYPARTYGAME_API UPTNameTagWidget : public UUserWidget
     GENERATED_BODY()
 
 public:
-    /** Setea el texto del cartel. Lo llama el personaje con el DisplayName replicado. */
+    /** Setea el texto del cartel (nombre, color original). Máximo 10 chars. */
     void SetPlayerName(const FString& InName);
 
-    /** Muestra un mensaje temporal (globo de chat) sin el límite de 10 chars del nombre. */
+    /** Globo de chat normal (color original, tope 40 chars). */
     void ShowMessage(const FString& Msg);
 
+    /** Globo de acierto: texto en VERDE (tope 40 chars). */
+    void ShowGuessMessage(const FString& Msg);
+
 protected:
+    virtual bool Initialize() override;
+
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* NameText;
+
+    // Color original del NameText (del WBP), para restaurarlo tras un globo verde.
+    FLinearColor DefaultColor = FLinearColor::White;
 };
