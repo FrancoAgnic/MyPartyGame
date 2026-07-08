@@ -10,6 +10,7 @@ class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
 class UWidgetComponent;
+class UAnimMontage;
 struct FInputActionValue;
 
 UCLASS()
@@ -59,9 +60,17 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input")
     UInputAction* JumpAction;
 
+    // Montage de salto (asignar Jump_AnimMontage). Se reproduce replicado en todos.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Anim")
+    UAnimMontage* JumpMontage = nullptr;
+
 private:
     void Move(const FInputActionValue& Value);
     void Look(const FInputActionValue& Value);
+
+    // Salto replicado: cliente → server → multicast a todos.
+    UFUNCTION(Server, Reliable)      void Server_PlayJump();
+    UFUNCTION(NetMulticast, Reliable) void Multicast_PlayJump();
 
     // ── Vuelo (modo creativo Minecraft) ─────────────────────────────────────
     void OnJumpPressed();

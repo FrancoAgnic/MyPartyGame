@@ -112,7 +112,21 @@ void APTLobbyCharacter::OnJumpPressed()
     LastJumpTime = Now;
 
     if (bFlying) bAscend = true;
-    else         Jump();
+    else
+    {
+        Jump();
+        if (JumpMontage) Server_PlayJump(); // reproducir la anim de salto en todos
+    }
+}
+
+void APTLobbyCharacter::Server_PlayJump_Implementation()
+{
+    Multicast_PlayJump();
+}
+
+void APTLobbyCharacter::Multicast_PlayJump_Implementation()
+{
+    if (JumpMontage) PlayAnimMontage(JumpMontage);
 }
 
 void APTLobbyCharacter::OnJumpReleased()
