@@ -10,6 +10,7 @@
 #include "Components/DecalComponent.h"
 #include "Components/BoxComponent.h"
 #include "Engine/StaticMesh.h"
+#include "DrawDebugHelpers.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "../UI/PTColorPickerWidget.h"
 #include "../Lobby/PTLobbyEscapeMenuWidget.h"
@@ -128,10 +129,12 @@ void APTSculptPlayerController::BeginPlay()
             if (!BoxMesh)
                 BoxMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
             if (BoxMesh) BoundaryMesh->SetStaticMesh(BoxMesh);
-            if (BoundaryMaterial)
-                BoundaryMID = BoundaryMesh->CreateDynamicMaterialInstance(0, BoundaryMaterial);
         }
         BoundaryMesh->RegisterComponent();
+        // El MID se crea DESPUÉS de registrar, si no el render se queda con el material
+        // base (CursorPos en 0 → grilla estática) e ignora las updates del C++.
+        if (BoundaryMaterial)
+            BoundaryMID = BoundaryMesh->CreateDynamicMaterialInstance(0, BoundaryMaterial);
         BoundaryMesh->SetVisibility(false);
     }
 
@@ -224,6 +227,17 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
             UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
 
     if (!Volume) return;
+
+    // DEBUG temporal (antes del gate): esfera en el cursor + estado. Corre para todos.
+    {
+        FVector DbgN; const FVector DbgStamp = GetStampPoint(DbgN);
+        DrawDebugSphere(GetWorld(), DbgStamp, 30.f, 12, FColor::Red, false, 0.f, 0, 2.f);
+        static float DbgAcc = 0.f; DbgAcc += DeltaTime;
+        if (DbgAcc > 1.f) { DbgAcc = 0.f;
+            UE_LOG(LogTemp, Warning, TEXT("[SculptDBG] StampPos=%s CanSculpt=%d BMID=%d"),
+                   *DbgStamp.ToString(), CanLocalPlayerSculpt() ? 1 : 0, BoundaryMID ? 1 : 0);
+        }
+    }
 
     // Solo el escultor del turno ve los previews de las herramientas. Para el resto,
     // ocultar el actor de preview y no calcular nada de la brocha.
