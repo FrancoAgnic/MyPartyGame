@@ -27,6 +27,12 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
     bool bHasGuessedThisTurn = false;
 
+    // Puntaje acumulado de la partida (estilo Skribbl). El servidor lo resetea a 0 al
+    // empezar cada partida y suma al adivinar / cuando alguien adivina tu escultura.
+    // (Se llama GameScore y no Score porque APlayerState ya tiene un Score propio.)
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
+    int32 GameScore = 0;
+
     // Llamar solo desde el servidor (HasAuthority).
     void Server_SetDisplayName(const FString& InName);
     void Server_SetHost(bool bInHost);

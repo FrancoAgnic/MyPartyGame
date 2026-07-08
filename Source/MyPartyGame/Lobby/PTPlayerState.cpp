@@ -9,6 +9,7 @@ void APTPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     DOREPLIFETIME(APTPlayerState, DisplayName);
     DOREPLIFETIME(APTPlayerState, bIsHost);
     DOREPLIFETIME(APTPlayerState, bHasGuessedThisTurn);
+    DOREPLIFETIME(APTPlayerState, GameScore);
 }
 
 void APTPlayerState::CopyProperties(APlayerState* NewPlayerState)

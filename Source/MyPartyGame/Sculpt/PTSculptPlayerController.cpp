@@ -778,6 +778,18 @@ void APTSculptPlayerController::Server_SendChat_Implementation(const FString& Me
         GM->HandleChat(GetPlayerState<APTPlayerState>(), Message);
 }
 
+void APTSculptPlayerController::Server_RequestPlayAgain_Implementation()
+{
+    if (APTSculptGameMode* GM = GetWorld()->GetAuthGameMode<APTSculptGameMode>())
+        GM->RequestPlayAgain(GetPlayerState<APTPlayerState>());
+}
+
+void APTSculptPlayerController::Server_RequestReturnToLobby_Implementation()
+{
+    if (APTSculptGameMode* GM = GetWorld()->GetAuthGameMode<APTSculptGameMode>())
+        GM->RequestReturnToLobby(GetPlayerState<APTPlayerState>());
+}
+
 void APTSculptPlayerController::UpdateSculptorHighlights()
 {
     APTSculptGameState* G = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr;

@@ -27,6 +27,16 @@ public:
     UPROPERTY(EditDefaultsOnly, Category="Game") float TurnEndDuration   = 5.f;  // pausa de reveal
     UPROPERTY(EditDefaultsOnly, Category="Game") int32 WordChoiceCount   = 3;    // palabras ofrecidas
 
+    // ── Puntajes y rondas (estilo Skribbl) ──────────────────────────────────
+    UPROPERTY(EditDefaultsOnly, Category="Game") int32 NumRounds          = 3;   // rondas antes de terminar
+    // Puntos del que adivina: interpola de Max (adivina al instante) a Min (sobre la hora).
+    UPROPERTY(EditDefaultsOnly, Category="Game") int32 MaxGuessPoints     = 100;
+    UPROPERTY(EditDefaultsOnly, Category="Game") int32 MinGuessPoints     = 25;
+    // El escultor gana esto por cada jugador que adivina su escultura.
+    UPROPERTY(EditDefaultsOnly, Category="Game") int32 SculptorPointsPerGuess = 25;
+    // Mapa del lobby (para "Volver al lobby" al terminar la partida).
+    UPROPERTY(EditDefaultsOnly, Category="Game") FString LobbyMapPath = TEXT("/Game/Template/levels/Lobby");
+
     // Banco de palabras (español). Si queda vacío se siembra con una lista por defecto.
     UPROPERTY(EditDefaultsOnly, Category="Game") TArray<FString> WordBank;
 
@@ -44,6 +54,11 @@ public:
     // Server-only: la palabra real nunca sale de acá.
     bool DoesGuessMatch(const FString& Guess) const;
 
+    // Al terminar la partida (fase GameOver), el HUD del anfitrión llama a una de estas
+    // vía el PlayerController. Solo el host puede; se ignora si lo pide otro.
+    void RequestPlayAgain(APTPlayerState* Requester);
+    void RequestReturnToLobby(APTPlayerState* Requester);
+
 protected:
     virtual void BeginPlay() override;
     virtual void PostLogin(APlayerController* NewPlayer) override;
@@ -56,16 +71,21 @@ private:
     // Estado del turno (solo servidor). La palabra real vive acá, jamás se replica.
     FString          CurrentWord;
     TArray<FString>  CurrentChoices;
+    int32            TurnsLeftThisRound = 0; // turnos que faltan para cerrar la ronda actual
 
     APTSculptGameState* GS() const;
     TArray<APTPlayerState*> GetActivePlayers() const;
     void ResetSculpture(); // limpia el Volume en todos (Multicast) al empezar el turno
 
     void CheckStart();          // arranca si hay suficientes jugadores
+    void StartGame();           // resetea puntajes/rondas y arranca el primer turno
     void StartChoosingPhase();  // elige escultor + 3 palabras
     void AutoChooseWord();      // si el escultor no elige a tiempo
     void BeginDrawing(int32 ChoiceIndex);
     void EndTurn();             // revela y agenda el próximo turno
+    void AdvanceTurn();         // avanza ronda/turno o termina la partida
+    void EndGame();             // fase GameOver: anuncia ganador y espera decisión del host
+    void AwardGuessPoints(APTPlayerState* Guesser); // suma puntos al que adivina + al escultor
     void GoToWaiting();         // no hay suficientes jugadores
 
     static FString MakeMasked(const FString& Word);

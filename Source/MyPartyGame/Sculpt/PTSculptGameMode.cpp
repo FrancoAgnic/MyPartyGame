@@ -95,8 +95,26 @@ void APTSculptGameMode::CheckStart()
     if (G->TurnPhase == EPTTurnPhase::WaitingForPlayers &&
         GetActivePlayers().Num() >= MinPlayersToStart)
     {
-        StartChoosingPhase();
+        StartGame();
     }
+}
+
+void APTSculptGameMode::StartGame()
+{
+    APTSculptGameState* G = GS();
+    if (!G) return;
+
+    TArray<APTPlayerState*> Players = GetActivePlayers();
+    if (Players.Num() < MinPlayersToStart) { GoToWaiting(); return; }
+
+    // Puntajes en cero y rondas desde el principio.
+    for (APTPlayerState* PT : Players) PT->GameScore = 0;
+    G->CurrentSculptor  = nullptr;       // el primer turno elige escultor al azar
+    G->CurrentRound     = 1;
+    G->TotalRounds      = NumRounds;
+    TurnsLeftThisRound  = Players.Num();  // una ronda = todos esculpen una vez
+
+    StartChoosingPhase();
 }
 
 void APTSculptGameMode::GoToWaiting()
@@ -228,8 +246,82 @@ void APTSculptGameMode::EndTurn()
     UE_LOG(LogTemp, Log, TEXT("[SculptGM] Fin de turno. La palabra era '%s'."), *CurrentWord);
 
     GetWorldTimerManager().ClearTimer(PhaseTimer);
-    GetWorldTimerManager().SetTimer(PhaseTimer, this, &APTSculptGameMode::StartChoosingPhase,
+    GetWorldTimerManager().SetTimer(PhaseTimer, this, &APTSculptGameMode::AdvanceTurn,
                                     TurnEndDuration, false);
+}
+
+void APTSculptGameMode::AdvanceTurn()
+{
+    APTSculptGameState* G = GS();
+    if (!G) return;
+
+    // Se cerró un turno. ¿Se completó la ronda?
+    if (--TurnsLeftThisRound <= 0)
+    {
+        if (G->CurrentRound >= NumRounds) { EndGame(); return; } // última ronda → fin
+        G->CurrentRound   += 1;
+        TurnsLeftThisRound = FMath::Max(1, GetActivePlayers().Num());
+        G->OnTurnPhaseChanged.Broadcast(); // refrescar "Ronda X/Y" en el HUD
+    }
+    StartChoosingPhase();
+}
+
+void APTSculptGameMode::EndGame()
+{
+    APTSculptGameState* G = GS();
+    if (!G) return;
+
+    GetWorldTimerManager().ClearTimer(PhaseTimer);
+    G->TurnPhase         = EPTTurnPhase::GameOver;
+    G->CurrentSculptor   = nullptr;
+    G->MaskedWord        = FString();
+    G->TurnEndServerTime = 0.0;
+    G->OnTurnPhaseChanged.Broadcast();
+
+    // Anunciar el ganador (el de mayor puntaje) por el chat.
+    APTPlayerState* Winner = nullptr;
+    for (APTPlayerState* PT : GetActivePlayers())
+        if (!Winner || PT->GameScore > Winner->GameScore) Winner = PT;
+
+    if (Winner)
+        G->Multicast_ChatLine(FString(),
+            FString::Printf(TEXT("¡Ganó %s con %d puntos!"), *Winner->GetPlayerName(), Winner->GameScore),
+            EPTChatType::System);
+
+    UE_LOG(LogTemp, Log, TEXT("[SculptGM] Fin de la partida. Ganador: %s"),
+           Winner ? *Winner->GetPlayerName() : TEXT("(nadie)"));
+}
+
+void APTSculptGameMode::AwardGuessPoints(APTPlayerState* Guesser)
+{
+    APTSculptGameState* G = GS();
+    if (!G || !Guesser) return;
+
+    // Más rápido = más puntos: interpola de Max (todo el tiempo restante) a Min (sin tiempo).
+    const float Frac = (TurnDuration > 0.f)
+        ? FMath::Clamp(G->GetTurnSecondsRemaining() / TurnDuration, 0.f, 1.f) : 0.f;
+    const int32 GuesserPts = MinGuessPoints + FMath::RoundToInt((MaxGuessPoints - MinGuessPoints) * Frac);
+    Guesser->GameScore += GuesserPts;
+
+    // El escultor gana por cada acierto (premia una escultura reconocible).
+    if (G->CurrentSculptor)
+        G->CurrentSculptor->GameScore += SculptorPointsPerGuess;
+}
+
+void APTSculptGameMode::RequestPlayAgain(APTPlayerState* Requester)
+{
+    APTSculptGameState* G = GS();
+    if (!G || G->TurnPhase != EPTTurnPhase::GameOver) return;
+    if (!Requester || !Requester->bIsHost) return; // solo el anfitrión decide
+    StartGame();
+}
+
+void APTSculptGameMode::RequestReturnToLobby(APTPlayerState* Requester)
+{
+    if (!Requester || !Requester->bIsHost) return; // solo el anfitrión decide
+    GetWorldTimerManager().ClearTimer(PhaseTimer);
+    UE_LOG(LogTemp, Log, TEXT("[SculptGM] Volviendo al lobby: %s"), *LobbyMapPath);
+    GetWorld()->ServerTravel(LobbyMapPath + TEXT("?listen"), /*bAbsolute=*/true);
 }
 
 void APTSculptGameMode::HandlePlayerGuessedCorrectly(APTPlayerState* Guesser)
@@ -239,6 +331,7 @@ void APTSculptGameMode::HandlePlayerGuessedCorrectly(APTPlayerState* Guesser)
     if (!Guesser || Guesser == G->CurrentSculptor || Guesser->bHasGuessedThisTurn) return;
 
     Guesser->bHasGuessedThisTurn = true;
+    AwardGuessPoints(Guesser); // puntos al que adivina + al escultor
 
     // ¿Adivinaron todos los que no esculpen? → cerrar el turno antes de tiempo.
     bool bAllGuessed = true;

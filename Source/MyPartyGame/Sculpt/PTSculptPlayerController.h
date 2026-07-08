@@ -182,6 +182,13 @@ public:
     UFUNCTION(Server, Reliable, BlueprintCallable, Category="Game")
     void Server_SendChat(const FString& Message);
 
+    /** Pantalla de fin de partida (solo el anfitrión): volver a jugar o volver al lobby.
+     *  El servidor valida que el que lo pide sea el host. Llamar desde el HUD. */
+    UFUNCTION(Server, Reliable, BlueprintCallable, Category="Game")
+    void Server_RequestPlayAgain();
+    UFUNCTION(Server, Reliable, BlueprintCallable, Category="Game")
+    void Server_RequestReturnToLobby();
+
     /** Aplica un sello: el cliente lo pide al server, que valida el rol y lo difunde.
      *  Reemplaza la llamada directa Volume->Server_ApplyStamp (que no funcionaba desde
      *  clientes: el Volume no tiene owner por jugador, así que su Server RPC se descartaba). */

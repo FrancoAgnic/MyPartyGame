@@ -14,7 +14,8 @@ enum class EPTTurnPhase : uint8
     WaitingForPlayers UMETA(DisplayName="Esperando jugadores"),
     ChoosingWord      UMETA(DisplayName="Eligiendo palabra"),
     Drawing           UMETA(DisplayName="Esculpiendo"),
-    TurnEnd           UMETA(DisplayName="Fin de turno")
+    TurnEnd           UMETA(DisplayName="Fin de turno"),
+    GameOver          UMETA(DisplayName="Fin de la partida")
 };
 
 // Tipo de línea de chat, para que el HUD la formatee:
@@ -51,6 +52,13 @@ public:
     // Palabra enmascarada para TODOS ("_ _ _ _"). Anti-spoiler: la real no se replica.
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
     FString MaskedWord;
+
+    // Ronda actual (1-based) y total de rondas de la partida (para el HUD "Ronda 2/3").
+    // Una ronda = todos los jugadores esculpen una vez.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
+    int32 CurrentRound = 0;
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
+    int32 TotalRounds = 0;
 
     // Segundos que faltan en el turno de dibujo (0 fuera de Drawing). Para el HUD.
     UFUNCTION(BlueprintPure, Category="Game")

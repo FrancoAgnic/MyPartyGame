@@ -17,6 +17,8 @@ bool UPTGameplayHUDWidget::Initialize()
     if (BtnWord1) BtnWord1->OnClicked.AddDynamic(this, &UPTGameplayHUDWidget::OnBtnWord1);
     if (BtnWord2) BtnWord2->OnClicked.AddDynamic(this, &UPTGameplayHUDWidget::OnBtnWord2);
     if (ChatInput) ChatInput->OnTextCommitted.AddDynamic(this, &UPTGameplayHUDWidget::OnChatCommitted);
+    if (BtnPlayAgain)   BtnPlayAgain->OnClicked.AddDynamic(this, &UPTGameplayHUDWidget::OnBtnPlayAgain);
+    if (BtnReturnLobby) BtnReturnLobby->OnClicked.AddDynamic(this, &UPTGameplayHUDWidget::OnBtnReturnLobby);
 
     return true;
 }
@@ -114,11 +116,40 @@ void UPTGameplayHUDWidget::RefreshTick()
             TxtTimer->SetText(FText::GetEmpty());
     }
 
+    // ── Ronda + marcador en vivo ──
+    if (TxtRound)
+    {
+        if (G->TotalRounds > 0 && G->TurnPhase != EPTTurnPhase::WaitingForPlayers &&
+            G->TurnPhase != EPTTurnPhase::GameOver)
+            TxtRound->SetText(FText::FromString(FString::Printf(TEXT("Ronda %d / %d"),
+                                                               G->CurrentRound, G->TotalRounds)));
+        else
+            TxtRound->SetText(FText::GetEmpty());
+    }
+    if (TxtScoreboard)
+        TxtScoreboard->SetText(FText::FromString(BuildScoreboard()));
+
+    // ── Pantalla de fin de partida ──
+    const bool bGameOver = (G->TurnPhase == EPTTurnPhase::GameOver);
+    if (ResultsPanel)
+        ResultsPanel->SetVisibility(bGameOver ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+    if (bGameOver)
+    {
+        if (TxtResults)
+            TxtResults->SetText(FText::FromString(TEXT("Resultados\n") + BuildScoreboard()));
+        // Los botones de decisión son solo para el anfitrión.
+        const bool bHost = IsLocalPlayerHost();
+        const ESlateVisibility BtnVis = bHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
+        if (BtnPlayAgain)   BtnPlayAgain->SetVisibility(BtnVis);
+        if (BtnReturnLobby) BtnReturnLobby->SetVisibility(BtnVis);
+    }
+
     // ── Modo de input ──
     // Base = Game Only (moverse/esculpir siempre funcionan). Solo se muestra el cursor
-    // cuando de verdad hace falta la UI: el escultor eligiendo palabra, o con el chat
-    // abierto (Enter). Así los que adivinan también se pueden mover y mirar.
-    const bool bWantUI = bChatOpen || (bSculptor && G->TurnPhase == EPTTurnPhase::ChoosingWord);
+    // cuando de verdad hace falta la UI: el escultor eligiendo palabra, con el chat
+    // abierto (Enter), o en la pantalla de fin (para clickear los botones).
+    const bool bWantUI = bChatOpen || bGameOver ||
+                         (bSculptor && G->TurnPhase == EPTTurnPhase::ChoosingWord);
     ApplyInputMode(!bWantUI);
 }
 
@@ -197,4 +228,42 @@ void UPTGameplayHUDWidget::OnChatLine(const FString& Name, const FString& Messag
     ChatLog += Line + TEXT("\n");
     if (TxtChat)    TxtChat->SetText(FText::FromString(ChatLog));
     if (ChatScroll) ChatScroll->ScrollToEnd();
+}
+
+void UPTGameplayHUDWidget::OnBtnPlayAgain()
+{
+    if (APTSculptPlayerController* PC = GetSculptPC())
+        PC->Server_RequestPlayAgain();
+}
+
+void UPTGameplayHUDWidget::OnBtnReturnLobby()
+{
+    if (APTSculptPlayerController* PC = GetSculptPC())
+        PC->Server_RequestReturnToLobby();
+}
+
+FString UPTGameplayHUDWidget::BuildScoreboard() const
+{
+    APTSculptGameState* G = GetGS();
+    if (!G) return FString();
+
+    TArray<APTPlayerState*> Players;
+    for (APlayerState* PS : G->PlayerArray)
+        if (APTPlayerState* PT = Cast<APTPlayerState>(PS))
+            Players.Add(PT);
+
+    Players.Sort([](const APTPlayerState& A, const APTPlayerState& B){ return A.GameScore > B.GameScore; });
+
+    FString Out;
+    for (const APTPlayerState* PT : Players)
+        Out += FString::Printf(TEXT("%s: %d\n"), *PT->DisplayName.Left(10), PT->GameScore);
+    return Out;
+}
+
+bool UPTGameplayHUDWidget::IsLocalPlayerHost() const
+{
+    if (const APlayerController* PC = GetOwningPlayer())
+        if (const APTPlayerState* PT = PC->GetPlayerState<APTPlayerState>())
+            return PT->bIsHost;
+    return false;
 }

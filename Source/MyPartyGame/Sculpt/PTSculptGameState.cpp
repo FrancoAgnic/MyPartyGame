@@ -10,6 +10,8 @@ void APTSculptGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
     DOREPLIFETIME(APTSculptGameState, CurrentSculptor);
     DOREPLIFETIME(APTSculptGameState, TurnEndServerTime);
     DOREPLIFETIME(APTSculptGameState, MaskedWord);
+    DOREPLIFETIME(APTSculptGameState, CurrentRound);
+    DOREPLIFETIME(APTSculptGameState, TotalRounds);
 }
 
 float APTSculptGameState::GetTurnSecondsRemaining() const

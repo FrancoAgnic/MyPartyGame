@@ -48,11 +48,21 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) class URichTextBlock* TxtChat;    // log de chat (Auto Wrap)
     UPROPERTY(meta=(BindWidgetOptional)) UEditableTextBox* ChatInput;
 
+    // ── Rondas + marcador + pantalla de fin (todos opcionales) ──
+    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* TxtRound;       // "Ronda 2 / 3"
+    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* TxtScoreboard;  // marcador en vivo (multilínea)
+    UPROPERTY(meta=(BindWidgetOptional)) UWidget*    ResultsPanel;   // se muestra solo en GameOver
+    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* TxtResults;     // ranking final (multilínea)
+    UPROPERTY(meta=(BindWidgetOptional)) UButton*    BtnPlayAgain;   // solo host
+    UPROPERTY(meta=(BindWidgetOptional)) UButton*    BtnReturnLobby; // solo host
+
     UFUNCTION() void OnBtnWord0();
     UFUNCTION() void OnBtnWord1();
     UFUNCTION() void OnBtnWord2();
     UFUNCTION() void OnChatCommitted(const FText& Text, ETextCommit::Type CommitMethod);
     UFUNCTION() void OnChatLine(const FString& Name, const FString& Message, EPTChatType Type);
+    UFUNCTION() void OnBtnPlayAgain();
+    UFUNCTION() void OnBtnReturnLobby();
 
 private:
     FTimerHandle RefreshTimer;
@@ -68,4 +78,6 @@ private:
     void RefreshTick();          // polling: pinta estado/reloj/panel/input según la fase
     void ChooseWord(int32 Index);
     void ApplyInputMode(bool bGameOnly);
+    FString BuildScoreboard() const; // "Nombre: pts" ordenado por puntaje desc.
+    bool    IsLocalPlayerHost() const;
 };
