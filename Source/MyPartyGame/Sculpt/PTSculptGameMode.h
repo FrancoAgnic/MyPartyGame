@@ -1,4 +1,4 @@
-// GameMode de la partida de Sculpturillo. Corre el loop por turnos (servidor manda):
+ // GameMode de la partida de Sculpturillo. Corre el loop por turnos (servidor manda):
 // elige escultor al azar → 3 palabras → esculpe con reloj → rota. Loop infinito por ahora.
 
 #pragma once

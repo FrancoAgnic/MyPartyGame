@@ -9,6 +9,7 @@
 class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
+class UWidgetComponent;
 struct FInputActionValue;
 
 UCLASS()
@@ -43,6 +44,11 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera")
     UCameraComponent* Camera;
 
+    // Cartel con el nombre sobre la cabeza. Asignale su Widget Class (WBP_NameTag,
+    // reparentado a UPTNameTagWidget) en el Blueprint. El nombre lo pone C++.
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="NameTag")
+    UWidgetComponent* NameTag;
+
     // Asignar en BP_LobbyCharacter o en el PlayerController/GameMode.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input")
     UInputAction* MoveAction;
@@ -69,4 +75,8 @@ private:
     bool  bDescend  = false;
     float LastJumpTime = -10.f;
     float DefaultMaxAccel = 2048.f; // MaxAcceleration para caminar (se restaura al salir de vuelo)
+
+    // Cartel del nombre: actualizado throttled desde Tick.
+    void  UpdateNameTag();
+    float NameTagAccum = 0.f;
 };

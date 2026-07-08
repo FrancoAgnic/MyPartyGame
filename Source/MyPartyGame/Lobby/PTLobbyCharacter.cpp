@@ -1,8 +1,11 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "PTLobbyCharacter.h"
+#include "PTPlayerState.h"
+#include "PTNameTagWidget.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Components/WidgetComponent.h"
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
 
@@ -30,6 +33,30 @@ APTLobbyCharacter::APTLobbyCharacter()
     // ACharacter + CharacterMovementComponent replican movimiento y rotación automáticamente.
     SetReplicates(true);
     SetReplicateMovement(true);
+
+    // Cartel del nombre sobre la cabeza (Screen Space = siempre mira a la cámara).
+    NameTag = CreateDefaultSubobject<UWidgetComponent>(TEXT("NameTag"));
+    NameTag->SetupAttachment(RootComponent);
+    NameTag->SetRelativeLocation(FVector(0.f, 0.f, 110.f));
+    NameTag->SetWidgetSpace(EWidgetSpace::Screen);
+    NameTag->SetDrawSize(FVector2D(200.f, 50.f));
+}
+
+void APTLobbyCharacter::UpdateNameTag()
+{
+    if (!NameTag) return;
+
+    // No mostrar tu propio nombre (solo ves los de los demás).
+    if (IsLocallyControlled())
+    {
+        NameTag->SetVisibility(false);
+        return;
+    }
+    NameTag->SetVisibility(true);
+
+    if (UPTNameTagWidget* W = Cast<UPTNameTagWidget>(NameTag->GetUserWidgetObject()))
+        if (const APTPlayerState* PS = GetPlayerState<APTPlayerState>())
+            W->SetPlayerName(PS->DisplayName);
 }
 
 void APTLobbyCharacter::Move(const FInputActionValue& Value)
@@ -119,6 +146,11 @@ void APTLobbyCharacter::SetFlyingMode(bool bEnable)
 void APTLobbyCharacter::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+
+    // Actualizar el cartel del nombre cada ~0.5s (el DisplayName se replica, puede tardar).
+    NameTagAccum += DeltaSeconds;
+    if (NameTagAccum >= 0.5f) { NameTagAccum = 0.f; UpdateNameTag(); }
+
     if (!bFlying) return;
     if (bAscend)  AddMovementInput(FVector::UpVector,  1.f);
     if (bDescend) AddMovementInput(FVector::UpVector, -1.f);
