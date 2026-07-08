@@ -25,6 +25,10 @@ public:
     // porque es un vacío sin piso caminable). Reutiliza la lógica de ToggleFly.
     void SetFlyingMode(bool bEnable);
 
+    // Globo de chat: muestra el mensaje en el cartel del nombre ~2s (lo ven todos).
+    // Lo llama el GameMode (servidor) cuando el jugador manda un mensaje normal.
+    UFUNCTION(NetMulticast, Reliable) void Multicast_ShowChatBubble(const FString& Message);
+
 protected:
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
     virtual void Tick(float DeltaSeconds) override;
@@ -88,4 +92,5 @@ private:
     // Cartel del nombre: actualizado throttled desde Tick.
     void  UpdateNameTag();
     float NameTagAccum = 0.f;
+    float ChatBubbleUntil = 0.f; // tiempo (world) hasta el que se muestra el globo de chat
 };

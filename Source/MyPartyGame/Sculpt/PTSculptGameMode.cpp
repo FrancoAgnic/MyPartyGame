@@ -277,6 +277,11 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
 
     // Mensaje normal → a todos.
     if (G) G->Multicast_ChatLine(Name, Text, EPTChatType::Normal);
+
+    // Globo de chat sobre la cabeza del que escribió (solo mensajes normales, nunca
+    // aciertos → no spoilea). Se muestra ~2s en el name tag y vuelve al nombre.
+    if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(Sender->GetPawn()))
+        Char->Multicast_ShowChatBubble(Text);
 }
 
 bool APTSculptGameMode::DoesGuessMatch(const FString& Guess) const

@@ -47,7 +47,14 @@ void APTLobbyCharacter::UpdateNameTag()
 {
     if (!NameTag) return;
 
-    // No mostrar tu propio nombre (solo ves los de los demás).
+    // Globo de chat activo: mostrar el mensaje (a todos, incluso a uno mismo) sin pisarlo.
+    if (GetWorld() && GetWorld()->GetTimeSeconds() < ChatBubbleUntil)
+    {
+        NameTag->SetVisibility(true);
+        return;
+    }
+
+    // Sin burbuja: no mostrar tu propio nombre (solo ves los de los demás).
     if (IsLocallyControlled())
     {
         NameTag->SetVisibility(false);
@@ -58,6 +65,15 @@ void APTLobbyCharacter::UpdateNameTag()
     if (UPTNameTagWidget* W = Cast<UPTNameTagWidget>(NameTag->GetUserWidgetObject()))
         if (const APTPlayerState* PS = GetPlayerState<APTPlayerState>())
             W->SetPlayerName(PS->DisplayName);
+}
+
+void APTLobbyCharacter::Multicast_ShowChatBubble_Implementation(const FString& Message)
+{
+    if (!NameTag) return;
+    ChatBubbleUntil = GetWorld() ? GetWorld()->GetTimeSeconds() + 2.f : 0.f;
+    NameTag->SetVisibility(true);
+    if (UPTNameTagWidget* W = Cast<UPTNameTagWidget>(NameTag->GetUserWidgetObject()))
+        W->ShowMessage(Message);
 }
 
 void APTLobbyCharacter::Move(const FInputActionValue& Value)

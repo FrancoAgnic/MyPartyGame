@@ -17,6 +17,9 @@ public:
     /** Setea el texto del cartel. Lo llama el personaje con el DisplayName replicado. */
     void SetPlayerName(const FString& InName);
 
+    /** Muestra un mensaje temporal (globo de chat) sin el límite de 10 chars del nombre. */
+    void ShowMessage(const FString& Msg);
+
 protected:
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* NameText;
 };
