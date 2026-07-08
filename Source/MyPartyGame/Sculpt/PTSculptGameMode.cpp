@@ -55,6 +55,13 @@ void APTSculptGameMode::PostLogin(APlayerController* NewPlayer)
 void APTSculptGameMode::HandleSeamlessTravelPlayer(AController*& C)
 {
     Super::HandleSeamlessTravelPlayer(C);
+
+    // El seamless travel NO llama PostLogin (donde el lobby hace RestartPlayer), así que
+    // el jugador llega sin pawn = espectador. Lo posesionamos a mano acá.
+    if (APlayerController* PC = Cast<APlayerController>(C))
+        if (!PC->GetPawn())
+            RestartPlayer(PC);
+
     CheckStart();
 }
 
