@@ -9,8 +9,9 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/DecalComponent.h"
 #include "Components/BoxComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Engine/StaticMesh.h"
-#include "DrawDebugHelpers.h"
+#include "GameFramework/PlayerState.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "../UI/PTColorPickerWidget.h"
 #include "../Lobby/PTLobbyEscapeMenuWidget.h"
@@ -226,18 +227,19 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         Volume = Cast<APTSculptVolume>(
             UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
 
-    if (!Volume) return;
-
-    // DEBUG temporal (antes del gate): esfera en el cursor + estado. Corre para todos.
+    // Resaltar al escultor con el overlay amarillo (lo ven TODOS). Corre para todos
+    // los clientes, antes del gate de escultor; solo se recalcula cuando cambia quién esculpe.
     {
-        FVector DbgN; const FVector DbgStamp = GetStampPoint(DbgN);
-        DrawDebugSphere(GetWorld(), DbgStamp, 30.f, 12, FColor::Red, false, 0.f, 0, 2.f);
-        static float DbgAcc = 0.f; DbgAcc += DeltaTime;
-        if (DbgAcc > 1.f) { DbgAcc = 0.f;
-            UE_LOG(LogTemp, Warning, TEXT("[SculptDBG] StampPos=%s CanSculpt=%d BMID=%d"),
-                   *DbgStamp.ToString(), CanLocalPlayerSculpt() ? 1 : 0, BoundaryMID ? 1 : 0);
+        APTSculptGameState* G = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr;
+        APlayerState* Sculptor = G ? G->CurrentSculptor : nullptr;
+        if (Sculptor != LastSculptorHighlight.Get())
+        {
+            LastSculptorHighlight = Sculptor;
+            UpdateSculptorHighlights();
         }
     }
+
+    if (!Volume) return;
 
     // Solo el escultor del turno ve los previews de las herramientas. Para el resto,
     // ocultar el actor de preview y no calcular nada de la brocha.
@@ -774,6 +776,19 @@ void APTSculptPlayerController::Server_SendChat_Implementation(const FString& Me
 {
     if (APTSculptGameMode* GM = GetWorld()->GetAuthGameMode<APTSculptGameMode>())
         GM->HandleChat(GetPlayerState<APTPlayerState>(), Message);
+}
+
+void APTSculptPlayerController::UpdateSculptorHighlights()
+{
+    APTSculptGameState* G = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr;
+    if (!G) return;
+    for (APlayerState* PS : G->PlayerArray)
+    {
+        ACharacter* Char = PS ? Cast<ACharacter>(PS->GetPawn()) : nullptr;
+        if (!Char || !Char->GetMesh()) continue;
+        const bool bIsSculptor = (PS == G->CurrentSculptor);
+        Char->GetMesh()->SetOverlayMaterial(bIsSculptor ? SculptorOverlayMaterial : nullptr);
+    }
 }
 
 bool APTSculptPlayerController::CanLocalPlayerSculpt() const

@@ -81,6 +81,11 @@ public:
     UPROPERTY(EditAnywhere, Category="Sculpt|Boundary")
     UStaticMesh* BoundaryBoxMesh = nullptr;
 
+    /** Overlay que resalta al escultor del turno (amarillo). Se pone sobre su mesh en
+     *  todos los clientes para que todos sepan quién esculpe. Asignar M_SculptorHighlight. */
+    UPROPERTY(EditAnywhere, Category="Game")
+    UMaterialInterface* SculptorOverlayMaterial = nullptr;
+
     /** Material overlay X-ray: se dibuja encima de todos los previews (sin tocar
      *  su material base) y muestra un color sólido donde el preview está tapado
      *  por otros objetos. Translucent + Disable Depth Test. */
@@ -259,6 +264,10 @@ private:
     // ¿El jugador local puede esculpir ahora? (es el escultor y la fase es Drawing).
     // Sin partida en curso (testeo solo del mapa) devuelve true → esculpir libre.
     bool CanLocalPlayerSculpt() const;
+
+    // Pone/saca el overlay amarillo en el mesh de cada jugador según quién esculpe.
+    void UpdateSculptorHighlights();
+    TWeakObjectPtr<class APlayerState> LastSculptorHighlight;
 
     void OnStampPressed();
     void OnStampReleased();
