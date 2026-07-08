@@ -34,10 +34,11 @@ APTLobbyCharacter::APTLobbyCharacter()
     SetReplicates(true);
     SetReplicateMovement(true);
 
-    // Cartel del nombre sobre la cabeza (Screen Space = siempre mira a la cámara).
+    // Cartel del nombre: atachado al hueso de la cabeza (Bone_008) del Mesh, así sigue
+    // el jiggle de la cabeza. Screen Space = siempre mira a la cámara.
     NameTag = CreateDefaultSubobject<UWidgetComponent>(TEXT("NameTag"));
-    NameTag->SetupAttachment(RootComponent);
-    NameTag->SetRelativeLocation(FVector(0.f, 0.f, 110.f));
+    NameTag->SetupAttachment(GetMesh(), TEXT("Bone_008"));
+    NameTag->SetRelativeLocation(FVector(0.f, 0.f, 20.f)); // apenas arriba del hueso; ajustar en el BP
     NameTag->SetWidgetSpace(EWidgetSpace::Screen);
     NameTag->SetDrawSize(FVector2D(200.f, 50.f));
 }
