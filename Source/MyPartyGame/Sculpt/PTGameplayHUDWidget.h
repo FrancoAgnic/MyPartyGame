@@ -43,8 +43,9 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      TxtWord0;      // texto dentro de BtnWord0
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      TxtWord1;
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      TxtWord2;
-    UPROPERTY(meta=(BindWidgetOptional)) UScrollBox*      ChatScroll;
-    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      TxtChat;       // log de chat (Auto Wrap)
+    UPROPERTY(meta=(BindWidgetOptional)) UScrollBox*          ChatScroll;
+    // RichTextBlock: el nombre usa el estilo "name" (color); el mensaje queda en el default.
+    UPROPERTY(meta=(BindWidgetOptional)) class URichTextBlock* TxtChat;    // log de chat (Auto Wrap)
     UPROPERTY(meta=(BindWidgetOptional)) UEditableTextBox* ChatInput;
 
     UFUNCTION() void OnBtnWord0();

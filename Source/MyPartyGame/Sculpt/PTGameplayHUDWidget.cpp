@@ -2,6 +2,7 @@
 #include "PTSculptPlayerController.h"
 #include "../Lobby/PTPlayerState.h"
 #include "Components/TextBlock.h"
+#include "Components/RichTextBlock.h"
 #include "Components/Button.h"
 #include "Components/EditableTextBox.h"
 #include "Components/ScrollBox.h"
@@ -184,12 +185,14 @@ void UPTGameplayHUDWidget::OnChatCommitted(const FText& Text, ETextCommit::Type 
 
 void UPTGameplayHUDWidget::OnChatLine(const FString& Name, const FString& Message, EPTChatType Type)
 {
+    const FString ShortName = Name.Left(10); // nombre máximo 10 caracteres
+    // El nombre va en color (estilo "name" del RichTextBlock); el mensaje queda blanco.
     FString Line;
     switch (Type)
     {
-    case EPTChatType::Correct: Line = Name + TEXT(" adivinó la palabra!"); break;
+    case EPTChatType::Correct: Line = FString::Printf(TEXT("<name>%s</> adivinó la palabra!"), *ShortName); break;
     case EPTChatType::System:  Line = Message; break;
-    default:                   Line = Name + TEXT(": ") + Message; break; // Normal
+    default:                   Line = FString::Printf(TEXT("<name>%s</>: %s"), *ShortName, *Message); break; // Normal
     }
     ChatLog += Line + TEXT("\n");
     if (TxtChat)    TxtChat->SetText(FText::FromString(ChatLog));
