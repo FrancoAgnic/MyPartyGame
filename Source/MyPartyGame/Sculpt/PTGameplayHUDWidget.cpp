@@ -111,7 +111,8 @@ void UPTGameplayHUDWidget::RefreshTick()
     if (TxtTimer)
     {
         if (G->TurnPhase == EPTTurnPhase::Drawing)
-            TxtTimer->SetText(FText::AsNumber(FMath::CeilToInt(G->GetTurnSecondsRemaining())));
+            TxtTimer->SetText(FText::FromString(FString::Printf(TEXT("%d Seg"),
+                              FMath::CeilToInt(G->GetTurnSecondsRemaining()))));
         else
             TxtTimer->SetText(FText::GetEmpty());
     }
@@ -121,7 +122,7 @@ void UPTGameplayHUDWidget::RefreshTick()
     {
         if (G->TotalRounds > 0 && G->TurnPhase != EPTTurnPhase::WaitingForPlayers &&
             G->TurnPhase != EPTTurnPhase::GameOver)
-            TxtRound->SetText(FText::FromString(FString::Printf(TEXT("Ronda %d / %d"),
+            TxtRound->SetText(FText::FromString(FString::Printf(TEXT("Round %d/%d"),
                                                                G->CurrentRound, G->TotalRounds)));
         else
             TxtRound->SetText(FText::GetEmpty());
