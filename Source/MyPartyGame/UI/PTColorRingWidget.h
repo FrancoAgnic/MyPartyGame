@@ -36,6 +36,7 @@ public:
 protected:
     virtual TSharedRef<SWidget> RebuildWidget() override;
     virtual void ReleaseSlateResources(bool bReleaseChildren) override;
+    virtual void SynchronizeProperties() override;
 
 private:
     UPROPERTY() TArray<FLinearColor> Colors;

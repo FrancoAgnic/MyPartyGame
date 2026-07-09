@@ -25,6 +25,7 @@ public:
         GapDeg     = InGapDeg;
         Invalidate(EInvalidateWidgetReason::Paint);
     }
+    void SetDesign(bool b) { bDesign = b; Invalidate(EInvalidateWidgetReason::Paint); }
 
     virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D(220.f, 220.f); }
 
@@ -32,8 +33,15 @@ public:
                           const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements,
                           int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override
     {
-        const int32 N = Colors.Num();
-        if (N <= 0) return LayerId;
+        // En el editor, si no hay colores guardados, mostrar un placeholder gris para
+        // poder posicionar/dimensionar el anillo. En runtime vacío no se dibuja nada.
+        TArray<FLinearColor> Draw = Colors;
+        if (Draw.Num() == 0)
+        {
+            if (!bDesign) return LayerId;
+            for (int32 i = 0; i < 8; ++i) Draw.Add(FLinearColor(0.35f, 0.35f, 0.38f, 0.6f));
+        }
+        const int32 N = Draw.Num();
 
         const FVector2D SizeD = AllottedGeometry.GetLocalSize();
         const FVector2f Size((float)SizeD.X, (float)SizeD.Y);
@@ -61,7 +69,7 @@ public:
             const float a0 = (N > 1) ? base0 + GapRad * 0.5f : base0;
             const float a1 = (N > 1) ? base1 - GapRad * 0.5f : base1;
             const int32 Steps = FMath::Max(2, FMath::CeilToInt((a1 - a0) / (TwoPi / 96.f)));
-            const FColor Col  = Colors[s].ToFColor(true);
+            const FColor Col  = Draw[s].ToFColor(true);
             const int32 Base  = Verts.Num();
 
             for (int32 i = 0; i <= Steps; ++i)
@@ -91,6 +99,7 @@ public:
     TArray<FLinearColor> Colors;
     float InnerRatio = 0.72f;
     float GapDeg     = 2.f;
+    bool  bDesign    = false;
 };
 
 // ─── UWidget wrapper ─────────────────────────────────────────────────────────
@@ -106,6 +115,17 @@ void UPTColorRingWidget::ReleaseSlateResources(bool bReleaseChildren)
 {
     Super::ReleaseSlateResources(bReleaseChildren);
     MyRing.Reset();
+}
+
+void UPTColorRingWidget::SynchronizeProperties()
+{
+    Super::SynchronizeProperties();
+    if (MyRing.IsValid())
+    {
+        MyRing->SetParams(InnerRadiusRatio, GapDegrees);
+        MyRing->SetDesign(IsDesignTime()); // placeholder gris solo en el editor
+        MyRing->SetColors(Colors);
+    }
 }
 
 void UPTColorRingWidget::SetColors(const TArray<FLinearColor>& InColors)
