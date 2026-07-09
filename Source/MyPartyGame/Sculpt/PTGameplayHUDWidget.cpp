@@ -1,11 +1,13 @@
 #include "PTGameplayHUDWidget.h"
 #include "PTSculptPlayerController.h"
+#include "PTScoreRowWidget.h"
 #include "../Lobby/PTPlayerState.h"
 #include "Components/TextBlock.h"
 #include "Components/RichTextBlock.h"
 #include "Components/Button.h"
 #include "Components/EditableTextBox.h"
 #include "Components/ScrollBox.h"
+#include "Components/PanelWidget.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
 
@@ -64,15 +66,10 @@ void UPTGameplayHUDWidget::RefreshTick()
     APTSculptPlayerController* PC = GetSculptPC();
     const bool bSculptor = G->IsLocalPlayerSculptor();
 
-    // ── Texto de arriba: quién esculpe ──
+    // El "quién esculpe" ya NO va arriba: se muestra en el marcador con el emoji 🖌️.
+    // Arriba queda solo el timer + la palabra. Limpiamos TxtSculptor si sigue en el WBP.
     if (TxtSculptor)
-    {
-        FString S;
-        if (!G->CurrentSculptor)          S = TEXT("Esperando jugadores...");
-        else if (bSculptor)               S = TEXT("Estás esculpiendo");
-        else                              S = G->CurrentSculptor->DisplayName + TEXT(" está esculpiendo");
-        TxtSculptor->SetText(FText::FromString(S));
-    }
+        TxtSculptor->SetText(FText::GetEmpty());
 
     // ── Panel de palabras + texto de la palabra, según la fase ──
     FString WordText;
@@ -95,7 +92,10 @@ void UPTGameplayHUDWidget::RefreshTick()
     case EPTTurnPhase::TurnEnd:
         WordText = G->MaskedWord; // ya revelada
         break;
-    default: break; // WaitingForPlayers
+    case EPTTurnPhase::WaitingForPlayers:
+        WordText = TEXT("Esperando jugadores...");
+        break;
+    default: break; // GameOver (el panel de resultados tapa esto)
     }
     if (WordPickPanel)
         WordPickPanel->SetVisibility(bShowPanel ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
@@ -126,8 +126,7 @@ void UPTGameplayHUDWidget::RefreshTick()
         else
             TxtRound->SetText(FText::GetEmpty());
     }
-    if (TxtScoreboard)
-        TxtScoreboard->SetText(FText::FromString(BuildScoreboard()));
+    RebuildScoreboard();
 
     // ── Pantalla de fin de partida ──
     const bool bGameOver = (G->TurnPhase == EPTTurnPhase::GameOver);
@@ -258,6 +257,36 @@ FString UPTGameplayHUDWidget::BuildScoreboard() const
     for (const APTPlayerState* PT : Players)
         Out += FString::Printf(TEXT("%s: %d\n"), *PT->DisplayName.Left(10), PT->GameScore);
     return Out;
+}
+
+void UPTGameplayHUDWidget::RebuildScoreboard()
+{
+    if (!ScoreboardBox || !ScoreRowClass) return;
+    APTSculptGameState* G = GetGS();
+    if (!G) return;
+
+    TArray<APTPlayerState*> Players;
+    for (APlayerState* PS : G->PlayerArray)
+        if (APTPlayerState* PT = Cast<APTPlayerState>(PS))
+            Players.Add(PT);
+    Players.Sort([](const APTPlayerState& A, const APTPlayerState& B){ return A.GameScore > B.GameScore; });
+
+    // Firma del estado visible: solo reconstruimos las filas si algo cambió (no cada tick).
+    FString Sig;
+    for (const APTPlayerState* PT : Players)
+        Sig += FString::Printf(TEXT("%s:%d:%d|"), *PT->DisplayName,
+                               PT->GameScore, PT == G->CurrentSculptor ? 1 : 0);
+    if (Sig == CachedScoreSig) return;
+    CachedScoreSig = Sig;
+
+    ScoreboardBox->ClearChildren();
+    for (APTPlayerState* PT : Players)
+    {
+        UPTScoreRowWidget* Row = CreateWidget<UPTScoreRowWidget>(GetOwningPlayer(), ScoreRowClass);
+        if (!Row) continue;
+        Row->SetRow(PT->DisplayName, PT->GameScore, PT == G->CurrentSculptor);
+        ScoreboardBox->AddChild(Row);
+    }
 }
 
 bool UPTGameplayHUDWidget::IsLocalPlayerHost() const

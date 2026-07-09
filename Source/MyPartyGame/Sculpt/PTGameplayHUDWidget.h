@@ -49,12 +49,17 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) UEditableTextBox* ChatInput;
 
     // ── Rondas + marcador + pantalla de fin (todos opcionales) ──
-    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* TxtRound;       // "Ronda 2 / 3"
-    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* TxtScoreboard;  // marcador en vivo (multilínea)
+    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*       TxtRound;      // "Ronda 2 / 3"
+    // Contenedor del marcador en vivo (VerticalBox/ScrollBox). C++ crea una fila por jugador.
+    UPROPERTY(meta=(BindWidgetOptional)) class UPanelWidget* ScoreboardBox;
     UPROPERTY(meta=(BindWidgetOptional)) UWidget*    ResultsPanel;   // se muestra solo en GameOver
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* TxtResults;     // ranking final (multilínea)
     UPROPERTY(meta=(BindWidgetOptional)) UButton*    BtnPlayAgain;   // solo host
     UPROPERTY(meta=(BindWidgetOptional)) UButton*    BtnReturnLobby; // solo host
+
+    // Clase de la fila del marcador (asignar WBP_ScoreRow reparentado a UPTScoreRowWidget).
+    UPROPERTY(EditAnywhere, Category="UI")
+    TSubclassOf<class UPTScoreRowWidget> ScoreRowClass;
 
     UFUNCTION() void OnBtnWord0();
     UFUNCTION() void OnBtnWord1();
@@ -78,6 +83,8 @@ private:
     void RefreshTick();          // polling: pinta estado/reloj/panel/input según la fase
     void ChooseWord(int32 Index);
     void ApplyInputMode(bool bGameOnly);
-    FString BuildScoreboard() const; // "Nombre: pts" ordenado por puntaje desc.
+    FString BuildScoreboard() const; // "Nombre: pts" ordenado por puntaje desc. (para resultados)
+    void    RebuildScoreboard();     // rehace las filas del marcador en vivo (solo si cambió)
+    FString CachedScoreSig;          // evita reconstruir cada tick si nada cambió
     bool    IsLocalPlayerHost() const;
 };
