@@ -1,12 +1,10 @@
 #include "PTColorPickerWidget.h"
+#include "PTColorRingWidget.h"
 #include "Components/Image.h"
 #include "Components/Slider.h"
 #include "Components/TextBlock.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
-#include "Components/PanelWidget.h"
-#include "Components/SizeBox.h"
-#include "Blueprint/WidgetTree.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Framework/Application/SlateApplication.h"
 #include "../Sculpt/PTSculptPlayerController.h"
@@ -27,9 +25,9 @@ void UPTColorPickerWidget::NativeConstruct()
     if (SaveHintText)
         SaveHintText->SetText(FText::FromString(TEXT("E — Save Color")));
 
-    // Cargar y mostrar la paleta guardada.
+    // Cargar y mostrar la paleta guardada en el anillo.
     LoadPalette();
-    BuildSwatches();
+    RefreshRing();
 
     // Inicializar con el color de pintura actual del controller.
     if (APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(GetOwningPlayer()))
@@ -60,41 +58,9 @@ void UPTColorPickerWidget::SavePalette() const
     GConfig->Flush(false, GGameUserSettingsIni);
 }
 
-void UPTColorPickerWidget::BuildSwatches()
+void UPTColorPickerWidget::RefreshRing()
 {
-    for (const FLinearColor& C : Palette)
-        AddSwatchButton(C);
-}
-
-void UPTColorPickerWidget::ClearSwatches()
-{
-    for (UWidget* W : SwatchWrappers)
-        if (W) W->RemoveFromParent();
-    SwatchWrappers.Reset();
-    SwatchButtons.Reset();
-}
-
-void UPTColorPickerWidget::AddSwatchButton(const FLinearColor& C)
-{
-    if (!SwatchBox || !WidgetTree) return;
-
-    UButton* B = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
-    FButtonStyle St = B->GetStyle();
-    St.Normal.TintColor  = FSlateColor(C);
-    St.Hovered.TintColor = FSlateColor(C);
-    St.Pressed.TintColor = FSlateColor(C);
-    B->SetStyle(St);
-    B->OnClicked.AddDynamic(this, &UPTColorPickerWidget::OnSwatchClicked);
-
-    // Tamaño fijo para que se vea como cuadradito.
-    USizeBox* Box = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
-    Box->SetWidthOverride(40.f);
-    Box->SetHeightOverride(40.f);
-    Box->AddChild(B);
-
-    SwatchBox->AddChild(Box);
-    SwatchButtons.Add(B);
-    SwatchWrappers.Add(Box);
+    if (SwatchRing) SwatchRing->SetColors(Palette);
 }
 
 void UPTColorPickerWidget::SaveCurrentColor()
@@ -104,20 +70,8 @@ void UPTColorPickerWidget::SaveCurrentColor()
     while (Palette.Num() > MaxSwatches) Palette.RemoveAt(0);
     SavePalette();
 
-    // Reconstruir los swatches para reflejar el desplazamiento.
-    ClearSwatches();
-    BuildSwatches();
-}
-
-void UPTColorPickerWidget::OnSwatchClicked()
-{
-    // OnClicked no trae el emisor: el botón clickeado es el que quedó hovered.
-    for (int32 i = 0; i < SwatchButtons.Num(); ++i)
-        if (SwatchButtons[i] && SwatchButtons[i]->IsHovered() && Palette.IsValidIndex(i))
-        {
-            SetColor(Palette[i]);
-            return;
-        }
+    // Actualizar el anillo con la paleta nueva.
+    RefreshRing();
 }
 
 void UPTColorPickerWidget::OnValueChanged(float V)
@@ -211,30 +165,19 @@ void UPTColorPickerWidget::Confirm()
         PC->OnColorConfirmed(CurrentColor); // aplica el color y cierra
 }
 
-// ¿La posición absoluta de pantalla cae dentro de este widget?
-static bool IsAbsPosInWidget(const UWidget* W, const FVector2D& Abs)
-{
-    if (!W) return false;
-    const FGeometry& G = W->GetCachedGeometry();
-    const FVector2D Size = G.GetLocalSize();
-    if (Size.X <= 0.f || Size.Y <= 0.f) return false;
-    const FVector2D L = G.AbsoluteToLocal(Abs);
-    return L.X >= 0.f && L.Y >= 0.f && L.X <= Size.X && L.Y <= Size.Y;
-}
-
 void UPTColorPickerWidget::ConfirmQuickPick()
 {
     const FVector2D CursorPos = FSlateApplication::IsInitialized()
         ? FSlateApplication::Get().GetCursorPos() : FVector2D::ZeroVector;
 
-    // ¿Soltó sobre un swatch guardado? → elegir ese color.
-    for (int32 i = 0; i < SwatchButtons.Num(); ++i)
-        if (SwatchButtons[i] && Palette.IsValidIndex(i) && IsAbsPosInWidget(SwatchButtons[i], CursorPos))
-        {
-            SetColor(Palette[i]);
-            Confirm();
-            return;
-        }
+    // ¿Soltó sobre un segmento del anillo? → elegir ese color guardado.
+    FLinearColor Picked;
+    if (SwatchRing && SwatchRing->GetColorAt(CursorPos, Picked))
+    {
+        SetColor(Picked);
+        Confirm();
+        return;
+    }
 
     Confirm(); // aplica el color actual de la rueda (guardar es con E, no al soltar)
 }

@@ -8,15 +8,16 @@ class USlider;
 class UTextBlock;
 class UBorder;
 class UButton;
-class UPanelWidget;
+class UPTColorRingWidget;
 
 /**
- * Color picker estilo rueda HSV.
- *  - Wheel (Image): rueda HSV. Click/drag elige matiz (ángulo) y saturación (radio).
- *  - ValueSlider (Slider vertical): brillo (V).
- *  - HexText (TextBlock): muestra el hex del color actual.
- *  - PreviewSwatch (Border): muestra el color actual.
- *  - ConfirmButton (Button): confirma y cierra (pasa a modo Paint).
+ * Color picker estilo rueda HSV (se abre manteniendo el click derecho).
+ *  - Wheel (Image, obligatorio): rueda HSV. Arrastrar elige matiz (ángulo) y saturación (radio).
+ *  - ValueSlider (Slider, opcional): brillo (V); también se ajusta con la rueda del mouse.
+ *  - PreviewSwatch (Border, opcional): muestra el color actual.
+ *  - SwatchRing (UPTColorRingWidget, opcional): dona segmentada con los colores guardados,
+ *    concéntrica con la rueda. Guardar = E; elegir = soltar el RMB sobre un segmento.
+ *  - SaveHintText (TextBlock, opcional): C++ le pone "E — Save Color".
  *
  * Reparentar el WBP a esta clase y nombrar los widgets igual (meta=BindWidget).
  * Los que son BindWidgetOptional pueden faltar.
@@ -61,8 +62,8 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional))  USlider*     ValueSlider   = nullptr;
     UPROPERTY(meta=(BindWidgetOptional))  UBorder*     PreviewSwatch = nullptr;
     UPROPERTY(meta=(BindWidgetOptional))  UButton*     ConfirmButton = nullptr;
-    /** Contenedor (Horizontal/Wrap Box) donde se agregan los swatches guardados. */
-    UPROPERTY(meta=(BindWidgetOptional))  UPanelWidget* SwatchBox    = nullptr;
+    /** Anillo de colores guardados (dona segmentada). Colocar concéntrico con la rueda. */
+    UPROPERTY(meta=(BindWidgetOptional))  UPTColorRingWidget* SwatchRing = nullptr;
     /** Texto de ayuda "E — Save Color" (lo setea C++). */
     UPROPERTY(meta=(BindWidgetOptional))  UTextBlock*   SaveHintText = nullptr;
 
@@ -76,19 +77,14 @@ private:
     // Paleta de colores guardados (persiste en disco entre sesiones).
     static constexpr int32 MaxSwatches = 11; // buffer rotativo: al pasarse cae el más viejo
     TArray<FLinearColor> Palette;
-    UPROPERTY() TArray<UButton*> SwatchButtons;
-    UPROPERTY() TArray<UWidget*> SwatchWrappers; // los SizeBox contenedores (para limpiar)
 
     UFUNCTION() void OnValueChanged(float V);
-    UFUNCTION() void OnSwatchClicked();
 
     void PushLiveColorToPC(); // aplica el color actual a la brocha en vivo (mientras arrastrás)
 
     void LoadPalette();
     void SavePalette() const;
-    void BuildSwatches();
-    void ClearSwatches();
-    void AddSwatchButton(const FLinearColor& C);
+    void RefreshRing();       // vuelca la paleta al anillo (SwatchRing)
 
     // Devuelve true si el click cae dentro de la rueda; actualiza Hue/Sat.
     bool UpdateFromMouse(const FPointerEvent& InMouseEvent);
