@@ -8,6 +8,7 @@
 #include "Components/SizeBox.h"
 #include "Blueprint/WidgetTree.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Framework/Application/SlateApplication.h"
 #include "../Sculpt/PTSculptPlayerController.h"
 
 static FString ColorToHex(const FLinearColor& C)
@@ -125,12 +126,18 @@ void UPTColorPickerWidget::OnSwatchClicked()
         }
 }
 
-void UPTColorPickerWidget::OnValueChanged(float /*V*/)
+void UPTColorPickerWidget::OnValueChanged(float V)
 {
+    Val = FMath::Clamp(V, 0.f, 1.f);
     RecomputeColor();
 }
 
 bool UPTColorPickerWidget::UpdateFromMouse(const FPointerEvent& InMouseEvent)
+{
+    return UpdateFromAbsolute(InMouseEvent.GetScreenSpacePosition());
+}
+
+bool UPTColorPickerWidget::UpdateFromAbsolute(FVector2D AbsPos)
 {
     if (!Wheel) return false;
 
@@ -138,7 +145,7 @@ bool UPTColorPickerWidget::UpdateFromMouse(const FPointerEvent& InMouseEvent)
     const FVector2D Size  = G.GetLocalSize();
     if (Size.X <= 0.f || Size.Y <= 0.f) return false;
 
-    const FVector2D Local  = G.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition());
+    const FVector2D Local  = G.AbsoluteToLocal(AbsPos);
     const FVector2D Center = Size * 0.5f;
     const FVector2D D      = Local - Center;
     const float     Radius = FMath::Min(Size.X, Size.Y) * 0.5f;
@@ -154,13 +161,26 @@ bool UPTColorPickerWidget::UpdateFromMouse(const FPointerEvent& InMouseEvent)
     return true;
 }
 
+void UPTColorPickerWidget::QuickPickTick()
+{
+    // Sigue el cursor real (posición absoluta de Slate, coherente con el geometry del wheel).
+    if (FSlateApplication::IsInitialized())
+        UpdateFromAbsolute(FSlateApplication::Get().GetCursorPos());
+}
+
+void UPTColorPickerWidget::QuickAdjustValue(float Delta)
+{
+    Val = FMath::Clamp(Val + Delta, 0.f, 1.f);
+    if (ValueSlider) ValueSlider->SetValue(Val); // reflejar en el slider si existe
+    RecomputeColor();
+}
+
 void UPTColorPickerWidget::RecomputeColor()
 {
-    const float V = ValueSlider ? ValueSlider->GetValue() : 1.f;
     CurrentColor = FLinearColor::MakeFromHSV8(
         (uint8)FMath::Clamp(Hue * 255.f, 0.f, 255.f),
         (uint8)FMath::Clamp(Sat * 255.f, 0.f, 255.f),
-        (uint8)FMath::Clamp(V   * 255.f, 0.f, 255.f));
+        (uint8)FMath::Clamp(Val * 255.f, 0.f, 255.f));
     RefreshUI();
 }
 
@@ -177,7 +197,8 @@ void UPTColorPickerWidget::SetColor(FLinearColor NewColor)
     const FLinearColor HSV = NewColor.LinearRGBToHSV();
     Hue = HSV.R / 360.f;
     Sat = HSV.G;
-    if (ValueSlider) ValueSlider->SetValue(HSV.B);
+    Val = HSV.B;
+    if (ValueSlider) ValueSlider->SetValue(Val);
     RefreshUI();
 }
 

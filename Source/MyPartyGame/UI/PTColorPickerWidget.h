@@ -38,6 +38,12 @@ public:
     UFUNCTION(BlueprintCallable, Category="ColorPicker")
     void Confirm();
 
+    // ── Selección rápida (mantener RMB): el PlayerController abre/cierra y va tickeando ──
+    /** Actualiza matiz/saturación desde la posición actual del cursor (llamar por tick). */
+    void QuickPickTick();
+    /** Sube/baja el brillo (V) del color (rueda del mouse con RMB apretado). */
+    void QuickAdjustValue(float Delta);
+
 protected:
     virtual void NativeConstruct() override;
     virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
@@ -55,8 +61,11 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional))  UButton*      AddButton    = nullptr;
 
 private:
-    float Hue = 0.f, Sat = 0.f; // guardados para recomputar al mover el value slider
+    float Hue = 0.f, Sat = 0.f, Val = 1.f; // HSV actual (Val = brillo; el slider es opcional)
     bool  bDragging = false;
+
+    // Actualiza matiz/saturación desde una posición ABSOLUTA de pantalla (Slate).
+    bool UpdateFromAbsolute(FVector2D AbsPos);
 
     // Paleta de colores guardados (persiste en disco entre sesiones).
     static constexpr int32 MaxSwatches = 11; // buffer rotativo: al pasarse cae el más viejo

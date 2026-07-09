@@ -268,6 +268,17 @@ private:
     mutable int32   AxisChosen = -1; // -1 sin definir, 0=U, 1=V
     void ToggleAxisLock();
 
+    // Congelar plano (Parte D): con modo eje ON, mantener LeftShift fija el plano actual
+    // (no se recalcula desde la cámara) y bloquea caminar (la cámara sigue libre).
+    bool bPlaneFrozen = false;
+    void OnFreezePressed();
+    void OnFreezeReleased();
+
+    // Color rápido (Parte B): mantener RMB abre la rueda; arrastrar elige; soltar confirma.
+    bool bQuickColorActive = false;
+    void OnColorPickPressed();
+    void OnColorPickReleased();
+
     // ¿El jugador local puede esculpir ahora? (es el escultor y la fase es Drawing).
     // Sin partida en curso (testeo solo del mapa) devuelve true → esculpir libre.
     bool CanLocalPlayerSculpt() const;
@@ -282,11 +293,10 @@ private:
     void OnScrollDown();
     float MinForMode() const { return (EditMode == EPTEditMode::Paint) ? PaintMinSize : MinSize; }
     void  ClampStampSize()   { StampSize = FMath::Clamp(StampSize, MinForMode(), MaxSize); }
-    void SetShapeSphere()  { SetShape(EPTStampShape::Sphere);  }
-    void SetShapeCube()    { SetShape(EPTStampShape::Cube);    }
-    void SetShapeCylinder(){ SetShape(EPTStampShape::Cylinder);}
-    void SetShapeTriPrism(){ SetShape(EPTStampShape::TriPrism);}
     void SetShape(EPTStampShape S);
-    void CycleModes();
-    void OpenColorPicker();
+    void CycleShapes();                                    // Tab: cicla Sphere→Cube→Cylinder→TriPrism
+    void SetMode(EPTEditMode M);                           // 1/2/3: Add/Erase/Paint
+    void SetModeAdd()   { SetMode(EPTEditMode::Add);   }
+    void SetModeErase() { SetMode(EPTEditMode::Erase); }
+    void SetModePaint() { SetMode(EPTEditMode::Paint); }
 };

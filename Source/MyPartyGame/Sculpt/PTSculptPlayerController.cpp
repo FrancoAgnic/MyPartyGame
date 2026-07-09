@@ -161,18 +161,22 @@ void APTSculptPlayerController::SetupInputComponent()
     InputComponent->BindKey(EKeys::MouseScrollUp,   IE_Pressed, this, &APTSculptPlayerController::OnScrollUp);
     InputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed, this, &APTSculptPlayerController::OnScrollDown);
 
-    // Formas: 1 2 3 4
-    InputComponent->BindKey(EKeys::One,   IE_Pressed, this, &APTSculptPlayerController::SetShapeSphere);
-    InputComponent->BindKey(EKeys::Two,   IE_Pressed, this, &APTSculptPlayerController::SetShapeCube);
-    InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &APTSculptPlayerController::SetShapeCylinder);
-    InputComponent->BindKey(EKeys::Four,  IE_Pressed, this, &APTSculptPlayerController::SetShapeTriPrism);
+    // Modos: 1 = Add, 2 = Erase, 3 = Paint
+    InputComponent->BindKey(EKeys::One,   IE_Pressed, this, &APTSculptPlayerController::SetModeAdd);
+    InputComponent->BindKey(EKeys::Two,   IE_Pressed, this, &APTSculptPlayerController::SetModeErase);
+    InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &APTSculptPlayerController::SetModePaint);
 
-    // Modos: Tab cicla Add→Erase→Paint
-    InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &APTSculptPlayerController::CycleModes);
-    InputComponent->BindKey(EKeys::X,   IE_Pressed, this, &APTSculptPlayerController::ToggleAxisLock);
+    // Formas: Tab cicla Sphere→Cube→Cylinder→TriPrism
+    InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &APTSculptPlayerController::CycleShapes);
 
-    // Color picker: C
-    InputComponent->BindKey(EKeys::C, IE_Pressed, this, &APTSculptPlayerController::OpenColorPicker);
+    // Modo eje (dibujo recto): X toggle. LeftShift (mantener) congela el plano.
+    InputComponent->BindKey(EKeys::X,         IE_Pressed,  this, &APTSculptPlayerController::ToggleAxisLock);
+    InputComponent->BindKey(EKeys::LeftShift, IE_Pressed,  this, &APTSculptPlayerController::OnFreezePressed);
+    InputComponent->BindKey(EKeys::LeftShift, IE_Released, this, &APTSculptPlayerController::OnFreezeReleased);
+
+    // Color rápido: mantener el click derecho abre la rueda; soltarlo confirma.
+    InputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed,  this, &APTSculptPlayerController::OnColorPickPressed);
+    InputComponent->BindKey(EKeys::RightMouseButton, IE_Released, this, &APTSculptPlayerController::OnColorPickReleased);
 
     // Menú de pausa: Esc
     InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &APTSculptPlayerController::OnPausePressed);
@@ -204,6 +208,11 @@ void APTSculptPlayerController::OnPausePressed()
 void APTSculptPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
+
+    // Rueda de color abierta (mantener RMB): seguir el cursor para elegir matiz/saturación.
+    if (bQuickColorActive)
+        if (UPTColorPickerWidget* CP = Cast<UPTColorPickerWidget>(ColorPicker))
+            CP->QuickPickTick();
 
     // Agregar el mapping context de movimiento acá (no en BeginPlay): en PIE el
     // LocalPlayer/subsistema puede no estar listo en BeginPlay, y entonces nunca se
@@ -643,7 +652,9 @@ void APTSculptPlayerController::OnStampPressed()
 
     // En modo eje (solo Add): bloquear un plano VERTICAL (que contiene el eje Z
     // global) que mira hacia la cámara. Movimiento libre y recto dentro del plano.
-    if (bAxisLock && EditMode == EPTEditMode::Add)
+    // Si el plano está congelado (LeftShift), NO se recalcula: se sigue dibujando en el
+    // mismo plano/ángulo aunque muevas la cámara y sueltes/vuelvas a apretar el click.
+    if (bAxisLock && EditMode == EPTEditMode::Add && !bPlaneFrozen)
     {
         FVector Start, Dir;
         if (GetCameraRay(Start, Dir))
@@ -666,6 +677,13 @@ void APTSculptPlayerController::ToggleAxisLock()
 
 void APTSculptPlayerController::OnScrollUp()
 {
+    // Con la rueda de color abierta (RMB) la rueda del mouse sube el brillo del color.
+    if (bQuickColorActive)
+    {
+        if (UPTColorPickerWidget* CP = Cast<UPTColorPickerWidget>(ColorPicker))
+            CP->QuickAdjustValue(+0.05f);
+        return;
+    }
     StampSize += SizeStep;
     ClampStampSize();
     bPreviewDirty = true;
@@ -674,6 +692,13 @@ void APTSculptPlayerController::OnScrollUp()
 
 void APTSculptPlayerController::OnScrollDown()
 {
+    // Con la rueda de color abierta (RMB) la rueda del mouse baja el brillo (hacia negro).
+    if (bQuickColorActive)
+    {
+        if (UPTColorPickerWidget* CP = Cast<UPTColorPickerWidget>(ColorPicker))
+            CP->QuickAdjustValue(-0.05f);
+        return;
+    }
     StampSize -= SizeStep;
     ClampStampSize();
     bPreviewDirty = true;
@@ -687,55 +712,83 @@ void APTSculptPlayerController::SetShape(EPTStampShape S)
     UE_LOG(LogTemp, Log, TEXT("[Sculpt] Shape: %d"), (int32)S);
 }
 
-void APTSculptPlayerController::CycleModes()
+void APTSculptPlayerController::CycleShapes()
 {
-    switch (EditMode)
+    // Cicla las 4 formas (Smooth ya no existe como modo; las formas son independientes).
+    switch (StampShape)
     {
-    case EPTEditMode::Add:    EditMode = EPTEditMode::Erase;  break;
-    case EPTEditMode::Erase:  EditMode = EPTEditMode::Smooth; break;
-    case EPTEditMode::Smooth: EditMode = EPTEditMode::Paint;  break;
-    case EPTEditMode::Paint:  EditMode = EPTEditMode::Add;    break;
+    case EPTStampShape::Sphere:   StampShape = EPTStampShape::Cube;     break;
+    case EPTStampShape::Cube:     StampShape = EPTStampShape::Cylinder; break;
+    case EPTStampShape::Cylinder: StampShape = EPTStampShape::TriPrism; break;
+    case EPTStampShape::TriPrism: StampShape = EPTStampShape::Sphere;   break;
     }
+    bPreviewDirty = true;
+    UE_LOG(LogTemp, Log, TEXT("[Sculpt] Shape: %d"), (int32)StampShape);
+}
+
+void APTSculptPlayerController::SetMode(EPTEditMode M)
+{
+    EditMode = M;
     ClampStampSize(); // respetar el mínimo del nuevo modo (Paint permite más chico)
     bPreviewDirty = true;
     ApplyPreviewMaterial();
     UE_LOG(LogTemp, Log, TEXT("[Sculpt] Mode: %d"), (int32)EditMode);
 }
 
-void APTSculptPlayerController::OpenColorPicker()
+void APTSculptPlayerController::OnFreezePressed()
 {
-    if (!ColorPickerClass) return;
+    // Solo tiene sentido en modo eje. Fija el plano actual y bloquea caminar (cámara libre).
+    if (bPlaneFrozen || !bAxisLock) return;
+    bPlaneFrozen = true;
+    SetIgnoreMoveInput(true);
+}
 
-    // Segunda C con el menú abierto → confirma el color actual y cierra (como Apply).
-    if (ColorPicker)
-    {
-        if (UPTColorPickerWidget* CP = Cast<UPTColorPickerWidget>(ColorPicker))
-        {
-            CP->Confirm(); // aplica color, pasa a Paint, cierra y restaura input
-        }
-        else
-        {
-            ColorPicker->RemoveFromParent();
-            ColorPicker = nullptr;
-            SetInputMode(FInputModeGameOnly());
-            bShowMouseCursor = false;
-        }
-        return;
-    }
+void APTSculptPlayerController::OnFreezeReleased()
+{
+    if (!bPlaneFrozen) return;
+    bPlaneFrozen = false;
+    SetIgnoreMoveInput(false);
+}
 
+void APTSculptPlayerController::OnColorPickPressed()
+{
+    if (!ColorPickerClass || ColorPicker) return;
     ColorPicker = CreateWidget<UUserWidget>(this, ColorPickerClass);
-    if (ColorPicker)
+    if (!ColorPicker) return;
+    ColorPicker->AddToViewport(10);
+    SetInputMode(FInputModeGameAndUI());
+    bShowMouseCursor  = true;
+    bQuickColorActive = true;
+}
+
+void APTSculptPlayerController::OnColorPickReleased()
+{
+    if (!bQuickColorActive) return;
+    bQuickColorActive = false;
+
+    // Confirmar el color actual (rueda o swatch bajo el cursor) y cerrar. Confirm() llama
+    // a OnColorConfirmed, que aplica el color, restaura el input y remueve el widget.
+    if (UPTColorPickerWidget* CP = Cast<UPTColorPickerWidget>(ColorPicker))
     {
-        ColorPicker->AddToViewport(10);
-        SetInputMode(FInputModeGameAndUI());
-        bShowMouseCursor = true;
+        CP->Confirm();
+    }
+    else if (ColorPicker)
+    {
+        ColorPicker->RemoveFromParent();
+        ColorPicker = nullptr;
+        SetInputMode(FInputModeGameOnly());
+        bShowMouseCursor = false;
     }
 }
 
 void APTSculptPlayerController::OnColorConfirmed(FLinearColor NewColor)
 {
     CurrentPaintColor = NewColor;
-    EditMode          = EPTEditMode::Paint;
+
+    // Al elegir color NO se fuerza Paint: si estabas en Erase pasás a Paint; si estabas
+    // en Add te quedás en Add (esculpís directamente con el color); en Paint queda igual.
+    if (EditMode == EPTEditMode::Erase || EditMode == EPTEditMode::Smooth)
+        EditMode = EPTEditMode::Paint;
     ApplyPreviewMaterial();
 
     if (ColorPicker)
