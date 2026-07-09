@@ -10,6 +10,7 @@
 #include "Components/PanelWidget.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
+#include "TimerManager.h"
 
 bool UPTGameplayHUDWidget::Initialize()
 {
@@ -102,10 +103,11 @@ void UPTGameplayHUDWidget::RefreshTick()
     if (TxtWord)
         TxtWord->SetText(FText::FromString(WordText));
 
-    // El escultor conoce la palabra → no puede chatear. Ocultar su caja de texto
-    // (así Tab tampoco le roba el foco); igual sigue viendo el log del chat.
+    // La caja de texto SÓLO se muestra mientras el chat está abierto (Enter). Colapsada,
+    // Tab no puede darle foco ni congelar el input. Vale para todos, incluido el escultor
+    // (que ahora también puede chatear con Enter; el anti-spoiler descarta la palabra).
     if (ChatInput)
-        ChatInput->SetVisibility(bSculptor ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+        ChatInput->SetVisibility(bChatOpen ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 
     // ── Reloj (solo en Drawing) ──
     if (TxtTimer)
@@ -156,12 +158,12 @@ void UPTGameplayHUDWidget::RefreshTick()
 void UPTGameplayHUDWidget::FocusChat()
 {
     if (bChatOpen) return;
-    // El escultor no chatea (conoce la palabra): no abrir el chat en su turno.
-    if (APTSculptGameState* G = GetGS())
-        if (G->IsLocalPlayerSculptor()) return;
     bChatOpen = true;
+    if (ChatInput) ChatInput->SetVisibility(ESlateVisibility::Visible);
     ApplyInputMode(false); // GameAndUI + cursor
-    if (ChatInput) ChatInput->SetKeyboardFocus();
+    // Recién visible: enfocar en el próximo tick (Slate necesita un frame para darle foco).
+    if (UWorld* W = GetWorld())
+        W->GetTimerManager().SetTimerForNextTick([this]() { if (ChatInput) ChatInput->SetKeyboardFocus(); });
 }
 
 void UPTGameplayHUDWidget::ApplyInputMode(bool bGameOnly)
@@ -207,9 +209,13 @@ void UPTGameplayHUDWidget::OnChatCommitted(const FText& Text, ETextCommit::Type 
             if (APTSculptPlayerController* PC = GetSculptPC())
                 PC->Server_SendChat(Msg);
     }
-    if (ChatInput) ChatInput->SetText(FText::GetEmpty());
-
-    // Enviar (Enter) o perder el foco: cerrar el chat y devolver el control al juego.
+    // Enviar (Enter) o perder el foco: limpiar, COLAPSAR (para que Tab no la reenfoque)
+    // y devolver el control al juego.
+    if (ChatInput)
+    {
+        ChatInput->SetText(FText::GetEmpty());
+        ChatInput->SetVisibility(ESlateVisibility::Collapsed);
+    }
     bChatOpen = false;
     ApplyInputMode(true); // Game Only
 }
