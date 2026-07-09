@@ -843,9 +843,12 @@ FVector APTSculptVolume::Interp(FVector P1, FVector P2, float V1, float V2)
 
 FColor APTSculptVolume::InterpColor(FLinearColor C1, FLinearColor C2, float V1, float V2)
 {
-    if (FMath::Abs(V1 - V2) < 1e-5f) return ((C1 + C2) * 0.5f).ToFColor(true);
+    // El vertex color va al mesh y el shader lo lee como LINEAL (no decodifica sRGB), así
+    // que se emite lineal (ToFColor(false)). El campo guarda sRGB y se decodifica bien al
+    // leer; emitir sRGB acá hacía que el color se viera más claro que el elegido.
+    if (FMath::Abs(V1 - V2) < 1e-5f) return ((C1 + C2) * 0.5f).ToFColor(false);
     float t = FMath::Clamp(-V1 / (V2 - V1), 0.f, 1.f);
-    return FLinearColor::LerpUsingHSV(C1, C2, t).ToFColor(true);
+    return FLinearColor::LerpUsingHSV(C1, C2, t).ToFColor(false);
 }
 
 void APTSculptVolume::RunMarchingCubes(const TArray<float>& G, const TArray<FLinearColor>& CG,
