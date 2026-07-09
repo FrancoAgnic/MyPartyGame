@@ -95,22 +95,46 @@ public:
         if (Verts.Num() >= 3)
             FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, Handle, Verts, Indices, nullptr, 0, 0);
 
-        // Outline amarillo del segmento bajo el mouse (borde del sector anular).
+        // Outline amarillo del segmento bajo el mouse: marco (borde ext/int + tapas
+        // radiales) dibujado con triángulos, mismo path que el relleno (sin MakeLines).
         if (Hovered >= 0 && Hovered < N && Colors.Num() > 0)
         {
             const float base0 = TwoPi * Hovered / N;
             const float base1 = TwoPi * (Hovered + 1) / N;
             const float a0 = (N > 1) ? base0 + GapRad * 0.5f : base0;
             const float a1 = (N > 1) ? base1 - GapRad * 0.5f : base1;
-            const int32 Steps = FMath::Max(2, FMath::CeilToInt((a1 - a0) / (TwoPi / 96.f)));
+            const float T   = FMath::Clamp(HoverThick, 1.f, 20.f);
+            const FColor YCol = HoverCol.ToFColor(true);
 
-            TArray<FVector2D> Pts;
-            for (int32 i = 0; i <= Steps; ++i) { const float a = a0 + (a1 - a0) * i / Steps; Pts.Add(FVector2D(Center.X + FMath::Sin(a) * Ro, Center.Y - FMath::Cos(a) * Ro)); }
-            for (int32 i = Steps; i >= 0; --i) { const float a = a0 + (a1 - a0) * i / Steps; Pts.Add(FVector2D(Center.X + FMath::Sin(a) * Ri, Center.Y - FMath::Cos(a) * Ri)); }
-            Pts.Add(Pts[0]); // cerrar el contorno
+            TArray<FSlateVertex> HV;
+            TArray<SlateIndex>   HI;
+            auto AddBand = [&](float r0, float r1, float ang0, float ang1)
+            {
+                const int32 St = FMath::Max(2, FMath::CeilToInt((ang1 - ang0) / (TwoPi / 96.f)));
+                const int32 B  = HV.Num();
+                for (int32 i = 0; i <= St; ++i)
+                {
+                    const float a = ang0 + (ang1 - ang0) * i / St;
+                    const FVector2f D(FMath::Sin(a), -FMath::Cos(a));
+                    HV.Add(FSlateVertex::Make<ESlateVertexRounding::Disabled>(RT, Center + D * r0, FVector2f(0.f, 0.f), YCol));
+                    HV.Add(FSlateVertex::Make<ESlateVertexRounding::Disabled>(RT, Center + D * r1, FVector2f(1.f, 1.f), YCol));
+                }
+                for (int32 i = 0; i < St; ++i)
+                {
+                    const SlateIndex b = (SlateIndex)(B + i * 2);
+                    HI.Add(b);     HI.Add(b + 1); HI.Add(b + 2);
+                    HI.Add(b + 1); HI.Add(b + 3); HI.Add(b + 2);
+                }
+            };
 
-            FSlateDrawElement::MakeLines(OutDrawElements, LayerId + 1, AllottedGeometry.ToPaintGeometry(),
-                                         Pts, ESlateDrawEffect::None, HoverCol, true, HoverThick);
+            const float CapAng = FMath::Min((a1 - a0) * 0.5f, T / FMath::Max(Ro, 1.f));
+            AddBand(Ro - T, Ro, a0, a1);      // borde exterior
+            AddBand(Ri, Ri + T, a0, a1);      // borde interior
+            AddBand(Ri, Ro, a0, a0 + CapAng); // tapa radial en a0
+            AddBand(Ri, Ro, a1 - CapAng, a1); // tapa radial en a1
+
+            if (HV.Num() >= 3)
+                FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId + 1, Handle, HV, HI, nullptr, 0, 0);
         }
 
         return LayerId + 1;
