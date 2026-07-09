@@ -766,11 +766,11 @@ void APTSculptPlayerController::OnColorPickReleased()
     if (!bQuickColorActive) return;
     bQuickColorActive = false;
 
-    // Confirmar el color actual (rueda o swatch bajo el cursor) y cerrar. Confirm() llama
-    // a OnColorConfirmed, que aplica el color, restaura el input y remueve el widget.
+    // Confirmar según dónde soltó: swatch guardado, "+" (guardar) o rueda. ConfirmQuickPick
+    // termina llamando a OnColorConfirmed, que aplica el color, restaura input y cierra.
     if (UPTColorPickerWidget* CP = Cast<UPTColorPickerWidget>(ColorPicker))
     {
-        CP->Confirm();
+        CP->ConfirmQuickPick();
     }
     else if (ColorPicker)
     {

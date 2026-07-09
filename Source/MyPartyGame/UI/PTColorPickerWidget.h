@@ -44,6 +44,10 @@ public:
     /** Sube/baja el brillo (V) del color (rueda del mouse con RMB apretado). */
     void QuickAdjustValue(float Delta);
 
+    /** Al soltar el RMB: si el cursor está sobre un swatch guardado usa ese color; si está
+     *  sobre el "+" guarda el color actual; si no, confirma el color de la rueda. Luego cierra. */
+    void ConfirmQuickPick();
+
 protected:
     virtual void NativeConstruct() override;
     virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;

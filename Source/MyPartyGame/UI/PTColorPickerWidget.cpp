@@ -205,7 +205,39 @@ void UPTColorPickerWidget::SetColor(FLinearColor NewColor)
 void UPTColorPickerWidget::Confirm()
 {
     if (APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(GetOwningPlayer()))
-        PC->OnColorConfirmed(CurrentColor); // setea color, modo Paint y cierra
+        PC->OnColorConfirmed(CurrentColor); // aplica el color y cierra
+}
+
+// ¿La posición absoluta de pantalla cae dentro de este widget?
+static bool IsAbsPosInWidget(const UWidget* W, const FVector2D& Abs)
+{
+    if (!W) return false;
+    const FGeometry& G = W->GetCachedGeometry();
+    const FVector2D Size = G.GetLocalSize();
+    if (Size.X <= 0.f || Size.Y <= 0.f) return false;
+    const FVector2D L = G.AbsoluteToLocal(Abs);
+    return L.X >= 0.f && L.Y >= 0.f && L.X <= Size.X && L.Y <= Size.Y;
+}
+
+void UPTColorPickerWidget::ConfirmQuickPick()
+{
+    const FVector2D CursorPos = FSlateApplication::IsInitialized()
+        ? FSlateApplication::Get().GetCursorPos() : FVector2D::ZeroVector;
+
+    // ¿Soltó sobre un swatch guardado? → elegir ese color.
+    for (int32 i = 0; i < SwatchButtons.Num(); ++i)
+        if (SwatchButtons[i] && Palette.IsValidIndex(i) && IsAbsPosInWidget(SwatchButtons[i], CursorPos))
+        {
+            SetColor(Palette[i]);
+            Confirm();
+            return;
+        }
+
+    // ¿Soltó sobre el "+"? → guardar el color actual de la rueda antes de aplicarlo.
+    if (AddButton && IsAbsPosInWidget(AddButton, CursorPos))
+        OnAddClicked(); // agrega CurrentColor a la paleta (persistente)
+
+    Confirm(); // aplica el color actual de la rueda
 }
 
 FReply UPTColorPickerWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
