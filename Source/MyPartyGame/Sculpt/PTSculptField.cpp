@@ -305,11 +305,15 @@ void FPTSculptField::MeshBrick(const FBrickSnapshot& Snap, FPTBrickMesh& Out)
         CellSlot(cx, cy, cz) = Out.Verts.Num();
         Out.Verts.Add(localPos);
         Out.Normals.Add(N);
-        Out.Colors.Add(FColor(
+        // accumCol son bytes sRGB (el field guarda el color con ToFColor(true)). El material
+        // lee el Vertex Color como LINEAL, así que se convierte sRGB→lineal; si no, el color
+        // sale más claro que el elegido (el atlas de Paint sí se decodifica por ser textura SRGB).
+        const FColor SRGBCol(
             (uint8)FMath::Clamp(accumCol.X, 0.f, 255.f),
             (uint8)FMath::Clamp(accumCol.Y, 0.f, 255.f),
             (uint8)FMath::Clamp(accumCol.Z, 0.f, 255.f),
-            (uint8)FMath::Clamp(accumCol.W, 0.f, 255.f)));
+            (uint8)FMath::Clamp(accumCol.W, 0.f, 255.f));
+        Out.Colors.Add(FLinearColor(SRGBCol).ToFColor(false));
     }
 
     // 2) Quads: solo celdas reales cc en [1,CPA]. Lado - (min) para dedupe con vecinos.
