@@ -8,6 +8,9 @@
 #include "EnhancedInputSubsystems.h"
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
+#include "Camera/CameraActor.h"
+#include "Kismet/GameplayStatics.h"
+#include "TimerManager.h"
 
 void APTLobbyPlayerController::Server_RequestStartGame_Implementation()
 {
@@ -35,10 +38,43 @@ void APTLobbyPlayerController::BeginPlay()
                 Subsystem->AddMappingContext(LobbyMappingContext, 0);
         }
 
-        // La Fase 2 dejó el input en UIOnly al salir del menú; restaurar a GameOnly en el lobby.
-        SetInputMode(FInputModeGameOnly());
-        SetShowMouseCursor(false);
+        // Menú/lobby diegético: el mouse queda visible para la UI (overlay 2D), pero el
+        // teclado (WASD/Space) sigue yendo al juego. El look se bloquea en SetupDioramaView.
+        FInputModeGameAndUI Mode;
+        Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+        SetInputMode(Mode);
+        SetShowMouseCursor(true);
+
+        // Que poseer el pawn NO cambie la cámara (si no, volvería a la del personaje).
+        bAutoManageActiveCameraTarget = false;
+
+        // Fijar la vista a la cámara diorama. Reintenta si aún no está lista.
+        SetupDioramaView();
+        if (!bDioramaReady)
+            GetWorldTimerManager().SetTimer(DioramaRetry, this,
+                &APTLobbyPlayerController::SetupDioramaView, 0.2f, true);
     }
+}
+
+void APTLobbyPlayerController::SetupDioramaView()
+{
+    if (!IsLocalController()) return;
+
+    // Buscar la ACameraActor del nivel por tag (existe localmente en todos los clientes).
+    TArray<AActor*> Found;
+    UGameplayStatics::GetAllActorsOfClassWithTag(GetWorld(), ACameraActor::StaticClass(),
+                                                 DioramaCameraTag, Found);
+    ACameraActor* Cam = Found.Num() > 0 ? Cast<ACameraActor>(Found[0]) : nullptr;
+    if (!Cam) return; // reintenta en el timer
+
+    SetViewTargetWithBlend(Cam, 0.f);
+    // La base del movimiento (Yaw) queda relativa a la cámara; el char gira hacia donde
+    // se mueve (bOrientRotationToMovement en el character). El mouse no rota (es para la UI).
+    SetControlRotation(Cam->GetActorRotation());
+    SetIgnoreLookInput(true);
+
+    bDioramaReady = true;
+    GetWorldTimerManager().ClearTimer(DioramaRetry);
 }
 
 void APTLobbyPlayerController::SetupInputComponent()

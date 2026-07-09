@@ -44,6 +44,17 @@ protected:
     void ToggleEscapeMenu(const FInputActionValue& Value);
     void OnPressedStartGame();
 
+    // ── Cámara fija diorama (menú/lobby interactivo) ────────────────────────
+    /** Tag de la ACameraActor del nivel que se usa como cámara fija compartida. */
+    UPROPERTY(EditAnywhere, Category="Diorama")
+    FName DioramaCameraTag = TEXT("DioramaCam");
+
 private:
     UPROPERTY() UPTLobbyEscapeMenuWidget* EscapeMenuWidget = nullptr;
+
+    // Fija la vista a la cámara diorama y bloquea el look (el mouse es para la UI). Reintenta
+    // hasta encontrar la cámara (puede no estar lista en BeginPlay / al poseer el pawn).
+    void SetupDioramaView();
+    bool bDioramaReady = false;
+    FTimerHandle DioramaRetry;
 };
