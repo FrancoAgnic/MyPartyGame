@@ -26,6 +26,8 @@ public:
         Invalidate(EInvalidateWidgetReason::Paint);
     }
     void SetDesign(bool b) { bDesign = b; Invalidate(EInvalidateWidgetReason::Paint); }
+    void SetHovered(int32 Seg) { if (Seg != Hovered) { Hovered = Seg; Invalidate(EInvalidateWidgetReason::Paint); } }
+    void SetHoverStyle(const FLinearColor& C, float T) { HoverCol = C; HoverThick = T; }
 
     virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D(220.f, 220.f); }
 
@@ -93,21 +95,43 @@ public:
         if (Verts.Num() >= 3)
             FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, Handle, Verts, Indices, nullptr, 0, 0);
 
-        return LayerId;
+        // Outline amarillo del segmento bajo el mouse (borde del sector anular).
+        if (Hovered >= 0 && Hovered < N && Colors.Num() > 0)
+        {
+            const float base0 = TwoPi * Hovered / N;
+            const float base1 = TwoPi * (Hovered + 1) / N;
+            const float a0 = (N > 1) ? base0 + GapRad * 0.5f : base0;
+            const float a1 = (N > 1) ? base1 - GapRad * 0.5f : base1;
+            const int32 Steps = FMath::Max(2, FMath::CeilToInt((a1 - a0) / (TwoPi / 96.f)));
+
+            TArray<FVector2D> Pts;
+            for (int32 i = 0; i <= Steps; ++i) { const float a = a0 + (a1 - a0) * i / Steps; Pts.Add(FVector2D(Center.X + FMath::Sin(a) * Ro, Center.Y - FMath::Cos(a) * Ro)); }
+            for (int32 i = Steps; i >= 0; --i) { const float a = a0 + (a1 - a0) * i / Steps; Pts.Add(FVector2D(Center.X + FMath::Sin(a) * Ri, Center.Y - FMath::Cos(a) * Ri)); }
+            Pts.Add(Pts[0]); // cerrar el contorno
+
+            FSlateDrawElement::MakeLines(OutDrawElements, LayerId + 1, AllottedGeometry.ToPaintGeometry(),
+                                         Pts, ESlateDrawEffect::None, HoverCol, true, HoverThick);
+        }
+
+        return LayerId + 1;
     }
 
     TArray<FLinearColor> Colors;
     float InnerRatio = 0.72f;
     float GapDeg     = 2.f;
     bool  bDesign    = false;
+    int32 Hovered    = -1;
+    FLinearColor HoverCol = FLinearColor(1.f, 0.85f, 0.f, 1.f);
+    float HoverThick = 3.f;
 };
 
 // ─── UWidget wrapper ─────────────────────────────────────────────────────────
 TSharedRef<SWidget> UPTColorRingWidget::RebuildWidget()
 {
     MyRing = SNew(SPTColorRing);
-    MyRing->SetColors(Colors);
+    MyRing->SetHoverStyle(HoverColor, HoverThickness);
     MyRing->SetParams(InnerRadiusRatio, GapDegrees);
+    MyRing->SetColors(Colors);
     return MyRing.ToSharedRef();
 }
 
@@ -122,6 +146,7 @@ void UPTColorRingWidget::SynchronizeProperties()
     Super::SynchronizeProperties();
     if (MyRing.IsValid())
     {
+        MyRing->SetHoverStyle(HoverColor, HoverThickness);
         MyRing->SetParams(InnerRadiusRatio, GapDegrees);
         MyRing->SetDesign(IsDesignTime()); // placeholder gris solo en el editor
         MyRing->SetColors(Colors);
@@ -136,6 +161,11 @@ void UPTColorRingWidget::SetColors(const TArray<FLinearColor>& InColors)
         MyRing->SetParams(InnerRadiusRatio, GapDegrees);
         MyRing->SetColors(Colors);
     }
+}
+
+void UPTColorRingWidget::SetHovered(int32 SegmentIndex)
+{
+    if (MyRing.IsValid()) MyRing->SetHovered(SegmentIndex);
 }
 
 int32 UPTColorRingWidget::SegmentAt(const FVector2D& AbsPos) const

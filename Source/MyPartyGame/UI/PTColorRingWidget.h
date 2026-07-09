@@ -22,6 +22,9 @@ public:
     /** Índice del segmento bajo una posición ABSOLUTA de pantalla, o -1 si cae fuera del anillo. */
     int32 SegmentAt(const FVector2D& AbsPos) const;
 
+    /** Resalta (outline amarillo) el segmento indicado; -1 = ninguno. */
+    void SetHovered(int32 SegmentIndex);
+
     /** Devuelve true + el color si la posición absoluta cae sobre un segmento. */
     bool GetColorAt(const FVector2D& AbsPos, FLinearColor& OutColor) const;
 
@@ -32,6 +35,10 @@ public:
     /** Separación entre segmentos, en grados (0 = pegados). */
     UPROPERTY(EditAnywhere, Category="Ring", meta=(ClampMin="0.0", ClampMax="20.0"))
     float GapDegrees = 2.f;
+
+    /** Color y grosor del outline de hover. */
+    UPROPERTY(EditAnywhere, Category="Ring") FLinearColor HoverColor = FLinearColor(1.f, 0.85f, 0.f, 1.f);
+    UPROPERTY(EditAnywhere, Category="Ring") float        HoverThickness = 3.f;
 
 protected:
     virtual TSharedRef<SWidget> RebuildWidget() override;

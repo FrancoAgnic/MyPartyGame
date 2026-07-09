@@ -111,9 +111,19 @@ bool UPTColorPickerWidget::UpdateFromAbsolute(FVector2D AbsPos)
 
 void UPTColorPickerWidget::QuickPickTick()
 {
-    // Sigue el cursor real (posición absoluta de Slate, coherente con el geometry del wheel).
-    if (FSlateApplication::IsInitialized())
-        UpdateFromAbsolute(FSlateApplication::Get().GetCursorPos());
+    if (!FSlateApplication::IsInitialized()) return;
+    const FVector2D CursorPos = FSlateApplication::Get().GetCursorPos();
+
+    // Si el cursor está sobre un segmento del anillo: resaltarlo y mostrar ESE color
+    // guardado en la brocha. Si no, muestrear la rueda (color más cercano).
+    const int32 Seg = SwatchRing ? SwatchRing->SegmentAt(CursorPos) : -1;
+    if (SwatchRing) SwatchRing->SetHovered(Seg);
+
+    if (Seg >= 0 && Palette.IsValidIndex(Seg))
+        SetColor(Palette[Seg]);
+    else
+        UpdateFromAbsolute(CursorPos);
+
     PushLiveColorToPC(); // color en vivo en la brocha
 }
 
