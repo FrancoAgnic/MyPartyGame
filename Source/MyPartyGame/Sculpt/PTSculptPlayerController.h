@@ -278,6 +278,7 @@ private:
     bool bQuickColorActive = false;
     void OnColorPickPressed();
     void OnColorPickReleased();
+    void OnColorSavePressed();  // E con la rueda abierta: guarda el color en la paleta
 
     // ¿El jugador local puede esculpir ahora? (es el escultor y la fase es Drawing).
     // Sin partida en curso (testeo solo del mapa) devuelve true → esculpir libre.

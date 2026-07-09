@@ -177,6 +177,8 @@ void APTSculptPlayerController::SetupInputComponent()
     // Color rápido: mantener el click derecho abre la rueda; soltarlo confirma.
     InputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed,  this, &APTSculptPlayerController::OnColorPickPressed);
     InputComponent->BindKey(EKeys::RightMouseButton, IE_Released, this, &APTSculptPlayerController::OnColorPickReleased);
+    // Con la rueda abierta, E guarda el color actual en la paleta.
+    InputComponent->BindKey(EKeys::E, IE_Pressed, this, &APTSculptPlayerController::OnColorSavePressed);
 
     // Menú de pausa: Esc
     InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &APTSculptPlayerController::OnPausePressed);
@@ -289,9 +291,10 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         AxisGizmo->SetVisibility(bShowGizmo);
         if (bShowGizmo)
         {
-            // Orientar al plano vertical activo (bloqueado si se esculpe, o el actual).
+            // Orientar al plano vertical activo. Si se esculpe o el plano está congelado
+            // (LeftShift), usar el plano fijo; si no, seguir la cámara.
             FVector N = AxisPlaneN;
-            if (!bIsStamping)
+            if (!bIsStamping && !bPlaneFrozen)
             {
                 FVector S, D;
                 if (GetCameraRay(S, D))
@@ -480,7 +483,9 @@ FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
     // ── Modo eje: trazo recto sobre el plano vertical bloqueado al inicio ───
     // Solo con la herramienta de esculpir (Add). El rayo se interseca con el
     // plano (contiene Z mundo): vertical plomada + diagonales verticales rectas.
-    if (bAxisLock && bIsStamping && EditMode == EPTEditMode::Add)
+    // Proyectar al plano del eje mientras se esculpe, O con el plano congelado (LeftShift):
+    // así el preview se desliza por el plano al mover la cámara, sin esculpir, hasta el LMB.
+    if (bAxisLock && EditMode == EPTEditMode::Add && (bIsStamping || bPlaneFrozen))
     {
         const float denom = FVector::DotProduct(Dir, AxisPlaneN);
         FVector Pf = AxisOrigin;
@@ -740,6 +745,20 @@ void APTSculptPlayerController::OnFreezePressed()
     // Solo tiene sentido en modo eje. Fija el plano actual y bloquea caminar (cámara libre).
     if (bPlaneFrozen || !bAxisLock) return;
     bPlaneFrozen = true;
+
+    // Capturar el plano al ángulo actual (salvo que ya vengas esculpiendo con uno fijado).
+    if (!bIsStamping && EditMode == EPTEditMode::Add)
+    {
+        FVector Start, Dir;
+        if (GetCameraRay(Start, Dir))
+        {
+            AxisOrigin = Start + Dir * AirDepth;
+            FVector N(Dir.X, Dir.Y, 0.f);          // normal horizontal → plano vertical
+            AxisPlaneN = N.GetSafeNormal();
+            if (AxisPlaneN.IsNearlyZero()) AxisPlaneN = FVector(1, 0, 0);
+        }
+    }
+
     SetIgnoreMoveInput(true);
 }
 
@@ -759,6 +778,13 @@ void APTSculptPlayerController::OnColorPickPressed()
     SetInputMode(FInputModeGameAndUI());
     bShowMouseCursor  = true;
     bQuickColorActive = true;
+}
+
+void APTSculptPlayerController::OnColorSavePressed()
+{
+    if (!bQuickColorActive) return;
+    if (UPTColorPickerWidget* CP = Cast<UPTColorPickerWidget>(ColorPicker))
+        CP->SaveCurrentColor();
 }
 
 void APTSculptPlayerController::OnColorPickReleased()

@@ -44,9 +44,12 @@ public:
     /** Sube/baja el brillo (V) del color (rueda del mouse con RMB apretado). */
     void QuickAdjustValue(float Delta);
 
-    /** Al soltar el RMB: si el cursor está sobre un swatch guardado usa ese color; si está
-     *  sobre el "+" guarda el color actual; si no, confirma el color de la rueda. Luego cierra. */
+    /** Al soltar el RMB: si el cursor está sobre un swatch guardado usa ese color; si no,
+     *  confirma el color de la rueda. Luego cierra. */
     void ConfirmQuickPick();
+
+    /** Guarda el color actual en la paleta persistente (lo llama el PlayerController con E). */
+    void SaveCurrentColor();
 
 protected:
     virtual void NativeConstruct() override;
@@ -56,13 +59,12 @@ protected:
 
     UPROPERTY(meta=(BindWidget))          UImage*      Wheel         = nullptr;
     UPROPERTY(meta=(BindWidgetOptional))  USlider*     ValueSlider   = nullptr;
-    UPROPERTY(meta=(BindWidgetOptional))  UTextBlock*  HexText       = nullptr;
     UPROPERTY(meta=(BindWidgetOptional))  UBorder*     PreviewSwatch = nullptr;
     UPROPERTY(meta=(BindWidgetOptional))  UButton*     ConfirmButton = nullptr;
     /** Contenedor (Horizontal/Wrap Box) donde se agregan los swatches guardados. */
     UPROPERTY(meta=(BindWidgetOptional))  UPanelWidget* SwatchBox    = nullptr;
-    /** Botón "+" para guardar el color actual como swatch. */
-    UPROPERTY(meta=(BindWidgetOptional))  UButton*      AddButton    = nullptr;
+    /** Texto de ayuda "E — Save Color" (lo setea C++). */
+    UPROPERTY(meta=(BindWidgetOptional))  UTextBlock*   SaveHintText = nullptr;
 
 private:
     float Hue = 0.f, Sat = 0.f, Val = 1.f; // HSV actual (Val = brillo; el slider es opcional)
@@ -78,8 +80,9 @@ private:
     UPROPERTY() TArray<UWidget*> SwatchWrappers; // los SizeBox contenedores (para limpiar)
 
     UFUNCTION() void OnValueChanged(float V);
-    UFUNCTION() void OnAddClicked();
     UFUNCTION() void OnSwatchClicked();
+
+    void PushLiveColorToPC(); // aplica el color actual a la brocha en vivo (mientras arrastrás)
 
     void LoadPalette();
     void SavePalette() const;

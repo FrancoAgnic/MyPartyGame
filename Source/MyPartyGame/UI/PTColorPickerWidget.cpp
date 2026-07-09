@@ -11,12 +11,6 @@
 #include "Framework/Application/SlateApplication.h"
 #include "../Sculpt/PTSculptPlayerController.h"
 
-static FString ColorToHex(const FLinearColor& C)
-{
-    const FColor c = C.ToFColor(true);
-    return FString::Printf(TEXT("#%02x%02x%02x"), c.R, c.G, c.B);
-}
-
 void UPTColorPickerWidget::NativeConstruct()
 {
     Super::NativeConstruct();
@@ -30,8 +24,8 @@ void UPTColorPickerWidget::NativeConstruct()
     }
     if (ConfirmButton)
         ConfirmButton->OnClicked.AddDynamic(this, &UPTColorPickerWidget::Confirm);
-    if (AddButton)
-        AddButton->OnClicked.AddDynamic(this, &UPTColorPickerWidget::OnAddClicked);
+    if (SaveHintText)
+        SaveHintText->SetText(FText::FromString(TEXT("E — Save Color")));
 
     // Cargar y mostrar la paleta guardada.
     LoadPalette();
@@ -103,7 +97,7 @@ void UPTColorPickerWidget::AddSwatchButton(const FLinearColor& C)
     SwatchWrappers.Add(Box);
 }
 
-void UPTColorPickerWidget::OnAddClicked()
+void UPTColorPickerWidget::SaveCurrentColor()
 {
     Palette.Add(CurrentColor);
     // Buffer rotativo: si se pasa del máximo, cae el más viejo (el primero).
@@ -166,6 +160,7 @@ void UPTColorPickerWidget::QuickPickTick()
     // Sigue el cursor real (posición absoluta de Slate, coherente con el geometry del wheel).
     if (FSlateApplication::IsInitialized())
         UpdateFromAbsolute(FSlateApplication::Get().GetCursorPos());
+    PushLiveColorToPC(); // color en vivo en la brocha
 }
 
 void UPTColorPickerWidget::QuickAdjustValue(float Delta)
@@ -173,6 +168,7 @@ void UPTColorPickerWidget::QuickAdjustValue(float Delta)
     Val = FMath::Clamp(Val + Delta, 0.f, 1.f);
     if (ValueSlider) ValueSlider->SetValue(Val); // reflejar en el slider si existe
     RecomputeColor();
+    PushLiveColorToPC(); // color en vivo en la brocha
 }
 
 void UPTColorPickerWidget::RecomputeColor()
@@ -186,8 +182,15 @@ void UPTColorPickerWidget::RecomputeColor()
 
 void UPTColorPickerWidget::RefreshUI()
 {
-    if (HexText)       HexText->SetText(FText::FromString(ColorToHex(CurrentColor)));
     if (PreviewSwatch) PreviewSwatch->SetBrushColor(CurrentColor);
+}
+
+void UPTColorPickerWidget::PushLiveColorToPC()
+{
+    // Aplica el color a la brocha en tiempo real mientras arrastrás (sin cambiar de modo;
+    // el cambio de modo Erase→Paint recién ocurre al soltar, en OnColorConfirmed).
+    if (APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(GetOwningPlayer()))
+        PC->CurrentPaintColor = CurrentColor;
 }
 
 void UPTColorPickerWidget::SetColor(FLinearColor NewColor)
@@ -233,11 +236,7 @@ void UPTColorPickerWidget::ConfirmQuickPick()
             return;
         }
 
-    // ¿Soltó sobre el "+"? → guardar el color actual de la rueda antes de aplicarlo.
-    if (AddButton && IsAbsPosInWidget(AddButton, CursorPos))
-        OnAddClicked(); // agrega CurrentColor a la paleta (persistente)
-
-    Confirm(); // aplica el color actual de la rueda
+    Confirm(); // aplica el color actual de la rueda (guardar es con E, no al soltar)
 }
 
 FReply UPTColorPickerWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
