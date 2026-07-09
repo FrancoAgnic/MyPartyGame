@@ -34,6 +34,8 @@ public:
     UPROPERTY(EditDefaultsOnly, Category="Game") int32 MinGuessPoints     = 25;
     // El escultor gana esto por cada jugador que adivina su escultura.
     UPROPERTY(EditDefaultsOnly, Category="Game") int32 SculptorPointsPerGuess = 25;
+    // Fracción de letras a revelar de a poco durante el turno (0.7 = 70% al final).
+    UPROPERTY(EditDefaultsOnly, Category="Game") float RevealFraction = 0.7f;
     // Mapa del lobby (para "Volver al lobby" al terminar la partida).
     UPROPERTY(EditDefaultsOnly, Category="Game") FString LobbyMapPath = TEXT("/Game/Template/levels/Lobby");
 
@@ -67,11 +69,19 @@ protected:
 
 private:
     FTimerHandle PhaseTimer;
+    FTimerHandle RevealTimer;
 
     // Estado del turno (solo servidor). La palabra real vive acá, jamás se replica.
     FString          CurrentWord;
     TArray<FString>  CurrentChoices;
     int32            TurnsLeftThisRound = 0; // turnos que faltan para cerrar la ronda actual
+
+    // Revelado progresivo de letras a los que adivinan (anti-spoiler: nunca la palabra entera).
+    TArray<int32> RevealQueue;  // posiciones (índice en CurrentWord) a revelar, en orden
+    TSet<int32>   RevealedPos;  // posiciones ya reveladas
+    void ScheduleLetterReveals();
+    void RevealNextLetter();
+    FString BuildMaskedWord() const; // arma "_ a _ o" con las letras ya reveladas
 
     APTSculptGameState* GS() const;
     TArray<APTPlayerState*> GetActivePlayers() const;

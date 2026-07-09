@@ -212,10 +212,14 @@ void APTSculptGameMode::BeginDrawing(int32 ChoiceIndex)
     ChoiceIndex = FMath::Clamp(ChoiceIndex, 0, CurrentChoices.Num() - 1);
     CurrentWord = CurrentChoices[ChoiceIndex];
 
+    RevealedPos.Reset();
     G->MaskedWord        = MakeMasked(CurrentWord);
     G->TurnPhase         = EPTTurnPhase::Drawing;
     G->TurnEndServerTime = G->GetServerWorldTimeSeconds() + TurnDuration;
     G->OnTurnPhaseChanged.Broadcast();
+
+    // Ir revelando letras de a poco hasta ~RevealFraction al final del turno.
+    ScheduleLetterReveals();
 
     // El escultor recibe la palabra real (nadie más).
     if (G->CurrentSculptor)
@@ -236,6 +240,7 @@ void APTSculptGameMode::EndTurn()
     APTSculptGameState* G = GS();
     if (!G) return;
 
+    GetWorldTimerManager().ClearTimer(RevealTimer);
     G->TurnPhase  = EPTTurnPhase::TurnEnd;
     G->MaskedWord = CurrentWord; // revelar la palabra a todos durante la pausa.
     G->OnTurnPhaseChanged.Broadcast();
@@ -402,6 +407,55 @@ void APTSculptGameMode::ResetSculpture()
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
+
+void APTSculptGameMode::ScheduleLetterReveals()
+{
+    GetWorldTimerManager().ClearTimer(RevealTimer);
+    RevealQueue.Reset();
+
+    // Posiciones de letras (ignorando espacios).
+    TArray<int32> Letters;
+    for (int32 i = 0; i < CurrentWord.Len(); ++i)
+        if (!FChar::IsWhitespace(CurrentWord[i])) Letters.Add(i);
+
+    const int32 NumToReveal = FMath::FloorToInt(FMath::Clamp(RevealFraction, 0.f, 0.95f) * Letters.Num());
+    if (NumToReveal <= 0) return;
+
+    // Barajar y tomar las primeras NumToReveal (orden de revelado al azar).
+    for (int32 i = Letters.Num() - 1; i > 0; --i) Letters.Swap(i, FMath::RandRange(0, i));
+    for (int32 i = 0; i < NumToReveal; ++i) RevealQueue.Add(Letters[i]);
+
+    // Repartir los revelados a lo largo del turno (el último cae cerca del final).
+    const float Interval = TurnDuration / (NumToReveal + 1);
+    GetWorldTimerManager().SetTimer(RevealTimer, this, &APTSculptGameMode::RevealNextLetter, Interval, true);
+}
+
+void APTSculptGameMode::RevealNextLetter()
+{
+    APTSculptGameState* G = GS();
+    if (!G || G->TurnPhase != EPTTurnPhase::Drawing || RevealQueue.Num() == 0)
+    {
+        GetWorldTimerManager().ClearTimer(RevealTimer);
+        return;
+    }
+    RevealedPos.Add(RevealQueue[0]);
+    RevealQueue.RemoveAt(0);
+    G->MaskedWord = BuildMaskedWord(); // solo lo ven los que adivinan (el escultor ve la real)
+    if (RevealQueue.Num() == 0) GetWorldTimerManager().ClearTimer(RevealTimer);
+}
+
+FString APTSculptGameMode::BuildMaskedWord() const
+{
+    FString Out;
+    for (int32 i = 0; i < CurrentWord.Len(); ++i)
+    {
+        const TCHAR C = CurrentWord[i];
+        if (FChar::IsWhitespace(C))      Out += TEXT("   ");
+        else if (RevealedPos.Contains(i)) { Out.AppendChar(C); Out += TEXT(" "); }
+        else                              Out += TEXT("_ ");
+    }
+    return Out.TrimStartAndEnd();
+}
 
 FString APTSculptGameMode::MakeMasked(const FString& Word)
 {
