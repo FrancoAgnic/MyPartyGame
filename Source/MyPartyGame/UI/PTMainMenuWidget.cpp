@@ -43,7 +43,8 @@ void UPTMainMenuWidget::MenuSetup(int32 InNumPublicConnections, FString InLobbyP
 
     AddToViewport();
     SetVisibility(ESlateVisibility::Visible);
-    SetIsFocusable(true);
+    // No SetIsFocusable(true) acá: el teclado tiene que quedar para el juego (WASD/Space), no
+    // para este widget. Los botones se clickean con mouse únicamente (ver nota de arriba).
 
     // Settings persistentes (volumen/idioma): aplicar lo guardado al volver al menú.
     if (UPTGameUserSettings* Settings = UPTGameUserSettings::Get())
@@ -51,18 +52,11 @@ void UPTMainMenuWidget::MenuSetup(int32 InNumPublicConnections, FString InLobbyP
         Settings->ApplyAudioAndLanguage(GetWorld());
     }
 
-    // Capturar mouse y bloquear input de juego mientras el menú está abierto.
-    if (UWorld* World = GetWorld())
-    {
-        if (APlayerController* PC = World->GetFirstPlayerController())
-        {
-            FInputModeUIOnly InputMode;
-            InputMode.SetWidgetToFocus(TakeWidget());
-            InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-            PC->SetInputMode(InputMode);
-            PC->SetShowMouseCursor(true);
-        }
-    }
+    // NOTA (lobby interactivo): no tocar el input mode ni el cursor acá. El PlayerController
+    // (APTLobbyPlayerController::BeginPlay) ya deja GameAndUI + cursor visible para toda la
+    // sesión diegética (podés moverte por el diorama mientras el overlay está abierto); pisarlo
+    // con UIOnly bloquearía el WASD. El menú clásico (no diegético) no usa este widget para
+    // este flujo, así que no hace falta una rama condicional.
 
     // Fase 4 — Mostrar error de conexión previo si lo hay (ej: contraseña incorrecta).
     if (UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance()))
@@ -304,15 +298,8 @@ void UPTMainMenuWidget::MenuTearDown()
 {
     RemoveFromParent();
 
-    if (UWorld* World = GetWorld())
-    {
-        if (APlayerController* PC = World->GetFirstPlayerController())
-        {
-            FInputModeGameOnly InputMode;
-            PC->SetInputMode(InputMode);
-            PC->SetShowMouseCursor(false);
-        }
-    }
+    // No restaurar GameOnly/cursor acá — ver nota en MenuSetup, lo mantiene el PlayerController
+    // durante toda la sesión diegética (el overlay de Ready que sigue también necesita el mouse).
 
     // Desuscribir delegates para evitar callbacks huérfanos.
     if (Sessions)

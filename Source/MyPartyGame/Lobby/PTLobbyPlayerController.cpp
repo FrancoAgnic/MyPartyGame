@@ -5,6 +5,8 @@
 #include "PTGameState.h"
 #include "PTPlayerState.h"
 #include "PTLobbyGameMode.h"
+#include "PTMainMenuWidget.h"
+#include "PTLobbyHUDWidget.h"
 #include "EnhancedInputSubsystems.h"
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
@@ -22,6 +24,17 @@ void APTLobbyPlayerController::Server_RequestStartGame_Implementation()
 
     if (APTLobbyGameMode* GM = GetWorld()->GetAuthGameMode<APTLobbyGameMode>())
         GM->TravelToGame();
+}
+
+void APTLobbyPlayerController::Server_SetReady_Implementation(bool bInReady)
+{
+    APTPlayerState* PS = GetPlayerState<APTPlayerState>();
+    if (!PS) return;
+
+    PS->bIsReady = bInReady;
+
+    if (APTLobbyGameMode* GM = GetWorld()->GetAuthGameMode<APTLobbyGameMode>())
+        GM->CheckReadyState();
 }
 
 void APTLobbyPlayerController::BeginPlay()
@@ -53,6 +66,32 @@ void APTLobbyPlayerController::BeginPlay()
         if (!bDioramaReady)
             GetWorldTimerManager().SetTimer(DioramaRetry, this,
                 &APTLobbyPlayerController::SetupDioramaView, 0.2f, true);
+
+        ShowLobbyOverlay();
+    }
+}
+
+void APTLobbyPlayerController::ShowLobbyOverlay()
+{
+    // NM_Standalone: recién se abrió el juego, todavía no hay sesión → Crear/Unirse/Opciones.
+    // NM_ListenServer/NM_Client: ya viajamos acá con "?listen" (host) o nos unimos (cliente) →
+    // ya estamos en la sala, mostrar la lista de jugadores + Ready.
+    const ENetMode NetMode = GetNetMode();
+    if (NetMode == NM_Standalone)
+    {
+        if (MainMenuWidgetClass)
+        {
+            if (UPTMainMenuWidget* Menu = CreateWidget<UPTMainMenuWidget>(this, MainMenuWidgetClass))
+                Menu->MenuSetup(DefaultMaxPlayers, SelfMapPath);
+        }
+    }
+    else
+    {
+        if (LobbyHUDWidgetClass)
+        {
+            if (UPTLobbyHUDWidget* HUD = CreateWidget<UPTLobbyHUDWidget>(this, LobbyHUDWidgetClass))
+                HUD->ShowHUD();
+        }
     }
 }
 

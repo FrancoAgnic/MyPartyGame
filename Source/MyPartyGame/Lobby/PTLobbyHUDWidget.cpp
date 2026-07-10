@@ -17,6 +17,7 @@ bool UPTLobbyHUDWidget::Initialize()
     if (CopyCodeButton)  CopyCodeButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnCopyCodeClicked);
     if (LeaveGameButton) LeaveGameButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnLeaveGameClicked);
     if (StartGameButton) StartGameButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnStartGameClicked);
+    if (ReadyButton)      ReadyButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnReadyClicked);
 
     return true;
 }
@@ -61,11 +62,10 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
             APTPlayerState* PTPS = Cast<APTPlayerState>(PS);
             if (!PTPS) continue;
 
-            // El estado de "ready" queda fuera del template (cada juego decide si lo usa);
-            // acá solo mostramos nombre + si es el host.
             UTextBlock* Row = NewObject<UTextBlock>(this);
             FString Label = PTPS->DisplayName;
             if (PTPS->bIsHost) Label += TEXT(" (Host)");
+            Label += PTPS->bIsReady ? TEXT(" — Listo") : TEXT(" — Esperando");
             Row->SetText(FText::FromString(Label));
             PlayersBox->AddChildToVerticalBox(Row);
         }
@@ -103,6 +103,26 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
     {
         StartGameButton->SetVisibility(bLocalIsHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
     }
+
+    if (ReadyButtonText)
+    {
+        ReadyButtonText->SetText(FText::FromString(
+            (LocalPS && LocalPS->bIsReady) ? TEXT("Listo ✓") : TEXT("Listo")));
+    }
+
+    if (CountdownText)
+    {
+        const int32 Seconds = PTGS->CountdownSecondsRemaining;
+        if (Seconds >= 0)
+        {
+            CountdownText->SetVisibility(ESlateVisibility::Visible);
+            CountdownText->SetText(FText::FromString(FString::Printf(TEXT("Arranca en %d..."), Seconds)));
+        }
+        else
+        {
+            CountdownText->SetVisibility(ESlateVisibility::Collapsed);
+        }
+    }
 }
 
 void UPTLobbyHUDWidget::OnCopyCodeClicked()
@@ -123,5 +143,16 @@ void UPTLobbyHUDWidget::OnStartGameClicked()
     if (APTLobbyPlayerController* PC = Cast<APTLobbyPlayerController>(GetOwningPlayer()))
     {
         PC->Server_RequestStartGame();
+    }
+}
+
+void UPTLobbyHUDWidget::OnReadyClicked()
+{
+    const APTPlayerState* LocalPS = GetOwningPlayer() ? GetOwningPlayer()->GetPlayerState<APTPlayerState>() : nullptr;
+    if (!LocalPS) return;
+
+    if (APTLobbyPlayerController* PC = Cast<APTLobbyPlayerController>(GetOwningPlayer()))
+    {
+        PC->Server_SetReady(!LocalPS->bIsReady);
     }
 }

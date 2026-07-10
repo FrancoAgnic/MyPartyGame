@@ -39,9 +39,17 @@ protected:
     // Solo habilitado/visible para el jugador host (ver RefreshPlayerList).
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      StartGameButton;
 
+    // Toggle de "listo". El arranque es automático (todos listos → countdown), no hay
+    // botón de Start manual en el flujo normal (StartGameButton queda como override de debug).
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*      ReadyButton;
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   ReadyButtonText;
+    // Visible solo mientras APTGameState::CountdownSecondsRemaining >= 0.
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   CountdownText;
+
     UFUNCTION() void OnCopyCodeClicked();
     UFUNCTION() void OnLeaveGameClicked();
     UFUNCTION() void OnStartGameClicked();
+    UFUNCTION() void OnReadyClicked();
 
     void RefreshPlayerList();
 

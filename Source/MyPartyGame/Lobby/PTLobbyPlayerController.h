@@ -9,6 +9,8 @@
 class UInputMappingContext;
 class UInputAction;
 class UPTLobbyEscapeMenuWidget;
+class UPTMainMenuWidget;
+class UPTLobbyHUDWidget;
 struct FInputActionValue;
 
 UCLASS()
@@ -24,6 +26,10 @@ public:
      */
     UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Lobby")
     void Server_RequestStartGame();
+
+    /** Toggle de "listo". Lo llama el botón Ready del HUD (UPTLobbyHUDWidget). */
+    UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Lobby")
+    void Server_SetReady(bool bInReady);
 
 protected:
     virtual void BeginPlay() override;
@@ -49,6 +55,23 @@ protected:
     UPROPERTY(EditAnywhere, Category="Diorama")
     FName DioramaCameraTag = TEXT("DioramaCam");
 
+    // ── Overlay 2D (menú diegético) ──────────────────────────────────────────
+    // Sin sesión activa (NM_Standalone, recién abierto el juego): Crear/Unirse/Opciones.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UI")
+    TSubclassOf<UPTMainMenuWidget> MainMenuWidgetClass;
+
+    // Ya en una sesión (host tras ?listen o cliente tras join): lista de jugadores + Ready.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UI")
+    TSubclassOf<UPTLobbyHUDWidget> LobbyHUDWidgetClass;
+
+    // Path del propio nivel combinado (MainMenu = Lobby). Al crear sesión se autoviaja acá
+    // mismo con "?listen" (self-travel, ver UPTMainMenuWidget::OnCreateSession).
+    UPROPERTY(EditAnywhere, Category="UI")
+    FString SelfMapPath = TEXT("/Game/Template/levels/MainMenu");
+
+    UPROPERTY(EditAnywhere, Category="UI")
+    int32 DefaultMaxPlayers = 8;
+
 private:
     UPROPERTY() UPTLobbyEscapeMenuWidget* EscapeMenuWidget = nullptr;
 
@@ -57,4 +80,7 @@ private:
     void SetupDioramaView();
     bool bDioramaReady = false;
     FTimerHandle DioramaRetry;
+
+    // Sin sesión (todavía no viajamos) → overlay Crear/Unirse; en sesión → HUD de lobby (Ready).
+    void ShowLobbyOverlay();
 };

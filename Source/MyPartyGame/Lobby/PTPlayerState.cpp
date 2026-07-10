@@ -8,6 +8,7 @@ void APTPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(APTPlayerState, DisplayName);
     DOREPLIFETIME(APTPlayerState, bIsHost);
+    DOREPLIFETIME(APTPlayerState, bIsReady);
     DOREPLIFETIME(APTPlayerState, bHasGuessedThisTurn);
     DOREPLIFETIME(APTPlayerState, GameScore);
 }

@@ -20,6 +20,11 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")
     bool bIsHost = false;
 
+    // Listo para arrancar (toggle en el HUD del lobby). El GameMode revisa esto en
+    // APTLobbyGameMode::CheckReadyState para el countdown automatico.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")
+    bool bIsReady = false;
+
     // ── Partida (Sculpturillo) ──────────────────────────────────────────────
     // Si este jugador ya adivinó la palabra del turno actual. El servidor lo resetea
     // al empezar cada turno. Se usa para el HUD ("quién adivinó") y para saber cuándo

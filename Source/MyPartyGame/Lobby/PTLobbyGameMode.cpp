@@ -7,6 +7,7 @@
 #include "PTGameState.h"
 #include "MultiplayerSessionsSubsystem.h"
 #include "Kismet/GameplayStatics.h"
+#include "TimerManager.h"
 
 APTLobbyGameMode::APTLobbyGameMode()
 {
@@ -87,6 +88,10 @@ void APTLobbyGameMode::PostLogin(APlayerController* NewPlayer)
     // Acá sí queremos el Pawn enseguida (el lobby es la sala de espera visible), así que lo
     // forzamos manualmente.
     RestartPlayer(NewPlayer);
+
+    // Un jugador nuevo entra sin listo (bIsReady=false por default): si había countdown en
+    // curso, esto lo cancela (CheckReadyState ve que ya no están todos listos).
+    CheckReadyState();
 }
 
 void APTLobbyGameMode::Logout(AController* Exiting)
@@ -107,6 +112,10 @@ void APTLobbyGameMode::Logout(AController* Exiting)
     }
 
     Super::Logout(Exiting);
+
+    // Recién ahora Exiting ya no figura en GameState->PlayerArray (Super::Logout dispara su
+    // remoción); si quedaba un countdown en curso puede haber que cancelarlo (bajó del mínimo).
+    CheckReadyState();
 }
 
 void APTLobbyGameMode::TravelToGame()
@@ -114,4 +123,49 @@ void APTLobbyGameMode::TravelToGame()
     const FString URL = GameMapPath + TEXT("?listen");
     UE_LOG(LogTemp, Log, TEXT("[LobbyGameMode] ServerTravel → %s"), *URL);
     GetWorld()->ServerTravel(URL, /*bAbsolute=*/true);
+}
+
+void APTLobbyGameMode::CheckReadyState()
+{
+    APTGameState* PTGS = GetGameState<APTGameState>();
+    if (!PTGS) return;
+
+    bool bAllReady = PTGS->PlayerArray.Num() >= MinPlayersToStart;
+    for (APlayerState* PS : PTGS->PlayerArray)
+    {
+        const APTPlayerState* PTPS = Cast<APTPlayerState>(PS);
+        if (!PTPS || !PTPS->bIsReady) { bAllReady = false; break; }
+    }
+
+    const bool bCounting = GetWorldTimerManager().IsTimerActive(CountdownTimerHandle);
+
+    if (bAllReady && !bCounting)
+    {
+        PTGS->CountdownSecondsRemaining = ReadyCountdownSeconds;
+        PTGS->LobbyState = EPTLobbyState::Starting;
+        GetWorldTimerManager().SetTimer(CountdownTimerHandle, this,
+            &APTLobbyGameMode::CountdownTick, 1.f, true);
+        UE_LOG(LogTemp, Log, TEXT("[Lobby] Todos listos (%d/%d) — countdown de %d s."),
+            PTGS->PlayerArray.Num(), PTGS->MaxPlayers, ReadyCountdownSeconds);
+    }
+    else if (!bAllReady && bCounting)
+    {
+        GetWorldTimerManager().ClearTimer(CountdownTimerHandle);
+        PTGS->CountdownSecondsRemaining = -1;
+        PTGS->LobbyState = EPTLobbyState::WaitingForPlayers;
+        UE_LOG(LogTemp, Log, TEXT("[Lobby] Countdown cancelado."));
+    }
+}
+
+void APTLobbyGameMode::CountdownTick()
+{
+    APTGameState* PTGS = GetGameState<APTGameState>();
+    if (!PTGS) return;
+
+    --PTGS->CountdownSecondsRemaining;
+    if (PTGS->CountdownSecondsRemaining <= 0)
+    {
+        GetWorldTimerManager().ClearTimer(CountdownTimerHandle);
+        TravelToGame();
+    }
 }

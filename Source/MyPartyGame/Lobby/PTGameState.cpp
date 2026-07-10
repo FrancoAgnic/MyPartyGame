@@ -10,4 +10,5 @@ void APTGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
     DOREPLIFETIME(APTGameState, SessionDisplayName);
     DOREPLIFETIME(APTGameState, SessionCode);
     DOREPLIFETIME(APTGameState, MaxPlayers);
+    DOREPLIFETIME(APTGameState, CountdownSecondsRemaining);
 }

@@ -37,5 +37,9 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")
     int32 MaxPlayers = 0;
 
+    // Segundos restantes del countdown automático (todos listos → arranca). -1 = sin countdown.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")
+    int32 CountdownSecondsRemaining = -1;
+
     // La lista de jugadores vive en PlayerArray (heredado de AGameStateBase). No replicar aparte.
 };
