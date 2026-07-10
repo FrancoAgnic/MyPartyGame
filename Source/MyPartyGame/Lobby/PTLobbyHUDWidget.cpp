@@ -22,31 +22,24 @@ bool UPTLobbyHUDWidget::Initialize()
     return true;
 }
 
-void UPTLobbyHUDWidget::NativeConstruct()
-{
-    Super::NativeConstruct();
-
-    // Guard anti "UI de lobby en el menú principal": este HUD solo tiene sentido DENTRO de una
-    // sesión (host tras ?listen o cliente tras join → NetMode ListenServer/Client). En Standalone
-    // todavía estamos en el menú Crear/Unirse (sin sesión) y no corresponde mostrarlo. El flujo
-    // normal solo lo crea vía APTLobbyPlayerController::ShowLobbyOverlay en la rama networked, así
-    // que si aparece en Standalone es por alguna vía inesperada — auto-ocultarse y dejar aviso.
-    if (const UWorld* World = GetWorld())
-    {
-        if (World->GetNetMode() == NM_Standalone)
-        {
-            UE_LOG(LogTemp, Warning,
-                TEXT("[Lobby] WBP_LobbyHUD construido en Standalone (menú, sin sesión) — auto-ocultando."));
-            SetVisibility(ESlateVisibility::Collapsed);
-            RemoveFromParent();
-        }
-    }
-}
-
 void UPTLobbyHUDWidget::ShowHUD()
 {
-    UE_LOG(LogTemp, Log, TEXT("[Lobby] UPTLobbyHUDWidget::ShowHUD llamado. NetMode=%d"),
-        GetWorld() ? (int32)GetWorld()->GetNetMode() : -1);
+    // Este HUD solo tiene sentido DENTRO de una sesión (host tras ?listen o cliente tras join →
+    // NetMode ListenServer/Client). En Standalone todavía estamos en el menú Crear/Unirse (sin
+    // sesión) y mostrarlo lo encimaría al MainMenu. El flujo correcto lo dispara C++ desde
+    // APTLobbyPlayerController::ShowLobbyOverlay (solo en la rama networked); si ShowHUD igual
+    // llega en Standalone es por un llamado de más (p.ej. un nodo BP viejo "Show HUD" en el
+    // Event BeginPlay de BP_LobbyPlayerController) → ignorarlo.
+    if (GetWorld() && GetWorld()->GetNetMode() == NM_Standalone)
+    {
+        UE_LOG(LogTemp, Warning,
+            TEXT("[Lobby] ShowHUD ignorado: NetMode Standalone (menú, sin sesión). ¿Nodo BP 'Show HUD' de más?"));
+        return;
+    }
+
+    // Idempotente: si ya está en el viewport (ej: lo llamaron dos veces — un nodo BP + el C++),
+    // no re-agregarlo ni reiniciar el timer.
+    if (IsInViewport()) return;
 
     AddToViewport();
     SetVisibility(ESlateVisibility::Visible);

@@ -24,7 +24,6 @@ public:
 
 protected:
     virtual bool Initialize() override;
-    virtual void NativeConstruct() override;
     virtual void NativeDestruct() override;
 
     UPROPERTY(meta = (BindWidget))         UVerticalBox* PlayersBox;
