@@ -36,8 +36,11 @@ public:
     UPROPERTY(EditDefaultsOnly, Category="Game") int32 SculptorPointsPerGuess = 25;
     // Fracción de letras a revelar de a poco durante el turno (0.7 = 70% al final).
     UPROPERTY(EditDefaultsOnly, Category="Game") float RevealFraction = 0.7f;
-    // Mapa del lobby (para "Volver al lobby" al terminar la partida).
-    UPROPERTY(EditDefaultsOnly, Category="Game") FString LobbyMapPath = TEXT("/Game/Template/levels/Lobby");
+    // Mapa del lobby (para "Volver al lobby" al terminar la partida). En el diseño de lobby
+    // interactivo el lobby ES MainMenu (menú y sala fusionados), así que se vuelve ahí con
+    // ?listen (queda como listen server → ShowLobbyOverlay muestra el LobbyHUD para re-jugar).
+    // El viejo Lobby.umap quedó sin uso.
+    UPROPERTY(EditDefaultsOnly, Category="Game") FString LobbyMapPath = TEXT("/Game/Template/levels/MainMenu");
 
     // Banco de palabras (español). Si queda vacío se siembra con una lista por defecto.
     UPROPERTY(EditDefaultsOnly, Category="Game") TArray<FString> WordBank;
