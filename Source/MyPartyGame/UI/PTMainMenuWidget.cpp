@@ -8,6 +8,7 @@
 #include "PTSettingsWidget.h"
 #include "PTGameUserSettings.h"
 #include "PTGameInstance.h"
+#include "PTLobbyGameMode.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Kismet/KismetSystemLibrary.h"
@@ -233,6 +234,21 @@ void UPTMainMenuWidget::OnCreateSession(bool bWasSuccessful)
             // contraseña en PreLogin para sesiones privadas.
             TravelURL += TEXT("?Name=") + UMultiplayerSessionsSubsystem::SanitizeNameForTravelURL(Sessions->GetLocalPlayerDisplayName());
         }
+
+        // Este self-travel tiene que ser un travel DURO (con el "flash" que el diseño acepta),
+        // no seamless: en seamless travel el PlayerController del host sobrevive al viaje sin
+        // pasar de nuevo por BeginPlay (así que ShowLobbyOverlay nunca se re-ejecuta) y sin pasar
+        // por PostLogin (así que el RestartPlayer manual tampoco corre) — el host queda sin pawn
+        // y sin overlay, como espectador. bUseSeamlessTravel=true es para el viaje final a Lvl-01
+        // (PTLobbyGameMode::TravelToGame lo vuelve a poner en true antes de usarlo).
+        if (APTLobbyGameMode* GM = World->GetAuthGameMode<APTLobbyGameMode>())
+        {
+            GM->bUseSeamlessTravel = false;
+            // Evita que el propio host dispare "último jugador se fue, destruir sesión" cuando
+            // su conexión local se recicla durante este travel (ver comentario en el header).
+            GM->bTravelInProgress = true;
+        }
+
         World->ServerTravel(TravelURL);
     }
 }

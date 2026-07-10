@@ -29,6 +29,14 @@ public:
 
     void TravelToGame();
 
+    // El self-travel de "Crear sesión" (MainMenu → MainMenu con ?listen, ver
+    // PTMainMenuWidget::OnCreateSession) es un travel duro: al desconectar el mundo viejo,
+    // el propio host pasa por Logout() con PlayersJoined llegando a 0, lo que sin este flag
+    // dispararía "se fue el último jugador, destruir sesión" — matando la sesión recién creada
+    // antes de que un amigo pueda encontrarla. Poner en true justo antes de un travel voluntario.
+    UPROPERTY()
+    bool bTravelInProgress = false;
+
     // Jugadores mínimos para poder arrancar el countdown (lobby interactivo, sin botón manual).
     static constexpr int32 MinPlayersToStart = 2;
     static constexpr int32 ReadyCountdownSeconds = 5;

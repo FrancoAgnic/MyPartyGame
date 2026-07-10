@@ -99,9 +99,11 @@ void APTLobbyGameMode::Logout(AController* Exiting)
     --PlayersJoined;
     UE_LOG(LogTemp, Log, TEXT("[Lobby] Logout. Jugadores conectados: %d"), PlayersJoined);
 
-    // Se fue el último jugador: no dejar la sesión como sala fantasma.
+    // Se fue el último jugador: no dejar la sesión como sala fantasma. Pero si este Logout es
+    // producto de nuestro propio self-travel (bTravelInProgress), no es un abandono real —
+    // no destruir la sesión que se acaba de crear (ver comentario en el header).
     // (La migración de host —cuando se va el host pero quedan otros— es trabajo aparte, todavía no hecho.)
-    if (PlayersJoined <= 0)
+    if (PlayersJoined <= 0 && !bTravelInProgress)
     {
         if (UMultiplayerSessionsSubsystem* Sessions =
                 GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>())
@@ -120,6 +122,10 @@ void APTLobbyGameMode::Logout(AController* Exiting)
 
 void APTLobbyGameMode::TravelToGame()
 {
+    // Acá sí queremos seamless (sin flash) — puede haberse desactivado para el self-travel
+    // de "Crear sesión" en MainMenu (ver PTMainMenuWidget::OnCreateSession).
+    bUseSeamlessTravel = true;
+
     const FString URL = GameMapPath + TEXT("?listen");
     UE_LOG(LogTemp, Log, TEXT("[LobbyGameMode] ServerTravel → %s"), *URL);
     GetWorld()->ServerTravel(URL, /*bAbsolute=*/true);
