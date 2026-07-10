@@ -22,8 +22,32 @@ bool UPTLobbyHUDWidget::Initialize()
     return true;
 }
 
+void UPTLobbyHUDWidget::NativeConstruct()
+{
+    Super::NativeConstruct();
+
+    // Guard anti "UI de lobby en el menú principal": este HUD solo tiene sentido DENTRO de una
+    // sesión (host tras ?listen o cliente tras join → NetMode ListenServer/Client). En Standalone
+    // todavía estamos en el menú Crear/Unirse (sin sesión) y no corresponde mostrarlo. El flujo
+    // normal solo lo crea vía APTLobbyPlayerController::ShowLobbyOverlay en la rama networked, así
+    // que si aparece en Standalone es por alguna vía inesperada — auto-ocultarse y dejar aviso.
+    if (const UWorld* World = GetWorld())
+    {
+        if (World->GetNetMode() == NM_Standalone)
+        {
+            UE_LOG(LogTemp, Warning,
+                TEXT("[Lobby] WBP_LobbyHUD construido en Standalone (menú, sin sesión) — auto-ocultando."));
+            SetVisibility(ESlateVisibility::Collapsed);
+            RemoveFromParent();
+        }
+    }
+}
+
 void UPTLobbyHUDWidget::ShowHUD()
 {
+    UE_LOG(LogTemp, Log, TEXT("[Lobby] UPTLobbyHUDWidget::ShowHUD llamado. NetMode=%d"),
+        GetWorld() ? (int32)GetWorld()->GetNetMode() : -1);
+
     AddToViewport();
     SetVisibility(ESlateVisibility::Visible);
 

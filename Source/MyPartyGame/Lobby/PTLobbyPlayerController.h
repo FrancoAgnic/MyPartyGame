@@ -34,6 +34,9 @@ public:
 protected:
     virtual void BeginPlay() override;
     virtual void SetupInputComponent() override;
+    // La posesión del pawn (sobre todo en clientes, que la reciben por replicación después del
+    // BeginPlay) fija la vista al personaje; re-asegurar acá la cámara diorama.
+    virtual void AcknowledgePossession(APawn* P) override;
 
     /** Asignar IMC_Lobby en el Blueprint derivado BP_LobbyPlayerController. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input")
@@ -80,6 +83,11 @@ private:
     void SetupDioramaView();
     bool bDioramaReady = false;
     FTimerHandle DioramaRetry;
+
+    // Input diegético del lobby: GameAndUI + cursor visible + sin captura de mouse (el look
+    // está bloqueado, así que el mouse es 100% para la UI). Se re-aplica al cerrar el menú de
+    // Escape, que si no dejaría el input en GameOnly (correcto para el juego FPS, no para el lobby).
+    void ApplyDioramaInputMode();
 
     // Sin sesión (todavía no viajamos) → overlay Crear/Unirse; en sesión → HUD de lobby (Ready).
     void ShowLobbyOverlay();

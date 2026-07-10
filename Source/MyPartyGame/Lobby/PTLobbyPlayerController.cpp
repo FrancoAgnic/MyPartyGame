@@ -43,7 +43,18 @@ void APTLobbyPlayerController::BeginPlay()
 {
     Super::BeginPlay();
 
-    // Solo el controlador local necesita el contexto de input.
+    UE_LOG(LogTemp, Log, TEXT("[Lobby] APTLobbyPlayerController::BeginPlay. IsLocalController=%d NetMode=%d"),
+        IsLocalController() ? 1 : 0, (int32)GetNetMode());
+
+    // Que poseer el pawn NO cambie la cámara. Va FUERA del bloque IsLocalController a propósito:
+    // en un cliente, esta misma clase corre en el SERVIDOR como proxy remoto (IsLocalController()
+    // ahí es false), y si el flag queda en true el servidor auto-administra la cámara de ese
+    // cliente y le manda ClientSetViewTarget(pawn) por red, pisando la cámara diorama que el
+    // cliente fija localmente. Desactivarlo en ambos lados es lo que hace que los clientes también
+    // vean la cámara fija del lobby y no su primera persona.
+    bAutoManageActiveCameraTarget = false;
+
+    // Solo el controlador local necesita el contexto de input y la vista/overlay locales.
     if (IsLocalController())
     {
         if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
@@ -53,31 +64,7 @@ void APTLobbyPlayerController::BeginPlay()
                 Subsystem->AddMappingContext(LobbyMappingContext, 0);
         }
 
-        // Menú/lobby diegético: el mouse queda visible para la UI (overlay 2D), pero el
-        // teclado (WASD/Space) sigue yendo al juego. El look se bloquea en SetupDioramaView
-        // (SetIgnoreLookInput), así que el mouse nunca necesita "capturarse" para nada.
-        FInputModeGameAndUI Mode;
-        Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-        Mode.SetHideCursorDuringCapture(false);
-        SetInputMode(Mode);
-        SetShowMouseCursor(true);
-
-        // SetHideCursorDuringCapture(false) no alcanza: FInputModeGameAndUI igual arma un
-        // capture mode que agarra el mouse al primer click (para permitir look FPS), y ese
-        // capture es lo que hace desaparecer la flechita en algunos drivers/monitores —
-        // pasa en PIE y en Standalone. Como el look de mouse está deshabilitado por diseño,
-        // no hace falta ningún capture: lo desactivamos directo en el viewport.
-        if (ULocalPlayer* LP = GetLocalPlayer())
-        {
-            if (UGameViewportClient* VC = LP->ViewportClient)
-            {
-                VC->SetMouseCaptureMode(EMouseCaptureMode::NoCapture);
-                VC->SetMouseLockMode(EMouseLockMode::DoNotLock);
-            }
-        }
-
-        // Que poseer el pawn NO cambie la cámara (si no, volvería a la del personaje).
-        bAutoManageActiveCameraTarget = false;
+        ApplyDioramaInputMode();
 
         // Fijar la vista a la cámara diorama. Reintenta si aún no está lista.
         SetupDioramaView();
@@ -86,6 +73,49 @@ void APTLobbyPlayerController::BeginPlay()
                 &APTLobbyPlayerController::SetupDioramaView, 0.2f, true);
 
         ShowLobbyOverlay();
+    }
+}
+
+void APTLobbyPlayerController::ApplyDioramaInputMode()
+{
+    if (!IsLocalController()) return;
+
+    // Menú/lobby diegético: el mouse queda visible para la UI (overlay 2D), pero el teclado
+    // (WASD/Space) sigue yendo al juego. El look se bloquea en SetupDioramaView (SetIgnoreLookInput),
+    // así que el mouse nunca necesita "capturarse" para nada.
+    FInputModeGameAndUI Mode;
+    Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+    Mode.SetHideCursorDuringCapture(false);
+    SetInputMode(Mode);
+    SetShowMouseCursor(true);
+
+    // SetHideCursorDuringCapture(false) no alcanza: FInputModeGameAndUI igual arma un capture
+    // mode que agarra el mouse al primer click (para permitir look FPS), y ese capture es lo que
+    // hace desaparecer la flechita en algunos drivers/monitores. Como el look está deshabilitado
+    // por diseño, no hace falta ningún capture: lo desactivamos directo en el viewport.
+    if (ULocalPlayer* LP = GetLocalPlayer())
+    {
+        if (UGameViewportClient* VC = LP->ViewportClient)
+        {
+            VC->SetMouseCaptureMode(EMouseCaptureMode::NoCapture);
+            VC->SetMouseLockMode(EMouseLockMode::DoNotLock);
+        }
+    }
+}
+
+void APTLobbyPlayerController::AcknowledgePossession(APawn* P)
+{
+    Super::AcknowledgePossession(P);
+
+    // La posesión del pawn fija la vista al personaje (en clientes llega por replicación DESPUÉS
+    // del BeginPlay, así que la cámara diorama que se fijó ahí queda pisada). Re-asegurarla.
+    if (IsLocalController())
+    {
+        bDioramaReady = false;
+        SetupDioramaView();
+        if (!bDioramaReady)
+            GetWorldTimerManager().SetTimer(DioramaRetry, this,
+                &APTLobbyPlayerController::SetupDioramaView, 0.2f, true);
     }
 }
 
@@ -187,4 +217,10 @@ void APTLobbyPlayerController::ToggleEscapeMenu(const FInputActionValue& Value)
     }
 
     if (EscapeMenuWidget) EscapeMenuWidget->HandleEscape();
+
+    // Al cerrar el menú de Escape, UPTLobbyEscapeMenuWidget::ToggleMenu deja el input en
+    // GameOnly + cursor oculto (correcto para el juego FPS, NO para el lobby diegético, que
+    // necesita el mouse para tocar Listo). Si el menú quedó cerrado, restaurar el modo diorama.
+    if (EscapeMenuWidget && !EscapeMenuWidget->IsMenuOpen())
+        ApplyDioramaInputMode();
 }
