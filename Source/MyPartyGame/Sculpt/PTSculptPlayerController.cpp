@@ -17,6 +17,7 @@
 #include "../Lobby/PTLobbyEscapeMenuWidget.h"
 #include "../Lobby/PTLobbyCharacter.h"
 #include "../Lobby/PTPlayerState.h"
+#include "Engine/Engine.h"
 #include "PTSculptGameMode.h"
 #include "PTSculptGameState.h"
 #include "PTGameplayHUDWidget.h"
@@ -197,11 +198,19 @@ void APTSculptPlayerController::SetupInputComponent()
 
     // Chat: Enter abre/enfoca el chat (al enviar vuelve el control al juego).
     InputComponent->BindKey(EKeys::Enter, IE_Pressed, this, &APTSculptPlayerController::OnOpenChat);
+
+    // Ayuda: H muestra/oculta la lista de controles.
+    InputComponent->BindKey(EKeys::H, IE_Pressed, this, &APTSculptPlayerController::OnToggleControls);
 }
 
 void APTSculptPlayerController::OnOpenChat()
 {
     if (GameplayHUD) GameplayHUD->FocusChat();
+}
+
+void APTSculptPlayerController::OnToggleControls()
+{
+    bShowControls = !bShowControls;
 }
 
 void APTSculptPlayerController::OnPausePressed()
@@ -240,6 +249,25 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         bMenuInputLocked = bMenuOpen;
         SetIgnoreLookInput(bMenuOpen);
         SetIgnoreMoveInput(bMenuOpen);
+    }
+
+    // ── Ayuda de controles en pantalla (tecla H) ──
+    if (GEngine && IsLocalController())
+    {
+        GEngine->AddOnScreenDebugMessage(987720, 0.25f, FColor(190, 190, 190), TEXT("[H] Controles"));
+        if (bShowControls)
+        {
+            static const FString Controls =
+                TEXT("CONTROLES\n")
+                TEXT("Mover: WASD     Camara: Mouse\n")
+                TEXT("Volar: doble ESPACIO (manten = sube)  ·  CTRL = baja\n")
+                TEXT("Esculpir: Click izq.     Tamano brocha: Rueda\n")
+                TEXT("Modos: 1 Agregar · 2 Borrar · 3 Pintar\n")
+                TEXT("Formas: TAB     Eje recto: X     Congelar plano: SHIFT\n")
+                TEXT("Color: manten Click der. (E = guardar color)\n")
+                TEXT("Chat: ENTER     Pausa: ESC");
+            GEngine->AddOnScreenDebugMessage(987721, 0.25f, FColor(255, 235, 150), Controls);
+        }
     }
 
     // Rueda de color abierta (mantener RMB): seguir el cursor para elegir matiz/saturación.

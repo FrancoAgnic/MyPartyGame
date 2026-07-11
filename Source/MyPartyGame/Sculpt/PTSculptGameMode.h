@@ -45,6 +45,12 @@ public:
     // Banco de palabras (español). Si queda vacío se siembra con una lista por defecto.
     UPROPERTY(EditDefaultsOnly, Category="Game") TArray<FString> WordBank;
 
+    // Al llegar a Lvl-01 por seamless travel, los PlayerState/controllers de todos recién se
+    // asientan; arrancar la partida en ese instante puede elegir escultor sobre un PlayerState
+    // que el motor todavía va a reemplazar → a nadie le toca esculpir. Esperar este delay antes
+    // del primer turno lo estabiliza (ver CheckStart).
+    UPROPERTY(EditDefaultsOnly, Category="Game") float StartDelay = 2.0f;
+
     // Llamado por el PlayerController del escultor cuando elige una de las 3 palabras.
     void HandleWordChosen(APTPlayerState* Chooser, int32 ChoiceIndex);
 
@@ -73,6 +79,8 @@ protected:
 private:
     FTimerHandle PhaseTimer;
     FTimerHandle RevealTimer;
+    FTimerHandle StartDelayTimer;   // arranque diferido del primer turno (ver StartDelay)
+    bool         bStartScheduled = false; // evita re-agendar el arranque en cada CheckStart
 
     // Estado del turno (solo servidor). La palabra real vive acá, jamás se replica.
     FString          CurrentWord;

@@ -233,6 +233,8 @@ private:
     UPROPERTY() class UPTLobbyEscapeMenuWidget* EscapeMenu = nullptr;
     void OnPausePressed();
     void OnOpenChat();
+    void OnToggleControls();          // H: muestra/oculta la lista de controles en pantalla
+    bool bShowControls = false;
 
     bool bIsStamping        = false;
     bool bPreviewDirty      = true;

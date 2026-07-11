@@ -101,14 +101,23 @@ void APTSculptGameMode::CheckStart()
     APTSculptGameState* G = GS();
     if (!G) return;
     if (G->TurnPhase == EPTTurnPhase::WaitingForPlayers &&
-        GetActivePlayers().Num() >= MinPlayersToStart)
+        GetActivePlayers().Num() >= MinPlayersToStart &&
+        !bStartScheduled)
     {
-        StartGame();
+        // Arranque DIFERIDO: si venimos de seamless travel desde el lobby, los PlayerState y
+        // controllers de todos recién se están asentando. Empezar ya puede elegir escultor sobre
+        // un PlayerState que el motor todavía va a reemplazar → a nadie le toca. Esperar StartDelay
+        // lo estabiliza. StartGame re-valida al dispararse.
+        bStartScheduled = true;
+        GetWorldTimerManager().SetTimer(StartDelayTimer, this, &APTSculptGameMode::StartGame,
+                                        StartDelay, false);
     }
 }
 
 void APTSculptGameMode::StartGame()
 {
+    bStartScheduled = false;
+
     APTSculptGameState* G = GS();
     if (!G) return;
 
@@ -250,11 +259,11 @@ void APTSculptGameMode::EndTurn()
 
     GetWorldTimerManager().ClearTimer(RevealTimer);
     G->TurnPhase  = EPTTurnPhase::TurnEnd;
-    G->MaskedWord = CurrentWord; // revelar la palabra a todos durante la pausa.
+    G->MaskedWord = CurrentWord.ToUpper(); // revelar la palabra a todos (en MAYÚSCULA) durante la pausa.
     G->OnTurnPhaseChanged.Broadcast();
 
-    // Anunciar la palabra por el chat (línea de sistema).
-    G->Multicast_ChatLine(FString(), FString::Printf(TEXT("La palabra era: %s"), *CurrentWord),
+    // Anunciar la palabra por el chat (línea de sistema), también en mayúscula.
+    G->Multicast_ChatLine(FString(), FString::Printf(TEXT("La palabra era: %s"), *CurrentWord.ToUpper()),
                           EPTChatType::System);
     UE_LOG(LogTemp, Log, TEXT("[SculptGM] Fin de turno. La palabra era '%s'."), *CurrentWord);
 
@@ -459,7 +468,7 @@ FString APTSculptGameMode::BuildMaskedWord() const
     {
         const TCHAR C = CurrentWord[i];
         if (FChar::IsWhitespace(C))      Out += TEXT("   ");
-        else if (RevealedPos.Contains(i)) { Out.AppendChar(C); Out += TEXT(" "); }
+        else if (RevealedPos.Contains(i)) { Out.AppendChar(FChar::ToUpper(C)); Out += TEXT(" "); } // revelada en MAYÚSCULA
         else                              Out += TEXT("_ ");
     }
     return Out.TrimStartAndEnd();
