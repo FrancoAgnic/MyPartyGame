@@ -494,12 +494,22 @@ FString APTSculptGameMode::Normalize(const FString& In)
     {
         switch (C)
         {
+            // Minúsculas acentuadas.
             case TCHAR(0x00E1): case TCHAR(0x00E0): case TCHAR(0x00E4): case TCHAR(0x00E2): C = 'a'; break; // á à ä â
             case TCHAR(0x00E9): case TCHAR(0x00E8): case TCHAR(0x00EB): case TCHAR(0x00EA): C = 'e'; break; // é è ë ê
             case TCHAR(0x00ED): case TCHAR(0x00EC): case TCHAR(0x00EF): case TCHAR(0x00EE): C = 'i'; break; // í ì ï î
             case TCHAR(0x00F3): case TCHAR(0x00F2): case TCHAR(0x00F6): case TCHAR(0x00F4): C = 'o'; break; // ó ò ö ô
             case TCHAR(0x00FA): case TCHAR(0x00F9): case TCHAR(0x00FC): case TCHAR(0x00FB): C = 'u'; break; // ú ù ü û
-            case TCHAR(0x00F1): C = 'n'; break; // ñ → n (para ser tolerante al escribir)
+            case TCHAR(0x00F1): C = 'n'; break; // ñ → n
+            // MAYÚSCULAS acentuadas: FChar::ToLower solo baja ASCII (A-Z), así que 'Á' NO se
+            // convierte a 'á' y sin estas cases se escaparía sin normalizar (bug: "Árbol" no
+            // matcheaba). Mapear directo a la base minúscula.
+            case TCHAR(0x00C1): case TCHAR(0x00C0): case TCHAR(0x00C4): case TCHAR(0x00C2): C = 'a'; break; // Á À Ä Â
+            case TCHAR(0x00C9): case TCHAR(0x00C8): case TCHAR(0x00CB): case TCHAR(0x00CA): C = 'e'; break; // É È Ë Ê
+            case TCHAR(0x00CD): case TCHAR(0x00CC): case TCHAR(0x00CF): case TCHAR(0x00CE): C = 'i'; break; // Í Ì Ï Î
+            case TCHAR(0x00D3): case TCHAR(0x00D2): case TCHAR(0x00D6): case TCHAR(0x00D4): C = 'o'; break; // Ó Ò Ö Ô
+            case TCHAR(0x00DA): case TCHAR(0x00D9): case TCHAR(0x00DC): case TCHAR(0x00DB): C = 'u'; break; // Ú Ù Ü Û
+            case TCHAR(0x00D1): C = 'n'; break; // Ñ → n
             default: break;
         }
         Out.AppendChar(C);
