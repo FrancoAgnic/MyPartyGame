@@ -151,8 +151,10 @@ void UPTGameplayHUDWidget::RefreshTick()
     // ── Modo de input ──
     // Base = Game Only (moverse/esculpir siempre funcionan). Solo se muestra el cursor
     // cuando de verdad hace falta la UI: el escultor eligiendo palabra, con el chat
-    // abierto (Enter), o en la pantalla de fin (para clickear los botones).
-    const bool bWantUI = bChatOpen || bGameOver ||
+    // abierto (Enter), la pantalla de fin (para clickear los botones), o el menú de pausa
+    // ESC abierto (si no, el refresh del HUD pisaría el cursor y la flecha desaparecía).
+    const bool bMenuOpen = PC && PC->IsEscapeMenuOpen();
+    const bool bWantUI = bChatOpen || bGameOver || bMenuOpen ||
                          (bSculptor && G->TurnPhase == EPTTurnPhase::ChoosingWord);
     ApplyInputMode(!bWantUI);
 

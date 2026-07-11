@@ -217,11 +217,30 @@ void APTSculptPlayerController::OnPausePressed()
     if (EscapeMenu) EscapeMenu->HandleEscape();
 }
 
+bool APTSculptPlayerController::IsEscapeMenuOpen() const
+{
+    return EscapeMenu && EscapeMenu->IsMenuOpen();
+}
+
 // ── Tick ─────────────────────────────────────────────────────────────────────
 
 void APTSculptPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
+
+    // ── Menú de pausa (ESC) abierto: pausar el gameplay del mouse ──
+    // Frena la cámara (el Look del character usa AddControllerYaw/PitchInput, que respetan
+    // IgnoreLookInput) y el movimiento/vuelo (AddMovementInput respeta IgnoreMoveInput), dejando
+    // la flecha solo para la UI. Se hace por TRANSICIÓN (bMenuInputLocked) para no desbalancear
+    // el contador de IgnoreLook/MoveInput — así cualquier vía de cierre (ESC, Resume, Leave) se
+    // refleja acá. El cursor/GameAndUI lo sostiene el HUD (ve IsEscapeMenuOpen en su bWantUI).
+    const bool bMenuOpen = IsEscapeMenuOpen();
+    if (bMenuOpen != bMenuInputLocked)
+    {
+        bMenuInputLocked = bMenuOpen;
+        SetIgnoreLookInput(bMenuOpen);
+        SetIgnoreMoveInput(bMenuOpen);
+    }
 
     // Rueda de color abierta (mantener RMB): seguir el cursor para elegir matiz/saturación.
     if (bQuickColorActive)
@@ -264,9 +283,9 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
 
     if (!Volume) return;
 
-    // Solo el escultor del turno ve los previews de las herramientas. Para el resto,
-    // ocultar el actor de preview y no calcular nada de la brocha.
-    if (!CanLocalPlayerSculpt())
+    // Solo el escultor del turno ve los previews de las herramientas. Para el resto —o con el
+    // menú de pausa abierto— ocultar el actor de preview y no calcular/aplicar nada de la brocha.
+    if (!CanLocalPlayerSculpt() || bMenuOpen)
     {
         if (PreviewActor) PreviewActor->SetActorHiddenInGame(true);
         bStrokeActive = false;

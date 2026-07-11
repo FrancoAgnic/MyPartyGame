@@ -219,6 +219,11 @@ protected:
     // en APTSculptGameMode::StartPawnFlying.
     virtual void AcknowledgePossession(APawn* P) override;
 
+public:
+    /** true si el menú de pausa (ESC) está abierto. Lo consulta el HUD para no pisar el
+     *  cursor con su ApplyInputMode mientras el menú necesita el mouse para la UI. */
+    bool IsEscapeMenuOpen() const;
+
 private:
     APTSculptVolume* Volume = nullptr;
     UPROPERTY() class UPTLobbyEscapeMenuWidget* EscapeMenu = nullptr;
@@ -228,6 +233,7 @@ private:
     bool bIsStamping        = false;
     bool bPreviewDirty      = true;
     bool bMovementCtxReady  = false; // mapping context de movimiento ya agregado
+    bool bMenuInputLocked   = false; // look/move pausados por el menú de pausa (transición)
 
     // Interpolación de trazo (sellos continuos entre frames).
     bool    bStrokeActive = false;
