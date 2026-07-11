@@ -19,6 +19,7 @@
 #include "Engine/Engine.h"
 #include "../PTNetStats.h"
 #include "../PTGameInstance.h"
+#include "../PTWordBank.h"
 
 bool UPTLobbyHUDWidget::Initialize()
 {
@@ -244,7 +245,7 @@ void UPTLobbyHUDWidget::BuildCategoryChecks()
     if (bCategoryChecksBuilt || !CategoriesBox || !WidgetTree) return;
     bCategoryChecksBuilt = true;
 
-    CategoryNames = PTDefaultWordCategories();
+    CategoryNames = PTWordBank::GetDefaultCategories(); // 18 categorías del DataTable
     CategoryChecks.Reset();
 
     // Grid de 3 columnas adentro de CategoriesBox (así 9 categorías no forman una columna larga

@@ -5,6 +5,7 @@
 #include "../Lobby/PTPlayerState.h"
 #include "../Lobby/PTLobbyCharacter.h"
 #include "../PTGameInstance.h"
+#include "../PTWordBank.h"
 #include "GameFramework/PlayerState.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
@@ -541,73 +542,8 @@ FString APTSculptGameMode::Normalize(const FString& In)
 
 void APTSculptGameMode::SeedDefaultWords()
 {
-    // Banco por defecto (100 palabras) categorizadas + dificultad (Fácil/Media/Difícil). El
-    // matcheo normaliza mayúsculas/tildes, así que los jugadores pueden escribir sin acentos.
-    // Las categorías son FName ASCII (para display se puede mapear con acentos aparte).
-    using D = EPTWordDifficulty;
-    WordBank = {
-        // ── Animales ──
-        {TEXT("Pez"),TEXT("Animales"),D::Facil}, {TEXT("Serpiente"),TEXT("Animales"),D::Facil},
-        {TEXT("Caracol"),TEXT("Animales"),D::Media}, {TEXT("Tortuga"),TEXT("Animales"),D::Media},
-        {TEXT("Pato"),TEXT("Animales"),D::Facil}, {TEXT("Gato"),TEXT("Animales"),D::Facil},
-        {TEXT("Perro"),TEXT("Animales"),D::Facil}, {TEXT("Conejo"),TEXT("Animales"),D::Media},
-        {TEXT("Elefante"),TEXT("Animales"),D::Media}, {TEXT("Jirafa"),TEXT("Animales"),D::Media},
-        {TEXT("Pingüino"),TEXT("Animales"),D::Media}, {TEXT("Oso"),TEXT("Animales"),D::Facil},
-        {TEXT("Rana"),TEXT("Animales"),D::Facil}, {TEXT("Pulpo"),TEXT("Animales"),D::Media},
-        {TEXT("Estrella de mar"),TEXT("Animales"),D::Dificil}, {TEXT("Cangrejo"),TEXT("Animales"),D::Media},
-        {TEXT("Gusano"),TEXT("Animales"),D::Facil}, {TEXT("Vaca"),TEXT("Animales"),D::Facil},
-        {TEXT("Cerdo"),TEXT("Animales"),D::Facil}, {TEXT("Caballo"),TEXT("Animales"),D::Media},
-        {TEXT("Dinosaurio"),TEXT("Animales"),D::Dificil}, {TEXT("Ballena"),TEXT("Animales"),D::Media},
-        {TEXT("Araña"),TEXT("Animales"),D::Media}, {TEXT("Abeja"),TEXT("Animales"),D::Media},
-        {TEXT("Mariposa"),TEXT("Animales"),D::Media},
-        // ── Comida ──
-        {TEXT("Manzana"),TEXT("Comida"),D::Facil}, {TEXT("Banana"),TEXT("Comida"),D::Facil},
-        {TEXT("Pera"),TEXT("Comida"),D::Facil}, {TEXT("Zanahoria"),TEXT("Comida"),D::Media},
-        {TEXT("Champiñón"),TEXT("Comida"),D::Dificil}, {TEXT("Helado"),TEXT("Comida"),D::Facil},
-        {TEXT("Hamburguesa"),TEXT("Comida"),D::Media}, {TEXT("Pizza"),TEXT("Comida"),D::Facil},
-        {TEXT("Dona"),TEXT("Comida"),D::Facil}, {TEXT("Huevo"),TEXT("Comida"),D::Facil},
-        {TEXT("Galleta"),TEXT("Comida"),D::Media}, {TEXT("Torta"),TEXT("Comida"),D::Media},
-        {TEXT("Pan"),TEXT("Comida"),D::Facil}, {TEXT("Queso"),TEXT("Comida"),D::Facil},
-        {TEXT("Frutilla"),TEXT("Comida"),D::Media}, {TEXT("Piña"),TEXT("Comida"),D::Media},
-        // ── Objetos ──
-        {TEXT("Taza"),TEXT("Objetos"),D::Facil}, {TEXT("Silla"),TEXT("Objetos"),D::Facil},
-        {TEXT("Mesa"),TEXT("Objetos"),D::Facil}, {TEXT("Lámpara"),TEXT("Objetos"),D::Media},
-        {TEXT("Botella"),TEXT("Objetos"),D::Facil}, {TEXT("Vaso"),TEXT("Objetos"),D::Facil},
-        {TEXT("Vela"),TEXT("Objetos"),D::Facil}, {TEXT("Balde"),TEXT("Objetos"),D::Media},
-        {TEXT("Almohada"),TEXT("Objetos"),D::Media}, {TEXT("Reloj"),TEXT("Objetos"),D::Media},
-        {TEXT("Llave"),TEXT("Objetos"),D::Facil}, {TEXT("Paraguas"),TEXT("Objetos"),D::Media},
-        {TEXT("Cámara"),TEXT("Objetos"),D::Media}, {TEXT("Teléfono"),TEXT("Objetos"),D::Media},
-        {TEXT("Cuchara"),TEXT("Objetos"),D::Facil},
-        // ── Naturaleza ──
-        {TEXT("Árbol"),TEXT("Naturaleza"),D::Facil}, {TEXT("Flor"),TEXT("Naturaleza"),D::Facil},
-        {TEXT("Cactus"),TEXT("Naturaleza"),D::Media}, {TEXT("Montaña"),TEXT("Naturaleza"),D::Facil},
-        {TEXT("Nube"),TEXT("Naturaleza"),D::Facil}, {TEXT("Sol"),TEXT("Naturaleza"),D::Facil},
-        {TEXT("Luna"),TEXT("Naturaleza"),D::Facil}, {TEXT("Hoja"),TEXT("Naturaleza"),D::Facil},
-        {TEXT("Roca"),TEXT("Naturaleza"),D::Facil}, {TEXT("Volcán"),TEXT("Naturaleza"),D::Media},
-        {TEXT("Rayo"),TEXT("Naturaleza"),D::Media},
-        // ── Vehiculos ──
-        {TEXT("Auto"),TEXT("Vehiculos"),D::Facil}, {TEXT("Barco"),TEXT("Vehiculos"),D::Media},
-        {TEXT("Avión"),TEXT("Vehiculos"),D::Media}, {TEXT("Cohete"),TEXT("Vehiculos"),D::Media},
-        {TEXT("Bicicleta"),TEXT("Vehiculos"),D::Dificil}, {TEXT("Tren"),TEXT("Vehiculos"),D::Media},
-        {TEXT("Globo aerostático"),TEXT("Vehiculos"),D::Dificil}, {TEXT("Submarino"),TEXT("Vehiculos"),D::Dificil},
-        // ── Cuerpo ──
-        {TEXT("Mano"),TEXT("Cuerpo"),D::Media}, {TEXT("Pie"),TEXT("Cuerpo"),D::Facil},
-        {TEXT("Nariz"),TEXT("Cuerpo"),D::Media}, {TEXT("Diente"),TEXT("Cuerpo"),D::Media},
-        {TEXT("Calavera"),TEXT("Cuerpo"),D::Media}, {TEXT("Corazón"),TEXT("Cuerpo"),D::Facil},
-        {TEXT("Cerebro"),TEXT("Cuerpo"),D::Dificil}, {TEXT("Oreja"),TEXT("Cuerpo"),D::Media},
-        // ── Ropa ──
-        {TEXT("Sombrero"),TEXT("Ropa"),D::Media}, {TEXT("Zapato"),TEXT("Ropa"),D::Facil},
-        {TEXT("Bota"),TEXT("Ropa"),D::Facil}, {TEXT("Corona"),TEXT("Ropa"),D::Media},
-        {TEXT("Lentes"),TEXT("Ropa"),D::Media}, {TEXT("Corbata"),TEXT("Ropa"),D::Media},
-        {TEXT("Mochila"),TEXT("Ropa"),D::Media}, {TEXT("Guante"),TEXT("Ropa"),D::Media},
-        // ── Herramientas ──
-        {TEXT("Martillo"),TEXT("Herramientas"),D::Media}, {TEXT("Pala"),TEXT("Herramientas"),D::Facil},
-        {TEXT("Hacha"),TEXT("Herramientas"),D::Media}, {TEXT("Lápiz"),TEXT("Herramientas"),D::Facil},
-        {TEXT("Pincel"),TEXT("Herramientas"),D::Media}, {TEXT("Tijera"),TEXT("Herramientas"),D::Media},
-        // ── Fantasia ──
-        {TEXT("Fantasma"),TEXT("Fantasia"),D::Facil}, {TEXT("Robot"),TEXT("Fantasia"),D::Media},
-        {TEXT("Espada"),TEXT("Fantasia"),D::Facil}
-    };
+    // Banco por defecto = DataTable DT_WordBank (importado del CSV). NO hardcodeado (ver PTWordBank).
+    WordBank = PTWordBank::GetDefaultWords();
 }
 
 TArray<FString> APTSculptGameMode::BuildEligibleWordPool() const

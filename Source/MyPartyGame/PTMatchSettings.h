@@ -51,11 +51,5 @@ struct FPTMatchSettings
     UPROPERTY(BlueprintReadWrite, Category="Match") bool bUseCustomWords = false;
 };
 
-// Categorías del banco por defecto, para armar los checkboxes del lobby. DEBEN coincidir con las
-// que asigna APTSculptGameMode::SeedDefaultWords (si se agregan/renombran allá, actualizar acá).
-inline TArray<FName> PTDefaultWordCategories()
-{
-    return { FName(TEXT("Animales")),   FName(TEXT("Comida")),        FName(TEXT("Objetos")),
-             FName(TEXT("Naturaleza")), FName(TEXT("Vehiculos")),     FName(TEXT("Cuerpo")),
-             FName(TEXT("Ropa")),       FName(TEXT("Herramientas")),  FName(TEXT("Fantasia")) };
-}
+// (Las categorías del banco default ahora se derivan del DataTable en tiempo real —
+//  ver PTWordBank::GetDefaultCategories(). Ya no hay lista hardcodeada acá.)
