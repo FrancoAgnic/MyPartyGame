@@ -10,6 +10,8 @@
 #include "Components/CheckBox.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
+#include "Components/UniformGridPanel.h"
+#include "Components/UniformGridSlot.h"
 #include "Components/PanelWidget.h"
 #include "Blueprint/WidgetTree.h"
 #include "HAL/PlatformApplicationMisc.h"
@@ -245,13 +247,22 @@ void UPTLobbyHUDWidget::BuildCategoryChecks()
     CategoryNames = PTDefaultWordCategories();
     CategoryChecks.Reset();
 
+    // Grid de 3 columnas adentro de CategoriesBox (así 9 categorías no forman una columna larga
+    // que rompe el layout). C++ crea el grid, no importa qué contenedor sea CategoriesBox.
+    const int32 Cols = 3;
+    UUniformGridPanel* Grid = WidgetTree->ConstructWidget<UUniformGridPanel>();
+    if (!Grid) return;
+    Grid->SetSlotPadding(FMargin(2.f, 2.f));
+    CategoriesBox->AddChild(Grid);
+
     UPTGameInstance* GI = GetGI();
-    for (const FName& Cat : CategoryNames)
+    for (int32 i = 0; i < CategoryNames.Num(); ++i)
     {
-        UHorizontalBox* Row  = WidgetTree->ConstructWidget<UHorizontalBox>();
+        const FName Cat = CategoryNames[i];
+        UHorizontalBox* Cell  = WidgetTree->ConstructWidget<UHorizontalBox>();
         UCheckBox*      Chk   = WidgetTree->ConstructWidget<UCheckBox>();
         UTextBlock*     Label = WidgetTree->ConstructWidget<UTextBlock>();
-        if (!Row || !Chk || !Label) continue;
+        if (!Cell || !Chk || !Label) continue;
 
         // Estado inicial: ActiveCategories vacío = todas activas.
         const bool bActive = !GI || GI->PendingMatchSettings.ActiveCategories.Num() == 0
@@ -261,11 +272,14 @@ void UPTLobbyHUDWidget::BuildCategoryChecks()
 
         Label->SetText(FText::FromName(Cat));
 
-        Row->AddChild(Chk);
-        if (UHorizontalBoxSlot* LSlot = Cast<UHorizontalBoxSlot>(Row->AddChild(Label)))
-            LSlot->SetPadding(FMargin(6.f, 0.f, 0.f, 0.f));
+        Cell->AddChild(Chk);
+        if (UHorizontalBoxSlot* LSlot = Cast<UHorizontalBoxSlot>(Cell->AddChild(Label)))
+            LSlot->SetPadding(FMargin(4.f, 0.f, 8.f, 0.f));
 
-        CategoriesBox->AddChild(Row);
+        // Fila i → (fila i/3, columna i%3) → 3 columnas.
+        if (UUniformGridSlot* GSlot = Cast<UUniformGridSlot>(Grid->AddChildToUniformGrid(Cell, i / Cols, i % Cols)))
+            GSlot->SetHorizontalAlignment(HAlign_Left);
+
         CategoryChecks.Add(Chk);
     }
 }
