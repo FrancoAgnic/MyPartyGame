@@ -32,7 +32,10 @@ public class MyPartyGame : ModuleRules
 			"ApplicationCore"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		// DesktopPlatform: diálogo nativo "Examinar" para que el host suba su CSV de palabras.
+		// Es un módulo Developer → presente en builds Development (los que empaquetamos); en
+		// Shipping habría que incluirlo aparte. Solo escritorio.
+		PrivateDependencyModuleNames.AddRange(new string[] { "DesktopPlatform" });
 
 		// Steamworks SDK directo — para FPTSteamWorldwideSearch/FPTSteamDirectJoin que llaman
 		// a RequestLobbyList con k_ELobbyDistanceFilterWorldwide, bypasseando el filtro regional

@@ -3,6 +3,88 @@
 #include "PTGameInstance.h"
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "DesktopPlatformModule.h"
+#include "IDesktopPlatform.h"
+#include "Framework/Application/SlateApplication.h"
+
+namespace
+{
+    // "facil/fácil/1/f" → Facil; "dificil/difícil/3/d" → Dificil; resto → Media.
+    EPTWordDifficulty ParseDifficulty(const FString& In)
+    {
+        const FString S = In.TrimStartAndEnd().ToLower();
+        if (S == TEXT("1") || S.StartsWith(TEXT("f"))) return EPTWordDifficulty::Facil;
+        if (S == TEXT("3") || S.StartsWith(TEXT("d"))) return EPTWordDifficulty::Dificil;
+        return EPTWordDifficulty::Media;
+    }
+}
+
+int32 UPTGameInstance::LoadCustomWordsFromCSVDialog()
+{
+    IDesktopPlatform* DP = FDesktopPlatformModule::Get();
+    if (!DP) return 0;
+
+    const void* ParentHandle = FSlateApplication::IsInitialized()
+        ? FSlateApplication::Get().FindBestParentWindowHandleForDialogs(nullptr) : nullptr;
+
+    TArray<FString> Files;
+    const bool bPicked = DP->OpenFileDialog(
+        ParentHandle, TEXT("Elegir CSV de palabras"), FPaths::ProjectDir(), TEXT(""),
+        TEXT("CSV (*.csv)|*.csv|Texto (*.txt)|*.txt|Todos (*.*)|*.*"),
+        EFileDialogFlags::None, Files);
+
+    if (!bPicked || Files.Num() == 0) return 0;
+    return LoadCustomWordsFromCSVFile(Files[0]);
+}
+
+int32 UPTGameInstance::LoadCustomWordsFromCSVFile(const FString& Path)
+{
+    FString Content;
+    if (!FFileHelper::LoadFileToString(Content, *Path)) // detecta UTF-8/BOM/UTF-16 solo
+        return 0;
+
+    TArray<FString> Lines;
+    Content.ParseIntoArrayLines(Lines);
+
+    TArray<FPTWordEntry> Parsed;
+    for (int32 i = 0; i < Lines.Num(); ++i)
+    {
+        const FString Line = Lines[i].TrimStartAndEnd();
+        if (Line.IsEmpty() || Line.StartsWith(TEXT("#"))) continue;
+
+        TArray<FString> Cols;
+        Line.ParseIntoArray(Cols, TEXT(","), false);
+        for (FString& C : Cols) C = C.TrimStartAndEnd();
+
+        const FString Word = Cols.IsValidIndex(0) ? Cols[0] : FString();
+        if (Word.IsEmpty()) continue;
+
+        // Saltar una fila de encabezado ("Palabra,Categoria,..." o "Word,...").
+        const FString WLow = Word.ToLower();
+        if (i == 0 && (WLow == TEXT("palabra") || WLow == TEXT("word"))) continue;
+
+        const FName Category = (Cols.IsValidIndex(1) && !Cols[1].IsEmpty())
+            ? FName(*Cols[1]) : FName(TEXT("Personalizadas"));
+        const EPTWordDifficulty Diff = ParseDifficulty(Cols.IsValidIndex(2) ? Cols[2] : FString());
+        Parsed.Add(FPTWordEntry(Word, Category, Diff));
+    }
+
+    if (Parsed.Num() == 0) return 0;
+
+    PendingMatchSettings.CustomWords    = MoveTemp(Parsed);
+    PendingMatchSettings.bUseCustomWords = true;
+    UE_LOG(LogTemp, Log, TEXT("[GameInstance] CSV de palabras cargado: %d palabras desde %s"),
+           PendingMatchSettings.CustomWords.Num(), *Path);
+    return PendingMatchSettings.CustomWords.Num();
+}
+
+void UPTGameInstance::ClearCustomWords()
+{
+    PendingMatchSettings.CustomWords.Reset();
+    PendingMatchSettings.bUseCustomWords = false;
+}
 
 void UPTGameInstance::Init()
 {

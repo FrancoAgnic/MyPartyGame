@@ -30,6 +30,20 @@ public:
     UPROPERTY(BlueprintReadWrite, Category="Match")
     FPTMatchSettings PendingMatchSettings;
 
+    // Abre un diálogo nativo para elegir un .csv y carga sus palabras en
+    // PendingMatchSettings.CustomWords (+ bUseCustomWords=true). Formato por línea:
+    // "Palabra,Categoria,Dificultad" (Dificultad: Facil/Media/Dificil o 1/2/3; categoría y
+    // dificultad opcionales). Devuelve cuántas palabras cargó (0 = canceló o archivo vacío).
+    UFUNCTION(BlueprintCallable, Category="Match")
+    int32 LoadCustomWordsFromCSVDialog();
+
+    // Parsea un CSV de una ruta concreta (lo usa el diálogo; separado para testear).
+    int32 LoadCustomWordsFromCSVFile(const FString& Path);
+
+    // Vuelve al banco default (descarta las palabras del CSV).
+    UFUNCTION(BlueprintCallable, Category="Match")
+    void ClearCustomWords();
+
 private:
     void HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver,
                               ENetworkFailure::Type FailureType, const FString& ErrorString);
