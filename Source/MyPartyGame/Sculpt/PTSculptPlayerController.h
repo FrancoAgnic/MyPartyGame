@@ -224,6 +224,10 @@ public:
      *  cursor con su ApplyInputMode mientras el menú necesita el mouse para la UI. */
     bool IsEscapeMenuOpen() const;
 
+    /** true mientras la rueda de color (mantener RMB) está activa. Igual que arriba: el HUD lo
+     *  consulta para mantener el cursor visible y poder elegir color mientras se esculpe. */
+    bool IsColorPickerOpen() const { return bQuickColorActive; }
+
 private:
     APTSculptVolume* Volume = nullptr;
     UPROPERTY() class UPTLobbyEscapeMenuWidget* EscapeMenu = nullptr;
