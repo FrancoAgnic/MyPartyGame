@@ -271,7 +271,8 @@ void UPTLobbyHUDWidget::BuildCategoryChecks()
         Chk->SetIsChecked(bActive);
         Chk->OnCheckStateChanged.AddDynamic(this, &UPTLobbyHUDWidget::OnCategoryChanged);
 
-        Label->SetText(FText::FromName(Cat));
+        // Display: los FName vienen tipo "CRIATURAS_MITOLOGICAS" → mostrar "CRIATURAS MITOLOGICAS".
+        Label->SetText(FText::FromString(Cat.ToString().Replace(TEXT("_"), TEXT(" "))));
 
         Cell->AddChild(Chk);
         if (UHorizontalBoxSlot* LSlot = Cast<UHorizontalBoxSlot>(Cell->AddChild(Label)))
