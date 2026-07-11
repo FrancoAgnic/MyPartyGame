@@ -7,10 +7,16 @@
 #include "Components/VerticalBox.h"
 #include "Components/TextBlock.h"
 #include "Components/Button.h"
+#include "Components/CheckBox.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
+#include "Components/PanelWidget.h"
+#include "Blueprint/WidgetTree.h"
 #include "HAL/PlatformApplicationMisc.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/Engine.h"
 #include "../PTNetStats.h"
+#include "../PTGameInstance.h"
 
 bool UPTLobbyHUDWidget::Initialize()
 {
@@ -20,6 +26,19 @@ bool UPTLobbyHUDWidget::Initialize()
     if (LeaveGameButton) LeaveGameButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnLeaveGameClicked);
     if (StartGameButton) StartGameButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnStartGameClicked);
     if (ReadyButton)      ReadyButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnReadyClicked);
+
+    // Config de partida (host).
+    if (TurnTimeMinus) TurnTimeMinus->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnTurnTimeMinus);
+    if (TurnTimePlus)  TurnTimePlus->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnTurnTimePlus);
+    if (RoundsMinus)   RoundsMinus->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnRoundsMinus);
+    if (RoundsPlus)    RoundsPlus->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnRoundsPlus);
+    if (RevealMinus)   RevealMinus->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnRevealMinus);
+    if (RevealPlus)    RevealPlus->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnRevealPlus);
+    if (DiffFacilButton)   DiffFacilButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnDiffFacil);
+    if (DiffMediaButton)   DiffMediaButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnDiffMedia);
+    if (DiffDificilButton) DiffDificilButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnDiffDificil);
+    if (LoadCSVButton)  LoadCSVButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnLoadCSV);
+    if (ClearCSVButton) ClearCSVButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnClearCSV);
 
     return true;
 }
@@ -123,6 +142,15 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
         StartGameButton->SetVisibility(bLocalIsHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
     }
 
+    // Config de partida: solo el host la ve/edita. Los demás no ven el panel.
+    if (HostSettingsPanel)
+        HostSettingsPanel->SetVisibility(bLocalIsHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+    if (bLocalIsHost)
+    {
+        if (!bCategoryChecksBuilt) BuildCategoryChecks();
+        RefreshHostSettingsUI();
+    }
+
     // Botón Ready: refleja el estado propio. No listo → "Not Ready" en rojo pastel; listo →
     // "Ready" en verde pastel. Clickearlo alterna (ver OnReadyClicked). SetBackgroundColor tiñe
     // el brush del botón, así que conviene que en el WBP el botón tenga brushes blancos.
@@ -191,3 +219,114 @@ void UPTLobbyHUDWidget::OnReadyClicked()
         PC->Server_SetReady(!LocalPS->bIsReady);
     }
 }
+
+// ── Config de partida (host) ─────────────────────────────────────────────────
+// Todo escribe directo en el GameInstance del host (que ES el server). Al viajar a Lvl-01 el
+// GameInstance sobrevive y APTSculptGameMode lee PendingMatchSettings al arrancar.
+
+UPTGameInstance* UPTLobbyHUDWidget::GetGI() const
+{
+    return GetWorld() ? GetWorld()->GetGameInstance<UPTGameInstance>() : nullptr;
+}
+
+void UPTLobbyHUDWidget::BuildCategoryChecks()
+{
+    if (bCategoryChecksBuilt || !CategoriesBox || !WidgetTree) return;
+    bCategoryChecksBuilt = true;
+
+    CategoryNames = PTDefaultWordCategories();
+    CategoryChecks.Reset();
+
+    UPTGameInstance* GI = GetGI();
+    for (const FName& Cat : CategoryNames)
+    {
+        UHorizontalBox* Row  = WidgetTree->ConstructWidget<UHorizontalBox>();
+        UCheckBox*      Chk   = WidgetTree->ConstructWidget<UCheckBox>();
+        UTextBlock*     Label = WidgetTree->ConstructWidget<UTextBlock>();
+        if (!Row || !Chk || !Label) continue;
+
+        // Estado inicial: ActiveCategories vacío = todas activas.
+        const bool bActive = !GI || GI->PendingMatchSettings.ActiveCategories.Num() == 0
+                          || GI->PendingMatchSettings.ActiveCategories.Contains(Cat);
+        Chk->SetIsChecked(bActive);
+        Chk->OnCheckStateChanged.AddDynamic(this, &UPTLobbyHUDWidget::OnCategoryChanged);
+
+        Label->SetText(FText::FromName(Cat));
+
+        Row->AddChild(Chk);
+        if (UHorizontalBoxSlot* LSlot = Cast<UHorizontalBoxSlot>(Row->AddChild(Label)))
+            LSlot->SetPadding(FMargin(6.f, 0.f, 0.f, 0.f));
+
+        CategoriesBox->AddChild(Row);
+        CategoryChecks.Add(Chk);
+    }
+}
+
+void UPTLobbyHUDWidget::OnCategoryChanged(bool /*bChecked*/)
+{
+    UPTGameInstance* GI = GetGI();
+    if (!GI) return;
+
+    TArray<FName> Active;
+    for (int32 i = 0; i < CategoryChecks.Num(); ++i)
+        if (CategoryChecks[i] && CategoryChecks[i]->IsChecked() && CategoryNames.IsValidIndex(i))
+            Active.Add(CategoryNames[i]);
+
+    // Todas marcadas → tratar como "sin filtro" (vacío = todas).
+    if (Active.Num() == CategoryChecks.Num()) Active.Reset();
+    GI->PendingMatchSettings.ActiveCategories = Active;
+}
+
+void UPTLobbyHUDWidget::RefreshHostSettingsUI()
+{
+    UPTGameInstance* GI = GetGI();
+    if (!GI) return;
+    const FPTMatchSettings& S = GI->PendingMatchSettings;
+
+    if (TurnTimeText) TurnTimeText->SetText(FText::FromString(FString::Printf(TEXT("%d s"), FMath::RoundToInt(S.TurnDuration))));
+    if (RoundsText)   RoundsText->SetText(FText::FromString(FString::Printf(TEXT("%d"), S.NumRounds)));
+    if (RevealText)   RevealText->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::RoundToInt(S.RevealFraction * 100.f))));
+
+    // Dificultad: coloreada si activa (ActiveDifficulties vacío = todas activas).
+    auto DiffActive = [&S](EPTWordDifficulty D){ return S.ActiveDifficulties.Num() == 0 || S.ActiveDifficulties.Contains(D); };
+    auto Paint = [](UButton* B, bool bOn){ if (B) B->SetBackgroundColor(bOn ? FLinearColor(0.47f, 0.87f, 0.50f) : FLinearColor(0.45f, 0.45f, 0.45f)); };
+    Paint(DiffFacilButton,   DiffActive(EPTWordDifficulty::Facil));
+    Paint(DiffMediaButton,   DiffActive(EPTWordDifficulty::Media));
+    Paint(DiffDificilButton, DiffActive(EPTWordDifficulty::Dificil));
+
+    // Estado del banco / CSV.
+    const bool bCustom = S.bUseCustomWords && S.CustomWords.Num() > 0;
+    if (CSVStatusText)
+        CSVStatusText->SetText(FText::FromString(bCustom
+            ? FString::Printf(TEXT("CSV propio: %d palabras"), S.CustomWords.Num())
+            : TEXT("Banco default")));
+    // Con CSV propio, el filtro por categorías del banco default no tiene sentido → deshabilitar.
+    for (UCheckBox* C : CategoryChecks) if (C) C->SetIsEnabled(!bCustom);
+}
+
+void UPTLobbyHUDWidget::ToggleDifficulty(EPTWordDifficulty Diff)
+{
+    UPTGameInstance* GI = GetGI();
+    if (!GI) return;
+    TArray<EPTWordDifficulty>& A = GI->PendingMatchSettings.ActiveDifficulties;
+
+    // "Vacío = todas" → expandir a las 3 para poder sacar una.
+    if (A.Num() == 0) A = { EPTWordDifficulty::Facil, EPTWordDifficulty::Media, EPTWordDifficulty::Dificil };
+    if (A.Contains(Diff)) A.Remove(Diff); else A.AddUnique(Diff);
+    if (A.Num() == 0) A = { EPTWordDifficulty::Facil, EPTWordDifficulty::Media, EPTWordDifficulty::Dificil }; // no dejar sin ninguna
+    if (A.Num() == 3) A.Reset(); // las 3 = sin filtro
+    RefreshHostSettingsUI();
+}
+
+void UPTLobbyHUDWidget::OnTurnTimeMinus() { if (UPTGameInstance* GI=GetGI()){ GI->PendingMatchSettings.TurnDuration = FMath::Clamp(GI->PendingMatchSettings.TurnDuration - 15.f, 15.f, 300.f); RefreshHostSettingsUI(); } }
+void UPTLobbyHUDWidget::OnTurnTimePlus()  { if (UPTGameInstance* GI=GetGI()){ GI->PendingMatchSettings.TurnDuration = FMath::Clamp(GI->PendingMatchSettings.TurnDuration + 15.f, 15.f, 300.f); RefreshHostSettingsUI(); } }
+void UPTLobbyHUDWidget::OnRoundsMinus()   { if (UPTGameInstance* GI=GetGI()){ GI->PendingMatchSettings.NumRounds = FMath::Clamp(GI->PendingMatchSettings.NumRounds - 1, 1, 10); RefreshHostSettingsUI(); } }
+void UPTLobbyHUDWidget::OnRoundsPlus()    { if (UPTGameInstance* GI=GetGI()){ GI->PendingMatchSettings.NumRounds = FMath::Clamp(GI->PendingMatchSettings.NumRounds + 1, 1, 10); RefreshHostSettingsUI(); } }
+void UPTLobbyHUDWidget::OnRevealMinus()   { if (UPTGameInstance* GI=GetGI()){ GI->PendingMatchSettings.RevealFraction = FMath::Clamp(GI->PendingMatchSettings.RevealFraction - 0.1f, 0.f, 0.9f); RefreshHostSettingsUI(); } }
+void UPTLobbyHUDWidget::OnRevealPlus()    { if (UPTGameInstance* GI=GetGI()){ GI->PendingMatchSettings.RevealFraction = FMath::Clamp(GI->PendingMatchSettings.RevealFraction + 0.1f, 0.f, 0.9f); RefreshHostSettingsUI(); } }
+void UPTLobbyHUDWidget::OnDiffFacil()   { ToggleDifficulty(EPTWordDifficulty::Facil); }
+void UPTLobbyHUDWidget::OnDiffMedia()   { ToggleDifficulty(EPTWordDifficulty::Media); }
+void UPTLobbyHUDWidget::OnDiffDificil() { ToggleDifficulty(EPTWordDifficulty::Dificil); }
+
+void UPTLobbyHUDWidget::OnLoadCSV()  { if (UPTGameInstance* GI=GetGI()){ GI->LoadCustomWordsFromCSVDialog(); RefreshHostSettingsUI(); } }
+void UPTLobbyHUDWidget::OnClearCSV() { if (UPTGameInstance* GI=GetGI()){ GI->ClearCustomWords(); RefreshHostSettingsUI(); } }

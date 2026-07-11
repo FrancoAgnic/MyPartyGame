@@ -6,11 +6,15 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "../PTMatchSettings.h"
 #include "PTLobbyHUDWidget.generated.h"
 
 class UVerticalBox;
 class UTextBlock;
 class UButton;
+class UPanelWidget;
+class UCheckBox;
+class UPTGameInstance;
 
 UCLASS()
 class MYPARTYGAME_API UPTLobbyHUDWidget : public UUserWidget
@@ -53,7 +57,53 @@ protected:
 
     void RefreshPlayerList();
 
+    // ── Config de partida (SOLO host) ──────────────────────────────────────────
+    // Todo BindWidgetOptional: el WBP se arma aparte. Se muestran solo si el jugador es el host.
+    // Panel raíz que agrupa toda la config (se colapsa para los que no son host).
+    UPROPERTY(meta = (BindWidgetOptional)) UWidget* HostSettingsPanel;
+
+    // Steppers numéricos: cada uno un texto + botón menos/más.
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* TurnTimeText;   // "90 s"
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*    TurnTimeMinus;
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*    TurnTimePlus;
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* RoundsText;     // "3 rondas"
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*    RoundsMinus;
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*    RoundsPlus;
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* RevealText;     // "70%"
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*    RevealMinus;
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*    RevealPlus;
+
+    // Dificultad: 3 toggles multi-selección (activa = coloreado). Vacío = todas.
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* DiffFacilButton;
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* DiffMediaButton;
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* DiffDificilButton;
+
+    // Categorías: contenedor (VerticalBox/ScrollBox) que C++ llena con un checkbox por categoría.
+    UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* CategoriesBox;
+
+    // CSV propio del host.
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*    LoadCSVButton;
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*    ClearCSVButton;
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* CSVStatusText;  // "Banco default (100)" / "CSV: 42 palabras"
+
+    UFUNCTION() void OnTurnTimeMinus(); UFUNCTION() void OnTurnTimePlus();
+    UFUNCTION() void OnRoundsMinus();   UFUNCTION() void OnRoundsPlus();
+    UFUNCTION() void OnRevealMinus();   UFUNCTION() void OnRevealPlus();
+    UFUNCTION() void OnDiffFacil();     UFUNCTION() void OnDiffMedia();  UFUNCTION() void OnDiffDificil();
+    UFUNCTION() void OnLoadCSV();       UFUNCTION() void OnClearCSV();
+    UFUNCTION() void OnCategoryChanged(bool bChecked); // rebuild desde el estado de todos los checks
+
+    UPTGameInstance* GetGI() const;
+    void BuildCategoryChecks();     // crea los checkboxes una vez (según PTDefaultWordCategories)
+    void RefreshHostSettingsUI();   // vuelca PendingMatchSettings a los textos/colores
+    void ToggleDifficulty(EPTWordDifficulty Diff);
+
 private:
     FTimerHandle RefreshTimerHandle;
     FString CachedRoomCode;
+
+    // Checkbox ↔ categoría (para reconstruir ActiveCategories al cambiar cualquiera).
+    UPROPERTY() TArray<UCheckBox*> CategoryChecks;
+    TArray<FName>                  CategoryNames;
+    bool bCategoryChecksBuilt = false;
 };
