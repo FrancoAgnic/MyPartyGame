@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
 #include "Engine/EngineTypes.h"
+#include "PTMatchSettings.h"
 #include "PTGameInstance.generated.h"
 
 UCLASS()
@@ -21,6 +22,13 @@ public:
 
     /** Llamar justo antes del ClientTravel exitoso a un servidor, para poder reintentar si se cae. */
     void NotifyJoinedServer(const FString& TravelURL);
+
+    // Config de partida que arma el HOST en el lobby (tiempo/rondas/revelado/categorías/
+    // dificultad/CSV). El GameInstance sobrevive al seamless travel, así que el host la setea
+    // en el lobby y APTSculptGameMode la lee al arrancar en Lvl-01. Es del host/servidor; a los
+    // clientes se les replica un resumen aparte por el GameState (para mostrarla en el lobby).
+    UPROPERTY(BlueprintReadWrite, Category="Match")
+    FPTMatchSettings PendingMatchSettings;
 
 private:
     void HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver,

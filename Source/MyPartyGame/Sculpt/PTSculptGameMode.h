@@ -48,9 +48,13 @@ public:
     UPROPERTY(EditDefaultsOnly, Category="Game") TArray<FPTWordEntry> WordBank;
 
     // Config de partida elegida por el host en el lobby (tiempo/rondas/revelado/categorías/
-    // dificultad/CSV). Solo servidor. La llena el GameInstance al viajar (Fase B). Default = sin
-    // filtros → entran todas las palabras del banco.
+    // dificultad/CSV). Solo servidor. La copia desde el GameInstance al arrancar (Fase B).
+    // Default = sin filtros → entran todas las palabras del banco.
     FPTMatchSettings MatchSettings;
+
+    // Copia PendingMatchSettings del GameInstance a MatchSettings y aplica los tuneables
+    // numéricos (tiempo/rondas/revelado) a las variables del GameMode, con clamps de seguridad.
+    void ApplyMatchSettingsFromGameInstance();
 
     // Al llegar a Lvl-01 por seamless travel, los PlayerState/controllers de todos recién se
     // asientan; arrancar la partida en ese instante puede elegir escultor sobre un PlayerState

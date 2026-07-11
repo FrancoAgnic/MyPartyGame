@@ -4,6 +4,7 @@
 #include "PTSculptVolume.h"
 #include "../Lobby/PTPlayerState.h"
 #include "../Lobby/PTLobbyCharacter.h"
+#include "../PTGameInstance.h"
 #include "GameFramework/PlayerState.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
@@ -114,12 +115,33 @@ void APTSculptGameMode::CheckStart()
     }
 }
 
+void APTSculptGameMode::ApplyMatchSettingsFromGameInstance()
+{
+    UPTGameInstance* GI = GetGameInstance<UPTGameInstance>();
+    if (!GI) return;
+
+    MatchSettings = GI->PendingMatchSettings; // categorías/dificultad/CSV para BuildEligibleWordPool
+
+    // Tuneables numéricos con clamps de seguridad (el host podría mandar cualquier cosa).
+    TurnDuration   = FMath::Clamp(MatchSettings.TurnDuration, 15.f, 600.f);
+    NumRounds      = FMath::Clamp(MatchSettings.NumRounds, 1, 20);
+    RevealFraction = FMath::Clamp(MatchSettings.RevealFraction, 0.f, 0.95f);
+
+    UE_LOG(LogTemp, Log, TEXT("[SculptGM] Config: %.0fs/turno, %d rondas, revelado %.0f%%, cats=%d, difs=%d, customWords=%d"),
+        TurnDuration, NumRounds, RevealFraction * 100.f,
+        MatchSettings.ActiveCategories.Num(), MatchSettings.ActiveDifficulties.Num(),
+        MatchSettings.bUseCustomWords ? MatchSettings.CustomWords.Num() : 0);
+}
+
 void APTSculptGameMode::StartGame()
 {
     bStartScheduled = false;
 
     APTSculptGameState* G = GS();
     if (!G) return;
+
+    // Tomar la config que armó el host en el lobby (viajó en el GameInstance).
+    ApplyMatchSettingsFromGameInstance();
 
     TArray<APTPlayerState*> Players = GetActivePlayers();
     if (Players.Num() < MinPlayersToStart) { GoToWaiting(); return; }
