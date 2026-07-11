@@ -59,7 +59,11 @@ protected:
 
     // ── Config de partida (SOLO host) ──────────────────────────────────────────
     // Todo BindWidgetOptional: el WBP se arma aparte. Se muestran solo si el jugador es el host.
-    // Panel raíz que agrupa toda la config (se colapsa para los que no son host).
+    // Botón "Game Settings" (al lado del Listo, host-only) que ABRE el panel.
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* GameSettingsButton;
+    // Botón "X" dentro del panel que lo CIERRA (los ajustes ya se aplican en vivo).
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* CloseSettingsButton;
+    // Panel raíz que agrupa toda la config. Arranca oculto; se abre con GameSettingsButton.
     UPROPERTY(meta = (BindWidgetOptional)) UWidget* HostSettingsPanel;
 
     // Steppers numéricos: cada uno un texto + botón menos/más.
@@ -92,6 +96,8 @@ protected:
     UFUNCTION() void OnDiffFacil();     UFUNCTION() void OnDiffMedia();  UFUNCTION() void OnDiffDificil();
     UFUNCTION() void OnLoadCSV();       UFUNCTION() void OnClearCSV();
     UFUNCTION() void OnCategoryChanged(bool bChecked); // rebuild desde el estado de todos los checks
+    UFUNCTION() void OnGameSettingsClicked(); // abre el panel
+    UFUNCTION() void OnCloseSettingsClicked(); // aplica (ya está en vivo) y cierra el panel
 
     UPTGameInstance* GetGI() const;
     void BuildCategoryChecks();     // crea los checkboxes una vez (según PTDefaultWordCategories)
@@ -106,4 +112,5 @@ private:
     UPROPERTY() TArray<UCheckBox*> CategoryChecks;
     TArray<FName>                  CategoryNames;
     bool bCategoryChecksBuilt = false;
+    bool bSettingsOpen        = false; // panel de config abierto/cerrado (host)
 };

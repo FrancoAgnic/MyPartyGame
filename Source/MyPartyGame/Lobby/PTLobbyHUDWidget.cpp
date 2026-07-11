@@ -39,6 +39,11 @@ bool UPTLobbyHUDWidget::Initialize()
     if (DiffDificilButton) DiffDificilButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnDiffDificil);
     if (LoadCSVButton)  LoadCSVButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnLoadCSV);
     if (ClearCSVButton) ClearCSVButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnClearCSV);
+    if (GameSettingsButton)  GameSettingsButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnGameSettingsClicked);
+    if (CloseSettingsButton) CloseSettingsButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnCloseSettingsClicked);
+
+    // El panel arranca cerrado.
+    if (HostSettingsPanel) HostSettingsPanel->SetVisibility(ESlateVisibility::Collapsed);
 
     return true;
 }
@@ -142,9 +147,12 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
         StartGameButton->SetVisibility(bLocalIsHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
     }
 
-    // Config de partida: solo el host la ve/edita. Los demás no ven el panel.
+    // Config de partida: el botón "Game Settings" lo ve solo el host. El panel se abre/cierra
+    // con ese botón (y la X interna); los que no son host nunca lo ven.
+    if (GameSettingsButton)
+        GameSettingsButton->SetVisibility(bLocalIsHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
     if (HostSettingsPanel)
-        HostSettingsPanel->SetVisibility(bLocalIsHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+        HostSettingsPanel->SetVisibility((bLocalIsHost && bSettingsOpen) ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
     if (bLocalIsHost)
     {
         if (!bCategoryChecksBuilt) BuildCategoryChecks();
@@ -330,3 +338,19 @@ void UPTLobbyHUDWidget::OnDiffDificil() { ToggleDifficulty(EPTWordDifficulty::Di
 
 void UPTLobbyHUDWidget::OnLoadCSV()  { if (UPTGameInstance* GI=GetGI()){ GI->LoadCustomWordsFromCSVDialog(); RefreshHostSettingsUI(); } }
 void UPTLobbyHUDWidget::OnClearCSV() { if (UPTGameInstance* GI=GetGI()){ GI->ClearCustomWords(); RefreshHostSettingsUI(); } }
+
+void UPTLobbyHUDWidget::OnGameSettingsClicked()
+{
+    bSettingsOpen = true;
+    if (!bCategoryChecksBuilt) BuildCategoryChecks();
+    RefreshHostSettingsUI();
+    if (HostSettingsPanel) HostSettingsPanel->SetVisibility(ESlateVisibility::Visible);
+}
+
+void UPTLobbyHUDWidget::OnCloseSettingsClicked()
+{
+    // Los ajustes ya se aplican en vivo (cada control escribe al GameInstance al tocarlo), así
+    // que "aplicar y cerrar" es simplemente cerrar el panel.
+    bSettingsOpen = false;
+    if (HostSettingsPanel) HostSettingsPanel->SetVisibility(ESlateVisibility::Collapsed);
+}
