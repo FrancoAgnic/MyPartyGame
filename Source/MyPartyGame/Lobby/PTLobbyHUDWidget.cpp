@@ -130,8 +130,8 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
             ReadyButtonText->SetText(FText::FromString(bReady ? TEXT("Ready") : TEXT("Not Ready")));
         if (ReadyButton)
             ReadyButton->SetBackgroundColor(bReady
-                ? FLinearColor(0.60f, 0.87f, 0.62f)    // verde pastel
-                : FLinearColor(0.94f, 0.55f, 0.55f));  // rojo pastel
+                ? FLinearColor(0.47f, 0.87f, 0.50f)    // verde pastel (+50% saturación)
+                : FLinearColor(0.94f, 0.36f, 0.36f));  // rojo pastel (+50% saturación)
     }
 
     if (CountdownText)
