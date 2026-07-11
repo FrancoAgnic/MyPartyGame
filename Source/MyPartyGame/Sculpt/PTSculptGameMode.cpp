@@ -48,7 +48,8 @@ TArray<APTPlayerState*> APTSculptGameMode::GetActivePlayers() const
 
 void APTSculptGameMode::PostLogin(APlayerController* NewPlayer)
 {
-    Super::PostLogin(NewPlayer);
+    Super::PostLogin(NewPlayer); // el lobby hace RestartPlayer acá → ya hay pawn
+    StartPawnFlying(NewPlayer);
     CheckStart();
 }
 
@@ -62,7 +63,14 @@ void APTSculptGameMode::HandleSeamlessTravelPlayer(AController*& C)
         if (!PC->GetPawn())
             RestartPlayer(PC);
 
+    StartPawnFlying(C);
     CheckStart();
+}
+
+void APTSculptGameMode::StartPawnFlying(AController* C) const
+{
+    if (APTLobbyCharacter* Char = C ? Cast<APTLobbyCharacter>(C->GetPawn()) : nullptr)
+        Char->SetFlyingMode(true);
 }
 
 void APTSculptGameMode::Logout(AController* Exiting)

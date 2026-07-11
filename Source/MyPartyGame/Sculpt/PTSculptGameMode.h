@@ -90,6 +90,12 @@ private:
     TArray<APTPlayerState*> GetActivePlayers() const;
     void ResetSculpture(); // limpia el Volume en todos (Multicast) al empezar el turno
 
+    // En Lvl-01 se esculpe en un vacío sin piso: cada jugador arranca volando (no caminando).
+    // Se llama server-side tras RestartPlayer para que la copia autoritativa arranque en vuelo
+    // (que no caiga mientras replica). El bFlying local para el input lo activa el cliente en
+    // APTSculptPlayerController::AcknowledgePossession. Solo pasa acá; el lobby camina.
+    void StartPawnFlying(AController* C) const;
+
     void CheckStart();          // arranca si hay suficientes jugadores
     void StartGame();           // resetea puntajes/rondas y arranca el primer turno
     void StartChoosingPhase();  // elige escultor + 3 palabras

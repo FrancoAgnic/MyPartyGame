@@ -121,10 +121,17 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
         StartGameButton->SetVisibility(bLocalIsHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
     }
 
-    if (ReadyButtonText)
+    // Botón Ready: refleja el estado propio. No listo → "Not Ready" en rojo pastel; listo →
+    // "Ready" en verde pastel. Clickearlo alterna (ver OnReadyClicked). SetBackgroundColor tiñe
+    // el brush del botón, así que conviene que en el WBP el botón tenga brushes blancos.
     {
-        ReadyButtonText->SetText(FText::FromString(
-            (LocalPS && LocalPS->bIsReady) ? TEXT("Listo ✓") : TEXT("Listo")));
+        const bool bReady = (LocalPS && LocalPS->bIsReady);
+        if (ReadyButtonText)
+            ReadyButtonText->SetText(FText::FromString(bReady ? TEXT("Ready") : TEXT("Not Ready")));
+        if (ReadyButton)
+            ReadyButton->SetBackgroundColor(bReady
+                ? FLinearColor(0.60f, 0.87f, 0.62f)    // verde pastel
+                : FLinearColor(0.94f, 0.55f, 0.55f));  // rojo pastel
     }
 
     if (CountdownText)

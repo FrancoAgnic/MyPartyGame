@@ -168,12 +168,20 @@ void UPTGameplayHUDWidget::FocusChat()
 
 void UPTGameplayHUDWidget::ApplyInputMode(bool bGameOnly)
 {
-    if (bInputModeInit && bGameOnly == bWantsGameOnly) return; // solo al cambiar
+    APlayerController* PC = GetOwningPlayer();
+    if (!PC) return;
+
+    // Re-aplicar si cambió lo que queremos, O si el cursor real quedó desincronizado de lo que
+    // debería estar. Esto último pasa porque el PlayerController setea FInputModeGameOnly directo
+    // en otros lados (color picker, etc.) sin avisarle al cache de acá: sin este chequeo, cuando
+    // después queremos el cursor (mostrar el scoreboard de fin, o elegir palabra en la ronda
+    // nueva), el early-return por cache creía que "ya estaba" y la flecha quedaba escondida.
+    const bool bWantCursor = !bGameOnly;
+    if (bInputModeInit && bGameOnly == bWantsGameOnly && PC->bShowMouseCursor == bWantCursor)
+        return;
     bInputModeInit = true;
     bWantsGameOnly = bGameOnly;
 
-    APlayerController* PC = GetOwningPlayer();
-    if (!PC) return;
     if (bGameOnly)
     {
         PC->SetInputMode(FInputModeGameOnly());

@@ -214,6 +214,10 @@ protected:
     virtual void BeginPlay()          override;
     virtual void SetupInputComponent() override;
     virtual void PlayerTick(float DeltaTime) override;
+    // Al poseer el pawn, arrancar en modo vuelo (Lvl-01 es un vacío sin piso). Corre en el
+    // cliente local para activar el bFlying local del input; el servidor ya lo dejó volando
+    // en APTSculptGameMode::StartPawnFlying.
+    virtual void AcknowledgePossession(APawn* P) override;
 
 private:
     APTSculptVolume* Volume = nullptr;

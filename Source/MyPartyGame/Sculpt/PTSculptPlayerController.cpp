@@ -15,6 +15,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "../UI/PTColorPickerWidget.h"
 #include "../Lobby/PTLobbyEscapeMenuWidget.h"
+#include "../Lobby/PTLobbyCharacter.h"
 #include "../Lobby/PTPlayerState.h"
 #include "PTSculptGameMode.h"
 #include "PTSculptGameState.h"
@@ -24,6 +25,17 @@ APTSculptPlayerController::APTSculptPlayerController()
 {
     PrimaryActorTick.bCanEverTick = true;
     bShowMouseCursor = false;
+}
+
+void APTSculptPlayerController::AcknowledgePossession(APawn* P)
+{
+    Super::AcknowledgePossession(P);
+    // Lvl-01 es un vacío sin piso caminable → arrancar volando (no caminar/saltar). Acá en el
+    // cliente local activa el bFlying para que el input de vuelo funcione; el servidor ya dejó la
+    // copia autoritativa en vuelo (StartPawnFlying). Solo pasa en Lvl-01: el lobby usa
+    // APTLobbyPlayerController y conserva el caminar.
+    if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(P))
+        Char->SetFlyingMode(true);
 }
 
 void APTSculptPlayerController::BeginPlay()
