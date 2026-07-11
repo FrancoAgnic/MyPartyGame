@@ -4,6 +4,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "../Lobby/PTLobbyGameMode.h"
+#include "../PTMatchSettings.h"
 #include "PTSculptGameMode.generated.h"
 
 class APTPlayerState;
@@ -42,8 +43,14 @@ public:
     // El viejo Lobby.umap quedó sin uso.
     UPROPERTY(EditDefaultsOnly, Category="Game") FString LobbyMapPath = TEXT("/Game/Template/levels/MainMenu");
 
-    // Banco de palabras (español). Si queda vacío se siembra con una lista por defecto.
-    UPROPERTY(EditDefaultsOnly, Category="Game") TArray<FString> WordBank;
+    // Banco de palabras (español) con categoría + dificultad. Si queda vacío se siembra con la
+    // lista por defecto (100 palabras categorizadas). Editable en BP_SculptGameMode.
+    UPROPERTY(EditDefaultsOnly, Category="Game") TArray<FPTWordEntry> WordBank;
+
+    // Config de partida elegida por el host en el lobby (tiempo/rondas/revelado/categorías/
+    // dificultad/CSV). Solo servidor. La llena el GameInstance al viajar (Fase B). Default = sin
+    // filtros → entran todas las palabras del banco.
+    FPTMatchSettings MatchSettings;
 
     // Al llegar a Lvl-01 por seamless travel, los PlayerState/controllers de todos recién se
     // asientan; arrancar la partida en ese instante puede elegir escultor sobre un PlayerState
@@ -97,6 +104,11 @@ private:
     APTSculptGameState* GS() const;
     TArray<APTPlayerState*> GetActivePlayers() const;
     void ResetSculpture(); // limpia el Volume en todos (Multicast) al empezar el turno
+
+    // Devuelve las palabras (solo texto) elegibles según MatchSettings: filtra el banco (o las
+    // CustomWords si bUseCustomWords) por categorías y dificultades activas. Si el filtro deja
+    // el pool vacío, cae a todas las palabras de la fuente (para no romper la partida).
+    TArray<FString> BuildEligibleWordPool() const;
 
     // En Lvl-01 se esculpe en un vacío sin piso: cada jugador arranca volando (no caminando).
     // Se llama server-side tras RestartPlayer para que la copia autoritativa arranque en vuelo
