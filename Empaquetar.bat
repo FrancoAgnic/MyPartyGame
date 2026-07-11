@@ -6,6 +6,9 @@ set PROJECT_FILE=%PROJECT_DIR%MyPartyGame.uproject
 set PACKAGED_DIR=%PROJECT_DIR%Packaged
 set UAT=%PROGRAMFILES%\Epic Games\UE_5.8\Engine\Build\BatchFiles\RunUAT.bat
 set ONEDRIVE_DEST=%ONEDRIVE%\Sculpturillo
+set RAR=%PROGRAMFILES%\WinRAR\Rar.exe
+set RAR_NAME=Sculpturillo.rar
+set RAR_LOCAL=%PACKAGED_DIR%\%RAR_NAME%
 
 echo.
 echo ========================================
@@ -23,25 +26,65 @@ call "%UAT%" BuildCookRun ^
 
 if errorlevel 1 (
     echo.
-    echo [ERROR] El empaquetado fallo. No se copio nada a OneDrive.
+    echo [ERROR] El empaquetado fallo. No se comprimio ni se subio nada.
     pause
     exit /b 1
 )
 
 echo.
 echo ========================================
-echo   Copiando build a OneDrive...
+echo   Comprimiendo build en %RAR_NAME% ...
+echo ========================================
+echo.
+
+if not exist "%RAR%" (
+    echo [ADVERTENCIA] No encontre WinRAR en "%RAR%".
+    echo Como respaldo copio la carpeta suelta a OneDrive.
+    if not exist "%ONEDRIVE_DEST%" mkdir "%ONEDRIVE_DEST%"
+    robocopy "%PACKAGED_DIR%\Windows" "%ONEDRIVE_DEST%" /MIR /NFL /NDL /NJH /NJS /NC /NS
+    goto :done
+)
+
+REM .rar limpio: borrar el anterior y comprimir el CONTENIDO de Packaged\Windows
+REM (raiz del .rar = Engine\, MyPartyGame\, MyPartyGame.exe). -m1 = rapido (los .pak
+REM ya vienen comprimidos con Oodle). Para achicarlo mas, agregar  -x*.pdb  y excluir
+REM los Manifest_DebugFiles (el amigo no los necesita para jugar).
+if exist "%RAR_LOCAL%" del /q "%RAR_LOCAL%"
+pushd "%PACKAGED_DIR%\Windows"
+"%RAR%" a -r -m1 -idq "%RAR_LOCAL%" "*"
+set RAR_ERR=%errorlevel%
+popd
+
+if not "%RAR_ERR%"=="0" (
+    echo.
+    echo [ERROR] Fallo la compresion ^(codigo %RAR_ERR%^). No se subio nada.
+    pause
+    exit /b 1
+)
+
+echo.
+echo ========================================
+echo   Subiendo %RAR_NAME% a OneDrive...
 echo ========================================
 echo.
 
 if not exist "%ONEDRIVE_DEST%" mkdir "%ONEDRIVE_DEST%"
 
-robocopy "%PACKAGED_DIR%\Windows" "%ONEDRIVE_DEST%" /MIR /NFL /NDL /NJH /NJS /NC /NS
+REM Limpiar los archivos SUELTOS viejos que dejaba la copia anterior, para que OneDrive
+REM sincronice solo el .rar y no las miles de archivos del cook.
+if exist "%ONEDRIVE_DEST%\Engine"     rmdir /s /q "%ONEDRIVE_DEST%\Engine"
+if exist "%ONEDRIVE_DEST%\MyPartyGame" rmdir /s /q "%ONEDRIVE_DEST%\MyPartyGame"
+del /q "%ONEDRIVE_DEST%\MyPartyGame.exe" 2>nul
+del /q "%ONEDRIVE_DEST%\Manifest_*"      2>nul
+del /q "%ONEDRIVE_DEST%\NOTICES.txt"     2>nul
 
+copy /y "%RAR_LOCAL%" "%ONEDRIVE_DEST%\%RAR_NAME%"
+
+:done
 echo.
 echo ========================================
-echo   Listo! Build disponible en OneDrive:
-echo   %ONEDRIVE_DEST%
+echo   Listo! Build comprimida en OneDrive:
+echo   %ONEDRIVE_DEST%\%RAR_NAME%
 echo ========================================
 echo.
 pause
