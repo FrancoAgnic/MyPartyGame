@@ -9,6 +9,8 @@
 #include "Components/Button.h"
 #include "HAL/PlatformApplicationMisc.h"
 #include "Kismet/GameplayStatics.h"
+#include "Engine/Engine.h"
+#include "../PTNetStats.h"
 
 bool UPTLobbyHUDWidget::Initialize()
 {
@@ -146,6 +148,15 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
         {
             CountdownText->SetVisibility(ESlateVisibility::Collapsed);
         }
+    }
+
+    // ── Diagnóstico de red (ping + packet loss) ──
+    // On-screen (visible en build Development). Ya en el lobby ves tu ping antes de arrancar.
+    if (GEngine)
+    {
+        const PTNetStats::FLine NS = PTNetStats::Build(GetOwningPlayer());
+        if (!NS.Text.IsEmpty())
+            GEngine->AddOnScreenDebugMessage(987710, 1.5f, NS.Color, NS.Text);
     }
 }
 

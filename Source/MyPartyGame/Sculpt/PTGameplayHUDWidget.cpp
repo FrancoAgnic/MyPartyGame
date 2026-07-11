@@ -10,6 +10,8 @@
 #include "Components/PanelWidget.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
+#include "Engine/Engine.h"
+#include "../PTNetStats.h"
 #include "TimerManager.h"
 
 bool UPTGameplayHUDWidget::Initialize()
@@ -153,6 +155,15 @@ void UPTGameplayHUDWidget::RefreshTick()
     const bool bWantUI = bChatOpen || bGameOver ||
                          (bSculptor && G->TurnPhase == EPTTurnPhase::ChoosingWord);
     ApplyInputMode(!bWantUI);
+
+    // ── Diagnóstico de red (ping + packet loss) ──
+    // On-screen (visible en build Development). Sirve para ver el lag en el test con un amigo.
+    if (GEngine)
+    {
+        const PTNetStats::FLine NS = PTNetStats::Build(GetOwningPlayer());
+        if (!NS.Text.IsEmpty())
+            GEngine->AddOnScreenDebugMessage(987711, 1.5f, NS.Color, NS.Text);
+    }
 }
 
 void UPTGameplayHUDWidget::FocusChat()
