@@ -227,11 +227,52 @@ void APTLobbyPlayerController::SetupInputComponent()
 void APTLobbyPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
-    if (!bHeadSculptMode || !HeadVolume || !bHeadStamping) return;
+    if (!bHeadSculptMode) return;
 
-    FVector Pt;
-    if (!GetHeadStampPoint(Pt)) return;
-    HeadVolume->ApplyStamp(Pt, EPTStampShape::Sphere, HeadBrushSize, HeadEditMode, HeadPaintColor);
+    // Órbita de cámara con WASD (A/D = yaw, W/S = pitch).
+    const float dYaw   = (IsInputKeyDown(EKeys::D) ? 1.f : 0.f) - (IsInputKeyDown(EKeys::A) ? 1.f : 0.f);
+    const float dPitch = (IsInputKeyDown(EKeys::W) ? 1.f : 0.f) - (IsInputKeyDown(EKeys::S) ? 1.f : 0.f);
+    if (dYaw != 0.f || dPitch != 0.f)
+    {
+        HeadOrbitYaw   += dYaw   * HeadOrbitSpeed * DeltaTime;
+        HeadOrbitPitch  = FMath::Clamp(HeadOrbitPitch + dPitch * HeadOrbitSpeed * DeltaTime, -85.f, 85.f);
+        UpdateHeadCam();
+    }
+
+    // Stamp continuo mientras se mantiene el LMB.
+    if (HeadVolume && bHeadStamping)
+    {
+        FVector Pt;
+        if (GetHeadStampPoint(Pt))
+            HeadVolume->ApplyStamp(Pt, EPTStampShape::Sphere, HeadBrushSize, HeadEditMode, HeadPaintColor);
+    }
+}
+
+void APTLobbyPlayerController::UpdateHeadCam()
+{
+    if (!HeadCam || !HeadVolume) return;
+    const FVector C   = HeadVolume->GetActorLocation();
+    const FVector Dir = FRotator(HeadOrbitPitch, HeadOrbitYaw, 0.f).Vector(); // dirección de mirada
+    const FVector CamLoc = C - Dir * HeadCamDistance;
+    HeadCam->SetActorLocation(CamLoc);
+    HeadCam->SetActorRotation(Dir.Rotation());
+}
+
+void APTLobbyPlayerController::ApplyHeadSculptInputMode()
+{
+    // GameAndUI + cursor, pero con CaptureDuringMouseDown → el LMB llega al esculpido (a diferencia
+    // del modo diorama que usa NoCapture y manda los clicks solo a la UI).
+    FInputModeGameAndUI Mode;
+    Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+    Mode.SetHideCursorDuringCapture(false);
+    SetInputMode(Mode);
+    SetShowMouseCursor(true);
+    if (ULocalPlayer* LP = GetLocalPlayer())
+        if (UGameViewportClient* VC = LP->ViewportClient)
+        {
+            VC->SetMouseCaptureMode(EMouseCaptureMode::CaptureDuringMouseDown);
+            VC->SetMouseLockMode(EMouseLockMode::DoNotLock);
+        }
 }
 
 void APTLobbyPlayerController::OnHeadStampPressed()  { if (bHeadSculptMode) bHeadStamping = true; }
@@ -246,28 +287,22 @@ bool APTLobbyPlayerController::GetHeadStampPoint(FVector& OutWorld) const
 {
     if (!HeadVolume || !GetWorld()) return false;
 
+    if (!HeadCam) return false;
+
     FVector Origin, Dir;
     if (!const_cast<APTLobbyPlayerController*>(this)->DeprojectMousePositionToWorld(Origin, Dir)) return false;
 
-    // 1) Raycast contra la arcilla (si el volumen tiene colisión de query).
-    FHitResult Hit;
-    FCollisionQueryParams Q; Q.bTraceComplex = true;
-    if (GetWorld()->LineTraceSingleByChannel(Hit, Origin, Origin + Dir * 5000.f, ECC_Visibility, Q)
-        && Hit.GetActor() == HeadVolume)
-    {
-        OutWorld = Hit.ImpactPoint;
-        return true;
-    }
-
-    // 2) Fallback: intersección rayo–esfera (esfera de sculpt en el centro del volumen).
-    const FVector C = HeadVolume->GetActorLocation();
-    const FVector m = Origin - C;
-    const float b = FVector::DotProduct(m, Dir);
-    const float c = FVector::DotProduct(m, m) - HeadRadius * HeadRadius;
-    if (c > 0.f && b > 0.f) return false;
-    const float disc = b * b - c;
-    if (disc < 0.f) return false;
-    OutWorld = Origin + Dir * FMath::Max(-b - FMath::Sqrt(disc), 0.f);
+    // IGUAL QUE EL GAMEPLAY (estilo SculptrVR): el sello NO cae sobre la superficie de la arcilla
+    // —eso la haría crecer hacia la cámara y no dejaría hacer trazos laterales—, sino sobre un
+    // PLANO a la profundidad de la cabeza, perpendicular a la cámara. Arrastrar el cursor desliza
+    // el sello por ese plano → trazos laterales a profundidad fija, desde cualquier ángulo (WASD).
+    const FVector C = HeadVolume->GetActorLocation();      // centro de la cabeza (punto del plano)
+    const FVector N = HeadCam->GetActorForwardVector();    // normal del plano = mirada de la cámara
+    const float denom = FVector::DotProduct(Dir, N);
+    if (FMath::Abs(denom) < 1e-4f) return false;           // rayo casi paralelo al plano
+    const float t = FVector::DotProduct(C - Origin, N) / denom;
+    if (t <= 0.f) return false;                            // el plano está detrás del cursor
+    OutWorld = Origin + Dir * t;
     return true;
 }
 
@@ -303,20 +338,17 @@ void APTLobbyPlayerController::EnterHeadSculpt()
     if (HeadVolume)
         HeadVolume->ApplyStamp(Center, EPTStampShape::Sphere, 40.f, EPTEditMode::Add, FLinearColor(0.95f, 0.78f, 0.66f));
 
-    // Cámara mirando el banco desde el frente (entre la cámara diorama y el volumen).
+    // Cámara ORBITAL: arranca mirando la cara del personaje (desde adelante). WASD la orbita.
     HeadCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass());
-    if (HeadCam)
-    {
-        const FVector CamLoc = Center - Fwd * HeadCamDistance + FVector(0, 0, 20.f);
-        HeadCam->SetActorLocation(CamLoc);
-        HeadCam->SetActorRotation((Center - CamLoc).Rotation());
-        SetViewTargetWithBlend(HeadCam, 0.35f);
-    }
+    HeadOrbitYaw   = P->GetActorRotation().Yaw + 180.f; // mirar desde el frente hacia el personaje
+    HeadOrbitPitch = -8.f;
+    UpdateHeadCam();
+    if (HeadCam) SetViewTargetWithBlend(HeadCam, 0.35f);
 
-    // Congelar el personaje y dejar el mouse para esculpir (el input real es P3).
+    // Congelar el personaje; input con CAPTURA para que el LMB llegue al esculpido (no a la UI).
     SetIgnoreMoveInput(true);
     SetIgnoreLookInput(true);
-    ApplyDioramaInputMode(); // GameAndUI + cursor
+    ApplyHeadSculptInputMode();
 
     UE_LOG(LogTemp, Log, TEXT("[Lobby] Modo esculpir-cabeza: ON."));
 }

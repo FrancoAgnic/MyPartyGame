@@ -91,6 +91,8 @@ protected:
     UPROPERTY(EditAnywhere, Category="Head") float HeadCamDistance   = 220.f;
     // Radio de la esfera de sculpt (donde caen los stamps si el raycast no pega en la arcilla).
     UPROPERTY(EditAnywhere, Category="Head") float HeadRadius        = 55.f;
+    // Velocidad de órbita de la cámara con WASD (grados/seg).
+    UPROPERTY(EditAnywhere, Category="Head") float HeadOrbitSpeed    = 100.f;
     // Tamaño del pincel (se ajusta con la rueda del mouse).
     UPROPERTY(EditAnywhere, Category="Head") float HeadBrushSize     = 22.f;
     // Color de pintura actual (por ahora fijo/piel; el selector de color va después).
@@ -122,6 +124,15 @@ private:
     bool bHeadSculptMode = false;
     void EnterHeadSculpt();
     void ExitHeadSculpt();
+
+    // Órbita de cámara (WASD) alrededor del volumen de cabeza.
+    float HeadOrbitYaw   = 0.f;
+    float HeadOrbitPitch = -8.f;
+    void  UpdateHeadCam(); // reposiciona HeadCam según yaw/pitch alrededor del centro del volumen
+
+    // Input mode del modo cabeza: GameAndUI + cursor pero con CaptureDuringMouseDown, así el LMB
+    // llega al esculpido (el modo diorama usa NoCapture y los clicks solo iban a la UI).
+    void ApplyHeadSculptInputMode();
 
     // Overlay del lobby activo (MainMenu o LobbyHUD): se colapsa mientras esculpís la cabeza
     // para que el mouse no lo agarre la UI y llegue al esculpido (igual que el gameplay).
