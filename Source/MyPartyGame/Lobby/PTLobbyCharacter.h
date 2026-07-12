@@ -8,6 +8,7 @@
 #include "PTLobbyCharacter.generated.h"
 
 class UMaterialInterface;
+class UAnimationAsset;
 
 class USpringArmComponent;
 class UCameraComponent;
@@ -48,6 +49,11 @@ public:
     // Material de la cabeza (arcilla que lee vertex color). Asignar en BP_LobbyCharacter.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head")
     UMaterialInterface* HeadMaterial = nullptr;
+
+    // Pose de esculpido: animación quieta (idealmente 1 frame) que se fuerza mientras esculpís la
+    // cabeza para que el personaje quede TOTALMENTE inmóvil (sin el loop de salto). Asignar en BP.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head")
+    UAnimationAsset* SculptPoseAnim = nullptr;
 
     // Copia la escultura de un ProceduralMesh de origen (el volumen donde el jugador esculpió) al
     // HeadMesh del personaje y la GUARDA (SaveGame). Es la "horneada" de v1.

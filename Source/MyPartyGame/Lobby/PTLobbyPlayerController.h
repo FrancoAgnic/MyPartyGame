@@ -15,6 +15,8 @@ class UPTLobbyHUDWidget;
 class APTSculptVolume;
 class ACameraActor;
 class UUserWidget;
+class UProceduralMeshComponent;
+class UMaterialInterface;
 struct FInputActionValue;
 
 UCLASS()
@@ -98,6 +100,11 @@ protected:
     // Color de pintura actual (por ahora fijo/piel; el selector de color va después).
     UPROPERTY(EditAnywhere, Category="Head") FLinearColor HeadPaintColor = FLinearColor(0.95f, 0.78f, 0.66f);
 
+    // Materiales de preview de la brocha (como el gameplay): el fantasma que sigue al cursor.
+    // Asignar los mismos del sculpt de gameplay (Add = arcilla, Erase = rojo/hueco).
+    UPROPERTY(EditAnywhere, Category="Head") UMaterialInterface* HeadPreviewMatAdd   = nullptr;
+    UPROPERTY(EditAnywhere, Category="Head") UMaterialInterface* HeadPreviewMatErase = nullptr;
+
     // Entra/sale del modo esculpir-cabeza: spawnea el volumen + cámara, congela el movimiento.
     void ToggleHeadSculptMode();
 
@@ -133,6 +140,14 @@ private:
     // Input mode del modo cabeza: GameAndUI + cursor pero con CaptureDuringMouseDown, así el LMB
     // llega al esculpido (el modo diorama usa NoCapture y los clicks solo iban a la UI).
     void ApplyHeadSculptInputMode();
+
+    // Preview de la brocha que sigue al cursor (como el gameplay): actor con un ProcMesh con la
+    // forma del sello, materializado según el modo (Add / Erase). Paint no muestra preview 3D.
+    UPROPERTY() AActor*                   HeadPreviewActor = nullptr;
+    UPROPERTY() UProceduralMeshComponent* HeadPreviewMesh  = nullptr;
+    float       HeadPreviewSize = -1.f;                 // cache para reconstruir sólo si cambia
+    EPTEditMode HeadPreviewMode = EPTEditMode::Smooth;  // idem (valor inicial != Add/Erase)
+    void UpdateHeadPreview(const FVector* At); // At=nullptr → oculta el preview
 
     // Overlay del lobby activo (MainMenu o LobbyHUD): se colapsa mientras esculpís la cabeza
     // para que el mouse no lo agarre la UI y llegue al esculpido (igual que el gameplay).

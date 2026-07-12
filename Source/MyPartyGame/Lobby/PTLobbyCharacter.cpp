@@ -7,6 +7,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Animation/AnimInstance.h"
 #include "ProceduralMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "NiagaraFunctionLibrary.h"
@@ -146,11 +147,20 @@ void APTLobbyCharacter::SetSculptPose(bool bEnable)
         M->SetSimulatePhysics(false);
         M->SetAllBodiesSimulatePhysics(false);
         M->PutAllRigidBodiesToSleep();
+        // Cortar cualquier montage en curso (ej: el salto que seguía en loop).
+        if (UAnimInstance* AI = M->GetAnimInstance())
+            AI->StopAllMontages(0.f);
         M->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+        if (SculptPoseAnim)
+            M->PlayAnimation(SculptPoseAnim, /*bLooping*/ true); // pose de referencia quieta
+        else
+            M->SetPosition(0.f, false);                          // sin pose: ref pose (frame 0)
+        M->bPauseAnims = true;                                   // congelar del todo (no avanza)
     }
     else
     {
         // Restaurar la animación normal (el AnimBP vuelve a manejar baile + jiggle).
+        M->bPauseAnims = false;
         M->SetAnimationMode(EAnimationMode::AnimationBlueprint);
     }
 }

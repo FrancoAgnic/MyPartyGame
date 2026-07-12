@@ -19,6 +19,9 @@
 #include "TimerManager.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
+#include "ProceduralMeshComponent.h"
+#include "DrawDebugHelpers.h"
+#include "Components/SkeletalMeshComponent.h"
 
 void APTLobbyPlayerController::Server_RequestStartGame_Implementation()
 {
@@ -239,13 +242,52 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
         UpdateHeadCam();
     }
 
-    // Stamp continuo mientras se mantiene el LMB.
-    if (HeadVolume && bHeadStamping)
+    // Flecha de preview: hacia dónde MIRA el personaje (su forward), desde el centro de la cabeza.
+    // Así sabés la orientación de la cara mientras modelás desde cualquier ángulo.
+    if (HeadVolume && GetPawn())
     {
-        FVector Pt;
-        if (GetHeadStampPoint(Pt))
-            HeadVolume->ApplyStamp(Pt, EPTStampShape::Sphere, HeadBrushSize, HeadEditMode, HeadPaintColor);
+        const FVector C = HeadVolume->GetActorLocation();
+        const FVector Fwd = GetPawn()->GetActorForwardVector();
+        DrawDebugDirectionalArrow(GetWorld(), C, C + Fwd * (HeadRadius * 2.5f),
+            HeadRadius * 0.6f, FColor(80, 200, 255), false, -1.f, 0, 2.f);
     }
+
+    // Punto de la brocha (cursor) — sirve para el preview y para esculpir.
+    FVector Pt;
+    const bool bHavePt = GetHeadStampPoint(Pt);
+
+    // Preview de la herramienta siguiendo el cursor (Add/Erase; Paint no muestra malla 3D).
+    UpdateHeadPreview(bHavePt ? &Pt : nullptr);
+
+    // Stamp continuo mientras se mantiene el LMB.
+    if (HeadVolume && bHeadStamping && bHavePt)
+        HeadVolume->ApplyStamp(Pt, EPTStampShape::Sphere, HeadBrushSize, HeadEditMode, HeadPaintColor);
+}
+
+void APTLobbyPlayerController::UpdateHeadPreview(const FVector* At)
+{
+    if (!HeadPreviewActor || !HeadPreviewMesh) return;
+
+    // Paint no lleva malla de preview 3D (como el gameplay: cursor 2D). Sin punto → oculto.
+    const bool bShow = At && bHeadSculptMode && HeadEditMode != EPTEditMode::Paint;
+    HeadPreviewActor->SetActorHiddenInGame(!bShow);
+    if (!bShow) return;
+
+    // Reconstruir la malla de la brocha sólo si cambió tamaño o modo.
+    if (HeadPreviewSize != HeadBrushSize || HeadPreviewMode != HeadEditMode)
+    {
+        TArray<FVector> V, Nn; TArray<int32> Tt;
+        APTSculptVolume::BuildStampPreview(EPTStampShape::Sphere, HeadBrushSize,
+            HeadVolume ? HeadVolume->VoxelSize : 5.f, V, Tt, Nn);
+        HeadPreviewMesh->CreateMeshSection(0, V, Tt, Nn, {}, {}, {}, false);
+
+        UMaterialInterface* Mat = (HeadEditMode == EPTEditMode::Erase) ? HeadPreviewMatErase : HeadPreviewMatAdd;
+        if (Mat) HeadPreviewMesh->SetMaterial(0, Mat);
+
+        HeadPreviewSize = HeadBrushSize;
+        HeadPreviewMode = HeadEditMode;
+    }
+    HeadPreviewActor->SetActorLocation(*At);
 }
 
 void APTLobbyPlayerController::UpdateHeadCam()
@@ -321,14 +363,20 @@ void APTLobbyPlayerController::EnterHeadSculpt()
     if (bHeadSculptMode || !HeadVolumeClass || !P || !GetWorld()) return;
     bHeadSculptMode = true;
 
+    APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(P);
+
     // Personaje recto y quieto (sin baile ni jiggle del physics asset) mientras esculpís.
-    if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(P)) Char->SetSculptPose(true);
+    if (Char) Char->SetSculptPose(true);
+    // Borrar la cabeza que ya tenía asignada: molesta para modelar una nueva desde cero.
+    if (Char) Char->ClearHeadMesh();
     // Colapsar la UI del lobby para que el mouse llegue al esculpido (no lo agarre la UI).
     if (ActiveOverlay) ActiveOverlay->SetVisibility(ESlateVisibility::Collapsed);
 
-    // Punto del "banco de esculpido": adelante y un poco arriba del personaje.
-    const FVector Fwd = P->GetActorForwardVector();
-    const FVector Center = P->GetActorLocation() + Fwd * HeadFrontDistance + FVector(0, 0, HeadUpOffset);
+    // El "banco de esculpido" cae JUSTO sobre el HeadSocket del personaje: esculpís donde va la
+    // cabeza y la cámara orbita alrededor de ese centro. Fallback: arriba del actor.
+    FVector Center = P->GetActorLocation() + FVector(0, 0, HeadUpOffset);
+    if (Char && Char->GetMesh() && Char->GetMesh()->DoesSocketExist(TEXT("HeadSocket")))
+        Center = Char->GetMesh()->GetSocketLocation(TEXT("HeadSocket"));
 
     FActorSpawnParameters SP;
     SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -337,6 +385,20 @@ void APTLobbyPlayerController::EnterHeadSculpt()
     // Bolita inicial de arcilla para que haya algo que esculpir (color piel neutro).
     if (HeadVolume)
         HeadVolume->ApplyStamp(Center, EPTStampShape::Sphere, 40.f, EPTEditMode::Add, FLinearColor(0.95f, 0.78f, 0.66f));
+
+    // Actor de preview de la brocha (fantasma que sigue al cursor, como el gameplay).
+    HeadPreviewActor = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), Center, FRotator::ZeroRotator, SP);
+    if (HeadPreviewActor)
+    {
+        HeadPreviewMesh = NewObject<UProceduralMeshComponent>(HeadPreviewActor, TEXT("HeadPreviewMesh"));
+        HeadPreviewMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        HeadPreviewMesh->SetCastShadow(false);
+        HeadPreviewMesh->RegisterComponent();
+        HeadPreviewActor->SetRootComponent(HeadPreviewMesh);
+        HeadPreviewActor->SetActorHiddenInGame(true);
+    }
+    HeadPreviewSize = -1.f;                    // fuerza reconstruir la malla en el primer tick
+    HeadPreviewMode = EPTEditMode::Smooth;
 
     // Cámara ORBITAL: arranca mirando la cara del personaje (desde adelante). WASD la orbita.
     HeadCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass());
@@ -368,8 +430,9 @@ void APTLobbyPlayerController::ExitHeadSculpt()
         Char->SetSculptPose(false); // restaura el baile + jiggle
     }
 
-    if (HeadVolume) { HeadVolume->Destroy(); HeadVolume = nullptr; }
-    if (HeadCam)    { HeadCam->Destroy();    HeadCam = nullptr; }
+    if (HeadVolume)       { HeadVolume->Destroy();       HeadVolume = nullptr; }
+    if (HeadCam)          { HeadCam->Destroy();          HeadCam = nullptr; }
+    if (HeadPreviewActor) { HeadPreviewActor->Destroy(); HeadPreviewActor = nullptr; HeadPreviewMesh = nullptr; }
 
     // Restaurar la UI del lobby.
     if (ActiveOverlay) ActiveOverlay->SetVisibility(ESlateVisibility::Visible);
