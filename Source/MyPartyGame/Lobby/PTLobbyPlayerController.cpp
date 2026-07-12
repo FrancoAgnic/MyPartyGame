@@ -204,6 +204,61 @@ void APTLobbyPlayerController::SetupInputComponent()
 
     // Tecla G: entrar/salir del modo esculpir tu cabeza custom.
     InputComponent->BindKey(EKeys::G, IE_Pressed, this, &APTLobbyPlayerController::ToggleHeadSculptMode);
+
+    // Esculpido de la cabeza (solo hace algo en modo cabeza; los handlers gatean con bHeadSculptMode).
+    InputComponent->BindKey(EKeys::LeftMouseButton,  IE_Pressed,  this, &APTLobbyPlayerController::OnHeadStampPressed);
+    InputComponent->BindKey(EKeys::LeftMouseButton,  IE_Released, this, &APTLobbyPlayerController::OnHeadStampReleased);
+    InputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed,  this, &APTLobbyPlayerController::OnHeadErasePressed);
+    InputComponent->BindKey(EKeys::RightMouseButton, IE_Released, this, &APTLobbyPlayerController::OnHeadEraseReleased);
+    InputComponent->BindKey(EKeys::MouseScrollUp,    IE_Pressed,  this, &APTLobbyPlayerController::OnHeadScrollUp);
+    InputComponent->BindKey(EKeys::MouseScrollDown,  IE_Pressed,  this, &APTLobbyPlayerController::OnHeadScrollDown);
+}
+
+void APTLobbyPlayerController::PlayerTick(float DeltaTime)
+{
+    Super::PlayerTick(DeltaTime);
+    if (!bHeadSculptMode || !HeadVolume || (!bHeadStamping && !bHeadErasing)) return;
+
+    FVector Pt;
+    if (!GetHeadStampPoint(Pt)) return;
+    const EPTEditMode Mode = bHeadErasing ? EPTEditMode::Erase : EPTEditMode::Add;
+    HeadVolume->ApplyStamp(Pt, EPTStampShape::Sphere, HeadBrushSize, Mode, HeadPaintColor);
+}
+
+void APTLobbyPlayerController::OnHeadStampPressed()  { if (bHeadSculptMode) bHeadStamping = true; }
+void APTLobbyPlayerController::OnHeadStampReleased() { bHeadStamping = false; }
+void APTLobbyPlayerController::OnHeadErasePressed()  { if (bHeadSculptMode) bHeadErasing = true; }
+void APTLobbyPlayerController::OnHeadEraseReleased() { bHeadErasing = false; }
+void APTLobbyPlayerController::OnHeadScrollUp()   { if (bHeadSculptMode) HeadBrushSize = FMath::Clamp(HeadBrushSize + 4.f, 6.f, 80.f); }
+void APTLobbyPlayerController::OnHeadScrollDown() { if (bHeadSculptMode) HeadBrushSize = FMath::Clamp(HeadBrushSize - 4.f, 6.f, 80.f); }
+
+bool APTLobbyPlayerController::GetHeadStampPoint(FVector& OutWorld) const
+{
+    if (!HeadVolume || !GetWorld()) return false;
+
+    FVector Origin, Dir;
+    if (!const_cast<APTLobbyPlayerController*>(this)->DeprojectMousePositionToWorld(Origin, Dir)) return false;
+
+    // 1) Raycast contra la arcilla (si el volumen tiene colisión de query).
+    FHitResult Hit;
+    FCollisionQueryParams Q; Q.bTraceComplex = true;
+    if (GetWorld()->LineTraceSingleByChannel(Hit, Origin, Origin + Dir * 5000.f, ECC_Visibility, Q)
+        && Hit.GetActor() == HeadVolume)
+    {
+        OutWorld = Hit.ImpactPoint;
+        return true;
+    }
+
+    // 2) Fallback: intersección rayo–esfera (esfera de sculpt en el centro del volumen).
+    const FVector C = HeadVolume->GetActorLocation();
+    const FVector m = Origin - C;
+    const float b = FVector::DotProduct(m, Dir);
+    const float c = FVector::DotProduct(m, m) - HeadRadius * HeadRadius;
+    if (c > 0.f && b > 0.f) return false;
+    const float disc = b * b - c;
+    if (disc < 0.f) return false;
+    OutWorld = Origin + Dir * FMath::Max(-b - FMath::Sqrt(disc), 0.f);
+    return true;
 }
 
 // ── Modo esculpir cabeza (tecla G) ───────────────────────────────────────────
@@ -255,6 +310,7 @@ void APTLobbyPlayerController::ExitHeadSculpt()
 {
     if (!bHeadSculptMode) return;
     bHeadSculptMode = false;
+    bHeadStamping = bHeadErasing = false;
 
     // (P4 horneará la malla al HeadSocket antes de destruir el volumen.)
     if (HeadVolume) { HeadVolume->Destroy(); HeadVolume = nullptr; }

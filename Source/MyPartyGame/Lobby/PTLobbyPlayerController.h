@@ -36,6 +36,7 @@ public:
 protected:
     virtual void BeginPlay() override;
     virtual void SetupInputComponent() override;
+    virtual void PlayerTick(float DeltaTime) override; // aplica stamps mientras se mantiene el click en modo cabeza
     // La posesión del pawn (sobre todo en clientes, que la reciben por replicación después del
     // BeginPlay) fija la vista al personaje; re-asegurar acá la cámara diorama.
     virtual void AcknowledgePossession(APawn* P) override;
@@ -86,6 +87,12 @@ protected:
     UPROPERTY(EditAnywhere, Category="Head") float HeadFrontDistance = 140.f;
     UPROPERTY(EditAnywhere, Category="Head") float HeadUpOffset      = 60.f;
     UPROPERTY(EditAnywhere, Category="Head") float HeadCamDistance   = 220.f;
+    // Radio de la esfera de sculpt (donde caen los stamps si el raycast no pega en la arcilla).
+    UPROPERTY(EditAnywhere, Category="Head") float HeadRadius        = 55.f;
+    // Tamaño del pincel (se ajusta con la rueda del mouse).
+    UPROPERTY(EditAnywhere, Category="Head") float HeadBrushSize     = 22.f;
+    // Color de pintura actual (por ahora fijo/piel; el selector de color va después).
+    UPROPERTY(EditAnywhere, Category="Head") FLinearColor HeadPaintColor = FLinearColor(0.95f, 0.78f, 0.66f);
 
     // Entra/sale del modo esculpir-cabeza: spawnea el volumen + cámara, congela el movimiento.
     void ToggleHeadSculptMode();
@@ -113,4 +120,14 @@ private:
     bool bHeadSculptMode = false;
     void EnterHeadSculpt();
     void ExitHeadSculpt();
+
+    // Input de esculpido (solo activo en modo cabeza).
+    bool bHeadStamping = false; // LMB mantenido → Add
+    bool bHeadErasing  = false; // RMB mantenido → Erase
+    void OnHeadStampPressed();  void OnHeadStampReleased();
+    void OnHeadErasePressed();  void OnHeadEraseReleased();
+    void OnHeadScrollUp();      void OnHeadScrollDown();
+    // Punto de mundo donde cae el sello: raycast del cursor contra la arcilla; si no pega,
+    // interseca la esfera de sculpt (radio HeadRadius) alrededor del centro del volumen.
+    bool GetHeadStampPoint(FVector& OutWorld) const;
 };
