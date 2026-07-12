@@ -11,6 +11,8 @@
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
 #include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "../Sculpt/PTSculptVolume.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 #include "Engine/GameViewportClient.h"
@@ -199,6 +201,70 @@ void APTLobbyPlayerController::SetupInputComponent()
 
     // Tecla P: el host arranca la partida (temporal hasta que exista el botón en el HUD).
     InputComponent->BindKey(EKeys::P, IE_Pressed, this, &APTLobbyPlayerController::OnPressedStartGame);
+
+    // Tecla G: entrar/salir del modo esculpir tu cabeza custom.
+    InputComponent->BindKey(EKeys::G, IE_Pressed, this, &APTLobbyPlayerController::ToggleHeadSculptMode);
+}
+
+// ── Modo esculpir cabeza (tecla G) ───────────────────────────────────────────
+
+void APTLobbyPlayerController::ToggleHeadSculptMode()
+{
+    if (!IsLocalController()) return;
+    if (bHeadSculptMode) ExitHeadSculpt();
+    else                 EnterHeadSculpt();
+}
+
+void APTLobbyPlayerController::EnterHeadSculpt()
+{
+    APawn* P = GetPawn();
+    if (bHeadSculptMode || !HeadVolumeClass || !P || !GetWorld()) return;
+    bHeadSculptMode = true;
+
+    // Punto del "banco de esculpido": adelante y un poco arriba del personaje.
+    const FVector Fwd = P->GetActorForwardVector();
+    const FVector Center = P->GetActorLocation() + Fwd * HeadFrontDistance + FVector(0, 0, HeadUpOffset);
+
+    FActorSpawnParameters SP;
+    SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    HeadVolume = GetWorld()->SpawnActor<APTSculptVolume>(HeadVolumeClass, Center, FRotator::ZeroRotator, SP);
+
+    // Bolita inicial de arcilla para que haya algo que esculpir (color piel neutro).
+    if (HeadVolume)
+        HeadVolume->ApplyStamp(Center, EPTStampShape::Sphere, 40.f, EPTEditMode::Add, FLinearColor(0.95f, 0.78f, 0.66f));
+
+    // Cámara mirando el banco desde el frente (entre la cámara diorama y el volumen).
+    HeadCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass());
+    if (HeadCam)
+    {
+        const FVector CamLoc = Center - Fwd * HeadCamDistance + FVector(0, 0, 20.f);
+        HeadCam->SetActorLocation(CamLoc);
+        HeadCam->SetActorRotation((Center - CamLoc).Rotation());
+        SetViewTargetWithBlend(HeadCam, 0.35f);
+    }
+
+    // Congelar el personaje y dejar el mouse para esculpir (el input real es P3).
+    SetIgnoreMoveInput(true);
+    SetIgnoreLookInput(true);
+    ApplyDioramaInputMode(); // GameAndUI + cursor
+
+    UE_LOG(LogTemp, Log, TEXT("[Lobby] Modo esculpir-cabeza: ON."));
+}
+
+void APTLobbyPlayerController::ExitHeadSculpt()
+{
+    if (!bHeadSculptMode) return;
+    bHeadSculptMode = false;
+
+    // (P4 horneará la malla al HeadSocket antes de destruir el volumen.)
+    if (HeadVolume) { HeadVolume->Destroy(); HeadVolume = nullptr; }
+    if (HeadCam)    { HeadCam->Destroy();    HeadCam = nullptr; }
+
+    SetIgnoreMoveInput(false);
+    SetupDioramaView();      // vuelve la cámara fija del lobby
+    ApplyDioramaInputMode(); // restaura cursor/input del lobby
+
+    UE_LOG(LogTemp, Log, TEXT("[Lobby] Modo esculpir-cabeza: OFF."));
 }
 
 void APTLobbyPlayerController::OnPressedStartGame()

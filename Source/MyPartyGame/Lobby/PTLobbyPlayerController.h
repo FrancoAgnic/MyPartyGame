@@ -11,6 +11,8 @@ class UInputAction;
 class UPTLobbyEscapeMenuWidget;
 class UPTMainMenuWidget;
 class UPTLobbyHUDWidget;
+class APTSculptVolume;
+class ACameraActor;
 struct FInputActionValue;
 
 UCLASS()
@@ -75,6 +77,19 @@ protected:
     UPROPERTY(EditAnywhere, Category="UI")
     int32 DefaultMaxPlayers = 8;
 
+    // ── Esculpir cabeza custom (tecla G) ────────────────────────────────────
+    // BP con el ClayMaterial asignado y un BoundsBox chico (tamaño cabeza). Se spawnea al entrar.
+    UPROPERTY(EditAnywhere, Category="Head")
+    TSubclassOf<APTSculptVolume> HeadVolumeClass;
+
+    // Encuadre del "banco de esculpido": distancia adelante del personaje, altura, y distancia de cámara.
+    UPROPERTY(EditAnywhere, Category="Head") float HeadFrontDistance = 140.f;
+    UPROPERTY(EditAnywhere, Category="Head") float HeadUpOffset      = 60.f;
+    UPROPERTY(EditAnywhere, Category="Head") float HeadCamDistance   = 220.f;
+
+    // Entra/sale del modo esculpir-cabeza: spawnea el volumen + cámara, congela el movimiento.
+    void ToggleHeadSculptMode();
+
 private:
     UPROPERTY() UPTLobbyEscapeMenuWidget* EscapeMenuWidget = nullptr;
 
@@ -91,4 +106,11 @@ private:
 
     // Sin sesión (todavía no viajamos) → overlay Crear/Unirse; en sesión → HUD de lobby (Ready).
     void ShowLobbyOverlay();
+
+    // Estado del modo esculpir-cabeza.
+    UPROPERTY() APTSculptVolume* HeadVolume = nullptr;
+    UPROPERTY() ACameraActor*    HeadCam    = nullptr;
+    bool bHeadSculptMode = false;
+    void EnterHeadSculpt();
+    void ExitHeadSculpt();
 };
