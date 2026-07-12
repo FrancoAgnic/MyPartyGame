@@ -60,6 +60,10 @@ public:
     void SaveHead();
     void LoadHead();
 
+    // Pose de esculpido: true = recto/quieto (bypass del AnimBP → pose base, sin baile ni jiggle
+    // del physics asset) mientras esculpís la cabeza; false = restaura la animación normal.
+    void SetSculptPose(bool bEnable);
+
 protected:
     virtual void BeginPlay() override;
 

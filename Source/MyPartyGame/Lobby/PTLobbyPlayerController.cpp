@@ -14,6 +14,7 @@
 #include "Camera/CameraComponent.h"
 #include "../Sculpt/PTSculptVolume.h"
 #include "PTLobbyCharacter.h"
+#include "Blueprint/UserWidget.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 #include "Engine/GameViewportClient.h"
@@ -136,7 +137,10 @@ void APTLobbyPlayerController::ShowLobbyOverlay()
         {
             UE_LOG(LogTemp, Log, TEXT("[Lobby] Mostrando MainMenuWidget (Crear/Unirse/Opciones)."));
             if (UPTMainMenuWidget* Menu = CreateWidget<UPTMainMenuWidget>(this, MainMenuWidgetClass))
+            {
                 Menu->MenuSetup(DefaultMaxPlayers, SelfMapPath);
+                ActiveOverlay = Menu; // para colapsarlo al esculpir la cabeza
+            }
         }
         else
         {
@@ -149,7 +153,10 @@ void APTLobbyPlayerController::ShowLobbyOverlay()
         {
             UE_LOG(LogTemp, Log, TEXT("[Lobby] Mostrando LobbyHUDWidget (lista + Ready)."));
             if (UPTLobbyHUDWidget* HUD = CreateWidget<UPTLobbyHUDWidget>(this, LobbyHUDWidgetClass))
+            {
                 HUD->ShowHUD();
+                ActiveOverlay = HUD; // para colapsarlo al esculpir la cabeza
+            }
         }
         else
         {
@@ -207,31 +214,33 @@ void APTLobbyPlayerController::SetupInputComponent()
     InputComponent->BindKey(EKeys::G, IE_Pressed, this, &APTLobbyPlayerController::ToggleHeadSculptMode);
 
     // Esculpido de la cabeza (solo hace algo en modo cabeza; los handlers gatean con bHeadSculptMode).
-    InputComponent->BindKey(EKeys::LeftMouseButton,  IE_Pressed,  this, &APTLobbyPlayerController::OnHeadStampPressed);
-    InputComponent->BindKey(EKeys::LeftMouseButton,  IE_Released, this, &APTLobbyPlayerController::OnHeadStampReleased);
-    InputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed,  this, &APTLobbyPlayerController::OnHeadErasePressed);
-    InputComponent->BindKey(EKeys::RightMouseButton, IE_Released, this, &APTLobbyPlayerController::OnHeadEraseReleased);
-    InputComponent->BindKey(EKeys::MouseScrollUp,    IE_Pressed,  this, &APTLobbyPlayerController::OnHeadScrollUp);
-    InputComponent->BindKey(EKeys::MouseScrollDown,  IE_Pressed,  this, &APTLobbyPlayerController::OnHeadScrollDown);
+    // Mismos inputs que el gameplay: LMB esculpe en el modo actual, 1/2/3 = Add/Erase/Paint, rueda = tamaño.
+    InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed,  this, &APTLobbyPlayerController::OnHeadStampPressed);
+    InputComponent->BindKey(EKeys::LeftMouseButton, IE_Released, this, &APTLobbyPlayerController::OnHeadStampReleased);
+    InputComponent->BindKey(EKeys::MouseScrollUp,   IE_Pressed,  this, &APTLobbyPlayerController::OnHeadScrollUp);
+    InputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed,  this, &APTLobbyPlayerController::OnHeadScrollDown);
+    InputComponent->BindKey(EKeys::One,   IE_Pressed, this, &APTLobbyPlayerController::OnHeadModeAdd);
+    InputComponent->BindKey(EKeys::Two,   IE_Pressed, this, &APTLobbyPlayerController::OnHeadModeErase);
+    InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &APTLobbyPlayerController::OnHeadModePaint);
 }
 
 void APTLobbyPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
-    if (!bHeadSculptMode || !HeadVolume || (!bHeadStamping && !bHeadErasing)) return;
+    if (!bHeadSculptMode || !HeadVolume || !bHeadStamping) return;
 
     FVector Pt;
     if (!GetHeadStampPoint(Pt)) return;
-    const EPTEditMode Mode = bHeadErasing ? EPTEditMode::Erase : EPTEditMode::Add;
-    HeadVolume->ApplyStamp(Pt, EPTStampShape::Sphere, HeadBrushSize, Mode, HeadPaintColor);
+    HeadVolume->ApplyStamp(Pt, EPTStampShape::Sphere, HeadBrushSize, HeadEditMode, HeadPaintColor);
 }
 
 void APTLobbyPlayerController::OnHeadStampPressed()  { if (bHeadSculptMode) bHeadStamping = true; }
 void APTLobbyPlayerController::OnHeadStampReleased() { bHeadStamping = false; }
-void APTLobbyPlayerController::OnHeadErasePressed()  { if (bHeadSculptMode) bHeadErasing = true; }
-void APTLobbyPlayerController::OnHeadEraseReleased() { bHeadErasing = false; }
 void APTLobbyPlayerController::OnHeadScrollUp()   { if (bHeadSculptMode) HeadBrushSize = FMath::Clamp(HeadBrushSize + 4.f, 6.f, 80.f); }
 void APTLobbyPlayerController::OnHeadScrollDown() { if (bHeadSculptMode) HeadBrushSize = FMath::Clamp(HeadBrushSize - 4.f, 6.f, 80.f); }
+void APTLobbyPlayerController::OnHeadModeAdd()   { if (bHeadSculptMode) HeadEditMode = EPTEditMode::Add;   }
+void APTLobbyPlayerController::OnHeadModeErase() { if (bHeadSculptMode) HeadEditMode = EPTEditMode::Erase; }
+void APTLobbyPlayerController::OnHeadModePaint() { if (bHeadSculptMode) HeadEditMode = EPTEditMode::Paint; }
 
 bool APTLobbyPlayerController::GetHeadStampPoint(FVector& OutWorld) const
 {
@@ -277,6 +286,11 @@ void APTLobbyPlayerController::EnterHeadSculpt()
     if (bHeadSculptMode || !HeadVolumeClass || !P || !GetWorld()) return;
     bHeadSculptMode = true;
 
+    // Personaje recto y quieto (sin baile ni jiggle del physics asset) mientras esculpís.
+    if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(P)) Char->SetSculptPose(true);
+    // Colapsar la UI del lobby para que el mouse llegue al esculpido (no lo agarre la UI).
+    if (ActiveOverlay) ActiveOverlay->SetVisibility(ESlateVisibility::Collapsed);
+
     // Punto del "banco de esculpido": adelante y un poco arriba del personaje.
     const FVector Fwd = P->GetActorForwardVector();
     const FVector Center = P->GetActorLocation() + Fwd * HeadFrontDistance + FVector(0, 0, HeadUpOffset);
@@ -311,17 +325,22 @@ void APTLobbyPlayerController::ExitHeadSculpt()
 {
     if (!bHeadSculptMode) return;
     bHeadSculptMode = false;
-    bHeadStamping = bHeadErasing = false;
+    bHeadStamping = false;
 
     // Hornear: copiar la escultura (malla local del volumen) a la cabeza del personaje, pegada
     // al HeadSocket. La arcilla se esculpió centrada en el origen del volumen → queda centrada
     // en el socket. Ajustá el tamaño con el RelativeScale3D del HeadMesh en BP_LobbyCharacter.
-    if (HeadVolume)
-        if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn()))
-            Char->SetHeadMeshFrom(HeadVolume->GetMeshComponent());
+    if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn()))
+    {
+        if (HeadVolume) Char->SetHeadMeshFrom(HeadVolume->GetMeshComponent());
+        Char->SetSculptPose(false); // restaura el baile + jiggle
+    }
 
     if (HeadVolume) { HeadVolume->Destroy(); HeadVolume = nullptr; }
     if (HeadCam)    { HeadCam->Destroy();    HeadCam = nullptr; }
+
+    // Restaurar la UI del lobby.
+    if (ActiveOverlay) ActiveOverlay->SetVisibility(ESlateVisibility::Visible);
 
     SetIgnoreMoveInput(false);
     SetupDioramaView();      // vuelve la cámara fija del lobby

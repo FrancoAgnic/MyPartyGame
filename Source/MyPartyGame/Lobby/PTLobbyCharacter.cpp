@@ -6,6 +6,7 @@
 #include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/WidgetComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "ProceduralMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "NiagaraFunctionLibrary.h"
@@ -131,6 +132,27 @@ void APTLobbyCharacter::BeginPlay()
     // v1 LOCAL: solo el pawn del jugador local restaura SU cabeza guardada (no se toca a los demás).
     if (IsLocallyControlled())
         LoadHead();
+}
+
+void APTLobbyCharacter::SetSculptPose(bool bEnable)
+{
+    USkeletalMeshComponent* M = GetMesh();
+    if (!M) return;
+
+    if (bEnable)
+    {
+        // Recto y quieto mientras esculpís: apagar la física (jiggle del physics asset) y
+        // bypassear el AnimBP (que hace el baile y/o el AnimDynamics) → queda en pose base.
+        M->SetSimulatePhysics(false);
+        M->SetAllBodiesSimulatePhysics(false);
+        M->PutAllRigidBodiesToSleep();
+        M->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+    }
+    else
+    {
+        // Restaurar la animación normal (el AnimBP vuelve a manejar baile + jiggle).
+        M->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+    }
 }
 
 void APTLobbyCharacter::UpdateNameTag()

@@ -4,6 +4,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "../Sculpt/PTSculptVolume.h" // EPTEditMode / EPTStampShape para el modo esculpir-cabeza
 #include "PTLobbyPlayerController.generated.h"
 
 class UInputMappingContext;
@@ -13,6 +14,7 @@ class UPTMainMenuWidget;
 class UPTLobbyHUDWidget;
 class APTSculptVolume;
 class ACameraActor;
+class UUserWidget;
 struct FInputActionValue;
 
 UCLASS()
@@ -121,12 +123,17 @@ private:
     void EnterHeadSculpt();
     void ExitHeadSculpt();
 
-    // Input de esculpido (solo activo en modo cabeza).
-    bool bHeadStamping = false; // LMB mantenido → Add
-    bool bHeadErasing  = false; // RMB mantenido → Erase
+    // Overlay del lobby activo (MainMenu o LobbyHUD): se colapsa mientras esculpís la cabeza
+    // para que el mouse no lo agarre la UI y llegue al esculpido (igual que el gameplay).
+    UPROPERTY() UUserWidget* ActiveOverlay = nullptr;
+
+    // Input de esculpido (solo activo en modo cabeza). Igual que el gameplay: LMB esculpe en el
+    // modo actual; 1/2/3 cambian el modo (Add/Erase/Paint). RMB queda para el color (paso siguiente).
+    bool bHeadStamping = false;
+    EPTEditMode HeadEditMode = EPTEditMode::Add;
     void OnHeadStampPressed();  void OnHeadStampReleased();
-    void OnHeadErasePressed();  void OnHeadEraseReleased();
     void OnHeadScrollUp();      void OnHeadScrollDown();
+    void OnHeadModeAdd();       void OnHeadModeErase();  void OnHeadModePaint();
     // Punto de mundo donde cae el sello: raycast del cursor contra la arcilla; si no pega,
     // interseca la esfera de sculpt (radio HeadRadius) alrededor del centro del volumen.
     bool GetHeadStampPoint(FVector& OutWorld) const;
