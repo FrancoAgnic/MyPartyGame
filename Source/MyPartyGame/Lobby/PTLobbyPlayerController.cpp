@@ -13,6 +13,7 @@
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "../Sculpt/PTSculptVolume.h"
+#include "PTLobbyCharacter.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 #include "Engine/GameViewportClient.h"
@@ -312,7 +313,13 @@ void APTLobbyPlayerController::ExitHeadSculpt()
     bHeadSculptMode = false;
     bHeadStamping = bHeadErasing = false;
 
-    // (P4 horneará la malla al HeadSocket antes de destruir el volumen.)
+    // Hornear: copiar la escultura (malla local del volumen) a la cabeza del personaje, pegada
+    // al HeadSocket. La arcilla se esculpió centrada en el origen del volumen → queda centrada
+    // en el socket. Ajustá el tamaño con el RelativeScale3D del HeadMesh en BP_LobbyCharacter.
+    if (HeadVolume)
+        if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn()))
+            Char->SetHeadMeshFrom(HeadVolume->GetMeshComponent());
+
     if (HeadVolume) { HeadVolume->Destroy(); HeadVolume = nullptr; }
     if (HeadCam)    { HeadCam->Destroy();    HeadCam = nullptr; }
 

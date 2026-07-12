@@ -57,6 +57,9 @@ public:
     void ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
                     EPTEditMode Mode, FLinearColor PaintColor);
 
+    // Acceso al ProceduralMesh (para hornear la escultura a otro componente, ej: la cabeza custom).
+    UProceduralMeshComponent* GetMeshComponent() const { return Mesh; }
+
     float        SampleWorldDensity(FVector WorldPos) const;
     FLinearColor SampleWorldColor  (FVector WorldPos) const;
 
