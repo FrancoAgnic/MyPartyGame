@@ -7,6 +7,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/WidgetComponent.h"
 #include "ProceduralMeshComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "EnhancedInputComponent.h"
@@ -53,42 +54,83 @@ APTLobbyCharacter::APTLobbyCharacter()
     HeadMesh->bUseComplexAsSimpleCollision = false;
 }
 
-void APTLobbyCharacter::SetHeadMeshFrom(UProceduralMeshComponent* Src)
-{
-    if (!HeadMesh || !Src) return;
+static const TCHAR* PTHeadSaveSlot = TEXT("PTHeadCustom");
 
-    HeadMesh->ClearAllMeshSections();
-    const int32 NumSec = Src->GetNumSections();
-    for (int32 s = 0; s < NumSec; ++s)
+TArray<FPTHeadSection> APTLobbyCharacter::ExtractSections(UProceduralMeshComponent* Src) const
+{
+    TArray<FPTHeadSection> Out;
+    if (!Src) return Out;
+    const int32 N = Src->GetNumSections();
+    for (int32 s = 0; s < N; ++s)
     {
         const FProcMeshSection* Sec = Src->GetProcMeshSection(s);
         if (!Sec || Sec->ProcVertexBuffer.Num() == 0) continue;
-
-        TArray<FVector>          Verts;    Verts.Reserve(Sec->ProcVertexBuffer.Num());
-        TArray<FVector>          Normals;  Normals.Reserve(Sec->ProcVertexBuffer.Num());
-        TArray<FVector2D>        UVs;      UVs.Reserve(Sec->ProcVertexBuffer.Num());
-        TArray<FColor>           Colors;   Colors.Reserve(Sec->ProcVertexBuffer.Num());
-        TArray<FProcMeshTangent> Tangents; Tangents.Reserve(Sec->ProcVertexBuffer.Num());
+        FPTHeadSection H;
+        H.Verts.Reserve(Sec->ProcVertexBuffer.Num());
+        H.Normals.Reserve(Sec->ProcVertexBuffer.Num());
+        H.UVs.Reserve(Sec->ProcVertexBuffer.Num());
+        H.Colors.Reserve(Sec->ProcVertexBuffer.Num());
         for (const FProcMeshVertex& V : Sec->ProcVertexBuffer)
         {
-            Verts.Add(V.Position); Normals.Add(V.Normal); UVs.Add(V.UV0);
-            Colors.Add(V.Color);   Tangents.Add(V.Tangent);
+            H.Verts.Add(V.Position); H.Normals.Add(V.Normal); H.UVs.Add(V.UV0); H.Colors.Add(V.Color);
         }
-        TArray<int32> Tris;
-        Tris.Reserve(Sec->ProcIndexBuffer.Num());
-        for (uint32 Idx : Sec->ProcIndexBuffer) Tris.Add((int32)Idx);
-
-        HeadMesh->CreateMeshSection(s, Verts, Tris, Normals, UVs, Colors, Tangents, /*bCreateCollision=*/false);
+        H.Tris.Reserve(Sec->ProcIndexBuffer.Num());
+        for (uint32 Idx : Sec->ProcIndexBuffer) H.Tris.Add((int32)Idx);
+        Out.Add(MoveTemp(H));
     }
+    return Out;
+}
 
-    // Reusar el material de arcilla del volumen de origen (para que se vea igual).
-    if (UMaterialInterface* Mat = Src->GetMaterial(0))
-        HeadMesh->SetMaterial(0, Mat);
+void APTLobbyCharacter::ApplyHeadSections(const TArray<FPTHeadSection>& Secs)
+{
+    if (!HeadMesh) return;
+    HeadMesh->ClearAllMeshSections();
+    const TArray<FProcMeshTangent> NoTangents;
+    for (int32 s = 0; s < Secs.Num(); ++s)
+    {
+        const FPTHeadSection& H = Secs[s];
+        if (H.Verts.Num() == 0) continue;
+        HeadMesh->CreateMeshSection(s, H.Verts, H.Tris, H.Normals, H.UVs, H.Colors, NoTangents, /*bCreateCollision=*/false);
+        if (HeadMaterial) HeadMesh->SetMaterial(s, HeadMaterial);
+    }
+}
+
+void APTLobbyCharacter::SetHeadMeshFrom(UProceduralMeshComponent* Src)
+{
+    if (!HeadMesh || !Src) return;
+    ApplyHeadSections(ExtractSections(Src));
+    SaveHead(); // hornear = guardar tu cabeza (v1 local)
 }
 
 void APTLobbyCharacter::ClearHeadMesh()
 {
     if (HeadMesh) HeadMesh->ClearAllMeshSections();
+}
+
+void APTLobbyCharacter::SaveHead()
+{
+    if (!HeadMesh) return;
+    UPTHeadSaveGame* Save = Cast<UPTHeadSaveGame>(
+        UGameplayStatics::CreateSaveGameObject(UPTHeadSaveGame::StaticClass()));
+    if (!Save) return;
+    Save->Sections = ExtractSections(HeadMesh);
+    UGameplayStatics::SaveGameToSlot(Save, PTHeadSaveSlot, 0);
+}
+
+void APTLobbyCharacter::LoadHead()
+{
+    if (!UGameplayStatics::DoesSaveGameExist(PTHeadSaveSlot, 0)) return;
+    if (UPTHeadSaveGame* Save = Cast<UPTHeadSaveGame>(UGameplayStatics::LoadGameFromSlot(PTHeadSaveSlot, 0)))
+        if (Save->Sections.Num() > 0)
+            ApplyHeadSections(Save->Sections);
+}
+
+void APTLobbyCharacter::BeginPlay()
+{
+    Super::BeginPlay();
+    // v1 LOCAL: solo el pawn del jugador local restaura SU cabeza guardada (no se toca a los demás).
+    if (IsLocallyControlled())
+        LoadHead();
 }
 
 void APTLobbyCharacter::UpdateNameTag()

@@ -4,7 +4,10 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "PTHeadSaveGame.h"
 #include "PTLobbyCharacter.generated.h"
+
+class UMaterialInterface;
 
 class USpringArmComponent;
 class UCameraComponent;
@@ -42,12 +45,23 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Head")
     UProceduralMeshComponent* HeadMesh;
 
-    // Copia todas las secciones (geometría + color) de un ProceduralMesh de origen (el volumen
-    // donde el jugador esculpió la cabeza) al HeadMesh del personaje. Es la "horneada" de v1.
+    // Material de la cabeza (arcilla que lee vertex color). Asignar en BP_LobbyCharacter.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head")
+    UMaterialInterface* HeadMaterial = nullptr;
+
+    // Copia la escultura de un ProceduralMesh de origen (el volumen donde el jugador esculpió) al
+    // HeadMesh del personaje y la GUARDA (SaveGame). Es la "horneada" de v1.
     void SetHeadMeshFrom(UProceduralMeshComponent* Src);
 
     // Borra la cabeza custom (vuelve a sin cabeza).
     void ClearHeadMesh();
+
+    // Persistencia local (v1): guardar/cargar la cabeza esculpida en un slot de SaveGame.
+    void SaveHead();
+    void LoadHead();
+
+protected:
+    virtual void BeginPlay() override;
 
 protected:
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
@@ -108,6 +122,12 @@ private:
     bool  bDescend  = false;
     float LastJumpTime = -10.f;
     float DefaultMaxAccel = 2048.f; // MaxAcceleration para caminar (se restaura al salir de vuelo)
+
+    // ── Cabeza custom: helpers de secciones ─────────────────────────────────
+    // Lee las secciones (verts/tris/normales/UV/color) de un ProceduralMesh a structs guardables.
+    TArray<FPTHeadSection> ExtractSections(UProceduralMeshComponent* Src) const;
+    // Reconstruye el HeadMesh desde secciones (aplica HeadMaterial). Lo usan SetHeadMeshFrom y LoadHead.
+    void ApplyHeadSections(const TArray<FPTHeadSection>& Secs);
 
     // Cartel del nombre: actualizado throttled desde Tick.
     void  UpdateNameTag();
