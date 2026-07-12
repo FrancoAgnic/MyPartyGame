@@ -6,6 +6,7 @@
 #include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/WidgetComponent.h"
+#include "ProceduralMeshComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "EnhancedInputComponent.h"
@@ -43,6 +44,51 @@ APTLobbyCharacter::APTLobbyCharacter()
     NameTag->SetRelativeLocation(FVector(0.f, 0.f, 20.f)); // apenas arriba del hueso; ajustar en el BP
     NameTag->SetWidgetSpace(EWidgetSpace::Screen);
     NameTag->SetDrawSize(FVector2D(200.f, 50.f));
+
+    // Cabeza custom: malla procedural pegada al socket "HeadSocket" del mesh (baila con la cabeza).
+    // Arranca vacía; se llena con la cabeza esculpida por el jugador (SetHeadMeshFrom).
+    HeadMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("HeadMesh"));
+    HeadMesh->SetupAttachment(GetMesh(), TEXT("HeadSocket"));
+    HeadMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    HeadMesh->bUseComplexAsSimpleCollision = false;
+}
+
+void APTLobbyCharacter::SetHeadMeshFrom(UProceduralMeshComponent* Src)
+{
+    if (!HeadMesh || !Src) return;
+
+    HeadMesh->ClearAllMeshSections();
+    const int32 NumSec = Src->GetNumSections();
+    for (int32 s = 0; s < NumSec; ++s)
+    {
+        const FProcMeshSection* Sec = Src->GetProcMeshSection(s);
+        if (!Sec || Sec->ProcVertexBuffer.Num() == 0) continue;
+
+        TArray<FVector>          Verts;    Verts.Reserve(Sec->ProcVertexBuffer.Num());
+        TArray<FVector>          Normals;  Normals.Reserve(Sec->ProcVertexBuffer.Num());
+        TArray<FVector2D>        UVs;      UVs.Reserve(Sec->ProcVertexBuffer.Num());
+        TArray<FColor>           Colors;   Colors.Reserve(Sec->ProcVertexBuffer.Num());
+        TArray<FProcMeshTangent> Tangents; Tangents.Reserve(Sec->ProcVertexBuffer.Num());
+        for (const FProcMeshVertex& V : Sec->ProcVertexBuffer)
+        {
+            Verts.Add(V.Position); Normals.Add(V.Normal); UVs.Add(V.UV0);
+            Colors.Add(V.Color);   Tangents.Add(V.Tangent);
+        }
+        TArray<int32> Tris;
+        Tris.Reserve(Sec->ProcIndexBuffer.Num());
+        for (uint32 Idx : Sec->ProcIndexBuffer) Tris.Add((int32)Idx);
+
+        HeadMesh->CreateMeshSection(s, Verts, Tris, Normals, UVs, Colors, Tangents, /*bCreateCollision=*/false);
+    }
+
+    // Reusar el material de arcilla del volumen de origen (para que se vea igual).
+    if (UMaterialInterface* Mat = Src->GetMaterial(0))
+        HeadMesh->SetMaterial(0, Mat);
+}
+
+void APTLobbyCharacter::ClearHeadMesh()
+{
+    if (HeadMesh) HeadMesh->ClearAllMeshSections();
 }
 
 void APTLobbyCharacter::UpdateNameTag()

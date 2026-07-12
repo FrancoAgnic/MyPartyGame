@@ -12,6 +12,7 @@ class UInputAction;
 class UWidgetComponent;
 class UAnimMontage;
 class UNiagaraSystem;
+class UProceduralMeshComponent;
 struct FInputActionValue;
 
 UCLASS()
@@ -34,6 +35,19 @@ public:
     // Sistema de partículas de confetti al adivinar. Asignar en el BP.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="FX")
     UNiagaraSystem* ConfettiFX = nullptr;
+
+    // ── Cabeza custom (esculpida por el jugador) ────────────────────────────────
+    // Malla procedural pegada al hueso "HeadSocket" del mesh: baila con el personaje.
+    // Se le copia la geometría de la cabeza que esculpe el jugador (ver SetHeadMeshFrom).
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Head")
+    UProceduralMeshComponent* HeadMesh;
+
+    // Copia todas las secciones (geometría + color) de un ProceduralMesh de origen (el volumen
+    // donde el jugador esculpió la cabeza) al HeadMesh del personaje. Es la "horneada" de v1.
+    void SetHeadMeshFrom(UProceduralMeshComponent* Src);
+
+    // Borra la cabeza custom (vuelve a sin cabeza).
+    void ClearHeadMesh();
 
 protected:
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
