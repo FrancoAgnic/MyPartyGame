@@ -9,6 +9,9 @@
 
 class UMaterialInterface;
 class UAnimationAsset;
+class UArrowComponent;
+class UStaticMesh;
+class APTSculptVolume;
 
 class USpringArmComponent;
 class UCameraComponent;
@@ -46,32 +49,84 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Head")
     UProceduralMeshComponent* HeadMesh;
 
+    // Flecha de "hacia dónde mira" (visible sólo en modo esculpir-cabeza). Ajustá su transform
+    // (altura/largo) y color en BP_LobbyCharacter; C++ sólo la muestra/oculta.
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Head")
+    UArrowComponent* FacingArrow;
+
     // Material de la cabeza (arcilla que lee vertex color). Asignar en BP_LobbyCharacter.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head")
     UMaterialInterface* HeadMaterial = nullptr;
+
+    // Material de los OJOS. Asignar el material de "ojos locos". Si es null usa HeadMaterial.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head")
+    UMaterialInterface* EyeMaterial = nullptr;
+
+    // Mesh del ojo que se hornea en la cabeza (si tiene "Allow CPU Access"). Si es null, esferas.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head")
+    UStaticMesh* HeadEyeMesh = nullptr;
+
+    // Radio "natural" del HeadEyeMesh (para escalarlo al tamaño del ojo colocado).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head")
+    float HeadEyeBaseSize = 50.f;
 
     // Pose de esculpido: animación quieta (idealmente 1 frame) que se fuerza mientras esculpís la
     // cabeza para que el personaje quede TOTALMENTE inmóvil (sin el loop de salto). Asignar en BP.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head")
     UAnimationAsset* SculptPoseAnim = nullptr;
 
-    // Copia la escultura de un ProceduralMesh de origen (el volumen donde el jugador esculpió) al
-    // HeadMesh del personaje y la GUARDA (SaveGame). Es la "horneada" de v1.
-    void SetHeadMeshFrom(UProceduralMeshComponent* Src);
+    // Hueso del physics asset cuyo cuerpo se escala para la colisión de la cabeza.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head")
+    FName HeadPhysicsBone = TEXT("Bone_008_end");
+
+    // Radio "de referencia" del cuerpo físico de la cabeza (escala 1). El cuerpo se escala por
+    // radioDeLaMalla / este valor. Subilo/bajalo hasta que la colisión calce con la cabeza.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head")
+    float HeadCollisionRefSize = 50.f;
+
+    // Hornea la cabeza final: arcilla del volumen ClaySrc (con la pintura del atlas de PaintSource)
+    // + los OJOS (esferas en posiciones locales LocalEyes: XYZ=centro, W=radio). La aplica al
+    // HeadMesh, la guarda localmente y la REPLICA (via PlayerState) para que todos la vean.
+    void BakeAndReplicateHead(UProceduralMeshComponent* ClaySrc, APTSculptVolume* PaintSource,
+                              const TArray<FVector4>& LocalEyes);
+
+    // Aplica al HeadMesh la cabeza replicada guardada en el PlayerState (para los demás jugadores
+    // y al viajar a Lvl-01). No hace nada si el PlayerState no tiene cabeza.
+    void ApplyReplicatedHead();
+
+    // Construye una sección de OJOS desde posiciones locales (XYZ=centro, W=radio). Si EyeMesh
+    // tiene datos CPU, copia su geometría por cada ojo (escalada a BaseSize); si no, esferas UV.
+    static FPTHeadSection BuildEyesSection(const TArray<FVector4>& LocalEyes,
+                                           UStaticMesh* EyeMesh = nullptr, float BaseSize = 50.f, int32 Segments = 12);
+
+    // Ajusta la colisión de la cabeza (cuerpo físico del hueso HeadPhysicsBone) al tamaño de la
+    // malla esculpida, para que la cabeza "choque" y no atraviese paredes/techos.
+    void UpdateHeadCollision();
 
     // Borra la cabeza custom (vuelve a sin cabeza).
     void ClearHeadMesh();
 
-    // Persistencia local (v1): guardar/cargar la cabeza esculpida en un slot de SaveGame.
-    void SaveHead();
+    // Persistencia local: guardar (secciones dadas) / cargar la cabeza esculpida en un SaveGame.
+    void SaveHead(const TArray<FPTHeadSection>& Secs);
     void LoadHead();
 
-    // Pose de esculpido: true = recto/quieto (bypass del AnimBP → pose base, sin baile ni jiggle
+    // Pose de esculpido: true = recto/quieto (bypass del AnimBP → pose fija, sin baile ni jiggle
     // del physics asset) mientras esculpís la cabeza; false = restaura la animación normal.
-    void SetSculptPose(bool bEnable);
+    // PoseAnim (opcional) = animación de pose recta a forzar; si es null usa SculptPoseAnim.
+    void SetSculptPose(bool bEnable, UAnimationAsset* PoseAnim = nullptr);
+
+    // Flecha que indica hacia dónde mira el personaje (para orientarse al esculpir la cabeza).
+    // Se muestra/oculta al entrar/salir del modo G (no se dibuja cuadro a cuadro).
+    void SetFacingArrowVisible(bool bVisible);
+
+    // Envía al servidor la cabeza horneada (la guarda en el PlayerState → se replica a todos).
+    UFUNCTION(Server, Reliable)
+    void Server_SetHeadSections(const TArray<FPTHeadSection>& Secs);
 
 protected:
     virtual void BeginPlay() override;
+    // Cuando el pawn recibe su PlayerState (clientes), intentar aplicar la cabeza replicada.
+    virtual void OnRep_PlayerState() override;
 
 protected:
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
@@ -135,9 +190,11 @@ private:
 
     // ── Cabeza custom: helpers de secciones ─────────────────────────────────
     // Lee las secciones (verts/tris/normales/UV/color) de un ProceduralMesh a structs guardables.
-    TArray<FPTHeadSection> ExtractSections(UProceduralMeshComponent* Src) const;
-    // Reconstruye el HeadMesh desde secciones (aplica HeadMaterial). Lo usan SetHeadMeshFrom y LoadHead.
+    TArray<FPTHeadSection> ExtractSections(UProceduralMeshComponent* Src, const APTSculptVolume* PaintSource = nullptr) const;
+    // Reconstruye el HeadMesh desde secciones (HeadMaterial en arcilla, EyeMaterial en ojos).
     void ApplyHeadSections(const TArray<FPTHeadSection>& Secs);
+    // Aplica la cabeza del PlayerState si tiene; si no y es el pawn local, carga la guardada (disco).
+    void TryApplyReplicatedHead();
 
     // Cartel del nombre: actualizado throttled desde Tick.
     void  UpdateNameTag();

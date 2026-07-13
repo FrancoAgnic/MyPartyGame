@@ -16,7 +16,11 @@ class APTSculptVolume;
 class ACameraActor;
 class UUserWidget;
 class UProceduralMeshComponent;
+class UStaticMeshComponent;
+class UStaticMesh;
 class UMaterialInterface;
+class UMaterialInstanceDynamic;
+class UAnimationAsset;
 struct FInputActionValue;
 
 UCLASS()
@@ -104,6 +108,24 @@ protected:
     // Asignar los mismos del sculpt de gameplay (Add = arcilla, Erase = rojo/hueco).
     UPROPERTY(EditAnywhere, Category="Head") UMaterialInterface* HeadPreviewMatAdd   = nullptr;
     UPROPERTY(EditAnywhere, Category="Head") UMaterialInterface* HeadPreviewMatErase = nullptr;
+    // Preview del modo Paint: se apoya SOBRE la malla (como el gameplay). Sólo este modo lo usa.
+    UPROPERTY(EditAnywhere, Category="Head") UStaticMesh*        HeadPreviewMeshPaint = nullptr;
+    UPROPERTY(EditAnywhere, Category="Head") UMaterialInterface* HeadPreviewMatPaint  = nullptr;
+    // Preview del modo OJOS (tecla 4): mesh + material del fantasma. Si el mesh es null, esfera.
+    UPROPERTY(EditAnywhere, Category="Head") UStaticMesh*        HeadEyePreviewMesh   = nullptr;
+    UPROPERTY(EditAnywhere, Category="Head") UMaterialInterface* HeadEyePreviewMat    = nullptr;
+
+    // Meshes propios para el preview de cada tool (opcional). Si se asignan, se usan en vez del
+    // mesh procedural de la brocha, escalados al tamaño del pincel (base = HeadPreviewMeshBaseSize).
+    UPROPERTY(EditAnywhere, Category="Head") UStaticMesh* HeadPreviewMeshAdd   = nullptr;
+    UPROPERTY(EditAnywhere, Category="Head") UStaticMesh* HeadPreviewMeshErase = nullptr;
+    UPROPERTY(EditAnywhere, Category="Head") float        HeadPreviewMeshBaseSize = 100.f;
+
+    // Animación de pose recta a forzar mientras esculpís (si null, usa la del BP_LobbyCharacter).
+    UPROPERTY(EditAnywhere, Category="Head") UAnimationAsset* HeadSculptPoseAnim = nullptr;
+
+    // WBP del color picker (el mismo del gameplay, WBP_ColorPicker). Se abre manteniendo RMB.
+    UPROPERTY(EditAnywhere, Category="Head") TSubclassOf<UUserWidget> HeadColorPickerClass;
 
     // Entra/sale del modo esculpir-cabeza: spawnea el volumen + cámara, congela el movimiento.
     void ToggleHeadSculptMode();
@@ -141,13 +163,22 @@ private:
     // llega al esculpido (el modo diorama usa NoCapture y los clicks solo iban a la UI).
     void ApplyHeadSculptInputMode();
 
-    // Preview de la brocha que sigue al cursor (como el gameplay): actor con un ProcMesh con la
-    // forma del sello, materializado según el modo (Add / Erase). Paint no muestra preview 3D.
-    UPROPERTY() AActor*                   HeadPreviewActor = nullptr;
-    UPROPERTY() UProceduralMeshComponent* HeadPreviewMesh  = nullptr;
+    // Preview de la brocha que sigue al cursor (como el gameplay): actor con un ProcMesh (forma
+    // procedural del sello) + un StaticMesh (mesh propio opcional), según el modo (Add / Erase).
+    // Paint no muestra preview 3D.
+    UPROPERTY() AActor*                   HeadPreviewActor  = nullptr;
+    UPROPERTY() UProceduralMeshComponent* HeadPreviewMesh   = nullptr;
+    UPROPERTY() UStaticMeshComponent*     HeadPreviewStatic = nullptr;
     float       HeadPreviewSize = -1.f;                 // cache para reconstruir sólo si cambia
     EPTEditMode HeadPreviewMode = EPTEditMode::Smooth;  // idem (valor inicial != Add/Erase)
-    void UpdateHeadPreview(const FVector* At); // At=nullptr → oculta el preview
+    void UpdateHeadPreview(const FVector* At, const FVector& Normal); // At=nullptr → oculta el preview
+
+    // Color picker (mantener RMB), reusando el WBP del gameplay: se abre, se tickea con el cursor
+    // y al soltar se aplica el color a HeadPaintColor (esculpís/pintás con ese color).
+    UPROPERTY() UUserWidget* HeadColorPicker = nullptr;
+    bool bHeadColorActive = false;
+    void OnHeadColorPickPressed();
+    void OnHeadColorPickReleased();
 
     // Overlay del lobby activo (MainMenu o LobbyHUD): se colapsa mientras esculpís la cabeza
     // para que el mouse no lo agarre la UI y llegue al esculpido (igual que el gameplay).
@@ -159,8 +190,17 @@ private:
     EPTEditMode HeadEditMode = EPTEditMode::Add;
     void OnHeadStampPressed();  void OnHeadStampReleased();
     void OnHeadScrollUp();      void OnHeadScrollDown();
-    void OnHeadModeAdd();       void OnHeadModeErase();  void OnHeadModePaint();
+    void OnHeadModeAdd();       void OnHeadModeErase();  void OnHeadModePaint();  void OnHeadModeEyes();
+
+    // ── Ojos (tecla 4): esferas aparte que se hornean junto a la cabeza ─────────
+    bool bHeadEyesTool = false;                 // tecla 4 activa: colocar ojos con el LMB
+    TArray<FVector4> HeadEyes;                  // ojos colocados (local al volumen: XYZ centro, W radio)
+    UPROPERTY() UProceduralMeshComponent* HeadEyesLiveMesh = nullptr; // muestra los ojos ya colocados
+    UPROPERTY() UMaterialInstanceDynamic* HeadPreviewMID   = nullptr; // preview con color en vivo
+    bool bHeadPreviewEyesCached = false;        // cache para reconstruir el preview al togglear ojos
+    void PlaceEyeAtCursor();                    // coloca un ojo donde apunta el cursor (sobre la malla)
+    void RebuildEyesLiveMesh();                 // reconstruye la malla viva de ojos colocados
     // Punto de mundo donde cae el sello: raycast del cursor contra la arcilla; si no pega,
     // interseca la esfera de sculpt (radio HeadRadius) alrededor del centro del volumen.
-    bool GetHeadStampPoint(FVector& OutWorld) const;
+    bool GetHeadStampPoint(FVector& OutWorld, FVector& OutNormal) const;
 };

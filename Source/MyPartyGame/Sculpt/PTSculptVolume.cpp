@@ -680,6 +680,42 @@ FLinearColor APTSculptVolume::SampleWorldColor(FVector WorldPos) const
     return FLinearColor(Field.GetColor(FMath::RoundToInt(C.X), FMath::RoundToInt(C.Y), FMath::RoundToInt(C.Z)));
 }
 
+FLinearColor APTSculptVolume::SampleWorldPaintColor(FVector WorldPos, bool& bOutPainted) const
+{
+    bOutPainted = false;
+    const float CV = FMath::Max(ColorVoxel, 0.5f);
+    const FVector Local = GetActorTransform().InverseTransformPosition(WorldPos);
+    const int32 cx = FMath::FloorToInt((Local.X - CanvasMinLocal.X) / CV);
+    const int32 cy = FMath::FloorToInt((Local.Y - CanvasMinLocal.Y) / CV);
+    const int32 cz = FMath::FloorToInt((Local.Z - CanvasMinLocal.Z) / CV);
+
+    // Buscar el voxel pintado más cercano en un vecindario 3³ (la pintura es una cáscara fina
+    // alrededor de la superficie; el vértice puede caer a 1 voxel del centro pintado).
+    for (int32 dz = -1; dz <= 1; ++dz)
+    for (int32 dy = -1; dy <= 1; ++dy)
+    for (int32 dx = -1; dx <= 1; ++dx)
+    {
+        const int32 vx = cx + dx, vy = cy + dy, vz = cz + dz;
+        if (vx < 0 || vy < 0 || vz < 0 ||
+            vx >= ColorVoxDim.X || vy >= ColorVoxDim.Y || vz >= ColorVoxDim.Z) continue;
+
+        const FIntVector BC(vx / CB, vy / CB, vz / CB);
+        const int32* Found = BrickSlot.Find(BC);
+        if (!Found) continue;
+        const int32 Slot = *Found;
+
+        const int32 TileX = Slot % AtlasTilesPerRow, TileY = Slot / AtlasTilesPerRow;
+        const int32 lx = vx - BC.X * CB, ly = vy - BC.Y * CB, lz = vz - BC.Z * CB;
+        const int32 AIdx = (TileX * CB + lx) + (TileY * (CB * CB) + lz * CB + ly) * AtlasW;
+        if (!AtlasBuf.IsValidIndex(AIdx) || AtlasBuf[AIdx].A == 0) continue;
+
+        const FColor C = AtlasBuf[AIdx];
+        bOutPainted = true;
+        return FLinearColor(FColor(C.R, C.G, C.B, 255)); // opaco (el alpha del atlas es cobertura)
+    }
+    return FLinearColor::White;
+}
+
 // ─── Stamp operations ─────────────────────────────────────────────────────────
 
 float APTSculptVolume::StampSDF(EPTStampShape Shape, FVector P, float HalfSize)

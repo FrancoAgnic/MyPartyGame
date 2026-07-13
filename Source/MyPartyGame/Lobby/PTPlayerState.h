@@ -4,6 +4,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerState.h"
+#include "PTHeadSaveGame.h" // FPTHeadSection (geometría de la cabeza custom, replicada)
 #include "PTPlayerState.generated.h"
 
 UCLASS()
@@ -37,6 +38,14 @@ public:
     // (Se llama GameScore y no Score porque APlayerState ya tiene un Score propio.)
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
     int32 GameScore = 0;
+
+    // ── Cabeza custom (replicada) ───────────────────────────────────────────
+    // Geometría final horneada de la cabeza (arcilla + pintura + ojos). Se replica a todos y
+    // sobrevive el seamless travel (CopyProperties) → la cabeza se ve en el lobby y en Lvl-01.
+    UPROPERTY(ReplicatedUsing=OnRep_HeadSections)
+    TArray<FPTHeadSection> HeadSections;
+
+    UFUNCTION() void OnRep_HeadSections();
 
     // Llamar solo desde el servidor (HasAuthority).
     void Server_SetDisplayName(const FString& InName);

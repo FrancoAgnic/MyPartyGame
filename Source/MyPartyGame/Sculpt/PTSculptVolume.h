@@ -62,6 +62,9 @@ public:
 
     float        SampleWorldDensity(FVector WorldPos) const;
     FLinearColor SampleWorldColor  (FVector WorldPos) const;
+    // Color PINTADO (atlas) en esa posición del mundo. bOutPainted=false si ese punto no fue
+    // pintado (busca en un vecindario chico para no fallar por redondeo del voxel).
+    FLinearColor SampleWorldPaintColor(FVector WorldPos, bool& bOutPainted) const;
 
     UFUNCTION(Server, Reliable, WithValidation)
     void Server_ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,

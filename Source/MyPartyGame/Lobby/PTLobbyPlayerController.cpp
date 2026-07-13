@@ -20,8 +20,10 @@
 #include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
 #include "ProceduralMeshComponent.h"
-#include "DrawDebugHelpers.h"
+#include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "../UI/PTColorPickerWidget.h"
 
 void APTLobbyPlayerController::Server_RequestStartGame_Implementation()
 {
@@ -225,6 +227,10 @@ void APTLobbyPlayerController::SetupInputComponent()
     InputComponent->BindKey(EKeys::One,   IE_Pressed, this, &APTLobbyPlayerController::OnHeadModeAdd);
     InputComponent->BindKey(EKeys::Two,   IE_Pressed, this, &APTLobbyPlayerController::OnHeadModeErase);
     InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &APTLobbyPlayerController::OnHeadModePaint);
+    InputComponent->BindKey(EKeys::Four,  IE_Pressed, this, &APTLobbyPlayerController::OnHeadModeEyes);
+    // RMB mantenido = color picker (igual que el gameplay).
+    InputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed,  this, &APTLobbyPlayerController::OnHeadColorPickPressed);
+    InputComponent->BindKey(EKeys::RightMouseButton, IE_Released, this, &APTLobbyPlayerController::OnHeadColorPickReleased);
 }
 
 void APTLobbyPlayerController::PlayerTick(float DeltaTime)
@@ -242,52 +248,108 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
         UpdateHeadCam();
     }
 
-    // Flecha de preview: hacia dónde MIRA el personaje (su forward), desde el centro de la cabeza.
-    // Así sabés la orientación de la cara mientras modelás desde cualquier ángulo.
-    if (HeadVolume && GetPawn())
+    // Color picker abierto (RMB): tickearlo con el cursor y tomar el color en vivo. No se esculpe.
+    if (bHeadColorActive)
     {
-        const FVector C = HeadVolume->GetActorLocation();
-        const FVector Fwd = GetPawn()->GetActorForwardVector();
-        DrawDebugDirectionalArrow(GetWorld(), C, C + Fwd * (HeadRadius * 2.5f),
-            HeadRadius * 0.6f, FColor(80, 200, 255), false, -1.f, 0, 2.f);
+        if (UPTColorPickerWidget* CP = Cast<UPTColorPickerWidget>(HeadColorPicker))
+        {
+            CP->QuickPickTick();
+            HeadPaintColor = CP->CurrentColor; // color en vivo en la brocha
+        }
+        UpdateHeadPreview(nullptr, FVector::UpVector); // ocultar el preview mientras elegís color
+        return;
     }
 
-    // Punto de la brocha (cursor) — sirve para el preview y para esculpir.
-    FVector Pt;
-    const bool bHavePt = GetHeadStampPoint(Pt);
+    // Punto de la brocha (cursor) — sirve para el preview y para esculpir. Normal para el preview.
+    FVector Pt, Nrm = FVector::UpVector;
+    const bool bHavePt = GetHeadStampPoint(Pt, Nrm);
 
-    // Preview de la herramienta siguiendo el cursor (Add/Erase; Paint no muestra malla 3D).
-    UpdateHeadPreview(bHavePt ? &Pt : nullptr);
+    // Preview de la herramienta siguiendo el cursor.
+    UpdateHeadPreview(bHavePt ? &Pt : nullptr, Nrm);
 
     // Stamp continuo mientras se mantiene el LMB.
     if (HeadVolume && bHeadStamping && bHavePt)
         HeadVolume->ApplyStamp(Pt, EPTStampShape::Sphere, HeadBrushSize, HeadEditMode, HeadPaintColor);
 }
 
-void APTLobbyPlayerController::UpdateHeadPreview(const FVector* At)
+void APTLobbyPlayerController::UpdateHeadPreview(const FVector* At, const FVector& Normal)
 {
     if (!HeadPreviewActor || !HeadPreviewMesh) return;
 
-    // Paint no lleva malla de preview 3D (como el gameplay: cursor 2D). Sin punto → oculto.
-    const bool bShow = At && bHeadSculptMode && HeadEditMode != EPTEditMode::Paint;
+    const bool bEyes  = bHeadEyesTool;
+    const bool bPaint = (!bEyes && HeadEditMode == EPTEditMode::Paint);
+    const bool bTint  = (!bEyes && (HeadEditMode == EPTEditMode::Add || HeadEditMode == EPTEditMode::Paint));
+    // Ojos: siempre muestra una esfera. Paint: sólo si asignaste su mesh. Add/Erase: siempre.
+    const bool bShow  = At && bHeadSculptMode && (bEyes || !bPaint || HeadPreviewMeshPaint != nullptr);
     HeadPreviewActor->SetActorHiddenInGame(!bShow);
     if (!bShow) return;
 
-    // Reconstruir la malla de la brocha sólo si cambió tamaño o modo.
-    if (HeadPreviewSize != HeadBrushSize || HeadPreviewMode != HeadEditMode)
+    // Reconstruir/elegir el mesh de la brocha sólo si cambió tamaño, modo o el toggle de ojos.
+    if (HeadPreviewSize != HeadBrushSize || HeadPreviewMode != HeadEditMode || bHeadPreviewEyesCached != bEyes)
     {
-        TArray<FVector> V, Nn; TArray<int32> Tt;
-        APTSculptVolume::BuildStampPreview(EPTStampShape::Sphere, HeadBrushSize,
-            HeadVolume ? HeadVolume->VoxelSize : 5.f, V, Tt, Nn);
-        HeadPreviewMesh->CreateMeshSection(0, V, Tt, Nn, {}, {}, {}, false);
+        HeadPreviewMID = nullptr;
 
-        UMaterialInterface* Mat = (HeadEditMode == EPTEditMode::Erase) ? HeadPreviewMatErase : HeadPreviewMatAdd;
-        if (Mat) HeadPreviewMesh->SetMaterial(0, Mat);
+        // Elegir mesh propio + material según el modo.
+        UStaticMesh* ToolMesh = nullptr;
+        UMaterialInterface* Mat = nullptr;
+        if (bEyes)
+        {
+            // Preview de ojo = mesh propio del ojo (o esfera) con su material de preview.
+            ToolMesh = HeadEyePreviewMesh;
+            Mat      = HeadEyePreviewMat;
+            if (!Mat) { if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn())) Mat = Char->EyeMaterial; }
+            if (!Mat) Mat = HeadPreviewMatAdd;
+        }
+        else switch (HeadEditMode)
+        {
+        case EPTEditMode::Erase: ToolMesh = HeadPreviewMeshErase; Mat = HeadPreviewMatErase; break;
+        case EPTEditMode::Paint: ToolMesh = HeadPreviewMeshPaint; Mat = HeadPreviewMatPaint; break;
+        default:                 ToolMesh = HeadPreviewMeshAdd;   Mat = HeadPreviewMatAdd;   break; // Add
+        }
 
-        HeadPreviewSize = HeadBrushSize;
-        HeadPreviewMode = HeadEditMode;
+        if (ToolMesh && HeadPreviewStatic)
+        {
+            // Mesh propio del usuario: escalarlo al tamaño de brocha; ocultar el procedural.
+            HeadPreviewStatic->SetStaticMesh(ToolMesh);
+            float Scale;
+            if (bEyes)
+            {
+                // El ojo se coloca con radio = HeadBrushSize/2, escalando el mesh por radio/BaseSize.
+                float EyeBase = 50.f;
+                if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn())) EyeBase = Char->HeadEyeBaseSize;
+                Scale = (HeadBrushSize * 0.5f) / FMath::Max(EyeBase, 1.f);
+            }
+            else
+            {
+                Scale = HeadBrushSize / FMath::Max(HeadPreviewMeshBaseSize, 1.f);
+            }
+            HeadPreviewStatic->SetWorldScale3D(FVector(Scale));
+            if (Mat) { if (bTint) HeadPreviewMID = HeadPreviewStatic->CreateDynamicMaterialInstance(0, Mat); else HeadPreviewStatic->SetMaterial(0, Mat); }
+            HeadPreviewStatic->SetVisibility(true);
+            HeadPreviewMesh->SetVisibility(false);
+        }
+        else
+        {
+            // Sin mesh propio → forma procedural del sello (esfera para Add/Erase/Ojos).
+            if (HeadPreviewStatic) HeadPreviewStatic->SetVisibility(false);
+            TArray<FVector> V, Nn; TArray<int32> Tt;
+            APTSculptVolume::BuildStampPreview(EPTStampShape::Sphere, HeadBrushSize,
+                HeadVolume ? HeadVolume->VoxelSize : 5.f, V, Tt, Nn);
+            HeadPreviewMesh->CreateMeshSection(0, V, Tt, Nn, {}, {}, {}, false);
+            if (Mat) { if (bTint) HeadPreviewMID = HeadPreviewMesh->CreateDynamicMaterialInstance(0, Mat); else HeadPreviewMesh->SetMaterial(0, Mat); }
+            HeadPreviewMesh->SetVisibility(true);
+        }
+
+        HeadPreviewSize        = HeadBrushSize;
+        HeadPreviewMode        = HeadEditMode;
+        bHeadPreviewEyesCached = bEyes;
     }
+
     HeadPreviewActor->SetActorLocation(*At);
+    // Paint/Ojos: orientar a la normal de la superficie (se "apoyan" sobre la malla). Add/Erase sin rotar.
+    HeadPreviewActor->SetActorRotation((bPaint || bEyes) ? Normal.Rotation() : FRotator::ZeroRotator);
+    // Color en vivo del preview (Add/Paint): mostrar el color seleccionado, incluso mientras lo editás.
+    if (HeadPreviewMID) HeadPreviewMID->SetVectorParameterValue(TEXT("Color"), HeadPaintColor);
 }
 
 void APTLobbyPlayerController::UpdateHeadCam()
@@ -317,34 +379,156 @@ void APTLobbyPlayerController::ApplyHeadSculptInputMode()
         }
 }
 
-void APTLobbyPlayerController::OnHeadStampPressed()  { if (bHeadSculptMode) bHeadStamping = true; }
-void APTLobbyPlayerController::OnHeadStampReleased() { bHeadStamping = false; }
-void APTLobbyPlayerController::OnHeadScrollUp()   { if (bHeadSculptMode) HeadBrushSize = FMath::Clamp(HeadBrushSize + 4.f, 6.f, 80.f); }
-void APTLobbyPlayerController::OnHeadScrollDown() { if (bHeadSculptMode) HeadBrushSize = FMath::Clamp(HeadBrushSize - 4.f, 6.f, 80.f); }
-void APTLobbyPlayerController::OnHeadModeAdd()   { if (bHeadSculptMode) HeadEditMode = EPTEditMode::Add;   }
-void APTLobbyPlayerController::OnHeadModeErase() { if (bHeadSculptMode) HeadEditMode = EPTEditMode::Erase; }
-void APTLobbyPlayerController::OnHeadModePaint() { if (bHeadSculptMode) HeadEditMode = EPTEditMode::Paint; }
-
-bool APTLobbyPlayerController::GetHeadStampPoint(FVector& OutWorld) const
+void APTLobbyPlayerController::OnHeadStampPressed()
 {
-    if (!HeadVolume || !GetWorld()) return false;
+    if (!bHeadSculptMode) return;
+    if (bHeadEyesTool) { PlaceEyeAtCursor(); return; } // ojos: un ojo por click (no continuo)
+    bHeadStamping = true;
+}
+void APTLobbyPlayerController::OnHeadStampReleased() { bHeadStamping = false; }
+void APTLobbyPlayerController::OnHeadScrollUp()
+{
+    if (!bHeadSculptMode) return;
+    // Con el color picker abierto, la rueda ajusta el brillo del color (como el gameplay).
+    if (bHeadColorActive)
+    {
+        if (UPTColorPickerWidget* CP = Cast<UPTColorPickerWidget>(HeadColorPicker)) CP->QuickAdjustValue(+0.05f);
+        return;
+    }
+    HeadBrushSize = FMath::Clamp(HeadBrushSize + 4.f, 6.f, 80.f);
+}
+void APTLobbyPlayerController::OnHeadScrollDown()
+{
+    if (!bHeadSculptMode) return;
+    if (bHeadColorActive)
+    {
+        if (UPTColorPickerWidget* CP = Cast<UPTColorPickerWidget>(HeadColorPicker)) CP->QuickAdjustValue(-0.05f);
+        return;
+    }
+    HeadBrushSize = FMath::Clamp(HeadBrushSize - 4.f, 6.f, 80.f);
+}
+void APTLobbyPlayerController::OnHeadModeAdd()   { if (bHeadSculptMode) { HeadEditMode = EPTEditMode::Add;   bHeadEyesTool = false; } }
+void APTLobbyPlayerController::OnHeadModeErase() { if (bHeadSculptMode) { HeadEditMode = EPTEditMode::Erase; bHeadEyesTool = false; } }
+void APTLobbyPlayerController::OnHeadModePaint() { if (bHeadSculptMode) { HeadEditMode = EPTEditMode::Paint; bHeadEyesTool = false; } }
+void APTLobbyPlayerController::OnHeadModeEyes()  { if (bHeadSculptMode) { bHeadEyesTool = true; } }
 
-    if (!HeadCam) return false;
+void APTLobbyPlayerController::PlaceEyeAtCursor()
+{
+    if (!HeadVolume) return;
+    FVector Pt, Nrm;
+    if (!GetHeadStampPoint(Pt, Nrm)) return; // sobre la malla (raymarch a la superficie)
+    // El centro del ojo cae sobre la superficie → la mitad de la esfera queda hundida en la arcilla.
+    const FVector Local = HeadVolume->GetActorTransform().InverseTransformPosition(Pt);
+    HeadEyes.Add(FVector4(Local.X, Local.Y, Local.Z, HeadBrushSize * 0.5f));
+    RebuildEyesLiveMesh();
+}
+
+void APTLobbyPlayerController::RebuildEyesLiveMesh()
+{
+    if (!HeadEyesLiveMesh) return;
+    HeadEyesLiveMesh->ClearAllMeshSections();
+    if (HeadEyes.Num() == 0) return;
+
+    UStaticMesh* EyeMesh = nullptr; float EyeBase = 50.f;
+    if (APTLobbyCharacter* C = Cast<APTLobbyCharacter>(GetPawn())) { EyeMesh = C->HeadEyeMesh; EyeBase = C->HeadEyeBaseSize; }
+    const FPTHeadSection S = APTLobbyCharacter::BuildEyesSection(HeadEyes, EyeMesh, EyeBase);
+    if (S.Verts.Num() == 0) return;
+    const TArray<FProcMeshTangent> NoTangents;
+    HeadEyesLiveMesh->CreateMeshSection(0, S.Verts, S.Tris, S.Normals, S.UVs, S.Colors, NoTangents, false);
+    // Material de ojos del personaje (si hay); si no, el de preview Add.
+    UMaterialInterface* Mat = nullptr;
+    if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn())) Mat = Char->EyeMaterial;
+    if (!Mat) Mat = HeadPreviewMatAdd;
+    if (Mat) HeadEyesLiveMesh->SetMaterial(0, Mat);
+}
+
+void APTLobbyPlayerController::OnHeadColorPickPressed()
+{
+    if (!bHeadSculptMode || !HeadColorPickerClass || HeadColorPicker) return;
+    HeadColorPicker = CreateWidget<UUserWidget>(this, HeadColorPickerClass);
+    if (!HeadColorPicker) return;
+    HeadColorPicker->AddToViewport(10);
+    // GameAndUI sin captura: la rueda del picker recibe el cursor (como el gameplay).
+    SetInputMode(FInputModeGameAndUI());
+    SetShowMouseCursor(true);
+    bHeadColorActive = true;
+    bHeadStamping    = false; // no esculpir mientras elegís color
+}
+
+void APTLobbyPlayerController::OnHeadColorPickReleased()
+{
+    if (!bHeadColorActive) return;
+    bHeadColorActive = false;
+
+    // Confirmar el color (swatch guardado o rueda) y tomarlo para la brocha.
+    if (UPTColorPickerWidget* CP = Cast<UPTColorPickerWidget>(HeadColorPicker))
+    {
+        CP->ConfirmQuickPick();          // deja CP->CurrentColor en el color final
+        HeadPaintColor = CP->CurrentColor;
+    }
+    if (HeadColorPicker) { HeadColorPicker->RemoveFromParent(); HeadColorPicker = nullptr; }
+
+    // Igual que el gameplay: al elegir color, si estabas en Erase pasás a Paint (si estabas en
+    // Add te quedás en Add y esculpís directo con el color).
+    if (HeadEditMode == EPTEditMode::Erase) HeadEditMode = EPTEditMode::Paint;
+
+    // Restaurar el input de esculpido (captura para el LMB).
+    ApplyHeadSculptInputMode();
+}
+
+bool APTLobbyPlayerController::GetHeadStampPoint(FVector& OutWorld, FVector& OutNormal) const
+{
+    if (!HeadVolume || !HeadCam || !GetWorld()) return false;
 
     FVector Origin, Dir;
     if (!const_cast<APTLobbyPlayerController*>(this)->DeprojectMousePositionToWorld(Origin, Dir)) return false;
 
-    // IGUAL QUE EL GAMEPLAY (estilo SculptrVR): el sello NO cae sobre la superficie de la arcilla
+    // PAINT y OJOS: pegar el cursor a la SUPERFICIE (raymarch sobre la densidad), como el gameplay,
+    // para trabajar preciso sobre la malla. Devuelve la normal (para apoyar el preview en el mesh).
+    if (HeadEditMode == EPTEditMode::Paint || bHeadEyesTool)
+    {
+        constexpr float StepSize = 6.f;
+        constexpr int32 MaxSteps = 500;
+        float prevD = HeadVolume->SampleWorldDensity(Origin);
+        for (int32 i = 1; i <= MaxSteps; ++i)
+        {
+            const FVector P = Origin + Dir * (StepSize * i);
+            const float   d = HeadVolume->SampleWorldDensity(P);
+            if (prevD <= 0.f && d > 0.f) // cruce aire→sólido
+            {
+                FVector lo = P - Dir * StepSize, hi = P;
+                for (int32 j = 0; j < 5; ++j)
+                {
+                    const FVector mid = (lo + hi) * 0.5f;
+                    (HeadVolume->SampleWorldDensity(mid) > 0.f ? hi : lo) = mid;
+                }
+                const FVector Surf = (lo + hi) * 0.5f;
+                const float E = HeadVolume->VoxelSize * 0.5f;
+                FVector Nn(
+                    HeadVolume->SampleWorldDensity(Surf + FVector(E,0,0)) - HeadVolume->SampleWorldDensity(Surf - FVector(E,0,0)),
+                    HeadVolume->SampleWorldDensity(Surf + FVector(0,E,0)) - HeadVolume->SampleWorldDensity(Surf - FVector(0,E,0)),
+                    HeadVolume->SampleWorldDensity(Surf + FVector(0,0,E)) - HeadVolume->SampleWorldDensity(Surf - FVector(0,0,E)));
+                Nn = (-Nn).GetSafeNormal();
+                OutNormal = Nn.IsNearlyZero() ? -Dir : Nn;
+                OutWorld  = Surf;
+                return true;
+            }
+            prevD = d;
+        }
+        return false; // sin superficie bajo el cursor → no pinta ni muestra preview
+    }
+
+    // ADD/ERASE — IGUAL QUE EL GAMEPLAY (estilo SculptrVR): el sello NO cae sobre la superficie
     // —eso la haría crecer hacia la cámara y no dejaría hacer trazos laterales—, sino sobre un
-    // PLANO a la profundidad de la cabeza, perpendicular a la cámara. Arrastrar el cursor desliza
-    // el sello por ese plano → trazos laterales a profundidad fija, desde cualquier ángulo (WASD).
+    // PLANO a la profundidad de la cabeza, perpendicular a la cámara. Arrastrar desliza el sello.
     const FVector C = HeadVolume->GetActorLocation();      // centro de la cabeza (punto del plano)
     const FVector N = HeadCam->GetActorForwardVector();    // normal del plano = mirada de la cámara
     const float denom = FVector::DotProduct(Dir, N);
     if (FMath::Abs(denom) < 1e-4f) return false;           // rayo casi paralelo al plano
     const float t = FVector::DotProduct(C - Origin, N) / denom;
     if (t <= 0.f) return false;                            // el plano está detrás del cursor
-    OutWorld = Origin + Dir * t;
+    OutWorld  = Origin + Dir * t;
+    OutNormal = -N;                                        // hacia la cámara
     return true;
 }
 
@@ -366,25 +550,46 @@ void APTLobbyPlayerController::EnterHeadSculpt()
     APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(P);
 
     // Personaje recto y quieto (sin baile ni jiggle del physics asset) mientras esculpís.
-    if (Char) Char->SetSculptPose(true);
+    // SetSculptPose evalúa la pose YA (RefreshBoneTransforms) → el socket queda recto ANTES de leerlo.
+    if (Char) Char->SetSculptPose(true, HeadSculptPoseAnim);
     // Borrar la cabeza que ya tenía asignada: molesta para modelar una nueva desde cero.
     if (Char) Char->ClearHeadMesh();
+    // Flecha "hacia dónde mira" visible mientras esculpís.
+    if (Char) Char->SetFacingArrowVisible(true);
     // Colapsar la UI del lobby para que el mouse llegue al esculpido (no lo agarre la UI).
     if (ActiveOverlay) ActiveOverlay->SetVisibility(ESlateVisibility::Collapsed);
 
-    // El "banco de esculpido" cae JUSTO sobre el HeadSocket del personaje: esculpís donde va la
-    // cabeza y la cámara orbita alrededor de ese centro. Fallback: arriba del actor.
-    FVector Center = P->GetActorLocation() + FVector(0, 0, HeadUpOffset);
+    // El "banco de esculpido" cae JUSTO sobre el HeadSocket. Además el volumen se alinea a la
+    // ROTACIÓN del socket: así el espacio en el que esculpís = el espacio del socket, y la cabeza
+    // horneada NO queda rotada respecto a como la modelaste, camine el personaje hacia donde camine.
+    FVector  Center   = P->GetActorLocation() + FVector(0, 0, HeadUpOffset);
+    FRotator SpawnRot = FRotator::ZeroRotator;
     if (Char && Char->GetMesh() && Char->GetMesh()->DoesSocketExist(TEXT("HeadSocket")))
-        Center = Char->GetMesh()->GetSocketLocation(TEXT("HeadSocket"));
+    {
+        const FTransform ST = Char->GetMesh()->GetSocketTransform(TEXT("HeadSocket"), RTS_World);
+        Center   = ST.GetLocation();
+        SpawnRot = ST.Rotator();
+    }
 
     FActorSpawnParameters SP;
     SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-    HeadVolume = GetWorld()->SpawnActor<APTSculptVolume>(HeadVolumeClass, Center, FRotator::ZeroRotator, SP);
+    HeadVolume = GetWorld()->SpawnActor<APTSculptVolume>(HeadVolumeClass, Center, SpawnRot, SP);
 
     // Bolita inicial de arcilla para que haya algo que esculpir (color piel neutro).
     if (HeadVolume)
         HeadVolume->ApplyStamp(Center, EPTStampShape::Sphere, 40.f, EPTEditMode::Add, FLinearColor(0.95f, 0.78f, 0.66f));
+
+    // Reset de la herramienta de ojos + malla viva de ojos (pegada al volumen para verlos colocados).
+    bHeadEyesTool = false;
+    HeadEyes.Reset();
+    if (HeadVolume)
+    {
+        HeadEyesLiveMesh = NewObject<UProceduralMeshComponent>(HeadVolume, TEXT("HeadEyesLiveMesh"));
+        HeadEyesLiveMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        HeadEyesLiveMesh->SetCastShadow(false);
+        HeadEyesLiveMesh->SetupAttachment(HeadVolume->GetRootComponent());
+        HeadEyesLiveMesh->RegisterComponent();
+    }
 
     // Actor de preview de la brocha (fantasma que sigue al cursor, como el gameplay).
     HeadPreviewActor = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), Center, FRotator::ZeroRotator, SP);
@@ -395,6 +600,14 @@ void APTLobbyPlayerController::EnterHeadSculpt()
         HeadPreviewMesh->SetCastShadow(false);
         HeadPreviewMesh->RegisterComponent();
         HeadPreviewActor->SetRootComponent(HeadPreviewMesh);
+
+        // Componente para el mesh propio opcional del preview (Add/Erase).
+        HeadPreviewStatic = NewObject<UStaticMeshComponent>(HeadPreviewActor, TEXT("HeadPreviewStatic"));
+        HeadPreviewStatic->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        HeadPreviewStatic->SetCastShadow(false);
+        HeadPreviewStatic->SetupAttachment(HeadPreviewMesh);
+        HeadPreviewStatic->RegisterComponent();
+
         HeadPreviewActor->SetActorHiddenInGame(true);
     }
     HeadPreviewSize = -1.f;                    // fuerza reconstruir la malla en el primer tick
@@ -426,9 +639,18 @@ void APTLobbyPlayerController::ExitHeadSculpt()
     // en el socket. Ajustá el tamaño con el RelativeScale3D del HeadMesh en BP_LobbyCharacter.
     if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn()))
     {
-        if (HeadVolume) Char->SetHeadMeshFrom(HeadVolume->GetMeshComponent());
-        Char->SetSculptPose(false); // restaura el baile + jiggle
+        // Hornear arcilla + pintura + ojos, aplicar, guardar y REPLICAR (para que todos la vean).
+        if (HeadVolume) Char->BakeAndReplicateHead(HeadVolume->GetMeshComponent(), HeadVolume, HeadEyes);
+        Char->SetSculptPose(false);         // restaura el baile + jiggle
+        Char->SetFacingArrowVisible(false); // ocultar la flecha
     }
+
+    // Cerrar el color picker si quedó abierto.
+    if (HeadColorPicker) { HeadColorPicker->RemoveFromParent(); HeadColorPicker = nullptr; }
+    bHeadColorActive = false;
+    bHeadEyesTool    = false;
+    HeadEyes.Reset();
+    HeadEyesLiveMesh = nullptr; // era componente del volumen; se destruye con él
 
     if (HeadVolume)       { HeadVolume->Destroy();       HeadVolume = nullptr; }
     if (HeadCam)          { HeadCam->Destroy();          HeadCam = nullptr; }

@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "PTPlayerState.h"
+#include "PTLobbyCharacter.h"
 #include "Net/UnrealNetwork.h"
 
 void APTPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -11,6 +12,7 @@ void APTPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     DOREPLIFETIME(APTPlayerState, bIsReady);
     DOREPLIFETIME(APTPlayerState, bHasGuessedThisTurn);
     DOREPLIFETIME(APTPlayerState, GameScore);
+    DOREPLIFETIME(APTPlayerState, HeadSections);
 }
 
 void APTPlayerState::CopyProperties(APlayerState* NewPlayerState)
@@ -18,10 +20,18 @@ void APTPlayerState::CopyProperties(APlayerState* NewPlayerState)
     Super::CopyProperties(NewPlayerState);
     if (APTPlayerState* PT = Cast<APTPlayerState>(NewPlayerState))
     {
-        PT->DisplayName = DisplayName;
-        PT->bIsHost     = bIsHost;
+        PT->DisplayName  = DisplayName;
+        PT->bIsHost      = bIsHost;
+        PT->HeadSections = HeadSections; // la cabeza custom viaja al Lvl-01 (seamless travel)
         // bHasGuessedThisTurn NO se copia: es estado por-turno, arranca en false en el juego.
     }
+}
+
+void APTPlayerState::OnRep_HeadSections()
+{
+    // Cuando llega/actualiza la cabeza replicada, aplicarla al pawn de este jugador.
+    if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn()))
+        Char->ApplyReplicatedHead();
 }
 
 void APTPlayerState::Server_SetDisplayName(const FString& InName)

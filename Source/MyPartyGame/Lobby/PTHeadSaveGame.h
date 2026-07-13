@@ -18,6 +18,8 @@ struct FPTHeadSection
     UPROPERTY() TArray<FVector>   Normals;
     UPROPERTY() TArray<FVector2D> UVs;
     UPROPERTY() TArray<FColor>    Colors;
+    // true = sección de OJOS (esferas): al aplicar usa el material de ojos, no el de arcilla.
+    UPROPERTY() bool bEye = false;
 };
 
 UCLASS()

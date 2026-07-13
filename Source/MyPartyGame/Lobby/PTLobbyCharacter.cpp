@@ -7,8 +7,14 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/ArrowComponent.h"
 #include "Animation/AnimInstance.h"
 #include "ProceduralMeshComponent.h"
+#include "PhysicsEngine/BodyInstance.h"
+#include "../Sculpt/PTSculptVolume.h"
+#include "PTPlayerState.h"
+#include "Engine/StaticMesh.h"
+#include "StaticMeshResources.h"
 #include "Kismet/GameplayStatics.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
@@ -54,11 +60,22 @@ APTLobbyCharacter::APTLobbyCharacter()
     HeadMesh->SetupAttachment(GetMesh(), TEXT("HeadSocket"));
     HeadMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     HeadMesh->bUseComplexAsSimpleCollision = false;
+
+    // Flecha "hacia dónde mira": pegada al root, apunta al forward del actor (+X). Oculta por
+    // defecto; sólo se muestra en modo esculpir-cabeza. Se puede reubicar/recolorear en el BP.
+    FacingArrow = CreateDefaultSubobject<UArrowComponent>(TEXT("FacingArrow"));
+    FacingArrow->SetupAttachment(RootComponent);
+    FacingArrow->SetRelativeLocation(FVector(0.f, 0.f, 90.f));
+    FacingArrow->ArrowSize = 1.5f;
+    FacingArrow->ArrowLength = 120.f;
+    FacingArrow->SetArrowColor(FLinearColor(0.3f, 0.8f, 1.f));
+    FacingArrow->bIsScreenSizeScaled = false;
+    FacingArrow->SetHiddenInGame(true); // visible sólo en modo G (SetFacingArrowVisible)
 }
 
 static const TCHAR* PTHeadSaveSlot = TEXT("PTHeadCustom");
 
-TArray<FPTHeadSection> APTLobbyCharacter::ExtractSections(UProceduralMeshComponent* Src) const
+TArray<FPTHeadSection> APTLobbyCharacter::ExtractSections(UProceduralMeshComponent* Src, const APTSculptVolume* PaintSource) const
 {
     TArray<FPTHeadSection> Out;
     if (!Src) return Out;
@@ -72,9 +89,21 @@ TArray<FPTHeadSection> APTLobbyCharacter::ExtractSections(UProceduralMeshCompone
         H.Normals.Reserve(Sec->ProcVertexBuffer.Num());
         H.UVs.Reserve(Sec->ProcVertexBuffer.Num());
         H.Colors.Reserve(Sec->ProcVertexBuffer.Num());
+        const FTransform SrcXform = Src->GetComponentTransform();
         for (const FProcMeshVertex& V : Sec->ProcVertexBuffer)
         {
-            H.Verts.Add(V.Position); H.Normals.Add(V.Normal); H.UVs.Add(V.UV0); H.Colors.Add(V.Color);
+            H.Verts.Add(V.Position); H.Normals.Add(V.Normal); H.UVs.Add(V.UV0);
+            // Color base = vertex color del campo (lo que pintás con Add-con-color). Si se pasó el
+            // volumen y ese vértice fue PINTADO (modo Paint → atlas), usar ese color en su lugar,
+            // para que la pintura quede horneada en el vertex color del mesh de la cabeza.
+            FColor Col = V.Color;
+            if (PaintSource)
+            {
+                bool bPainted = false;
+                const FLinearColor PC = PaintSource->SampleWorldPaintColor(SrcXform.TransformPosition(FVector(V.Position)), bPainted);
+                if (bPainted) Col = PC.ToFColor(true);
+            }
+            H.Colors.Add(Col);
         }
         H.Tris.Reserve(Sec->ProcIndexBuffer.Num());
         for (uint32 Idx : Sec->ProcIndexBuffer) H.Tris.Add((int32)Idx);
@@ -93,15 +122,140 @@ void APTLobbyCharacter::ApplyHeadSections(const TArray<FPTHeadSection>& Secs)
         const FPTHeadSection& H = Secs[s];
         if (H.Verts.Num() == 0) continue;
         HeadMesh->CreateMeshSection(s, H.Verts, H.Tris, H.Normals, H.UVs, H.Colors, NoTangents, /*bCreateCollision=*/false);
-        if (HeadMaterial) HeadMesh->SetMaterial(s, HeadMaterial);
+        UMaterialInterface* Mat = (H.bEye && EyeMaterial) ? EyeMaterial : HeadMaterial;
+        if (Mat) HeadMesh->SetMaterial(s, Mat);
     }
 }
 
-void APTLobbyCharacter::SetHeadMeshFrom(UProceduralMeshComponent* Src)
+void APTLobbyCharacter::BakeAndReplicateHead(UProceduralMeshComponent* ClaySrc, APTSculptVolume* PaintSource,
+                                             const TArray<FVector4>& LocalEyes)
 {
-    if (!HeadMesh || !Src) return;
-    ApplyHeadSections(ExtractSections(Src));
-    SaveHead(); // hornear = guardar tu cabeza (v1 local)
+    if (!HeadMesh || !ClaySrc) return;
+
+    // Componer: arcilla (con pintura horneada) + una sección de OJOS (esferas).
+    TArray<FPTHeadSection> Secs = ExtractSections(ClaySrc, PaintSource);
+    if (LocalEyes.Num() > 0)
+    {
+        FPTHeadSection Eyes = BuildEyesSection(LocalEyes, HeadEyeMesh, HeadEyeBaseSize);
+        if (Eyes.Verts.Num() > 0) Secs.Add(MoveTemp(Eyes));
+    }
+
+    ApplyHeadSections(Secs);
+    UpdateHeadCollision();
+    SaveHead(Secs);               // persistencia local (disco)
+    Server_SetHeadSections(Secs); // replicar a todos (via PlayerState)
+}
+
+void APTLobbyCharacter::Server_SetHeadSections_Implementation(const TArray<FPTHeadSection>& Secs)
+{
+    if (APTPlayerState* PS = GetPlayerState<APTPlayerState>())
+        PS->HeadSections = Secs;  // se replica a los clientes (OnRep_HeadSections)
+    // En el servidor no salta OnRep: aplicar acá para que el host/servidor también la vea.
+    ApplyHeadSections(Secs);
+    UpdateHeadCollision();
+}
+
+void APTLobbyCharacter::ApplyReplicatedHead()
+{
+    if (const APTPlayerState* PS = GetPlayerState<APTPlayerState>())
+        if (PS->HeadSections.Num() > 0)
+        {
+            ApplyHeadSections(PS->HeadSections);
+            UpdateHeadCollision();
+        }
+}
+
+FPTHeadSection APTLobbyCharacter::BuildEyesSection(const TArray<FVector4>& LocalEyes,
+                                                   UStaticMesh* EyeMesh, float BaseSize, int32 Segments)
+{
+    FPTHeadSection S;
+    S.bEye = true;
+    BaseSize = FMath::Max(BaseSize, 1.f);
+
+    // ── Mesh propio (si tiene datos CPU): copiar su geometría por cada ojo → queda todo un mesh ──
+    const FStaticMeshLODResources* LOD = nullptr;
+    if (EyeMesh && EyeMesh->bAllowCPUAccess && EyeMesh->GetRenderData()
+        && EyeMesh->GetRenderData()->LODResources.Num() > 0)
+        LOD = &EyeMesh->GetRenderData()->LODResources[0];
+
+    if (LOD)
+    {
+        const FPositionVertexBuffer&   PB = LOD->VertexBuffers.PositionVertexBuffer;
+        const FStaticMeshVertexBuffer& VB = LOD->VertexBuffers.StaticMeshVertexBuffer;
+        const FIndexArrayView          Idx = LOD->IndexBuffer.GetArrayView();
+        const int32 NV = (int32)PB.GetNumVertices();
+        for (const FVector4& E : LocalEyes)
+        {
+            const FVector Center(E.X, E.Y, E.Z);
+            const float   Scale = (float)E.W / BaseSize;
+            const int32   Base  = S.Verts.Num();
+            for (int32 i = 0; i < NV; ++i)
+            {
+                S.Verts.Add(Center + FVector(PB.VertexPosition(i)) * Scale);
+                S.Normals.Add(FVector(VB.VertexTangentZ(i)));
+                S.UVs.Add(FVector2D(VB.GetVertexUV(i, 0)));
+                S.Colors.Add(FColor::White);
+            }
+            for (int32 t = 0; t + 2 < Idx.Num(); t += 3)
+            {
+                S.Tris.Add(Base + (int32)Idx[t]);
+                S.Tris.Add(Base + (int32)Idx[t + 1]);
+                S.Tris.Add(Base + (int32)Idx[t + 2]);
+            }
+        }
+        return S;
+    }
+
+    // ── Fallback: esferas UV procedurales ──
+    const int32 Rings   = FMath::Max(Segments / 2, 4); // polo a polo
+    const int32 Sectors = FMath::Max(Segments, 6);     // alrededor
+    for (const FVector4& E : LocalEyes)
+    {
+        const FVector Center(E.X, E.Y, E.Z);
+        const float   R    = FMath::Max((float)E.W, 1.f);
+        const int32   Base = S.Verts.Num();
+        for (int32 r = 0; r <= Rings; ++r)
+        {
+            const float phi = PI * r / Rings;
+            const float sp = FMath::Sin(phi), cp = FMath::Cos(phi);
+            for (int32 c = 0; c <= Sectors; ++c)
+            {
+                const float th = 2.f * PI * c / Sectors;
+                const FVector Nrm(sp * FMath::Cos(th), sp * FMath::Sin(th), cp);
+                S.Verts.Add(Center + Nrm * R);
+                S.Normals.Add(Nrm);
+                S.UVs.Add(FVector2D((float)c / Sectors, (float)r / Rings));
+                S.Colors.Add(FColor::White);
+            }
+        }
+        const int32 Stride = Sectors + 1;
+        for (int32 r = 0; r < Rings; ++r)
+        for (int32 c = 0; c < Sectors; ++c)
+        {
+            const int32 i0 = Base + r * Stride + c;
+            const int32 i1 = i0 + 1;
+            const int32 i2 = i0 + Stride;
+            const int32 i3 = i2 + 1;
+            S.Tris.Add(i0); S.Tris.Add(i2); S.Tris.Add(i1);
+            S.Tris.Add(i1); S.Tris.Add(i2); S.Tris.Add(i3);
+        }
+    }
+    return S;
+}
+
+void APTLobbyCharacter::UpdateHeadCollision()
+{
+    USkeletalMeshComponent* M = GetMesh();
+    if (!M || !HeadMesh || HeadPhysicsBone.IsNone()) return;
+
+    // Radio de la cabeza esculpida (bounds del HeadMesh, ya con su escala en el socket).
+    HeadMesh->UpdateBounds();
+    const float R = HeadMesh->Bounds.SphereRadius;
+    if (R <= KINDA_SMALL_NUMBER) return;
+
+    const float Scale = FMath::Clamp(R / FMath::Max(HeadCollisionRefSize, 1.f), 0.1f, 8.f);
+    if (FBodyInstance* BI = M->GetBodyInstance(HeadPhysicsBone))
+        BI->UpdateBodyScale(FVector(Scale)); // escala la cápsula/esfera del hueso de la cabeza
 }
 
 void APTLobbyCharacter::ClearHeadMesh()
@@ -109,13 +263,12 @@ void APTLobbyCharacter::ClearHeadMesh()
     if (HeadMesh) HeadMesh->ClearAllMeshSections();
 }
 
-void APTLobbyCharacter::SaveHead()
+void APTLobbyCharacter::SaveHead(const TArray<FPTHeadSection>& Secs)
 {
-    if (!HeadMesh) return;
     UPTHeadSaveGame* Save = Cast<UPTHeadSaveGame>(
         UGameplayStatics::CreateSaveGameObject(UPTHeadSaveGame::StaticClass()));
     if (!Save) return;
-    Save->Sections = ExtractSections(HeadMesh);
+    Save->Sections = Secs;
     UGameplayStatics::SaveGameToSlot(Save, PTHeadSaveSlot, 0);
 }
 
@@ -124,18 +277,43 @@ void APTLobbyCharacter::LoadHead()
     if (!UGameplayStatics::DoesSaveGameExist(PTHeadSaveSlot, 0)) return;
     if (UPTHeadSaveGame* Save = Cast<UPTHeadSaveGame>(UGameplayStatics::LoadGameFromSlot(PTHeadSaveSlot, 0)))
         if (Save->Sections.Num() > 0)
+        {
             ApplyHeadSections(Save->Sections);
+            UpdateHeadCollision();
+            // Replicar tu cabeza guardada para que los demás la vean sin re-esculpir.
+            Server_SetHeadSections(Save->Sections);
+        }
+}
+
+void APTLobbyCharacter::TryApplyReplicatedHead()
+{
+    // Si el PlayerState ya trae una cabeza (otros jugadores, o al viajar a Lvl-01), aplicarla.
+    if (const APTPlayerState* PS = GetPlayerState<APTPlayerState>())
+        if (PS->HeadSections.Num() > 0)
+        {
+            ApplyHeadSections(PS->HeadSections);
+            UpdateHeadCollision();
+            return;
+        }
+
+    // Sin cabeza replicada aún: si es el pawn local, cargar la guardada (disco) y replicarla.
+    if (IsLocallyControlled())
+        LoadHead();
 }
 
 void APTLobbyCharacter::BeginPlay()
 {
     Super::BeginPlay();
-    // v1 LOCAL: solo el pawn del jugador local restaura SU cabeza guardada (no se toca a los demás).
-    if (IsLocallyControlled())
-        LoadHead();
+    TryApplyReplicatedHead();
 }
 
-void APTLobbyCharacter::SetSculptPose(bool bEnable)
+void APTLobbyCharacter::OnRep_PlayerState()
+{
+    Super::OnRep_PlayerState();
+    TryApplyReplicatedHead(); // el PlayerState (y su cabeza) puede llegar después del BeginPlay
+}
+
+void APTLobbyCharacter::SetSculptPose(bool bEnable, UAnimationAsset* PoseAnim)
 {
     USkeletalMeshComponent* M = GetMesh();
     if (!M) return;
@@ -143,19 +321,31 @@ void APTLobbyCharacter::SetSculptPose(bool bEnable)
     if (bEnable)
     {
         // Recto y quieto mientras esculpís: apagar la física (jiggle del physics asset) y
-        // bypassear el AnimBP (que hace el baile y/o el AnimDynamics) → queda en pose base.
+        // bypassear el AnimBP (que hace el baile y/o el AnimDynamics).
         M->SetSimulatePhysics(false);
         M->SetAllBodiesSimulatePhysics(false);
         M->PutAllRigidBodiesToSleep();
         // Cortar cualquier montage en curso (ej: el salto que seguía en loop).
         if (UAnimInstance* AI = M->GetAnimInstance())
             AI->StopAllMontages(0.f);
+
+        UAnimationAsset* Anim = PoseAnim ? PoseAnim : SculptPoseAnim;
         M->SetAnimationMode(EAnimationMode::AnimationSingleNode);
-        if (SculptPoseAnim)
-            M->PlayAnimation(SculptPoseAnim, /*bLooping*/ true); // pose de referencia quieta
+        if (Anim)
+        {
+            // Reproducir la pose recta en loop (una pose estática = queda quieta). NO pausar:
+            // pausar congelaba en la última pose del baile en vez de tomar la pose recta.
+            M->bPauseAnims = false;
+            M->PlayAnimation(Anim, /*bLooping*/ true);
+        }
         else
-            M->SetPosition(0.f, false);                          // sin pose: ref pose (frame 0)
-        M->bPauseAnims = true;                                   // congelar del todo (no avanza)
+        {
+            // Sin pose asignada: ref pose (frame 0) y congelar.
+            M->SetPosition(0.f, false);
+            M->bPauseAnims = true;
+        }
+        // Evaluar la pose YA, para que GetSocketLocation devuelva la posición recta (no la vieja).
+        M->RefreshBoneTransforms();
     }
     else
     {
@@ -163,6 +353,11 @@ void APTLobbyCharacter::SetSculptPose(bool bEnable)
         M->bPauseAnims = false;
         M->SetAnimationMode(EAnimationMode::AnimationBlueprint);
     }
+}
+
+void APTLobbyCharacter::SetFacingArrowVisible(bool bVisible)
+{
+    if (FacingArrow) FacingArrow->SetHiddenInGame(!bVisible);
 }
 
 void APTLobbyCharacter::UpdateNameTag()
