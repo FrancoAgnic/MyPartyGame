@@ -66,6 +66,14 @@ void UMultiplayerSessionsSubsystem::Deinitialize()
         }
     }
 
+    // Destruir la sesión activa al cerrar el juego → evita sesiones "fantasma" que quedan
+    // anunciadas en Steam y no se pueden joinear. Best-effort: en shutdown el callback async
+    // puede no completar, pero al menos se dispara DestroySession en OSS.
+    if (SessionInterface.IsValid() && SessionInterface->GetNamedSession(NAME_GameSession))
+    {
+        SessionInterface->DestroySession(NAME_GameSession);
+    }
+
     if (SessionInterface.IsValid())
     {
         SessionInterface->ClearOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteHandle);

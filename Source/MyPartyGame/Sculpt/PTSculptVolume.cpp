@@ -4,6 +4,8 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "TextureResource.h"
 #include "RenderUtils.h"
+#include "Net/UnrealNetwork.h"
+#include "../Lobby/PTLobbyCharacter.h" // BuildEyesSection (esferas/mesh de ojos)
 
 // ─── Marching Cubes lookup tables (Bourke / Lorensen & Cline) ──────────────
 // EdgeTable[i]: bitmask of the 12 edges intersected when corners have sign pattern i.
@@ -327,6 +329,18 @@ APTSculptVolume::APTSculptVolume()
     BoundsBox->ShapeColor = FColor(0, 200, 255);
     BoundsBox->bDrawOnlyIfSelected = false; // siempre visible en editor
     BoundsBox->SetHiddenInGame(true);
+
+    // Malla de ojos (aparte de la arcilla, mismo espacio local que el volumen).
+    EyesMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("EyesMesh"));
+    EyesMesh->SetupAttachment(Mesh);
+    EyesMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    EyesMesh->SetCastShadow(false);
+}
+
+void APTSculptVolume::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    DOREPLIFETIME(APTSculptVolume, Eyes);
 }
 
 void APTSculptVolume::OnConstruction(const FTransform& Transform)
@@ -1093,6 +1107,10 @@ void APTSculptVolume::ClearAll()
     if (Mesh) Mesh->ClearAllMeshSections();
     TimeSinceRebuild = 0.f;
 
+    // Ojos: limpiar visualmente en todos; resetear el array autoritativo sólo en el servidor.
+    if (HasAuthority()) Eyes.Reset();
+    if (EyesMesh) EyesMesh->ClearAllMeshSections();
+
     // ── Color: vaciar los buffers y re-subir la page table en blanco. Con toda la
     //    page table a 0 (slot vacío) el material no lee ningún brick → sin pintura,
     //    sin necesidad de recrear texturas ni re-bindear el material. ──
@@ -1112,4 +1130,32 @@ void APTSculptVolume::ClearAll()
 void APTSculptVolume::Multicast_ClearAll_Implementation()
 {
     ClearAll();
+}
+
+// ─── Ojos (replicados) ─────────────────────────────────────────────────────────
+void APTSculptVolume::AddEye(FVector WorldPos, float Radius)
+{
+    if (!HasAuthority()) return; // autoritativo: sólo el servidor modifica Eyes (se replica)
+    const FVector Local = GetActorTransform().InverseTransformPosition(WorldPos);
+    Eyes.Add(FVector4(Local.X, Local.Y, Local.Z, FMath::Max(Radius, 1.f)));
+    RebuildEyesMesh(); // el servidor no recibe OnRep; reconstruir acá
+}
+
+void APTSculptVolume::OnRep_Eyes()
+{
+    RebuildEyesMesh();
+}
+
+void APTSculptVolume::RebuildEyesMesh()
+{
+    if (!EyesMesh) return;
+    EyesMesh->ClearAllMeshSections();
+    if (Eyes.Num() == 0) return;
+
+    const FPTHeadSection S = APTLobbyCharacter::BuildEyesSection(Eyes, EyeMesh, EyeBaseSize);
+    if (S.Verts.Num() == 0) return;
+    const TArray<FProcMeshTangent> NoTangents;
+    EyesMesh->CreateMeshSection(0, S.Verts, S.Tris, S.Normals, S.UVs, S.Colors, NoTangents, false);
+    UMaterialInterface* Mat = EyeMaterial ? EyeMaterial : (ClayMID ? (UMaterialInterface*)ClayMID : ClayMaterial);
+    if (Mat) EyesMesh->SetMaterial(0, Mat);
 }

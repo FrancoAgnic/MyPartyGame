@@ -40,12 +40,13 @@ public:
     int32 GameScore = 0;
 
     // ── Cabeza custom (replicada) ───────────────────────────────────────────
-    // Geometría final horneada de la cabeza (arcilla + pintura + ojos). Se replica a todos y
-    // sobrevive el seamless travel (CopyProperties) → la cabeza se ve en el lobby y en Lvl-01.
-    UPROPERTY(ReplicatedUsing=OnRep_HeadSections)
-    TArray<FPTHeadSection> HeadSections;
+    // Geometría final horneada de la cabeza (arcilla + pintura + ojos), serializada y COMPRIMIDA
+    // (Zlib) a bytes: así entra en el límite de replicación (la malla cruda supera los ~64KB).
+    // Se replica a todos y sobrevive el seamless travel (CopyProperties) → se ve en lobby y Lvl-01.
+    UPROPERTY(ReplicatedUsing=OnRep_HeadBlob)
+    TArray<uint8> HeadBlob;
 
-    UFUNCTION() void OnRep_HeadSections();
+    UFUNCTION() void OnRep_HeadBlob();
 
     // Llamar solo desde el servidor (HasAuthority).
     void Server_SetDisplayName(const FString& InName);

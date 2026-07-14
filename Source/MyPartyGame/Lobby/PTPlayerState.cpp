@@ -12,7 +12,7 @@ void APTPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     DOREPLIFETIME(APTPlayerState, bIsReady);
     DOREPLIFETIME(APTPlayerState, bHasGuessedThisTurn);
     DOREPLIFETIME(APTPlayerState, GameScore);
-    DOREPLIFETIME(APTPlayerState, HeadSections);
+    DOREPLIFETIME(APTPlayerState, HeadBlob);
 }
 
 void APTPlayerState::CopyProperties(APlayerState* NewPlayerState)
@@ -20,14 +20,14 @@ void APTPlayerState::CopyProperties(APlayerState* NewPlayerState)
     Super::CopyProperties(NewPlayerState);
     if (APTPlayerState* PT = Cast<APTPlayerState>(NewPlayerState))
     {
-        PT->DisplayName  = DisplayName;
-        PT->bIsHost      = bIsHost;
-        PT->HeadSections = HeadSections; // la cabeza custom viaja al Lvl-01 (seamless travel)
+        PT->DisplayName = DisplayName;
+        PT->bIsHost     = bIsHost;
+        PT->HeadBlob    = HeadBlob; // la cabeza custom viaja al Lvl-01 (seamless travel)
         // bHasGuessedThisTurn NO se copia: es estado por-turno, arranca en false en el juego.
     }
 }
 
-void APTPlayerState::OnRep_HeadSections()
+void APTPlayerState::OnRep_HeadBlob()
 {
     // Cuando llega/actualiza la cabeza replicada, aplicarla al pawn de este jugador.
     if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn()))

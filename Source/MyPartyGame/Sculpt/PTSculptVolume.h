@@ -9,6 +9,7 @@
 
 class UTexture2D;
 class UMaterialInstanceDynamic;
+class UStaticMesh;
 
 UENUM(BlueprintType)
 enum class EPTStampShape : uint8 { Sphere, Cube, Cylinder, TriPrism };
@@ -57,6 +58,16 @@ public:
     void ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
                     EPTEditMode Mode, FLinearColor PaintColor);
 
+    // ── Ojos (tecla 4): esferas/mesh aparte, replicadas, que se apoyan sobre la escultura ──
+    UPROPERTY(EditAnywhere, Category="Sculpt|Eyes") UStaticMesh*        EyeMesh     = nullptr; // necesita "Allow CPU Access"
+    UPROPERTY(EditAnywhere, Category="Sculpt|Eyes") UMaterialInterface* EyeMaterial = nullptr;
+    UPROPERTY(EditAnywhere, Category="Sculpt|Eyes") float               EyeBaseSize = 50.f;
+
+    // Coloca un ojo en WorldPos (radio). Se llama SOLO en el servidor (el controller enruta su
+    // propio Server RPC, porque el volumen no tiene owner por jugador y sus Server RPC se descartan).
+    // Se replica a todos via la propiedad Eyes → la escultura con ojos se ve igual en todos.
+    void AddEye(FVector WorldPos, float Radius);
+
     // Acceso al ProceduralMesh (para hornear la escultura a otro componente, ej: la cabeza custom).
     UProceduralMeshComponent* GetMeshComponent() const { return Mesh; }
 
@@ -94,10 +105,18 @@ protected:
     virtual void BeginPlay() override;
     virtual void Tick(float DeltaTime) override;
     virtual void OnConstruction(const FTransform& Transform) override;
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+    UFUNCTION() void OnRep_Eyes();
+    void RebuildEyesMesh(); // reconstruye EyesMesh desde Eyes (usa EyeMesh/EyeMaterial)
 
 private:
     UPROPERTY(VisibleAnywhere) UProceduralMeshComponent* Mesh;
     UPROPERTY(VisibleAnywhere) UBoxComponent* BoundsBox;
+    UPROPERTY() UProceduralMeshComponent* EyesMesh = nullptr; // malla de ojos (aparte de la arcilla)
+
+    // Ojos colocados (local al volumen: XYZ=centro, W=radio). Replicado → todos ven los mismos.
+    UPROPERTY(ReplicatedUsing=OnRep_Eyes) TArray<FVector4> Eyes;
 
     FPTSculptField Field;
 

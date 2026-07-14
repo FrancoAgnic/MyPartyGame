@@ -196,6 +196,11 @@ public:
     void Server_ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
                            EPTEditMode Mode, FLinearColor PaintColor);
 
+    /** Coloca un ojo (tecla 4). Igual que el stamp: el cliente lo pide al server (que sí tiene
+     *  owner), y el server lo agrega al volumen (se replica a todos via la propiedad Eyes). */
+    UFUNCTION(Server, Reliable)
+    void Server_AddEye(FVector WorldPos, float Radius);
+
     /** Palabra secreta del turno y las 3 opciones (solo se setean en el cliente del
      *  escultor). El HUD puede leerlas directo, o suscribirse a los delegates de abajo. */
     UPROPERTY(BlueprintReadOnly, Category="Game")
@@ -316,4 +321,9 @@ private:
     void SetModeAdd()   { SetMode(EPTEditMode::Add);   }
     void SetModeErase() { SetMode(EPTEditMode::Erase); }
     void SetModePaint() { SetMode(EPTEditMode::Paint); }
+
+    // ── Ojos (tecla 4): igual que en modo G del lobby, pero replicado en el volumen ──
+    bool bEyesTool = false;
+    void SetModeEyes();   // tecla 4: activar la herramienta de ojos
+    void PlaceEyeAtCursor(); // coloca un ojo (sobre la superficie) → Volume->Server_AddEye
 };

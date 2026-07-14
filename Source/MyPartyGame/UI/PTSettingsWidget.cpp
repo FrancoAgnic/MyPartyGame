@@ -5,6 +5,7 @@
 #include "Components/Slider.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
+#include "Components/CheckBox.h"
 
 bool UPTSettingsWidget::Initialize()
 {
@@ -24,6 +25,7 @@ bool UPTSettingsWidget::Initialize()
     if (HighButton)    HighButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnHighClicked);
     if (ApplyButton)   ApplyButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnApplyClicked);
     if (BackButton)    BackButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnBackClicked);
+    if (VSyncCheckBox) VSyncCheckBox->OnCheckStateChanged.AddDynamic(this, &UPTSettingsWidget::OnVSyncChanged);
 
     return true;
 }
@@ -38,6 +40,7 @@ void UPTSettingsWidget::ShowPanel()
 
         OnLanguageStateChanged(Settings->GetLanguageCode() != TEXT("es"));
         OnGraphicsStateChanged(FMath::Clamp(Settings->GetGraphicsQuality(), 0, 2));
+        if (VSyncCheckBox) VSyncCheckBox->SetIsChecked(Settings->IsVSyncEnabled());
     }
 
     SetVisibility(ESlateVisibility::Visible);
@@ -83,9 +86,20 @@ void UPTSettingsWidget::OnApplyClicked()
     {
         Settings->SaveSettings();
     }
+    // Cerrar el panel al aplicar (antes solo se cerraba con Escape / Back).
+    SetVisibility(ESlateVisibility::Collapsed);
 }
 
 void UPTSettingsWidget::OnBackClicked()
 {
     SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UPTSettingsWidget::OnVSyncChanged(bool bIsChecked)
+{
+    if (UPTGameUserSettings* Settings = UPTGameUserSettings::Get())
+    {
+        Settings->SetVSyncEnabled(bIsChecked);
+        Settings->ApplyNonResolutionSettings(); // aplica VSync en caliente (se persiste en Apply)
+    }
 }

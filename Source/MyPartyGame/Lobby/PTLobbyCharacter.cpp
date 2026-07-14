@@ -15,6 +15,9 @@
 #include "PTPlayerState.h"
 #include "Engine/StaticMesh.h"
 #include "StaticMeshResources.h"
+#include "Serialization/MemoryWriter.h"
+#include "Serialization/MemoryReader.h"
+#include "Misc/Compression.h"
 #include "Kismet/GameplayStatics.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
@@ -143,26 +146,102 @@ void APTLobbyCharacter::BakeAndReplicateHead(UProceduralMeshComponent* ClaySrc, 
     ApplyHeadSections(Secs);
     UpdateHeadCollision();
     SaveHead(Secs);               // persistencia local (disco)
-    Server_SetHeadSections(Secs); // replicar a todos (via PlayerState)
+
+    // Replicar: serializar+comprimir → mandar al servidor → PlayerState → OnRep en todos.
+    TArray<uint8> Blob;
+    SectionsToBlob(Secs, Blob);
+    Server_SetHeadBlob(Blob);
 }
 
-void APTLobbyCharacter::Server_SetHeadSections_Implementation(const TArray<FPTHeadSection>& Secs)
+void APTLobbyCharacter::Server_SetHeadBlob_Implementation(const TArray<uint8>& Blob)
 {
     if (APTPlayerState* PS = GetPlayerState<APTPlayerState>())
-        PS->HeadSections = Secs;  // se replica a los clientes (OnRep_HeadSections)
+        PS->HeadBlob = Blob;      // se replica a los clientes (OnRep_HeadBlob)
     // En el servidor no salta OnRep: aplicar acá para que el host/servidor también la vea.
-    ApplyHeadSections(Secs);
-    UpdateHeadCollision();
+    ApplyReplicatedHead();
 }
 
 void APTLobbyCharacter::ApplyReplicatedHead()
 {
-    if (const APTPlayerState* PS = GetPlayerState<APTPlayerState>())
-        if (PS->HeadSections.Num() > 0)
+    const APTPlayerState* PS = GetPlayerState<APTPlayerState>();
+    if (!PS || PS->HeadBlob.Num() == 0) return;
+    TArray<FPTHeadSection> Secs;
+    if (BlobToSections(PS->HeadBlob, Secs) && Secs.Num() > 0)
+    {
+        ApplyHeadSections(Secs);
+        UpdateHeadCollision();
+    }
+}
+
+// ── Serialización + compresión (Zlib) de la malla de la cabeza ─────────────────
+void APTLobbyCharacter::SectionsToBlob(const TArray<FPTHeadSection>& Secs, TArray<uint8>& OutBlob)
+{
+    // 1) Empaquetar crudo (verts/normales como float para achicar antes de comprimir).
+    TArray<uint8> Raw;
+    FMemoryWriter Ar(Raw);
+    int32 N = Secs.Num(); Ar << N;
+    for (const FPTHeadSection& S : Secs)
+    {
+        int32 NV = S.Verts.Num(); Ar << NV;
+        for (int32 i = 0; i < NV; ++i)
         {
-            ApplyHeadSections(PS->HeadSections);
-            UpdateHeadCollision();
+            FVector3f p = (FVector3f)S.Verts[i];
+            FVector3f n = S.Normals.IsValidIndex(i) ? (FVector3f)S.Normals[i] : FVector3f::ZeroVector;
+            FVector2f uv= S.UVs.IsValidIndex(i)     ? (FVector2f)S.UVs[i]     : FVector2f::ZeroVector;
+            FColor    c = S.Colors.IsValidIndex(i)  ? S.Colors[i]             : FColor::White;
+            Ar << p.X << p.Y << p.Z << n.X << n.Y << n.Z << uv.X << uv.Y << c;
         }
+        int32 NT = S.Tris.Num(); Ar << NT;
+        for (int32 t = 0; t < NT; ++t) { int32 v = S.Tris[t]; Ar << v; }
+        uint8 eye = S.bEye ? 1 : 0; Ar << eye;
+    }
+
+    // 2) Comprimir (header = tamaño sin comprimir).
+    const int32 Uncomp = Raw.Num();
+    int32 CompSize = FCompression::CompressMemoryBound(NAME_Zlib, Uncomp);
+    OutBlob.SetNumUninitialized(sizeof(int32) + CompSize);
+    FMemory::Memcpy(OutBlob.GetData(), &Uncomp, sizeof(int32));
+    if (FCompression::CompressMemory(NAME_Zlib, OutBlob.GetData() + sizeof(int32), CompSize, Raw.GetData(), Uncomp))
+        OutBlob.SetNum(sizeof(int32) + CompSize, EAllowShrinking::No);
+    else
+        OutBlob.Reset();
+}
+
+bool APTLobbyCharacter::BlobToSections(const TArray<uint8>& Blob, TArray<FPTHeadSection>& OutSecs)
+{
+    if (Blob.Num() <= (int32)sizeof(int32)) return false;
+
+    int32 Uncomp = 0;
+    FMemory::Memcpy(&Uncomp, Blob.GetData(), sizeof(int32));
+    if (Uncomp <= 0) return false;
+
+    TArray<uint8> Raw; Raw.SetNumUninitialized(Uncomp);
+    if (!FCompression::UncompressMemory(NAME_Zlib, Raw.GetData(), Uncomp,
+                                        Blob.GetData() + sizeof(int32), Blob.Num() - sizeof(int32)))
+        return false;
+
+    FMemoryReader Ar(Raw);
+    int32 N = 0; Ar << N;
+    OutSecs.Reset();
+    OutSecs.Reserve(N);
+    for (int32 s = 0; s < N; ++s)
+    {
+        FPTHeadSection S;
+        int32 NV = 0; Ar << NV;
+        S.Verts.Reserve(NV); S.Normals.Reserve(NV); S.UVs.Reserve(NV); S.Colors.Reserve(NV);
+        for (int32 i = 0; i < NV; ++i)
+        {
+            FVector3f p, n; FVector2f uv; FColor c;
+            Ar << p.X << p.Y << p.Z << n.X << n.Y << n.Z << uv.X << uv.Y << c;
+            S.Verts.Add(FVector(p)); S.Normals.Add(FVector(n)); S.UVs.Add(FVector2D(uv)); S.Colors.Add(c);
+        }
+        int32 NT = 0; Ar << NT;
+        S.Tris.Reserve(NT);
+        for (int32 t = 0; t < NT; ++t) { int32 v = 0; Ar << v; S.Tris.Add(v); }
+        uint8 eye = 0; Ar << eye; S.bEye = (eye != 0);
+        OutSecs.Add(MoveTemp(S));
+    }
+    return true;
 }
 
 FPTHeadSection APTLobbyCharacter::BuildEyesSection(const TArray<FVector4>& LocalEyes,
@@ -280,8 +359,10 @@ void APTLobbyCharacter::LoadHead()
         {
             ApplyHeadSections(Save->Sections);
             UpdateHeadCollision();
-            // Replicar tu cabeza guardada para que los demás la vean sin re-esculpir.
-            Server_SetHeadSections(Save->Sections);
+            // Replicar tu cabeza guardada (comprimida) para que los demás la vean sin re-esculpir.
+            TArray<uint8> Blob;
+            SectionsToBlob(Save->Sections, Blob);
+            Server_SetHeadBlob(Blob);
         }
 }
 
@@ -289,10 +370,9 @@ void APTLobbyCharacter::TryApplyReplicatedHead()
 {
     // Si el PlayerState ya trae una cabeza (otros jugadores, o al viajar a Lvl-01), aplicarla.
     if (const APTPlayerState* PS = GetPlayerState<APTPlayerState>())
-        if (PS->HeadSections.Num() > 0)
+        if (PS->HeadBlob.Num() > 0)
         {
-            ApplyHeadSections(PS->HeadSections);
-            UpdateHeadCollision();
+            ApplyReplicatedHead();
             return;
         }
 

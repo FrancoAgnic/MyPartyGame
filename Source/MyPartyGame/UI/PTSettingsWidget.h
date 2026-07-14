@@ -13,6 +13,7 @@
 class USlider;
 class UButton;
 class UTextBlock;
+class UCheckBox;
 
 UCLASS()
 class MYPARTYGAME_API UPTSettingsWidget : public UUserWidget
@@ -39,6 +40,9 @@ protected:
     UPROPERTY(meta = (BindWidget)) UButton* ApplyButton;
     UPROPERTY(meta = (BindWidgetOptional)) UButton* BackButton; // opcional: se cierra con Esc
 
+    // Checkbox de sincronización vertical (VSync). Crear un CheckBox llamado "VSyncCheckBox" en el WBP.
+    UPROPERTY(meta = (BindWidgetOptional)) UCheckBox* VSyncCheckBox;
+
     UFUNCTION() void OnVolumeChanged(float NewValue);
     UFUNCTION() void OnEnglishClicked();
     UFUNCTION() void OnSpanishClicked();
@@ -47,6 +51,7 @@ protected:
     UFUNCTION() void OnHighClicked();
     UFUNCTION() void OnApplyClicked();
     UFUNCTION() void OnBackClicked();
+    UFUNCTION() void OnVSyncChanged(bool bIsChecked);
 
     /** Blueprint resalta el botón activo (estilo visual, no lógica) — llamado en ShowPanel y tras cada cambio. */
     UFUNCTION(BlueprintImplementableEvent, Category = "Settings")

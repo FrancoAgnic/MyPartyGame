@@ -25,6 +25,9 @@ bool UPTGameplayHUDWidget::Initialize()
     if (BtnPlayAgain)   BtnPlayAgain->OnClicked.AddDynamic(this, &UPTGameplayHUDWidget::OnBtnPlayAgain);
     if (BtnReturnLobby) BtnReturnLobby->OnClicked.AddDynamic(this, &UPTGameplayHUDWidget::OnBtnReturnLobby);
 
+    // Chat: envolver texto largo (que el mensaje baje de línea en vez de cortarse al salir del margen).
+    if (TxtChat) TxtChat->SetAutoWrapText(true);
+
     return true;
 }
 

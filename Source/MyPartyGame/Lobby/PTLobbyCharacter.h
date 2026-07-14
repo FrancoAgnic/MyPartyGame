@@ -119,9 +119,13 @@ public:
     // Se muestra/oculta al entrar/salir del modo G (no se dibuja cuadro a cuadro).
     void SetFacingArrowVisible(bool bVisible);
 
-    // Envía al servidor la cabeza horneada (la guarda en el PlayerState → se replica a todos).
+    // Envía al servidor la cabeza horneada (comprimida) → la guarda en el PlayerState → se replica.
     UFUNCTION(Server, Reliable)
-    void Server_SetHeadSections(const TArray<FPTHeadSection>& Secs);
+    void Server_SetHeadBlob(const TArray<uint8>& Blob);
+
+    // Serializa+comprime / descomprime+deserializa las secciones de la cabeza a/desde bytes.
+    static void SectionsToBlob(const TArray<FPTHeadSection>& Secs, TArray<uint8>& OutBlob);
+    static bool BlobToSections(const TArray<uint8>& Blob, TArray<FPTHeadSection>& OutSecs);
 
 protected:
     virtual void BeginPlay() override;

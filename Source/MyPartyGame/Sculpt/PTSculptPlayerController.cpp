@@ -178,6 +178,7 @@ void APTSculptPlayerController::SetupInputComponent()
     InputComponent->BindKey(EKeys::One,   IE_Pressed, this, &APTSculptPlayerController::SetModeAdd);
     InputComponent->BindKey(EKeys::Two,   IE_Pressed, this, &APTSculptPlayerController::SetModeErase);
     InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &APTSculptPlayerController::SetModePaint);
+    InputComponent->BindKey(EKeys::Four,  IE_Pressed, this, &APTSculptPlayerController::SetModeEyes);
 
     // Formas: Tab cicla Sphere→Cube→Cylinder→TriPrism
     InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &APTSculptPlayerController::CycleShapes);
@@ -443,8 +444,15 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
     if (PaintRing)
     {
         UStaticMesh* RingMesh = nullptr;
-        bool bTint = false;
-        if (EditMode == EPTEditMode::Paint)
+        bool  bTint     = false;
+        bool  bEyeScale = false; // los ojos escalan por su propio radio/base
+        if (bEyesTool)
+        {
+            // Preview del ojo apoyado sobre la malla (igual que en modo G): mesh del ojo o esfera.
+            RingMesh = (Volume && Volume->EyeMesh) ? Volume->EyeMesh : PaintMeshSphere;
+            bEyeScale = true;
+        }
+        else if (EditMode == EPTEditMode::Paint)
         {
             switch (StampShape)
             {
@@ -467,7 +475,7 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
             if (CachedRingMesh != RingMesh)
             {
                 PaintRing->SetStaticMesh(RingMesh);
-                // MID solo para Paint (toma el color); Smooth usa su material tal cual.
+                // MID solo para Paint (toma el color); Smooth/ojos usan su material tal cual.
                 PaintRingMID = nullptr;
                 if (bTint)
                 {
@@ -478,8 +486,17 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
             }
             PaintRing->SetWorldLocation(StampPos);
             PaintRing->SetWorldRotation(FRotationMatrix::MakeFromZ(Normal).Rotator());
-            const float Base = FMath::Max(PreviewMeshBaseSize, 1.f);
-            PaintRing->SetWorldScale3D(FVector(StampSize / Base));
+            float Scale;
+            if (bEyeScale)
+            {
+                const float EyeBase = (Volume && Volume->EyeBaseSize > 1.f) ? Volume->EyeBaseSize : 50.f;
+                Scale = (StampSize * 0.5f) / EyeBase; // mismo radio con que se coloca el ojo
+            }
+            else
+            {
+                Scale = StampSize / FMath::Max(PreviewMeshBaseSize, 1.f);
+            }
+            PaintRing->SetWorldScale3D(FVector(Scale));
             if (bTint && PaintRingMID) PaintRingMID->SetVectorParameterValue(TEXT("Color"), CurrentPaintColor);
         }
     }
@@ -557,9 +574,9 @@ FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
         return Pf;
     }
 
-    // ── Paint y Smooth: pegar el cursor a la superficie (raymarch) para trabajar
+    // ── Paint, Smooth y OJOS: pegar el cursor a la superficie (raymarch) para trabajar
     // preciso sobre la malla donde apuntás. ────────────────────────────────────
-    if ((EditMode == EPTEditMode::Paint || EditMode == EPTEditMode::Smooth) && Volume)
+    if ((EditMode == EPTEditMode::Paint || EditMode == EPTEditMode::Smooth || bEyesTool) && Volume)
     {
         static constexpr float StepSize = 8.f;  // ~1 voxel: preciso
         static constexpr int32 MaxSteps = 700;
@@ -661,8 +678,8 @@ void APTSculptPlayerController::UpdatePreviewVisual()
 {
     if (!PreviewMesh) return;
 
-    // Smooth (decal) y Paint (cursor 2D): sin malla de preview 3D.
-    if (EditMode == EPTEditMode::Smooth || EditMode == EPTEditMode::Paint)
+    // Smooth (decal), Paint (cursor 2D) y OJOS (preview sobre la malla vía PaintRing): sin malla 3D acá.
+    if (EditMode == EPTEditMode::Smooth || EditMode == EPTEditMode::Paint || bEyesTool)
     {
         PreviewMesh->SetVisibility(false);
         if (PreviewStaticMesh) PreviewStaticMesh->SetVisibility(false);
@@ -712,6 +729,9 @@ void APTSculptPlayerController::UpdatePreviewVisual()
 
 void APTSculptPlayerController::OnStampPressed()
 {
+    // Herramienta de ojos: un ojo por click (no esculpe ni deja bIsStamping).
+    if (bEyesTool) { PlaceEyeAtCursor(); return; }
+
     bIsStamping = true;
 
     // En modo eje (solo Add): bloquear un plano VERTICAL (que contiene el eje Z
@@ -792,11 +812,42 @@ void APTSculptPlayerController::CycleShapes()
 
 void APTSculptPlayerController::SetMode(EPTEditMode M)
 {
+    bEyesTool = false; // 1/2/3 salen de la herramienta de ojos
     EditMode = M;
     ClampStampSize(); // respetar el mínimo del nuevo modo (Paint permite más chico)
     bPreviewDirty = true;
     ApplyPreviewMaterial();
     UE_LOG(LogTemp, Log, TEXT("[Sculpt] Mode: %d"), (int32)EditMode);
+}
+
+void APTSculptPlayerController::SetModeEyes()
+{
+    bEyesTool = true;
+    bPreviewDirty = true;
+    UE_LOG(LogTemp, Log, TEXT("[Sculpt] Mode: OJOS"));
+}
+
+void APTSculptPlayerController::PlaceEyeAtCursor()
+{
+    if (!Volume || !CanLocalPlayerSculpt()) return;
+    FVector Normal;
+    const FVector Pt = GetStampPoint(Normal); // superficie (raymarch)
+    Server_AddEye(Pt, StampSize * 0.5f);      // vía el controller (tiene owner) → server → volumen
+}
+
+void APTSculptPlayerController::Server_AddEye_Implementation(FVector WorldPos, float Radius)
+{
+    // Mismo gating que el stamp: solo el escultor del turno modifica la escultura.
+    if (const APTSculptGameState* G = GetWorld()->GetGameState<APTSculptGameState>())
+    {
+        if (G->TurnPhase != EPTTurnPhase::Drawing ||
+            G->CurrentSculptor != GetPlayerState<APTPlayerState>())
+            return;
+    }
+    if (!Volume)
+        Volume = Cast<APTSculptVolume>(
+            UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
+    if (Volume) Volume->AddEye(WorldPos, Radius);
 }
 
 void APTSculptPlayerController::OnFreezePressed()
