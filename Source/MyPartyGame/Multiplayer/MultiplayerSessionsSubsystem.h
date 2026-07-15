@@ -58,6 +58,13 @@ public:
     void DestroySession();
     void StartSession();
 
+    // Destruye una sesión que haya quedado REGISTRADA localmente de una partida anterior.
+    // Llamar al mostrar el menú principal: ahí nunca debería haber sesión activa.
+    // Sin esto: (a) el host que volvió al menú deja su sala anunciada = "sesión fantasma" que
+    // aparece en Find y no se puede joinear, y (b) con NAME_GameSession todavía ocupado, unirse a
+    // OTRA sala falla → quedaba todo trabado hasta reiniciar el juego.
+    void CleanupStaleSession();
+
     // Helper para que el PlayerController viaje tras crear/unirse (Fases 2-3).
     // Devuelve la dirección de conexión resuelta (ej: "192.168.1.5:7777").
     bool GetResolvedConnectString(FString& OutConnectString) const;

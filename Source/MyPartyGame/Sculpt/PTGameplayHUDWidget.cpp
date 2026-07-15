@@ -8,6 +8,11 @@
 #include "Components/EditableTextBox.h"
 #include "Components/ScrollBox.h"
 #include "Components/PanelWidget.h"
+#include "Components/Image.h"
+#include "../PTInputBindings.h"
+#include "../UI/PTControlRowWidget.h"
+#include "../UI/PTToolSlotWidget.h"
+#include "Components/PanelWidget.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
@@ -28,7 +33,187 @@ bool UPTGameplayHUDWidget::Initialize()
     // Chat: envolver texto largo (que el mensaje baje de línea en vez de cortarse al salir del margen).
     if (TxtChat) TxtChat->SetAutoWrapText(true);
 
+    // Lista de controles (pantalla de ayuda opcional) + barra de herramientas: se arman una vez.
+    RebuildControls();
+    BuildToolbar();
+
     return true;
+}
+
+void UPTGameplayHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+    Super::NativeTick(MyGeometry, InDeltaTime);
+
+    const APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(GetOwningPlayer());
+    if (!PC) return;
+
+    // Círculo de "borrar todo": se llena mientras mantenés la tecla, con el contador 3→1 adentro.
+    // Va por frame (no por el RefreshTick de 10Hz) para que el llenado se vea fluido.
+    if (ClearSlot)
+    {
+        const float P = PC->GetClearHoldProgress();
+        ClearSlot->SetProgress(P, P > 0.f
+            ? FText::AsNumber(FMath::CeilToInt(PC->GetClearHoldRemaining()))
+            : FText::GetEmpty());
+    }
+
+    // Ícono de "prohibido construir": apuntando fuera de la zona de modelado (cualquier tool).
+    if (OutOfBoundsIcon)
+    {
+        const APTSculptGameState* G = GetGS();
+        const bool bSculpting = G && G->TurnPhase == EPTTurnPhase::Drawing && G->IsLocalPlayerSculptor();
+        OutOfBoundsIcon->SetVisibility(bSculpting && PC->IsStampOutsideCanvas()
+            ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+    }
+}
+
+void UPTGameplayHUDWidget::BuildToolbar()
+{
+    if (!ToolSlotClass) return;
+
+    auto MakeSlot = [this](UPanelWidget* Box, UTexture2D* Icon, const FKey& Key, const FText& Label)
+        -> UPTToolSlotWidget*
+    {
+        if (!Box) return nullptr;
+        UPTToolSlotWidget* S = CreateWidget<UPTToolSlotWidget>(GetOwningPlayer(), ToolSlotClass);
+        if (!S) return nullptr;
+        S->SetSlot(Icon, Key.GetDisplayName(), Label);
+        Box->AddChild(S);
+        return S;
+    };
+
+    // Tools: la tecla sale de PTInput (misma tabla que bindea el controller) → si se rebindea,
+    // el cuadrito muestra la tecla nueva sin tocar nada acá.
+    if (ToolsBox)
+    {
+        ToolsBox->ClearChildren();
+        ToolSlots.Reset();
+        ToolSlots.Add(MakeSlot(ToolsBox, IconAdd,   PTInput::GetKey(TEXT("ModeAdd")),   FText::FromString(TEXT("Agregar"))));
+        ToolSlots.Add(MakeSlot(ToolsBox, IconErase, PTInput::GetKey(TEXT("ModeErase")), FText::FromString(TEXT("Borrar"))));
+        ToolSlots.Add(MakeSlot(ToolsBox, IconPaint, PTInput::GetKey(TEXT("ModePaint")), FText::FromString(TEXT("Pintar"))));
+        ToolSlots.Add(MakeSlot(ToolsBox, IconEyes,  PTInput::GetKey(TEXT("ModeEyes")),  FText::FromString(TEXT("Ojos"))));
+    }
+
+    // Formas: todas muestran la tecla de ciclar (TAB), y se resalta la equipada.
+    if (ShapesBox)
+    {
+        ShapesBox->ClearChildren();
+        ShapeSlots.Reset();
+        const FKey TabKey = PTInput::GetKey(TEXT("CycleShape"));
+        ShapeSlots.Add(MakeSlot(ShapesBox, IconSphere,   TabKey, FText::FromString(TEXT("Esfera"))));
+        ShapeSlots.Add(MakeSlot(ShapesBox, IconCube,     TabKey, FText::FromString(TEXT("Cubo"))));
+        ShapeSlots.Add(MakeSlot(ShapesBox, IconCylinder, TabKey, FText::FromString(TEXT("Cilindro"))));
+        ShapeSlots.Add(MakeSlot(ShapesBox, IconCone,     TabKey, FText::FromString(TEXT("Cono"))));
+    }
+
+    // Borrar todo (BACKSPACE mantenido): cuadrito fijo con círculo de progreso + contador.
+    if (ClearBox)
+    {
+        ClearBox->ClearChildren();
+        ClearSlot = MakeSlot(ClearBox, IconClearAll, PTInput::GetKey(TEXT("ClearAll")),
+                             FText::FromString(TEXT("Borrar todo")));
+        if (ClearSlot) ClearSlot->SetProgress(0.f, FText::GetEmpty()); // arranca sin círculo
+    }
+}
+
+void UPTGameplayHUDWidget::RefreshToolbar()
+{
+    APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(GetOwningPlayer());
+    APTSculptGameState* G = GetGS();
+    if (!PC) return;
+
+    // La barra es del escultor: solo se ve cuando te toca dibujar.
+    const bool bSculpting = G && G->TurnPhase == EPTTurnPhase::Drawing && G->IsLocalPlayerSculptor();
+    const ESlateVisibility Vis = bSculpting ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
+    if (ToolsBox)  ToolsBox->SetVisibility(Vis);
+    if (HintsBox)  HintsBox->SetVisibility(Vis);
+    if (ClearBox)  ClearBox->SetVisibility(Vis);
+
+    if (!bSculpting)
+    {
+        if (ShapesBox) ShapesBox->SetVisibility(ESlateVisibility::Collapsed);
+        return;
+    }
+
+
+    // ── Tool equipada ──
+    const bool bEyes = PC->IsEyesToolActive();
+    const int32 ToolIdx = bEyes ? 3
+        : (PC->EditMode == EPTEditMode::Add   ? 0
+        :  PC->EditMode == EPTEditMode::Erase ? 1
+        :  PC->EditMode == EPTEditMode::Paint ? 2 : -1);
+    for (int32 i = 0; i < ToolSlots.Num(); ++i)
+        if (ToolSlots[i]) ToolSlots[i]->SetSelected(i == ToolIdx);
+
+    // ── Formas: solo tienen sentido con Add o Paint (Erase/Ojos siempre son esfera) ──
+    const bool bShowShapes = !bEyes && (PC->EditMode == EPTEditMode::Add || PC->EditMode == EPTEditMode::Paint);
+    if (ShapesBox) ShapesBox->SetVisibility(bShowShapes ? ESlateVisibility::HitTestInvisible
+                                                        : ESlateVisibility::Collapsed);
+    if (bShowShapes)
+    {
+        const int32 ShapeIdx = (int32)PC->StampShape; // Sphere, Cube, Cylinder, TriPrism
+        for (int32 i = 0; i < ShapeSlots.Num(); ++i)
+            if (ShapeSlots[i]) ShapeSlots[i]->SetSelected(i == ShapeIdx);
+    }
+
+    // ── Atajos contextuales: cambian según lo que tengas equipado ──
+    if (!HintsBox || !ToolSlotClass) return;
+
+    const bool bPicker = PC->IsColorPickerOpen();
+    // Firma del contexto: solo rearmamos los cuadritos si cambió (no cada tick).
+    const FString Sig = FString::Printf(TEXT("%d|%d|%d|%d"), (int32)PC->EditMode, bEyes ? 1 : 0,
+                                        bPicker ? 1 : 0, PC->IsAxisLockActive() ? 1 : 0);
+    if (Sig != CachedHintSig)
+    {
+        CachedHintSig = Sig;
+        HintsBox->ClearChildren();
+        HintSlots.Reset();
+
+        auto AddHint = [this](UTexture2D* Icon, const FKey& Key, const FText& Label) -> UPTToolSlotWidget*
+        {
+            UPTToolSlotWidget* S = CreateWidget<UPTToolSlotWidget>(GetOwningPlayer(), ToolSlotClass);
+            if (!S) return nullptr;
+            S->SetSlot(Icon, Key.GetDisplayName(), Label);
+            HintsBox->AddChild(S);
+            HintSlots.Add(S);
+            return S;
+        };
+
+        if (bPicker)
+        {
+            // Con la rueda de color abierta: E guarda el color donde tenés el puntero.
+            AddHint(IconSaveColor, PTInput::GetKey(TEXT("SaveColor")), FText::FromString(TEXT("Guardar color")));
+        }
+        else if (!bEyes && PC->EditMode == EPTEditMode::Add)
+        {
+            // Con Agregar: los dos planos de trazo recto.
+            AddHint(IconAxisVert,  PTInput::GetKey(TEXT("AxisVertical")),   FText::FromString(TEXT("Plano vertical")));
+            AddHint(IconAxisHoriz, PTInput::GetKey(TEXT("AxisHorizontal")), FText::FromString(TEXT("Plano horizontal")));
+        }
+    }
+
+    // Resaltar el plano activo (si el modo eje está encendido).
+    if (!bPicker && !bEyes && PC->EditMode == EPTEditMode::Add && HintSlots.Num() >= 2)
+    {
+        const bool bAxis = PC->IsAxisLockActive();
+        if (HintSlots[0]) HintSlots[0]->SetSelected(bAxis && !PC->IsAxisHorizontal());
+        if (HintSlots[1]) HintSlots[1]->SetSelected(bAxis &&  PC->IsAxisHorizontal());
+    }
+}
+
+void UPTGameplayHUDWidget::RebuildControls()
+{
+    if (!ControlsBox || !ControlRowClass) return;
+
+    ControlsBox->ClearChildren();
+    // Una fila por acción, leyendo la MISMA tabla que usa el PlayerController para bindear.
+    for (const FPTKeyBinding& B : PTInput::GetBindings())
+    {
+        UPTControlRowWidget* Row = CreateWidget<UPTControlRowWidget>(GetOwningPlayer(), ControlRowClass);
+        if (!Row) continue;
+        Row->SetRow(B.Label, B.Key.GetDisplayName());
+        ControlsBox->AddChild(Row);
+    }
 }
 
 void UPTGameplayHUDWidget::ShowHUD()
@@ -68,6 +253,9 @@ void UPTGameplayHUDWidget::RefreshTick()
         bChatBound = true;
     }
     if (!G) return;
+
+    // Barra de herramientas: qué está equipado / qué barras se ven.
+    RefreshToolbar();
 
     APTSculptPlayerController* PC = GetSculptPC();
     const bool bSculptor = G->IsLocalPlayerSculptor();

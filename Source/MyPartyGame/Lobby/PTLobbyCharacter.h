@@ -34,6 +34,18 @@ public:
     // porque es un vacío sin piso caminable). Reutiliza la lógica de ToggleFly.
     void SetFlyingMode(bool bEnable);
 
+    // true = vuelo OBLIGATORIO: no se puede caminar ni apagarlo con el doble-espacio. Lo activa
+    // el gameplay (Lvl-01), donde caminar se sentía con lag y el nivel no tiene piso.
+    bool bForceFlying = false;
+
+    // Configura el pawn para el GAMEPLAY (Lvl-01), a diferencia del lobby:
+    //  - vuelo obligatorio (el nivel es un vacío sin piso y caminar se sentía con lag),
+    //  - SIN orientar la rotación al movimiento (molesta al esculpir; en el lobby queda lindo).
+    // Se llama en el servidor (APTSculptGameMode::StartPawnFlying) y en el cliente local
+    // (APTSculptPlayerController::AcknowledgePossession), porque el input corre en el cliente.
+    void ApplyGameplayMovementMode();
+
+
     // Globo de chat: muestra el texto en el cartel del nombre ~2s (lo ven todos). Si
     // bGuess=true, va en verde ("adivinó la palabra") y spawnea el confetti. Lo llama
     // el GameMode (servidor). El mensaje NO es la palabra (anti-spoiler).
@@ -157,6 +169,10 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="NameTag")
     UWidgetComponent* NameTag;
 
+    // Cuánto queda el globo de chat sobre la cabeza (segundos). Ajustable en BP_LobbyCharacter.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="NameTag")
+    float ChatBubbleDuration = 4.5f;
+
     // Asignar en BP_LobbyCharacter o en el PlayerController/GameMode.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input")
     UInputAction* MoveAction;
@@ -199,6 +215,10 @@ private:
     void ApplyHeadSections(const TArray<FPTHeadSection>& Secs);
     // Aplica la cabeza del PlayerState si tiene; si no y es el pawn local, carga la guardada (disco).
     void TryApplyReplicatedHead();
+
+    // Última versión de cabeza aplicada a este pawn (se compara con APTPlayerState::HeadVersion
+    // en el Tick throttled). -1 = todavía ninguna.
+    int32 AppliedHeadVersion = -1;
 
     // Cartel del nombre: actualizado throttled desde Tick.
     void  UpdateNameTag();

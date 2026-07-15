@@ -492,6 +492,7 @@ bool APTSculptVolume::WriteColorVoxel(int32 vx, int32 vy, int32 vz, const FColor
     const int32 AIdx = ax + ay * AtlasW;
     if (AtlasBuf.IsValidIndex(AIdx) && C.A >= AtlasBuf[AIdx].A)
     {
+        BackupAtlas(AIdx, Slot); // undo: guardar el color previo antes de pisarlo
         if (AtlasBuf[AIdx].A == 0 && C.A > 0 && SlotUsed.IsValidIndex(Slot)) ++SlotUsed[Slot];
         AtlasBuf[AIdx] = C;
         DirtyTiles.Add(Slot);
@@ -564,6 +565,7 @@ void APTSculptVolume::ClearColorVoxel(int32 vx, int32 vy, int32 vz)
     const int32 AIdx = (TileX * CB + lx) + (TileY * (CB * CB) + lz * CB + ly) * AtlasW;
     if (!AtlasBuf.IsValidIndex(AIdx) || AtlasBuf[AIdx].A == 0) return; // ya vacío
 
+    BackupAtlas(AIdx, Slot); // undo: guardar el color previo antes de borrarlo
     AtlasBuf[AIdx] = FColor(0, 0, 0, 0);
     DirtyTiles.Add(Slot);
     bPaintDirty = true;
@@ -767,7 +769,7 @@ float APTSculptVolume::StampSDF(EPTStampShape Shape, FVector P, float HalfSize)
 }
 
 void APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
-                                  EPTEditMode Mode, FLinearColor PaintColor)
+                                  EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot)
 {
     // Paint: escribe en el volumen 3D de pintura (per-pixel, no toca la geometría).
     if (Mode == EPTEditMode::Paint)
@@ -780,9 +782,17 @@ void APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
     if (Mode == EPTEditMode::Erase)
         ClearPaintStamp(WorldPos, Shape, Size);
 
+    // Rotación del sello: el SDF se evalúa siempre alineado a los ejes, así que en vez de rotar la
+    // forma se ROTA AL REVÉS el punto de muestreo (a espacio local del sello). La rotación llega en
+    // mundo → pasarla al espacio local del volumen.
+    const FQuat LocalQ  = GetActorTransform().InverseTransformRotation(StampRot.Quaternion());
+    const bool  bRotated = !LocalQ.IsIdentity(1e-4f);
+
     const FVector GC = WorldToCell(WorldPos);
     const float HalfSize = (Size * 0.5f) / VoxelSize; // radio en celdas
-    const int32 R = FMath::CeilToInt(HalfSize) + 1;
+    // Con rotación, una forma no-esférica barre más lejos que HalfSize (diagonal del cubo ≈ √3)
+    // → ampliar el rango de celdas a revisar para no cortar la punta del sello.
+    const int32 R = FMath::CeilToInt(HalfSize * (bRotated ? 1.75f : 1.f)) + 1;
 
     // Clamp al lienzo (BoundsBox).
     FIntVector BMin, BMax;
@@ -809,7 +819,8 @@ void APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
         for (int32 x = x0; x <= x1; ++x)
         {
             const float prev = Field.GetSDF(x, y, z);
-            const FVector LP(x - GC.X, y - GC.Y, z - GC.Z);
+            FVector LP(x - GC.X, y - GC.Y, z - GC.Z);
+            if (bRotated) LP = LocalQ.UnrotateVector(LP);
             const float sdf  = StampSDF(Shape, LP, HalfSize);
             const float fall = FMath::Clamp(sdf / FMath::Max(HalfSize, 1.f), 0.f, 1.f);
             if (fall <= 0.f) { NewV[WI(x,y,z)] = prev; continue; }
@@ -841,7 +852,8 @@ void APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
     for (int32 y = y0; y <= y1; ++y)
     for (int32 x = x0; x <= x1; ++x)
     {
-        const FVector LP(x - GC.X, y - GC.Y, z - GC.Z);
+        FVector LP(x - GC.X, y - GC.Y, z - GC.Z);
+        if (bRotated) LP = LocalQ.UnrotateVector(LP);
         const float sdf  = StampSDF(Shape, LP, HalfSize);
         const float prev = Field.GetSDF(x, y, z);
 
@@ -1078,21 +1090,23 @@ void APTSculptVolume::RebuildDirty()
 
 // ─── RPCs de replicación ──────────────────────────────────────────────────────
 
-bool APTSculptVolume::Server_ApplyStamp_Validate(FVector, EPTStampShape, float, EPTEditMode, FLinearColor)
+bool APTSculptVolume::Server_ApplyStamp_Validate(FVector, EPTStampShape, float, EPTEditMode, FLinearColor, FRotator)
 {
     return true;
 }
 
 void APTSculptVolume::Server_ApplyStamp_Implementation(FVector WorldPos, EPTStampShape Shape,
-                                                        float Size, EPTEditMode Mode, FLinearColor PaintColor)
+                                                        float Size, EPTEditMode Mode, FLinearColor PaintColor,
+                                                        FRotator StampRot)
 {
-    Multicast_ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor);
+    Multicast_ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot);
 }
 
 void APTSculptVolume::Multicast_ApplyStamp_Implementation(FVector WorldPos, EPTStampShape Shape,
-                                                           float Size, EPTEditMode Mode, FLinearColor PaintColor)
+                                                           float Size, EPTEditMode Mode, FLinearColor PaintColor,
+                                                           FRotator StampRot)
 {
-    ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor);
+    ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot);
 }
 
 void APTSculptVolume::ClearAll()
@@ -1110,6 +1124,13 @@ void APTSculptVolume::ClearAll()
     // Ojos: limpiar visualmente en todos; resetear el array autoritativo sólo en el servidor.
     if (HasAuthority()) Eyes.Reset();
     if (EyesMesh) EyesMesh->ClearAllMeshSections();
+
+    // Undo: con el lienzo en blanco ya no hay nada a qué volver (y los respaldos apuntarían a
+    // bricks de un campo que se descartó).
+    Field.ClearUndo();
+    VolumeUndoStack.Reset();
+    CurrentVolumeUndo = FPTVolumeUndo();
+    bRecordingStroke  = false;
 
     // ── Color: vaciar los buffers y re-subir la page table en blanco. Con toda la
     //    page table a 0 (slot vacío) el material no lee ningún brick → sin pintura,
@@ -1132,10 +1153,81 @@ void APTSculptVolume::Multicast_ClearAll_Implementation()
     ClearAll();
 }
 
+// ─── Undo ─────────────────────────────────────────────────────────────────────
+void APTSculptVolume::BackupAtlas(int32 AIdx, int32 Slot)
+{
+    if (!bRecordingStroke) return;
+    if (!AtlasBuf.IsValidIndex(AIdx)) return;
+    CurrentVolumeUndo.Slots.Add(Slot);
+    if (CurrentVolumeUndo.AtlasOld.Contains(AIdx)) return; // ya respaldado en este trazo
+    CurrentVolumeUndo.AtlasOld.Add(AIdx, AtlasBuf[AIdx]);
+}
+
+void APTSculptVolume::Multicast_BeginStroke_Implementation()
+{
+    Field.BeginStroke();
+    CurrentVolumeUndo = FPTVolumeUndo();
+    CurrentVolumeUndo.EyesCount = Eyes.Num();
+    bRecordingStroke = true;
+}
+
+void APTSculptVolume::Multicast_EndStroke_Implementation()
+{
+    Field.PushStroke();                          // la pila del campo y esta van 1:1
+    VolumeUndoStack.Add(MoveTemp(CurrentVolumeUndo));
+    CurrentVolumeUndo = FPTVolumeUndo();
+    bRecordingStroke = false;
+    while (VolumeUndoStack.Num() > MaxUndoSteps) VolumeUndoStack.RemoveAt(0);
+}
+
+void APTSculptVolume::Multicast_Undo_Implementation()
+{
+    if (VolumeUndoStack.Num() == 0) return;
+
+    // 1) Geometría: el campo restaura los bricks del último trazo y los marca dirty (se remallan).
+    Field.UndoStroke();
+
+    // 2) Pintura: devolver los texels del atlas a su color previo.
+    const FPTVolumeUndo U = MoveTemp(VolumeUndoStack.Last());
+    VolumeUndoStack.Pop();
+    for (const auto& It : U.AtlasOld)
+    {
+        if (!AtlasBuf.IsValidIndex(It.Key)) continue;
+        AtlasBuf[It.Key] = It.Value;
+    }
+    if (U.AtlasOld.Num() > 0)
+    {
+        for (const int32 Slot : U.Slots) DirtyTiles.Add(Slot); // re-subir esos tiles
+        bPaintDirty = true;
+        UploadColorField();
+    }
+
+    // 3) Ojos: son autoritativos del servidor (se replican por la propiedad Eyes) → solo él los
+    //    recorta; a los clientes les llega por OnRep_Eyes y reconstruyen su malla.
+    if (HasAuthority() && Eyes.Num() > U.EyesCount)
+    {
+        Eyes.SetNum(U.EyesCount);
+        RebuildEyesMesh();
+    }
+
+    TimeSinceRebuild = RebuildInterval; // forzar el remallado en el próximo tick
+}
+
+bool APTSculptVolume::IsInsideCanvas(FVector WorldPos) const
+{
+    if (!BoundsBox) return true;
+    // A espacio local de la caja (InverseTransformPosition ya saca su escala) → comparar contra
+    // el extent sin escalar.
+    const FVector L = BoundsBox->GetComponentTransform().InverseTransformPosition(WorldPos);
+    const FVector E = BoundsBox->GetUnscaledBoxExtent();
+    return FMath::Abs(L.X) <= E.X && FMath::Abs(L.Y) <= E.Y && FMath::Abs(L.Z) <= E.Z;
+}
+
 // ─── Ojos (replicados) ─────────────────────────────────────────────────────────
 void APTSculptVolume::AddEye(FVector WorldPos, float Radius)
 {
     if (!HasAuthority()) return; // autoritativo: sólo el servidor modifica Eyes (se replica)
+    if (!IsInsideCanvas(WorldPos)) return; // no dejar poner ojos fuera de la zona de modelado
     const FVector Local = GetActorTransform().InverseTransformPosition(WorldPos);
     Eyes.Add(FVector4(Local.X, Local.Y, Local.Z, FMath::Max(Radius, 1.f)));
     RebuildEyesMesh(); // el servidor no recibe OnRep; reconstruir acá

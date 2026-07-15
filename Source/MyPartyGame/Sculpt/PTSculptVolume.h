@@ -55,8 +55,11 @@ public:
     UPROPERTY(EditAnywhere, Category="Sculpt|Paint", meta=(ClampMin="0.0", ClampMax="1.0"))
     float PaintHardness = 0.6f;
 
+    // StampRot = rotación del sello (rueda del mouse + arrastrar). Solo afecta la GEOMETRÍA
+    // (Add/Erase/Smooth); Paint es un splat sobre la superficie y la ignora.
     void ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
-                    EPTEditMode Mode, FLinearColor PaintColor);
+                    EPTEditMode Mode, FLinearColor PaintColor,
+                    FRotator StampRot = FRotator::ZeroRotator);
 
     // ── Ojos (tecla 4): esferas/mesh aparte, replicadas, que se apoyan sobre la escultura ──
     UPROPERTY(EditAnywhere, Category="Sculpt|Eyes") UStaticMesh*        EyeMesh     = nullptr; // necesita "Allow CPU Access"
@@ -71,6 +74,11 @@ public:
     // Acceso al ProceduralMesh (para hornear la escultura a otro componente, ej: la cabeza custom).
     UProceduralMeshComponent* GetMeshComponent() const { return Mesh; }
 
+    /** ¿Ese punto del mundo cae DENTRO del lienzo (el BoundsBox)? Para no dejar poner cosas
+     *  (ej: ojos) fuera de la zona de modelado. */
+    UFUNCTION(BlueprintPure, Category="Sculpt")
+    bool IsInsideCanvas(FVector WorldPos) const;
+
     float        SampleWorldDensity(FVector WorldPos) const;
     FLinearColor SampleWorldColor  (FVector WorldPos) const;
     // Color PINTADO (atlas) en esa posición del mundo. bOutPainted=false si ese punto no fue
@@ -79,11 +87,11 @@ public:
 
     UFUNCTION(Server, Reliable, WithValidation)
     void Server_ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
-                           EPTEditMode Mode, FLinearColor PaintColor);
+                           EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot);
 
     UFUNCTION(NetMulticast, Reliable)
     void Multicast_ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
-                              EPTEditMode Mode, FLinearColor PaintColor);
+                              EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot);
 
     // Limpia toda la escultura (geometría + color) dejando el lienzo en blanco.
     // Reusa las texturas de color existentes (solo re-sube la page table vacía).
@@ -92,6 +100,15 @@ public:
     // Reset sincronizado en todos: el GameMode (servidor) lo llama al empezar cada turno.
     UFUNCTION(NetMulticast, Reliable)
     void Multicast_ClearAll();
+
+    // ── Undo (deshacer la última acción) ────────────────────────────────────
+    // Un "trazo" = desde que apretás el click hasta que lo soltás (o un ojo colocado). Cada
+    // cliente graba su propio respaldo, así que el undo se difunde y todos deshacen igual.
+    UFUNCTION(NetMulticast, Reliable) void Multicast_BeginStroke();
+    UFUNCTION(NetMulticast, Reliable) void Multicast_EndStroke();
+    UFUNCTION(NetMulticast, Reliable) void Multicast_Undo();
+
+    bool CanUndo() const { return VolumeUndoStack.Num() > 0; }
 
     // Preview de la forma del sello (malla fantasma que sigue al cursor).
     static void BuildStampPreview(EPTStampShape Shape, float Size, float VoxSz,
@@ -117,6 +134,22 @@ private:
 
     // Ojos colocados (local al volumen: XYZ=centro, W=radio). Replicado → todos ven los mismos.
     UPROPERTY(ReplicatedUsing=OnRep_Eyes) TArray<FVector4> Eyes;
+
+    // ── Undo: lo que el campo NO cubre (pintura del atlas + ojos) ───────────
+    // La geometría la respalda FPTSculptField (copy-on-write por brick). Acá va el resto, con una
+    // pila 1:1 con la del campo para que Undo deshaga las dos partes a la vez.
+    struct FPTVolumeUndo
+    {
+        TMap<int32, FColor> AtlasOld;      // texel del atlas → color previo (solo el 1er cambio)
+        TSet<int32>         Slots;         // slots tocados (para re-subir esos tiles al deshacer)
+        int32               EyesCount = 0; // cuántos ojos había antes del trazo
+    };
+    TArray<FPTVolumeUndo>  VolumeUndoStack;
+    FPTVolumeUndo          CurrentVolumeUndo;
+    bool                   bRecordingStroke = false;
+    static constexpr int32 MaxUndoSteps = 8;
+    /** Guarda el color previo de un texel del atlas (solo la 1ra vez en el trazo). */
+    void BackupAtlas(int32 AIdx, int32 Slot);
 
     FPTSculptField Field;
 

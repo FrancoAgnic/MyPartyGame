@@ -72,7 +72,7 @@ void APTSculptGameMode::HandleSeamlessTravelPlayer(AController*& C)
 void APTSculptGameMode::StartPawnFlying(AController* C) const
 {
     if (APTLobbyCharacter* Char = C ? Cast<APTLobbyCharacter>(C->GetPawn()) : nullptr)
-        Char->SetFlyingMode(true);
+        Char->ApplyGameplayMovementMode(); // vuelo obligatorio + sin orientar al movimiento
 }
 
 void APTSculptGameMode::Logout(AController* Exiting)

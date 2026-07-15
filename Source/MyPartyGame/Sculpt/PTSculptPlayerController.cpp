@@ -16,6 +16,8 @@
 #include "../UI/PTColorPickerWidget.h"
 #include "../Lobby/PTLobbyEscapeMenuWidget.h"
 #include "../Lobby/PTLobbyCharacter.h"
+#include "PTSculptPlane.h"
+#include "../PTInputBindings.h"
 #include "../Lobby/PTPlayerState.h"
 #include "Engine/Engine.h"
 #include "PTSculptGameMode.h"
@@ -36,7 +38,7 @@ void APTSculptPlayerController::AcknowledgePossession(APawn* P)
     // copia autoritativa en vuelo (StartPawnFlying). Solo pasa en Lvl-01: el lobby usa
     // APTLobbyPlayerController y conserva el caminar.
     if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(P))
-        Char->SetFlyingMode(true);
+        Char->ApplyGameplayMovementMode(); // vuelo obligatorio + sin orientar al movimiento
 }
 
 void APTSculptPlayerController::BeginPlay()
@@ -170,38 +172,43 @@ void APTSculptPlayerController::SetupInputComponent()
     InputComponent->BindAction("Sculpt", IE_Pressed,  this, &APTSculptPlayerController::OnStampPressed);
     InputComponent->BindAction("Sculpt", IE_Released, this, &APTSculptPlayerController::OnStampReleased);
 
-    // Tamaño con rueda
+    // El resto de las teclas salen de PTInput (fuente de verdad única, compartida con la UI del
+    // HUD). Nada de EKeys hardcodeados acá: si el jugador rebindea, con RefreshFromSettings +
+    // volver a llamar a esto alcanza, y la UI ya lo refleja sola.
+    const auto K = [](const TCHAR* Id) { return PTInput::GetKey(FName(Id)); };
+
+    // Tamaño con rueda (la rueda no se rebindea, pero sale de la tabla igual).
     InputComponent->BindKey(EKeys::MouseScrollUp,   IE_Pressed, this, &APTSculptPlayerController::OnScrollUp);
     InputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed, this, &APTSculptPlayerController::OnScrollDown);
 
-    // Modos: 1 = Add, 2 = Erase, 3 = Paint
-    InputComponent->BindKey(EKeys::One,   IE_Pressed, this, &APTSculptPlayerController::SetModeAdd);
-    InputComponent->BindKey(EKeys::Two,   IE_Pressed, this, &APTSculptPlayerController::SetModeErase);
-    InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &APTSculptPlayerController::SetModePaint);
-    InputComponent->BindKey(EKeys::Four,  IE_Pressed, this, &APTSculptPlayerController::SetModeEyes);
+    // Modos: Add / Erase / Paint / Ojos
+    InputComponent->BindKey(K(TEXT("ModeAdd")),   IE_Pressed, this, &APTSculptPlayerController::SetModeAdd);
+    InputComponent->BindKey(K(TEXT("ModeErase")), IE_Pressed, this, &APTSculptPlayerController::SetModeErase);
+    InputComponent->BindKey(K(TEXT("ModePaint")), IE_Pressed, this, &APTSculptPlayerController::SetModePaint);
+    InputComponent->BindKey(K(TEXT("ModeEyes")),  IE_Pressed, this, &APTSculptPlayerController::SetModeEyes);
 
-    // Formas: Tab cicla Sphere→Cube→Cylinder→TriPrism
-    InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &APTSculptPlayerController::CycleShapes);
+    // Formas: cicla Sphere→Cube→Cylinder→TriPrism
+    InputComponent->BindKey(K(TEXT("CycleShape")), IE_Pressed, this, &APTSculptPlayerController::CycleShapes);
 
-    // Modo eje (dibujo recto): X toggle. LeftShift (mantener) congela el plano.
-    InputComponent->BindKey(EKeys::X,         IE_Pressed,  this, &APTSculptPlayerController::ToggleAxisLock);
-    InputComponent->BindKey(EKeys::LeftShift, IE_Pressed,  this, &APTSculptPlayerController::OnFreezePressed);
-    InputComponent->BindKey(EKeys::LeftShift, IE_Released, this, &APTSculptPlayerController::OnFreezeReleased);
+    // Modo eje (dibujo recto sobre plano congelado): vertical / horizontal.
+    InputComponent->BindKey(K(TEXT("AxisVertical")),   IE_Pressed, this, &APTSculptPlayerController::ToggleAxisVertical);
+    InputComponent->BindKey(K(TEXT("AxisHorizontal")), IE_Pressed, this, &APTSculptPlayerController::ToggleAxisHorizontal);
 
-    // Color rápido: mantener el click derecho abre la rueda; soltarlo confirma.
-    InputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed,  this, &APTSculptPlayerController::OnColorPickPressed);
-    InputComponent->BindKey(EKeys::RightMouseButton, IE_Released, this, &APTSculptPlayerController::OnColorPickReleased);
-    // Con la rueda abierta, E guarda el color actual en la paleta.
-    InputComponent->BindKey(EKeys::E, IE_Pressed, this, &APTSculptPlayerController::OnColorSavePressed);
+    // Rotar el shape: mantener + arrastrar (doble click = reset).
+    InputComponent->BindKey(K(TEXT("RotateShape")), IE_Pressed,  this, &APTSculptPlayerController::OnShapeRotatePressed);
+    InputComponent->BindKey(K(TEXT("RotateShape")), IE_Released, this, &APTSculptPlayerController::OnShapeRotateReleased);
 
-    // Menú de pausa: Esc
-    InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &APTSculptPlayerController::OnPausePressed);
+    // Borrar TODA la escultura: mantener 3s (solo el escultor).
+    InputComponent->BindKey(K(TEXT("ClearAll")), IE_Pressed,  this, &APTSculptPlayerController::OnClearAllPressed);
+    InputComponent->BindKey(K(TEXT("ClearAll")), IE_Released, this, &APTSculptPlayerController::OnClearAllReleased);
 
-    // Chat: Enter abre/enfoca el chat (al enviar vuelve el control al juego).
-    InputComponent->BindKey(EKeys::Enter, IE_Pressed, this, &APTSculptPlayerController::OnOpenChat);
+    // Color rápido: mantener abre la rueda; soltar confirma. Guardar color con su tecla.
+    InputComponent->BindKey(K(TEXT("ColorPick")), IE_Pressed,  this, &APTSculptPlayerController::OnColorPickPressed);
+    InputComponent->BindKey(K(TEXT("ColorPick")), IE_Released, this, &APTSculptPlayerController::OnColorPickReleased);
+    InputComponent->BindKey(K(TEXT("SaveColor")), IE_Pressed,  this, &APTSculptPlayerController::OnColorSavePressed);
 
-    // Ayuda: H muestra/oculta la lista de controles.
-    InputComponent->BindKey(EKeys::H, IE_Pressed, this, &APTSculptPlayerController::OnToggleControls);
+    InputComponent->BindKey(K(TEXT("Pause")), IE_Pressed, this, &APTSculptPlayerController::OnPausePressed);
+    InputComponent->BindKey(K(TEXT("Chat")),  IE_Pressed, this, &APTSculptPlayerController::OnOpenChat);
 }
 
 void APTSculptPlayerController::OnOpenChat()
@@ -209,10 +216,6 @@ void APTSculptPlayerController::OnOpenChat()
     if (GameplayHUD) GameplayHUD->FocusChat();
 }
 
-void APTSculptPlayerController::OnToggleControls()
-{
-    bShowControls = !bShowControls;
-}
 
 void APTSculptPlayerController::OnPausePressed()
 {
@@ -252,24 +255,7 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         SetIgnoreMoveInput(bMenuOpen);
     }
 
-    // ── Ayuda de controles en pantalla (tecla H) ──
-    if (GEngine && IsLocalController())
-    {
-        GEngine->AddOnScreenDebugMessage(987720, 0.25f, FColor(190, 190, 190), TEXT("[H] Controles"));
-        if (bShowControls)
-        {
-            static const FString Controls =
-                TEXT("CONTROLES\n")
-                TEXT("Mover: WASD     Camara: Mouse\n")
-                TEXT("Volar: doble ESPACIO (manten = sube)  ·  CTRL = baja\n")
-                TEXT("Esculpir: Click izq.     Tamano brocha: Rueda\n")
-                TEXT("Modos: 1 Agregar · 2 Borrar · 3 Pintar\n")
-                TEXT("Formas: TAB     Eje recto: X     Congelar plano: SHIFT\n")
-                TEXT("Color: manten Click der. (E = guardar color)\n")
-                TEXT("Chat: ENTER     Pausa: ESC");
-            GEngine->AddOnScreenDebugMessage(987721, 0.25f, FColor(255, 235, 150), Controls);
-        }
-    }
+    // (La lista de controles con H ahora vive en la UI del HUD: ver UPTGameplayHUDWidget::SetControlsVisible.)
 
     // Rueda de color abierta (mantener RMB): seguir el cursor para elegir matiz/saturación.
     if (bQuickColorActive)
@@ -318,12 +304,48 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
     {
         if (PreviewActor) PreviewActor->SetActorHiddenInGame(true);
         bStrokeActive = false;
+        bClearHeld    = false; // no dejar el "borrar todo" cargándose fuera de tu turno
+        ClearHoldTime = 0.f;
+        bStampOutsideCanvas = false; // que no quede el ícono de prohibido colgado
+        // Se terminó tu turno con el modo eje activo → apagarlo (y destruir su plano con colisión,
+        // para no dejarlo frenándote cuando ya no esculpís).
+        if (bAxisLock && !CanLocalPlayerSculpt()) SetAxisMode(false, bAxisHorizontal);
         return;
     }
     if (PreviewActor) PreviewActor->SetActorHiddenInGame(false);
 
+    // Borrar TODO: mantener BACKSPACE 3s (con cuenta regresiva en pantalla para que se entienda
+    // que hay que sostenerlo y para poder arrepentirse soltando).
+    // El feedback (círculo + contador) lo muestra el cuadrito del HUD leyendo GetClearHoldProgress.
+    if (bClearHeld)
+    {
+        ClearHoldTime += DeltaTime;
+        if (ClearHoldTime >= ClearHoldDuration)
+        {
+            bClearHeld    = false; // consumido: soltar después ya no dispara el "deshacer"
+            ClearHoldTime = 0.f;
+            Server_ClearSculpture();
+        }
+    }
+
+    // Rotar el shape mientras se mantiene la rueda del mouse (la cámara está bloqueada).
+    if (bRotatingShape)
+    {
+        float DX = 0.f, DY = 0.f;
+        GetInputMouseDelta(DX, DY);
+        if (DX != 0.f || DY != 0.f)
+        {
+            StampRotation.Yaw   += DX * ShapeRotateSpeed;
+            StampRotation.Pitch += DY * ShapeRotateSpeed;
+            StampRotation.Normalize();
+        }
+    }
+
     FVector Normal;
     FVector StampPos = GetStampPoint(Normal);
+
+    // ¿Estás apuntando fuera de la zona de modelado? El HUD lo avisa con el ícono de prohibido.
+    bStampOutsideCanvas = Volume && !Volume->IsInsideCanvas(StampPos);
 
     // Preview: actualizar cuando cambia forma, tamaño o modo (tool).
     if (PreviewMesh && (bPreviewDirty
@@ -340,31 +362,25 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         bPreviewDirty      = false;
     }
 
-    // Mover preview al punto de stamp
+    // Mover preview al punto de stamp. La rotación del actor = rotación del sello, así ves la
+    // forma girada antes de colocarla (los demás componentes —gizmo, ring, sombra, límite— fijan
+    // su propio transform WORLD cada tick, así que no les afecta).
     if (PreviewActor)
+    {
         PreviewActor->SetActorLocation(StampPos);
+        PreviewActor->SetActorRotation(StampRotation);
+    }
 
     // Gizmo de ejes: visible solo en modo eje con la herramienta Add.
     if (AxisGizmo)
     {
-        const bool bShowGizmo = bAxisLock && EditMode == EPTEditMode::Add;
+        const bool bShowGizmo = bAxisLock && EditMode == EPTEditMode::Add && !bEyesTool;
         AxisGizmo->SetVisibility(bShowGizmo);
         if (bShowGizmo)
         {
-            // Orientar al plano vertical activo. Si se esculpe o el plano está congelado
-            // (LeftShift), usar el plano fijo; si no, seguir la cámara.
-            FVector N = AxisPlaneN;
-            if (!bIsStamping && !bPlaneFrozen)
-            {
-                FVector S, D;
-                if (GetCameraRay(S, D))
-                {
-                    N = FVector(D.X, D.Y, 0.f).GetSafeNormal();
-                    if (N.IsNearlyZero()) N = FVector(1.f, 0.f, 0.f);
-                }
-            }
+            // Plano CONGELADO (fijado al activar el modo): el gizmo usa siempre AxisPlaneN.
             AxisGizmo->SetWorldLocation(StampPos);
-            AxisGizmo->SetWorldRotation(N.Rotation());
+            AxisGizmo->SetWorldRotation(AxisPlaneN.Rotation());
             const float Base = FMath::Max(PreviewMeshBaseSize, 1.f);
             AxisGizmo->SetWorldScale3D(FVector(StampSize / Base));
         }
@@ -468,21 +484,31 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
             RingMesh = SmoothRingMesh;
         }
 
+        // El preview se ve SIEMPRE (aunque estés fuera del lienzo): que no se pueda construir ahí
+        // lo avisa el ícono de "prohibido" del centro de la pantalla, no la desaparición del preview.
         const bool bShow = (RingMesh != nullptr);
         PaintRing->SetVisibility(bShow);
         if (bShow)
         {
-            if (CachedRingMesh != RingMesh)
+            // Rearmar si cambió el mesh O si cambió el estado de tinte (Paint ↔ Ojos/Smooth).
+            if (CachedRingMesh != RingMesh || CachedRingTint != bTint)
             {
                 PaintRing->SetStaticMesh(RingMesh);
-                // MID solo para Paint (toma el color); Smooth/ojos usan su material tal cual.
                 PaintRingMID = nullptr;
                 if (bTint)
                 {
+                    // Paint: MID para teñir con el color del picker.
                     if (UMaterialInterface* M = PaintRing->GetMaterial(0))
                         PaintRingMID = PaintRing->CreateDynamicMaterialInstance(0, M);
                 }
+                else
+                {
+                    // Ojos/Smooth: sacar cualquier override (el MID tintado de Paint) para que el
+                    // mesh use SU material original → el ojo siempre se ve igual, sin color.
+                    PaintRing->SetMaterial(0, nullptr);
+                }
                 CachedRingMesh = RingMesh;
+                CachedRingTint = bTint;
             }
             PaintRing->SetWorldLocation(StampPos);
             PaintRing->SetWorldRotation(FRotationMatrix::MakeFromZ(Normal).Rotator());
@@ -515,12 +541,12 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
             for (int32 i = 1; i <= N; ++i)
             {
                 const FVector P = FMath::Lerp(LastStampPos, StampPos, (float)i / N);
-                Server_ApplyStamp(P, Sh, StampSize, EditMode, CurrentPaintColor);
+                Server_ApplyStamp(P, Sh, StampSize, EditMode, CurrentPaintColor, StampRotation);
             }
         }
         else
         {
-            Server_ApplyStamp(StampPos, Sh, StampSize, EditMode, CurrentPaintColor);
+            Server_ApplyStamp(StampPos, Sh, StampSize, EditMode, CurrentPaintColor, StampRotation);
             bStrokeActive = true;
         }
         LastStampPos = StampPos;
@@ -556,12 +582,10 @@ FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
         return Start + Dir * AirDepth;
     }
 
-    // ── Modo eje: trazo recto sobre el plano vertical bloqueado al inicio ───
-    // Solo con la herramienta de esculpir (Add). El rayo se interseca con el
-    // plano (contiene Z mundo): vertical plomada + diagonales verticales rectas.
-    // Proyectar al plano del eje mientras se esculpe, O con el plano congelado (LeftShift):
-    // así el preview se desliza por el plano al mover la cámara, sin esculpir, hasta el LMB.
-    if (bAxisLock && EditMode == EPTEditMode::Add && (bIsStamping || bPlaneFrozen))
+    // ── Modo eje: trazo recto sobre el plano CONGELADO (fijado al activar Z/X) ───
+    // Solo con la herramienta de esculpir (Add) y fuera de la tool de ojos. El rayo del cursor
+    // se interseca con el plano fijo → trazos rectos; soltar/re-presionar mantiene el mismo plano.
+    if (bAxisLock && EditMode == EPTEditMode::Add && !bEyesTool)
     {
         const float denom = FVector::DotProduct(Dir, AxisPlaneN);
         FVector Pf = AxisOrigin;
@@ -733,30 +757,187 @@ void APTSculptPlayerController::OnStampPressed()
     if (bEyesTool) { PlaceEyeAtCursor(); return; }
 
     bIsStamping = true;
+    // Undo: un trazo = desde que apretás hasta que soltás. Avisar para que todos empiecen a grabar.
+    if (CanLocalPlayerSculpt()) Server_BeginStroke();
+    // NOTA: el plano del modo eje NO se recalcula al apretar (se fijó al activar el modo con
+    // Z/X). Así soltar y re-presionar el esculpido sigue en el MISMO plano.
+}
 
-    // En modo eje (solo Add): bloquear un plano VERTICAL (que contiene el eje Z
-    // global) que mira hacia la cámara. Movimiento libre y recto dentro del plano.
-    // Si el plano está congelado (LeftShift), NO se recalcula: se sigue dibujando en el
-    // mismo plano/ángulo aunque muevas la cámara y sueltes/vuelvas a apretar el click.
-    if (bAxisLock && EditMode == EPTEditMode::Add && !bPlaneFrozen)
+void APTSculptPlayerController::OnStampReleased()
+{
+    if (bIsStamping && CanLocalPlayerSculpt()) Server_EndStroke(); // cerrar el trazo (undo)
+    bIsStamping = false;
+    AxisChosen  = -1;
+}
+
+void APTSculptPlayerController::OnClearAllPressed()
+{
+    // Mientras escribís en el chat, BACKSPACE es para borrar texto, no la escultura.
+    if (GameplayHUD && GameplayHUD->IsChatOpen()) return;
+    if (!CanLocalPlayerSculpt()) return;
+    bClearHeld    = true;
+    ClearHoldTime = 0.f;
+}
+
+void APTSculptPlayerController::OnClearAllReleased()
+{
+    // Toque CORTO (soltaste antes de completar los 3s) = deshacer la última acción.
+    // Mantener hasta el final = borrar todo (eso lo dispara el tick, que ya limpió bClearHeld).
+    if (bClearHeld && ClearHoldTime < UndoTapMaxTime && CanLocalPlayerSculpt())
     {
+        Server_Undo();
+        if (GEngine) GEngine->AddOnScreenDebugMessage(987723, 1.2f, FColor(150, 220, 255),
+            TEXT("Deshacer"));
+    }
+    bClearHeld    = false;
+    ClearHoldTime = 0.f;
+}
+
+void APTSculptPlayerController::Server_BeginStroke_Implementation()
+{
+    if (!Volume)
+        Volume = Cast<APTSculptVolume>(
+            UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
+    if (Volume) Volume->Multicast_BeginStroke();
+}
+
+void APTSculptPlayerController::Server_EndStroke_Implementation()
+{
+    if (Volume) Volume->Multicast_EndStroke();
+}
+
+void APTSculptPlayerController::Server_Undo_Implementation()
+{
+    // Mismo gating que el stamp: solo el escultor del turno deshace.
+    if (const APTSculptGameState* G = GetWorld()->GetGameState<APTSculptGameState>())
+    {
+        if (G->TurnPhase != EPTTurnPhase::Drawing ||
+            G->CurrentSculptor != GetPlayerState<APTPlayerState>())
+            return;
+    }
+    if (!Volume)
+        Volume = Cast<APTSculptVolume>(
+            UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
+    if (Volume) Volume->Multicast_Undo(); // todos deshacen su propio respaldo del último trazo
+}
+
+void APTSculptPlayerController::Server_ClearSculpture_Implementation()
+{
+    // Mismo gating que el stamp: solo el escultor del turno puede borrar todo.
+    if (const APTSculptGameState* G = GetWorld()->GetGameState<APTSculptGameState>())
+    {
+        if (G->TurnPhase != EPTTurnPhase::Drawing ||
+            G->CurrentSculptor != GetPlayerState<APTPlayerState>())
+            return;
+    }
+    if (!Volume)
+        Volume = Cast<APTSculptVolume>(
+            UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
+    if (Volume) Volume->Multicast_ClearAll(); // lienzo en blanco en TODOS
+}
+
+void APTSculptPlayerController::OnShapeRotatePressed()
+{
+    const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+
+    // Doble click de rueda → volver a la rotación default.
+    if (Now - LastWheelPressTime <= WheelDoubleClickWindow)
+    {
+        StampRotation = FRotator::ZeroRotator;
+        bPreviewDirty = true;
+        UE_LOG(LogTemp, Log, TEXT("[Sculpt] Rotación del shape: reset"));
+    }
+    LastWheelPressTime = Now;
+
+    // Mientras se mantiene la rueda, el mouse rota el sello y NO mueve la cámara.
+    if (!bRotatingShape)
+    {
+        bRotatingShape = true;
+        SetIgnoreLookInput(true);
+    }
+}
+
+void APTSculptPlayerController::OnShapeRotateReleased()
+{
+    if (!bRotatingShape) return;
+    bRotatingShape = false;
+    SetIgnoreLookInput(false);
+}
+
+void APTSculptPlayerController::ToggleAxisVertical()
+{
+    // Si ya está en vertical → apagar; si no → encender vertical (cambia desde horizontal también).
+    SetAxisMode(!(bAxisLock && !bAxisHorizontal), /*bHorizontal=*/false);
+}
+
+void APTSculptPlayerController::ToggleAxisHorizontal()
+{
+    SetAxisMode(!(bAxisLock && bAxisHorizontal), /*bHorizontal=*/true);
+}
+
+void APTSculptPlayerController::SetAxisMode(bool bEnable, bool bHorizontal)
+{
+    bAxisLock = bEnable;
+
+    if (bEnable)
+    {
+        // El modo eje solo tiene sentido esculpiendo: auto-equipar Agregar (sin resetear el eje,
+        // que es justo lo que estamos por prender). Antes podías activarlo en Erase/Paint y quedaba
+        // tosco: el plano estaba pero no hacía nada.
+        SetModeInternal(EPTEditMode::Add, /*bResetAxis=*/false);
+
+        bAxisHorizontal = bHorizontal;
+        // Fijar el plano AHORA (al ángulo/posición actual de cámara) y no recalcularlo más.
         FVector Start, Dir;
         if (GetCameraRay(Start, Dir))
         {
             AxisOrigin = Start + Dir * AirDepth;
-            FVector N(Dir.X, Dir.Y, 0.f);            // normal horizontal → plano vertical
-            AxisPlaneN = N.GetSafeNormal();
-            if (AxisPlaneN.IsNearlyZero()) AxisPlaneN = FVector(1, 0, 0); // mirando recto arriba/abajo
+            if (bHorizontal)
+            {
+                AxisPlaneN = FVector(0.f, 0.f, 1.f); // plano horizontal a la altura de AxisOrigin
+            }
+            else
+            {
+                FVector N(Dir.X, Dir.Y, 0.f);        // normal horizontal → plano vertical
+                AxisPlaneN = N.GetSafeNormal();
+                if (AxisPlaneN.IsNearlyZero()) AxisPlaneN = FVector(1.f, 0.f, 0.f);
+            }
         }
     }
+
+    // Movimiento y cámara quedan LIBRES: lo que te impide cruzar el plano es su colisión física
+    // (APTSculptPlane), que el servidor spawnea y que solo bloquea al escultor.
+    Server_SetSculptPlane(bAxisLock, AxisOrigin, AxisPlaneN);
+
+    bPreviewDirty = true;
+    UE_LOG(LogTemp, Log, TEXT("[Sculpt] Modo eje: %s (%s)"),
+           bAxisLock ? TEXT("ON") : TEXT("OFF"), bHorizontal ? TEXT("horizontal") : TEXT("vertical"));
 }
 
-void APTSculptPlayerController::OnStampReleased() { bIsStamping = false; AxisChosen = -1; }
-
-void APTSculptPlayerController::ToggleAxisLock()
+void APTSculptPlayerController::Server_SetSculptPlane_Implementation(bool bEnable, FVector Origin, FVector Normal)
 {
-    bAxisLock = !bAxisLock;
-    UE_LOG(LogTemp, Log, TEXT("[Sculpt] Axis lock: %s"), bAxisLock ? TEXT("ON") : TEXT("OFF"));
+    // Solo el escultor del turno puede poner su plano (mismo gating que el stamp).
+    if (bEnable)
+    {
+        if (const APTSculptGameState* G = GetWorld()->GetGameState<APTSculptGameState>())
+        {
+            if (G->TurnPhase != EPTTurnPhase::Drawing ||
+                G->CurrentSculptor != GetPlayerState<APTPlayerState>())
+                bEnable = false;
+        }
+    }
+
+    // Siempre limpiar el plano anterior (toggle off, o cambio de plano vertical↔horizontal).
+    if (ActivePlane) { ActivePlane->Destroy(); ActivePlane = nullptr; }
+    if (!bEnable || !SculptPlaneClass) return;
+
+    FActorSpawnParameters SP;
+    SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    SP.Owner = this;
+    ActivePlane = GetWorld()->SpawnActor<APTSculptPlane>(
+        SculptPlaneClass, Origin, Normal.Rotation(), SP);
+    // Solo bloquea a MI pawn (el escultor); los demás lo ignoran al moverse.
+    if (ActivePlane) ActivePlane->SetTargetPawn(GetPawn());
 }
 
 void APTSculptPlayerController::OnScrollUp()
@@ -812,6 +993,15 @@ void APTSculptPlayerController::CycleShapes()
 
 void APTSculptPlayerController::SetMode(EPTEditMode M)
 {
+    SetModeInternal(M, /*bResetAxis=*/true);
+}
+
+void APTSculptPlayerController::SetModeInternal(EPTEditMode M, bool bResetAxis)
+{
+    // Cambiar de herramienta SIEMPRE resetea el modo eje al default (apagado) y destruye su plano
+    // con colisión: si no, quedaba activo estorbando al pintar/borrar.
+    if (bResetAxis && bAxisLock) SetAxisMode(false, bAxisHorizontal);
+
     bEyesTool = false; // 1/2/3 salen de la herramienta de ojos
     EditMode = M;
     ClampStampSize(); // respetar el mínimo del nuevo modo (Paint permite más chico)
@@ -822,6 +1012,8 @@ void APTSculptPlayerController::SetMode(EPTEditMode M)
 
 void APTSculptPlayerController::SetModeEyes()
 {
+    if (bAxisLock) SetAxisMode(false, bAxisHorizontal); // idem: la tool de ojos no usa el plano
+
     bEyesTool = true;
     bPreviewDirty = true;
     UE_LOG(LogTemp, Log, TEXT("[Sculpt] Mode: OJOS"));
@@ -831,8 +1023,13 @@ void APTSculptPlayerController::PlaceEyeAtCursor()
 {
     if (!Volume || !CanLocalPlayerSculpt()) return;
     FVector Normal;
-    const FVector Pt = GetStampPoint(Normal); // superficie (raymarch)
-    Server_AddEye(Pt, StampSize * 0.5f);      // vía el controller (tiene owner) → server → volumen
+    const FVector Pt = GetStampPoint(Normal);   // superficie (raymarch)
+    if (!Volume->IsInsideCanvas(Pt)) return;    // fuera de la zona de modelado: no colocar
+
+    // Cada ojo es una acción deshacible por sí sola: se envuelve en su propio trazo.
+    Server_BeginStroke();
+    Server_AddEye(Pt, StampSize * 0.5f);        // vía el controller (tiene owner) → server → volumen
+    Server_EndStroke();
 }
 
 void APTSculptPlayerController::Server_AddEye_Implementation(FVector WorldPos, float Radius)
@@ -848,35 +1045,6 @@ void APTSculptPlayerController::Server_AddEye_Implementation(FVector WorldPos, f
         Volume = Cast<APTSculptVolume>(
             UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
     if (Volume) Volume->AddEye(WorldPos, Radius);
-}
-
-void APTSculptPlayerController::OnFreezePressed()
-{
-    // Solo tiene sentido en modo eje. Fija el plano actual y bloquea caminar (cámara libre).
-    if (bPlaneFrozen || !bAxisLock) return;
-    bPlaneFrozen = true;
-
-    // Capturar el plano al ángulo actual (salvo que ya vengas esculpiendo con uno fijado).
-    if (!bIsStamping && EditMode == EPTEditMode::Add)
-    {
-        FVector Start, Dir;
-        if (GetCameraRay(Start, Dir))
-        {
-            AxisOrigin = Start + Dir * AirDepth;
-            FVector N(Dir.X, Dir.Y, 0.f);          // normal horizontal → plano vertical
-            AxisPlaneN = N.GetSafeNormal();
-            if (AxisPlaneN.IsNearlyZero()) AxisPlaneN = FVector(1, 0, 0);
-        }
-    }
-
-    SetIgnoreMoveInput(true);
-}
-
-void APTSculptPlayerController::OnFreezeReleased()
-{
-    if (!bPlaneFrozen) return;
-    bPlaneFrozen = false;
-    SetIgnoreMoveInput(false);
 }
 
 void APTSculptPlayerController::OnColorPickPressed()
@@ -1000,7 +1168,7 @@ bool APTSculptPlayerController::CanLocalPlayerSculpt() const
 }
 
 void APTSculptPlayerController::Server_ApplyStamp_Implementation(FVector WorldPos, EPTStampShape Shape,
-    float Size, EPTEditMode Mode, FLinearColor PaintColor)
+    float Size, EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot)
 {
     // Gating de autoridad: solo el escultor del turno en curso modifica la escultura.
     if (const APTSculptGameState* G = GetWorld()->GetGameState<APTSculptGameState>())
@@ -1013,6 +1181,6 @@ void APTSculptPlayerController::Server_ApplyStamp_Implementation(FVector WorldPo
         Volume = Cast<APTSculptVolume>(
             UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
     if (Volume)
-        Volume->Multicast_ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor);
+        Volume->Multicast_ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot);
 }
 

@@ -43,10 +43,20 @@ public:
     /** Aplica el volumen y la cultura guardados. Llamar una vez al arrancar (MainMenu). */
     void ApplyAudioAndLanguage(UWorld* World);
 
+    // ── Rebind de teclas (ver PTInputBindings.h) ────────────────────────────
+    // Override por acción: Id de acción → nombre de tecla (FKey::ToString). Solo se guardan las
+    // que el usuario cambió; el resto usa el default de la tabla.
+    const TMap<FName, FString>& GetKeyOverrides() const { return KeyOverrides; }
+    void SetKeyOverride(FName ActionId, const FString& KeyName) { KeyOverrides.Add(ActionId, KeyName); }
+    void ClearKeyOverrides() { KeyOverrides.Reset(); }
+
 private:
     UPROPERTY(Config)
     float MasterVolume = 1.0f;
 
     UPROPERTY(Config)
     FString LanguageCode = TEXT("en");
+
+    UPROPERTY(Config)
+    TMap<FName, FString> KeyOverrides;
 };

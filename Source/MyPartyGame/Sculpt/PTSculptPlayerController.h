@@ -128,6 +128,12 @@ public:
     /** Mesh indicador de ejes (se muestra en modo eje con la herramienta Add). */
     UPROPERTY(EditAnywhere, Category="Sculpt|PreviewMesh") UStaticMesh* AxisGizmoMesh = nullptr;
 
+    /** BP del plano de eje CON COLISIÓN (crear BP_SculptPlane derivado de APTSculptPlane, con el
+     *  static mesh de la grilla y su colisión —más grande/gruesa que el plano—). El servidor lo
+     *  spawnea al activar Z/X: te frena solo a vos (el escultor), a los demás ni los toca. */
+    UPROPERTY(EditAnywhere, Category="Sculpt|Axis")
+    TSubclassOf<class APTSculptPlane> SculptPlaneClass;
+
     // ── HUD de la partida ───────────────────────────────────────────────────
     /** Asignar WBP_GameplayHUD (reparentado a UPTGameplayHUDWidget). Se crea solo en BeginPlay. */
     UPROPERTY(EditAnywhere, Category="UI")
@@ -156,6 +162,15 @@ public:
     /** Forma activa. Leer desde Blueprint para mostrar HUD. */
     UPROPERTY(BlueprintReadOnly, Category="Sculpt")
     EPTStampShape StampShape = EPTStampShape::Sphere;
+
+    /** Rotación actual del sello (rueda del mouse mantenida + arrastrar). Doble click de rueda
+     *  la resetea. Se aplica al preview y viaja con el stamp (afecta la geometría, no el paint). */
+    UPROPERTY(BlueprintReadOnly, Category="Sculpt")
+    FRotator StampRotation = FRotator::ZeroRotator;
+
+    /** Grados de rotación por unidad de movimiento del mouse (sensibilidad al rotar shapes). */
+    UPROPERTY(EditAnywhere, Category="Sculpt")
+    float ShapeRotateSpeed = 3.f;
 
     /** Forma efectiva: Add/Paint usan la seleccionada; Erase/Smooth siempre esfera. */
     EPTStampShape EffectiveShape() const
@@ -194,12 +209,25 @@ public:
      *  clientes: el Volume no tiene owner por jugador, así que su Server RPC se descartaba). */
     UFUNCTION(Server, Reliable)
     void Server_ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
-                           EPTEditMode Mode, FLinearColor PaintColor);
+                           EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot);
 
     /** Coloca un ojo (tecla 4). Igual que el stamp: el cliente lo pide al server (que sí tiene
      *  owner), y el server lo agrega al volumen (se replica a todos via la propiedad Eyes). */
     UFUNCTION(Server, Reliable)
     void Server_AddEye(FVector WorldPos, float Radius);
+
+    /** Borra TODA la escultura (BACKSPACE mantenido). Solo el escultor del turno; el server
+     *  valida y difunde el clear a todos (Multicast_ClearAll del volumen). */
+    UFUNCTION(Server, Reliable)
+    void Server_ClearSculpture();
+
+    /** Deshace la última acción (BACKSPACE toque corto). Solo el escultor; el server difunde. */
+    UFUNCTION(Server, Reliable)
+    void Server_Undo();
+
+    /** Marcas de trazo para el undo: el server las difunde para que TODOS graben/cierren igual. */
+    UFUNCTION(Server, Reliable) void Server_BeginStroke();
+    UFUNCTION(Server, Reliable) void Server_EndStroke();
 
     /** Palabra secreta del turno y las 3 opciones (solo se setean en el cliente del
      *  escultor). El HUD puede leerlas directo, o suscribirse a los delegates de abajo. */
@@ -233,15 +261,39 @@ public:
      *  consulta para mantener el cursor visible y poder elegir color mientras se esculpe. */
     bool IsColorPickerOpen() const { return bQuickColorActive; }
 
+    // ── Estado de las tools, para la barra de herramientas del HUD ───────────
+    UFUNCTION(BlueprintPure, Category="Sculpt") bool IsEyesToolActive() const   { return bEyesTool; }
+    UFUNCTION(BlueprintPure, Category="Sculpt") bool IsAxisLockActive() const   { return bAxisLock; }
+    UFUNCTION(BlueprintPure, Category="Sculpt") bool IsAxisHorizontal() const   { return bAxisHorizontal; }
+
+    /** ¿El punto donde apuntás cae FUERA de la zona de modelado? El HUD muestra el ícono de
+     *  "prohibido construir" en el centro cuando esto es true. */
+    UFUNCTION(BlueprintPure, Category="Sculpt") bool IsStampOutsideCanvas() const { return bStampOutsideCanvas; }
+
+    /** ¿Se está manteniendo BACKSPACE (borrar todo)? Para el círculo de progreso del HUD. */
+    UFUNCTION(BlueprintPure, Category="Sculpt") bool IsClearHeld() const { return bClearHeld; }
+    /** Progreso 0..1 del "borrar todo" mientras se mantiene. Devuelve 0 durante la ventana del
+     *  toque corto (que es "deshacer"), así el círculo no parpadea en cada undo. */
+    UFUNCTION(BlueprintPure, Category="Sculpt")
+    float GetClearHoldProgress() const
+    {
+        if (!bClearHeld || ClearHoldTime <= UndoTapMaxTime) return 0.f;
+        return FMath::Clamp((ClearHoldTime - UndoTapMaxTime) / (ClearHoldDuration - UndoTapMaxTime), 0.f, 1.f);
+    }
+    /** Segundos que faltan para que se borre todo (cuenta regresiva del cuadrito). */
+    UFUNCTION(BlueprintPure, Category="Sculpt")
+    float GetClearHoldRemaining() const
+    { return bClearHeld ? FMath::Max(0.f, ClearHoldDuration - ClearHoldTime) : ClearHoldDuration; }
+
 private:
     APTSculptVolume* Volume = nullptr;
     UPROPERTY() class UPTLobbyEscapeMenuWidget* EscapeMenu = nullptr;
     void OnPausePressed();
     void OnOpenChat();
-    void OnToggleControls();          // H: muestra/oculta la lista de controles en pantalla
-    bool bShowControls = false;
 
     bool bIsStamping        = false;
+    // El cursor apunta fuera del lienzo (BoundsBox del volumen) → no se puede construir ahí.
+    bool bStampOutsideCanvas = false;
     bool bPreviewDirty      = true;
     bool bMovementCtxReady  = false; // mapping context de movimiento ya agregado
     bool bMenuInputLocked   = false; // look/move pausados por el menú de pausa (transición)
@@ -266,6 +318,9 @@ private:
     UPROPERTY() UStaticMeshComponent*     PaintRing         = nullptr;
     UPROPERTY() class UMaterialInstanceDynamic* PaintRingMID = nullptr;
     UPROPERTY() UStaticMesh*              CachedRingMesh    = nullptr;
+    // Si el preview de superficie está tintado (Paint) o no (Smooth/Ojos). Sin esto, al pasar de
+    // Paint a Ojos con el mismo mesh el MID tintado quedaba puesto y el ojo salía del color de Paint.
+    bool CachedRingTint = false;
     UPROPERTY() UUserWidget*              ColorPicker       = nullptr;
     UPROPERTY() class UPTGameplayHUDWidget* GameplayHUD     = nullptr;
     UPROPERTY() class UDecalComponent*    ShadowDecal       = nullptr;
@@ -280,20 +335,29 @@ private:
     FVector GetStampPoint(FVector& OutNormal) const;
     float   VoxelHint() const;
 
-    // ── Modo eje (tecla X): trazos rectos sin curvatura de cámara ───────────
-    bool            bAxisLock = false;
+    // ── Modo eje: trazos rectos sobre un plano CONGELADO (sin Shift) ─────────
+    // El plano se fija al activar el modo (tecla) y NO se recalcula: podés soltar/re-presionar el
+    // esculpido y sigue en el mismo plano. Mientras está activo: rotación de cámara bloqueada y
+    // movimiento restringido a A/D (strafe paralelo al plano) para no cruzar/rodear el plano.
+    //  - Z (bAxisHorizontal=false): plano VERTICAL (contiene el eje Z) → trazos verticales.
+    //  - X (bAxisHorizontal=true):  plano HORIZONTAL (normal = Z)      → trazos horizontales.
+    bool            bAxisLock       = false;
+    bool            bAxisHorizontal = false;
     FVector         AxisOrigin = FVector::ZeroVector;
     FVector         AxisPlaneN = FVector::ForwardVector;
     FVector         AxisU      = FVector::RightVector;
     FVector         AxisV      = FVector::UpVector;
     mutable int32   AxisChosen = -1; // -1 sin definir, 0=U, 1=V
-    void ToggleAxisLock();
+    void ToggleAxisVertical();   // tecla Z
+    void ToggleAxisHorizontal(); // tecla X
+    void SetAxisMode(bool bEnable, bool bHorizontal); // fija/limpia el plano
 
-    // Congelar plano (Parte D): con modo eje ON, mantener LeftShift fija el plano actual
-    // (no se recalcula desde la cámara) y bloquea caminar (la cámara sigue libre).
-    bool bPlaneFrozen = false;
-    void OnFreezePressed();
-    void OnFreezeReleased();
+    // El plano con colisión lo spawnea el SERVIDOR (el movimiento es autoritativo: si viviera solo
+    // en el cliente, el server lo corregiría atravesándolo). El cliente lo pide por este RPC.
+    UFUNCTION(Server, Reliable)
+    void Server_SetSculptPlane(bool bEnable, FVector Origin, FVector Normal);
+
+    UPROPERTY() class APTSculptPlane* ActivePlane = nullptr; // solo válido en el servidor
 
     // Color rápido (Parte B): mantener RMB abre la rueda; arrastrar elige; soltar confirma.
     bool bQuickColorActive = false;
@@ -313,11 +377,33 @@ private:
     void OnStampReleased();
     void OnScrollUp();
     void OnScrollDown();
+
+    // ── Rotar shapes (mantener la RUEDA del mouse + arrastrar) ──────────────
+    // Mientras se mantiene, la cámara NO se mueve: el mouse rota el sello. Doble click de
+    // rueda = volver a la rotación default (sin rotar).
+    bool  bRotatingShape   = false;
+    float LastWheelPressTime = -10.f;
+    static constexpr float WheelDoubleClickWindow = 0.30f;
+    void OnShapeRotatePressed();
+    void OnShapeRotateReleased();
+
+    // ── Borrar TODO (mantener BACKSPACE 3s) ────────────────────────────────
+    // Para empezar de cero rápido sin gastar el turno borrando con Erase. Se ignora mientras
+    // el chat está abierto (ahí BACKSPACE es para escribir).
+    bool  bClearHeld    = false;
+    float ClearHoldTime = 0.f;
+    static constexpr float ClearHoldDuration = 3.0f;
+    // Toque corto (soltar antes de esto) = deshacer la última acción, en vez de borrar todo.
+    static constexpr float UndoTapMaxTime = 0.35f;
+    void OnClearAllPressed();
+    void OnClearAllReleased();
     float MinForMode() const { return (EditMode == EPTEditMode::Paint) ? PaintMinSize : MinSize; }
     void  ClampStampSize()   { StampSize = FMath::Clamp(StampSize, MinForMode(), MaxSize); }
     void SetShape(EPTStampShape S);
     void CycleShapes();                                    // Tab: cicla Sphere→Cube→Cylinder→TriPrism
     void SetMode(EPTEditMode M);                           // 1/2/3: Add/Erase/Paint
+    // bResetAxis=false lo usa el modo eje al auto-equipar Add (si no, se apagaría a sí mismo).
+    void SetModeInternal(EPTEditMode M, bool bResetAxis);
     void SetModeAdd()   { SetMode(EPTEditMode::Add);   }
     void SetModeErase() { SetMode(EPTEditMode::Erase); }
     void SetModePaint() { SetMode(EPTEditMode::Paint); }

@@ -102,6 +102,16 @@ public:
     // Convierte coord global de celda → (brick key, coord local dentro del brick).
     static void CellToBrick(int32 X, int32 Y, int32 Z, FPTBrickKey& OutKey, int32& lx, int32& ly, int32& lz);
 
+    // ── Undo por TRAZO ─────────────────────────────────────────────────────
+    // Copy-on-write: durante un trazo, la primera vez que se toca un brick se guarda una copia.
+    // Deshacer = restaurar esas copias. La memoria es proporcional a lo que tocó el trazo (no al
+    // volumen entero), que es lo que hace viable tener varios niveles de undo.
+    void BeginStroke();            // arranca a grabar (cierra cualquier grabación previa)
+    void PushStroke();             // cierra el trazo y lo apila (si tocó algo)
+    bool UndoStroke();             // restaura el último trazo apilado y lo marca dirty
+    bool CanUndo() const { return UndoStack.Num() > 0; }
+    void ClearUndo();              // se llama al limpiar todo (ya no hay a qué volver)
+
     // ── Surface Nets (estático, corre en ThreadPool) ───────────────────────
     static void MeshBrick(const FBrickSnapshot& Snap, FPTBrickMesh& Out);
 
@@ -114,4 +124,15 @@ private:
 
     const FPTBrick* FindBrick(const FPTBrickKey& Key) const;
     FPTBrick&       FindOrAddBrick(const FPTBrickKey& Key);
+
+    // Un trazo = los bricks que tocó, con su contenido ANTERIOR. Valor null = el brick no existía
+    // antes (al deshacer hay que borrarlo).
+    struct FStrokeBackup { TMap<FPTBrickKey, TSharedPtr<FPTBrick>> Bricks; };
+    FStrokeBackup          CurrentStroke;
+    TArray<FStrokeBackup>  UndoStack;
+    bool                   bRecording = false;
+    static constexpr int32 MaxUndoSteps = 8;
+
+    // Guarda el estado previo del brick si es la primera vez que lo toca este trazo.
+    void BackupBrick(const FPTBrickKey& Key);
 };

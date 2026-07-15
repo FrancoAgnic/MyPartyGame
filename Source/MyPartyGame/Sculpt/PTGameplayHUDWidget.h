@@ -28,9 +28,24 @@ public:
      *  da foco al input; al enviar vuelve solo a Game Only. */
     void FocusChat();
 
+    /** true mientras el chat está abierto/enfocado. Lo consulta el PlayerController para no
+     *  interpretar teclas de juego (ej: BACKSPACE de "borrar todo") mientras estás escribiendo. */
+    bool IsChatOpen() const { return bChatOpen; }
+
+    /** Rellena la lista de controles desde PTInput::GetBindings() (fuente de verdad única).
+     *  Llamar de nuevo tras un rebind y la UI queda actualizada. */
+    void RebuildControls();
+
+    /** Arma la barra de herramientas (una sola vez): tools 1/2/3/4 + formas (TAB). */
+    void BuildToolbar();
+    /** Actualiza qué está equipado y qué barras se ven según el modo. Se llama desde RefreshTick. */
+    void RefreshToolbar();
+
 protected:
     virtual bool Initialize() override;
     virtual void NativeDestruct() override;
+    // Solo para el círculo de "borrar todo": RefreshTick va a 10Hz y se vería a saltos.
+    virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
     // ── Widgets del WBP (todos opcionales: el WBP compila aunque falte alguno) ──
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      TxtSculptor;   // "X está esculpiendo"
@@ -44,6 +59,51 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      TxtWord1;
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      TxtWord2;
     UPROPERTY(meta=(BindWidgetOptional)) UScrollBox*          ChatScroll;
+
+    // ── Lista de controles completa (opcional: para una pantalla de ayuda/settings) ────
+    UPROPERTY(meta=(BindWidgetOptional)) class UPanelWidget*  ControlsBox;
+    UPROPERTY(EditAnywhere, Category="UI")
+    TSubclassOf<class UPTControlRowWidget> ControlRowClass;
+
+    // ── Barra de herramientas (esquina inferior derecha, estilo hotbar) ──────
+    // Contenedores en el WBP (HorizontalBox): C++ los llena con cuadritos.
+    UPROPERTY(meta=(BindWidgetOptional)) class UPanelWidget* ToolsBox;   // 1/2/3/4: Add/Erase/Paint/Ojos
+    UPROPERTY(meta=(BindWidgetOptional)) class UPanelWidget* ShapesBox;  // TAB: formas (solo en Add/Paint)
+    UPROPERTY(meta=(BindWidgetOptional)) class UPanelWidget* HintsBox;   // atajos contextuales (Z/X, E...)
+    // Cuadrito de "borrar todo" (BACKSPACE mantenido): contenedor propio porque, a diferencia de
+    // los hints, NO se rearma por contexto — se construye una vez y se le actualiza el progreso.
+    UPROPERTY(meta=(BindWidgetOptional)) class UPanelWidget* ClearBox;
+
+    // Ícono de "prohibido construir" (🚫) en el centro de la pantalla: aparece cuando apuntás
+    // fuera de la zona de modelado, con CUALQUIER herramienta. La textura se asigna directo en el
+    // brush de este Image dentro del WBP; C++ solo lo muestra/oculta.
+    UPROPERTY(meta=(BindWidgetOptional)) class UImage* OutOfBoundsIcon;
+
+    /** WBP del cuadrito (derivado de UPTToolSlotWidget). */
+    UPROPERTY(EditAnywhere, Category="UI")
+    TSubclassOf<class UPTToolSlotWidget> ToolSlotClass;
+
+    // Iconos de cada tool/forma/atajo. Asignar en el WBP; si falta alguno el cuadrito muestra
+    // igual la tecla y el nombre.
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconAdd       = nullptr;
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconErase     = nullptr;
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconPaint     = nullptr;
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconEyes      = nullptr;
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconSphere    = nullptr;
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconCube      = nullptr;
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconCylinder  = nullptr;
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconCone      = nullptr;
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconAxisVert  = nullptr;
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconAxisHoriz = nullptr;
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconSaveColor = nullptr;
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconClearAll  = nullptr;
+
+    // Cuadritos creados (para actualizar el equipado sin reconstruir).
+    UPROPERTY() TArray<class UPTToolSlotWidget*> ToolSlots;   // orden: Add, Erase, Paint, Ojos
+    UPROPERTY() TArray<class UPTToolSlotWidget*> ShapeSlots;  // orden: Sphere, Cube, Cylinder, Cono
+    UPROPERTY() TArray<class UPTToolSlotWidget*> HintSlots;
+    UPROPERTY() class UPTToolSlotWidget* ClearSlot = nullptr; // BACKSPACE (con círculo de progreso)
+    FString CachedHintSig; // los atajos contextuales solo se rearman si cambia el contexto
     // RichTextBlock: el nombre usa el estilo "name" (color); el mensaje queda en el default.
     UPROPERTY(meta=(BindWidgetOptional)) class URichTextBlock* TxtChat;    // log de chat (Auto Wrap)
     UPROPERTY(meta=(BindWidgetOptional)) UEditableTextBox* ChatInput;

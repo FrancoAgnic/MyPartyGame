@@ -46,6 +46,13 @@ public:
     UPROPERTY(ReplicatedUsing=OnRep_HeadBlob)
     TArray<uint8> HeadBlob;
 
+    // Sube +1 cada vez que el jugador confirma una cabeza nueva. El pawn compara esta versión
+    // con la que tiene aplicada y se re-aplica si difiere. Es la red de seguridad ante el orden
+    // de llegada: si el blob replica ANTES de que el PlayerState tenga pawn, OnRep_HeadBlob no
+    // encuentra a quién aplicársela y nunca vuelve a dispararse (el valor ya no cambia).
+    UPROPERTY(Replicated)
+    int32 HeadVersion = 0;
+
     UFUNCTION() void OnRep_HeadBlob();
 
     // Llamar solo desde el servidor (HasAuthority).

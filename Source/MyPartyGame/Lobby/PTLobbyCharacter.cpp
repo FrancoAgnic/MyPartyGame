@@ -156,7 +156,12 @@ void APTLobbyCharacter::BakeAndReplicateHead(UProceduralMeshComponent* ClaySrc, 
 void APTLobbyCharacter::Server_SetHeadBlob_Implementation(const TArray<uint8>& Blob)
 {
     if (APTPlayerState* PS = GetPlayerState<APTPlayerState>())
+    {
         PS->HeadBlob = Blob;      // se replica a los clientes (OnRep_HeadBlob)
+        PS->HeadVersion++;        // ...y sube la versión → los pawns se re-aplican sí o sí
+        UE_LOG(LogTemp, Log, TEXT("[Head] Cabeza replicada: %d bytes (v%d) de %s"),
+               Blob.Num(), PS->HeadVersion, *PS->GetPlayerName());
+    }
     // En el servidor no salta OnRep: aplicar acá para que el host/servidor también la vea.
     ApplyReplicatedHead();
 }
@@ -461,14 +466,21 @@ void APTLobbyCharacter::UpdateNameTag()
 
     if (UPTNameTagWidget* W = Cast<UPTNameTagWidget>(NameTag->GetUserWidgetObject()))
         if (const APTPlayerState* PS = GetPlayerState<APTPlayerState>())
-            W->SetPlayerName(PS->DisplayName);
+        {
+            // DisplayName lo setea el GameMode y se replica; a veces (sobre todo tras el seamless
+            // travel) puede llegar vacío. Caer al nombre nativo del PlayerState (el "?Name=" de
+            // Steam) evita el cartel en blanco.
+            FString N = PS->DisplayName;
+            if (N.IsEmpty()) N = PS->GetPlayerName();
+            W->SetPlayerName(N);
+        }
 }
 
 void APTLobbyCharacter::Multicast_ShowChatBubble_Implementation(const FString& Text, bool bGuess)
 {
     if (NameTag)
     {
-        ChatBubbleUntil = GetWorld() ? GetWorld()->GetTimeSeconds() + 2.f : 0.f;
+        ChatBubbleUntil = GetWorld() ? GetWorld()->GetTimeSeconds() + ChatBubbleDuration : 0.f;
         NameTag->SetVisibility(true);
         if (UPTNameTagWidget* W = Cast<UPTNameTagWidget>(NameTag->GetUserWidgetObject()))
         {
@@ -528,11 +540,8 @@ void APTLobbyCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 
 void APTLobbyCharacter::OnJumpPressed()
 {
-    const float Now = GetWorld()->GetTimeSeconds();
-    if (Now - LastJumpTime < DoubleTapWindow)
-        ToggleFly(); // doble toque de espacio → alterna vuelo
-    LastJumpTime = Now;
-
+    // Ya NO hay doble-toque para alternar vuelo: el modo lo decide el nivel. En Lvl-01 siempre se
+    // vuela (bForceFlying, lo pone el gameplay) y en el lobby/menú siempre se camina.
     if (bFlying) bAscend = true;
     else
     {
@@ -559,11 +568,23 @@ void APTLobbyCharacter::OnJumpReleased()
 
 void APTLobbyCharacter::ToggleFly()
 {
+    // En el gameplay (Lvl-01) el vuelo es obligatorio: caminar se sentía con lag y el nivel es un
+    // vacío sin piso. El doble-espacio no debe poder apagarlo.
+    if (bForceFlying) return;
     SetFlyingMode(!bFlying);
+}
+
+void APTLobbyCharacter::ApplyGameplayMovementMode()
+{
+    bForceFlying = true;
+    if (UCharacterMovementComponent* M = GetCharacterMovement())
+        M->bOrientRotationToMovement = false; // en el gameplay molesta; en el lobby queda lindo
+    SetFlyingMode(true);
 }
 
 void APTLobbyCharacter::SetFlyingMode(bool bEnable)
 {
+    if (bForceFlying) bEnable = true; // no se puede salir del vuelo donde es obligatorio
     bFlying = bEnable;
     UCharacterMovementComponent* M = GetCharacterMovement();
     if (bFlying)
@@ -586,7 +607,30 @@ void APTLobbyCharacter::Tick(float DeltaSeconds)
 
     // Actualizar el cartel del nombre cada ~0.5s (el DisplayName se replica, puede tardar).
     NameTagAccum += DeltaSeconds;
-    if (NameTagAccum >= 0.5f) { NameTagAccum = 0.f; UpdateNameTag(); }
+    if (NameTagAccum >= 0.5f)
+    {
+        NameTagAccum = 0.f;
+        UpdateNameTag();
+
+        // Cabeza custom: aplicarla si el PlayerState tiene una versión distinta a la puesta.
+        // Cubre CUALQUIER orden de llegada (blob antes que el pawn, pawn antes que el blob,
+        // re-edición, seamless travel) — los OnRep solos se perdían carreras y no reintentaban.
+        if (const APTPlayerState* PS = GetPlayerState<APTPlayerState>())
+        {
+            if (PS->HeadVersion != AppliedHeadVersion && PS->HeadBlob.Num() > 0)
+            {
+                AppliedHeadVersion = PS->HeadVersion;
+                ApplyReplicatedHead();
+            }
+        }
+    }
+
+    // Vuelo obligatorio (Lvl-01): si algo dejó el movimiento en caminar, volver a vuelo.
+    if (bForceFlying && GetCharacterMovement()
+        && GetCharacterMovement()->MovementMode != MOVE_Flying)
+    {
+        SetFlyingMode(true);
+    }
 
     if (!bFlying) return;
     if (bAscend)  AddMovementInput(FVector::UpVector,  1.f);

@@ -27,9 +27,70 @@ const FPTBrick* FPTSculptField::FindBrick(const FPTBrickKey& Key) const
 
 FPTBrick& FPTSculptField::FindOrAddBrick(const FPTBrickKey& Key)
 {
+    // Undo: guardar cómo estaba este brick ANTES de que el trazo lo toque (solo la 1ra vez).
+    BackupBrick(Key);
+
     TSharedPtr<FPTBrick>& Slot = Bricks.FindOrAdd(Key);
     if (!Slot.IsValid()) Slot = MakeShared<FPTBrick>();
     return *Slot;
+}
+
+// ─── Undo por trazo ──────────────────────────────────────────────────────────
+
+void FPTSculptField::BackupBrick(const FPTBrickKey& Key)
+{
+    if (!bRecording) return;
+    if (CurrentStroke.Bricks.Contains(Key)) return; // ya respaldado en este trazo
+
+    if (const TSharedPtr<FPTBrick>* Existing = Bricks.Find(Key))
+        CurrentStroke.Bricks.Add(Key, MakeShared<FPTBrick>(**Existing)); // copia del contenido
+    else
+        CurrentStroke.Bricks.Add(Key, nullptr); // no existía → al deshacer se borra
+}
+
+void FPTSculptField::BeginStroke()
+{
+    CurrentStroke.Bricks.Reset();
+    bRecording = true;
+}
+
+void FPTSculptField::PushStroke()
+{
+    bRecording = false;
+    // Se apila SIEMPRE (aunque el trazo no haya tocado geometría, ej: solo pintura u ojos): el
+    // volumen lleva su propia pila en paralelo y las dos tienen que quedar 1:1 para deshacer juntas.
+    UndoStack.Add(MoveTemp(CurrentStroke));
+    CurrentStroke.Bricks.Reset();
+    // Tope de niveles: tirar el más viejo (la memoria es ∝ a lo que tocó cada trazo).
+    while (UndoStack.Num() > MaxUndoSteps) UndoStack.RemoveAt(0);
+}
+
+bool FPTSculptField::UndoStroke()
+{
+    if (UndoStack.Num() == 0) return false;
+
+    FStrokeBackup S = MoveTemp(UndoStack.Last());
+    UndoStack.Pop();
+
+    for (const auto& It : S.Bricks)
+    {
+        if (It.Value.IsValid()) Bricks.Add(It.Key, It.Value); // restaurar contenido previo
+        else                    Bricks.Remove(It.Key);        // no existía antes → sacarlo
+
+        // Marcar el brick y sus vecinos: los bordes comparten muestras, si no quedan costuras.
+        for (int32 dz = -1; dz <= 1; ++dz)
+        for (int32 dy = -1; dy <= 1; ++dy)
+        for (int32 dx = -1; dx <= 1; ++dx)
+            MarkDirty(FPTBrickKey(It.Key.X + dx, It.Key.Y + dy, It.Key.Z + dz));
+    }
+    return true;
+}
+
+void FPTSculptField::ClearUndo()
+{
+    UndoStack.Reset();
+    CurrentStroke.Bricks.Reset();
+    bRecording = false;
 }
 
 int32 FPTSculptField::SectionIndex(const FPTBrickKey& Key)

@@ -70,6 +70,10 @@ protected:
     // cuando CreateSession se hizo con bPrivate=true; queda vacío/oculto en sesión pública.
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* GeneratedCodeText;
 
+    // Número de versión (ej: "v0.1.0"). Lo llena C++ desde ProjectVersion (DefaultGame.ini),
+    // que se sube en cada build. Crear un TextBlock llamado "VersionText" en el WBP.
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* VersionText;
+
     // ------------------------------------------------------------------
     // Handlers de botones
     // ------------------------------------------------------------------

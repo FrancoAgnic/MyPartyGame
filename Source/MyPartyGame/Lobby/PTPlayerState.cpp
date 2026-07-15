@@ -13,6 +13,7 @@ void APTPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     DOREPLIFETIME(APTPlayerState, bHasGuessedThisTurn);
     DOREPLIFETIME(APTPlayerState, GameScore);
     DOREPLIFETIME(APTPlayerState, HeadBlob);
+    DOREPLIFETIME(APTPlayerState, HeadVersion);
 }
 
 void APTPlayerState::CopyProperties(APlayerState* NewPlayerState)
@@ -22,7 +23,8 @@ void APTPlayerState::CopyProperties(APlayerState* NewPlayerState)
     {
         PT->DisplayName = DisplayName;
         PT->bIsHost     = bIsHost;
-        PT->HeadBlob    = HeadBlob; // la cabeza custom viaja al Lvl-01 (seamless travel)
+        PT->HeadBlob    = HeadBlob;    // la cabeza custom viaja al Lvl-01 (seamless travel)
+        PT->HeadVersion = HeadVersion; // ...y su versión, para que el pawn nuevo la aplique
         // bHasGuessedThisTurn NO se copia: es estado por-turno, arranca en false en el juego.
     }
 }

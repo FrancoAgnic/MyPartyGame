@@ -679,6 +679,17 @@ void UMultiplayerSessionsSubsystem::DestroySession()
     }
 }
 
+void UMultiplayerSessionsSubsystem::CleanupStaleSession()
+{
+    if (!GetSessions().IsValid()) return;
+    if (GetSessions()->GetNamedSession(NAME_GameSession) == nullptr) return; // nada que limpiar
+
+    UE_LOG(LogPTSessions, Warning,
+        TEXT("CleanupStaleSession: quedó una sesión registrada al volver al menú → destruyendo."));
+    bCreateSessionOnDestroy = false; // limpieza pura: no recrear nada después
+    DestroySession();
+}
+
 void UMultiplayerSessionsSubsystem::HandleDestroySessionComplete(FName SessionName, bool bWasSuccessful)
 {
     if (GetSessions().IsValid())

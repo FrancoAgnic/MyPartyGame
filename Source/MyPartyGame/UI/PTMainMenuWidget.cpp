@@ -13,6 +13,7 @@
 #include "Components/TextBlock.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "HAL/PlatformApplicationMisc.h"
+#include "Misc/ConfigCacheIni.h"
 
 // ==========================================================================
 // Inicialización
@@ -33,6 +34,16 @@ bool UPTMainMenuWidget::Initialize()
     // Si hay un PlayButton, arrancar en la pantalla principal (submenú Host/Find/EnterCode oculto).
     // Si el WBP todavía no tiene PlayButton, no se toca nada (comportamiento previo, todo visible).
     if (PlayButton) SetPlaySubmenuVisible(false);
+
+    // Número de versión (desde ProjectVersion de DefaultGame.ini, que se sube en cada build).
+    if (VersionText)
+    {
+        FString Ver;
+        GConfig->GetString(TEXT("/Script/EngineSettings.GeneralProjectSettings"),
+                           TEXT("ProjectVersion"), Ver, GGameIni);
+        if (Ver.IsEmpty()) Ver = TEXT("0.0.0");
+        VersionText->SetText(FText::FromString(FString::Printf(TEXT("v%s"), *Ver)));
+    }
 
     return true;
 }
@@ -76,6 +87,11 @@ void UPTMainMenuWidget::MenuSetup(int32 InNumPublicConnections, FString InLobbyP
 
     if (Sessions)
     {
+        // Estar en el menú principal significa NO estar en una sala (este overlay solo se muestra
+        // en standalone). Si quedó una sesión registrada de una partida anterior, limpiarla: si no,
+        // tu sala vieja sigue anunciada (fantasma en Find) y no podés unirte a ninguna otra.
+        Sessions->CleanupStaleSession();
+
         Sessions->OnLoginComplete.AddUObject(this, &UPTMainMenuWidget::OnLogin);
         Sessions->OnCreateSessionComplete.AddUObject(this, &UPTMainMenuWidget::OnCreateSession);
         Sessions->OnFindSessionsComplete.AddUObject(this, &UPTMainMenuWidget::OnFindSessions);
