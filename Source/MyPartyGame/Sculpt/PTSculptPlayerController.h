@@ -252,6 +252,10 @@ protected:
     // en APTSculptGameMode::StartPawnFlying.
     virtual void AcknowledgePossession(APawn* P) override;
 
+    /** Manda al servidor el idioma elegido en Settings (para ver la palabra en MI idioma).
+        Reintenta solo si el PlayerState todavía no replicó. */
+    void PushLanguageToServer();
+
 public:
     /** true si el menú de pausa (ESC) está abierto. Lo consulta el HUD para no pisar el
      *  cursor con su ApplyInputMode mientras el menú necesita el mouse para la UI. */

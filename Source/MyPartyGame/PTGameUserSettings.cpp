@@ -34,7 +34,12 @@ void UPTGameUserSettings::SetMasterVolume(float InVolume)
 void UPTGameUserSettings::SetLanguageCode(const FString& InLanguageCode)
 {
     LanguageCode = InLanguageCode;
-    FInternationalization::Get().SetCurrentCulture(LanguageCode);
+    // Ojo: esto puede devolver false si todavía no hay datos de localización para ese idioma.
+    // El idioma de la PALABRA a adivinar NO depende de esto: se lee LanguageCode directamente.
+    const bool bOk = FInternationalization::Get().SetCurrentCulture(LanguageCode);
+    UE_LOG(LogTemp, Log, TEXT("[Lang] LanguageCode=%s  SetCurrentCulture=%s"),
+           *LanguageCode, bOk ? TEXT("OK") : TEXT("FALLÓ (falta localización)"));
+    SaveSettings();
 }
 
 int32 UPTGameUserSettings::GetGraphicsQuality() const

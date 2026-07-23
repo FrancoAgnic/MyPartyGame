@@ -19,6 +19,7 @@
 #include "PTSculptPlane.h"
 #include "../PTInputBindings.h"
 #include "../Lobby/PTPlayerState.h"
+#include "../PTGameUserSettings.h"
 #include "Internationalization/Internationalization.h"
 #include "Internationalization/Culture.h"
 #include "Engine/Engine.h"
@@ -43,10 +44,30 @@ void APTSculptPlayerController::AcknowledgePossession(APawn* P)
         Char->ApplyGameplayMovementMode(); // vuelo obligatorio + sin orientar al movimiento
 
     // Avisar al servidor mi idioma (para ver la palabra a adivinar EN MI IDIOMA).
+    PushLanguageToServer();
+}
+
+void APTSculptPlayerController::PushLanguageToServer()
+{
+    if (!IsLocalController()) return;
+
+    // El idioma sale de NUESTRA preferencia guardada, no de la cultura del motor:
+    // SetCurrentCulture("en") falla en silencio mientras no haya datos de localización.
+    FString Lang = TEXT("es");
+    if (const UPTGameUserSettings* S = UPTGameUserSettings::Get()) Lang = S->GetLanguageCode();
+
     if (APTPlayerState* PS = GetPlayerState<APTPlayerState>())
     {
-        const FString Culture = FInternationalization::Get().GetCurrentCulture()->GetName();
-        PS->Server_SetLanguage(Culture);
+        PS->Server_SetLanguage(Lang);
+        UE_LOG(LogTemp, Log, TEXT("[Lang] Idioma enviado al servidor: %s"), *Lang);
+        return;
+    }
+
+    // El PlayerState todavía no llegó por replicación → reintentar.
+    if (UWorld* W = GetWorld())
+    {
+        FTimerHandle H;
+        W->GetTimerManager().SetTimer(H, this, &APTSculptPlayerController::PushLanguageToServer, 0.5f, false);
     }
 }
 

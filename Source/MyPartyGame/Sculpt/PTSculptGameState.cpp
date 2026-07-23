@@ -1,5 +1,6 @@
 #include "PTSculptGameState.h"
 #include "../Lobby/PTPlayerState.h"
+#include "../PTGameUserSettings.h"
 #include "GameFramework/PlayerController.h"
 #include "Internationalization/Internationalization.h"
 #include "Internationalization/Culture.h"
@@ -12,9 +13,13 @@ void APTSculptGameState::OnRep_Masked()
 
 void APTSculptGameState::RefreshLocalMasked()
 {
-    // Idioma del jugador LOCAL: por la cultura actual (la que eligió en Settings).
-    const FString Culture = FInternationalization::Get().GetCurrentCulture()->GetName();
-    const bool bEnglish = Culture.StartsWith(TEXT("en"));
+    // Idioma del jugador LOCAL: se toma de NUESTRA preferencia guardada, NO de la cultura del
+    // motor. Motivo: FInternationalization::SetCurrentCulture("en") falla en silencio si el juego
+    // todavía no tiene datos de localización para ese idioma → la cultura seguiría en "es" y todos
+    // verían la palabra en español. El idioma de la palabra es una opción nuestra, no de UE.
+    FString Lang = TEXT("es");
+    if (const UPTGameUserSettings* S = UPTGameUserSettings::Get()) Lang = S->GetLanguageCode();
+    const bool bEnglish = Lang.StartsWith(TEXT("en"));
     MaskedWord = bEnglish ? MaskedWordEn : MaskedWordEs;
     if (MaskedWord.IsEmpty() && !bEnglish) MaskedWord = MaskedWordEn; // fallback si falta el idioma
     if (MaskedWord.IsEmpty() &&  bEnglish) MaskedWord = MaskedWordEs;
