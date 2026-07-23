@@ -15,7 +15,9 @@ struct FPTWordRow : public FTableRowBase
 {
     GENERATED_BODY()
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Word") FString Word;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Word") FString Word;   // primaria (español)
+    // Traducción al inglés (columna opcional del CSV/DataTable). Vacía = el inglés cae a Word.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Word") FString WordEn;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Word") FName   Category;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Word") int32   Difficulty = 2; // 1=Fácil 2=Media 3=Difícil
 };

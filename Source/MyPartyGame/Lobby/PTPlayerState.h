@@ -39,6 +39,17 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
     int32 GameScore = 0;
 
+    // Idioma elegido por el jugador ("es"/"en"). El cliente lo manda al servidor para que el
+    // GameMode le muestre la palabra a adivinar EN SU IDIOMA (ver Server_SetLanguage en el controller).
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
+    FString Language = TEXT("es");
+
+    bool IsEnglish() const { return Language.StartsWith(TEXT("en")); }
+
+    // El cliente le dice al servidor su idioma (para la palabra a adivinar por idioma).
+    UFUNCTION(Server, Reliable)
+    void Server_SetLanguage(const FString& InLanguage);
+
     // ── Cabeza custom (replicada) ───────────────────────────────────────────
     // Geometría final horneada de la cabeza (arcilla + pintura + ojos), serializada y COMPRIMIDA
     // (Zlib) a bytes: así entra en el límite de replicación (la malla cruda supera los ~64KB).

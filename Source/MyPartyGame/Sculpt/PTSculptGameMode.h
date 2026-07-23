@@ -93,17 +93,18 @@ private:
     FTimerHandle StartDelayTimer;   // arranque diferido del primer turno (ver StartDelay)
     bool         bStartScheduled = false; // evita re-agendar el arranque en cada CheckStart
 
-    // Estado del turno (solo servidor). La palabra real vive acá, jamás se replica.
-    FString          CurrentWord;
-    TArray<FString>  CurrentChoices;
-    int32            TurnsLeftThisRound = 0; // turnos que faltan para cerrar la ronda actual
+    // Estado del turno (solo servidor). La palabra real vive acá (ES + EN), jamás se replica.
+    FPTWordEntry           CurrentWord;    // ForLang(false)=español, ForLang(true)=inglés
+    TArray<FPTWordEntry>   CurrentChoices; // las 3 opciones, cada una con sus 2 traducciones
+    int32                  TurnsLeftThisRound = 0; // turnos que faltan para cerrar la ronda
 
-    // Revelado progresivo de letras a los que adivinan (anti-spoiler: nunca la palabra entera).
-    TArray<int32> RevealQueue;  // posiciones (índice en CurrentWord) a revelar, en orden
-    TSet<int32>   RevealedPos;  // posiciones ya reveladas
+    // Revelado progresivo por IDIOMA (las dos traducciones tienen letras distintas → dos sets).
+    TArray<int32> RevealQueueEs, RevealQueueEn;
+    TSet<int32>   RevealedPosEs, RevealedPosEn;
     void ScheduleLetterReveals();
     void RevealNextLetter();
-    FString BuildMaskedWord() const; // arma "_ a _ o" con las letras ya reveladas
+    // Envía a los clientes ambas máscaras (ES/EN) y refresca la local del host.
+    void PushMaskedWords();
 
     APTSculptGameState* GS() const;
     TArray<APTPlayerState*> GetActivePlayers() const;
@@ -112,7 +113,7 @@ private:
     // Devuelve las palabras (solo texto) elegibles según MatchSettings: filtra el banco (o las
     // CustomWords si bUseCustomWords) por categorías y dificultades activas. Si el filtro deja
     // el pool vacío, cae a todas las palabras de la fuente (para no romper la partida).
-    TArray<FString> BuildEligibleWordPool() const;
+    TArray<FPTWordEntry> BuildEligibleWordPool() const;
 
     // En Lvl-01 se esculpe en un vacío sin piso: cada jugador arranca volando (no caminando).
     // Se llama server-side tras RestartPlayer para que la copia autoritativa arranque en vuelo
@@ -131,7 +132,10 @@ private:
     void AwardGuessPoints(APTPlayerState* Guesser); // suma puntos al que adivina + al escultor
     void GoToWaiting();         // no hay suficientes jugadores
 
-    static FString MakeMasked(const FString& Word);
+    // Máscara de una palabra: sin revelar = todo "_"; con Revealed = esas posiciones en MAYÚSCULA.
+    static FString MaskWord(const FString& Word, const TSet<int32>* Revealed = nullptr);
+    // Programa el revelado de una palabra: llena Queue con las posiciones a revelar (fracción).
+    static void ScheduleRevealsFor(const FString& Word, float Fraction, TArray<int32>& OutQueue);
     static FString Normalize(const FString& In); // minúsculas, sin tildes, trim
     void SeedDefaultWords();
 };

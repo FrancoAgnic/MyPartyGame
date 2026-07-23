@@ -6,6 +6,9 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/CheckBox.h"
+#include "GameFramework/PlayerController.h"
+#include "../Lobby/PTPlayerState.h"
+#include "../Sculpt/PTSculptGameState.h"
 
 bool UPTSettingsWidget::Initialize()
 {
@@ -62,6 +65,17 @@ void UPTSettingsWidget::ApplyLanguage(const FString& Code)
         Settings->SetLanguageCode(Code);
     }
     OnLanguageStateChanged(Code != TEXT("es"));
+
+    // Si estamos en una sesión: avisar al servidor el nuevo idioma (palabra por idioma) y refrescar
+    // ya la máscara local para que el HUD cambie sin esperar el próximo revelado.
+    if (APlayerController* PC = GetOwningPlayer())
+    {
+        if (APTPlayerState* PS = PC->GetPlayerState<APTPlayerState>())
+            PS->Server_SetLanguage(Code);
+        if (UWorld* W = GetWorld())
+            if (APTSculptGameState* GS = W->GetGameState<APTSculptGameState>())
+                GS->RefreshLocalMasked();
+    }
 }
 
 void UPTSettingsWidget::ApplyGraphics(int32 Quality)

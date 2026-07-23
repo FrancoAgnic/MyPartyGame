@@ -22,13 +22,21 @@ struct FPTWordEntry
 {
     GENERATED_BODY()
 
+    // Word = traducción primaria (español, el banco default está en español).
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Word") FString Word;
+    // WordEn = traducción al inglés. OPCIONAL: si está vacía, el inglés cae a Word (fallback).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Word") FString WordEn;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Word") FName   Category;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Word") EPTWordDifficulty Difficulty = EPTWordDifficulty::Media;
 
     FPTWordEntry() {}
     FPTWordEntry(const FString& InWord, const FName& InCat, EPTWordDifficulty InDiff)
         : Word(InWord), Category(InCat), Difficulty(InDiff) {}
+    FPTWordEntry(const FString& InWord, const FString& InWordEn, const FName& InCat, EPTWordDifficulty InDiff)
+        : Word(InWord), WordEn(InWordEn), Category(InCat), Difficulty(InDiff) {}
+
+    // Devuelve la traducción para el idioma pedido (con fallback al primario si falta).
+    FString ForLang(bool bEnglish) const { return (bEnglish && !WordEn.IsEmpty()) ? WordEn : Word; }
 };
 
 // Config de la partida que el host elige en el lobby. Viaja lobby→Lvl-01 por el GameInstance.

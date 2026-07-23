@@ -49,9 +49,22 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
     double TurnEndServerTime = 0.0;
 
-    // Palabra enmascarada para TODOS ("_ _ _ _"). Anti-spoiler: la real no se replica.
-    UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
+    // Palabra enmascarada en cada idioma ("_ u _ o" / "_ a _"). Anti-spoiler: son máscaras, la real
+    // no se replica. Se replican las dos; cada cliente muestra la de SU idioma (ver MaskedWord).
+    UPROPERTY(ReplicatedUsing=OnRep_Masked, BlueprintReadOnly, Category="Game")
+    FString MaskedWordEs;
+    UPROPERTY(ReplicatedUsing=OnRep_Masked, BlueprintReadOnly, Category="Game")
+    FString MaskedWordEn;
+
+    // Máscara en el idioma del JUGADOR LOCAL (la que muestra el HUD). NO se replica: se calcula
+    // en cada cliente a partir de las dos de arriba y la cultura actual. El HUD lee esta.
+    UPROPERTY(BlueprintReadOnly, Category="Game")
     FString MaskedWord;
+
+    UFUNCTION() void OnRep_Masked();
+    // Recalcula MaskedWord (idioma local) desde MaskedWordEs/En. La llama el server tras setearlas
+    // (no recibe OnRep) y el cliente en OnRep_Masked. Refresca el HUD.
+    void RefreshLocalMasked();
 
     // Ronda actual (1-based) y total de rondas de la partida (para el HUD "Ronda 2/3").
     // Una ronda = todos los jugadores esculpen una vez.

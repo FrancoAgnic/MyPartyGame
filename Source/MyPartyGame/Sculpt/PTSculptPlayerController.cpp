@@ -19,6 +19,8 @@
 #include "PTSculptPlane.h"
 #include "../PTInputBindings.h"
 #include "../Lobby/PTPlayerState.h"
+#include "Internationalization/Internationalization.h"
+#include "Internationalization/Culture.h"
 #include "Engine/Engine.h"
 #include "PTSculptGameMode.h"
 #include "PTSculptGameState.h"
@@ -39,6 +41,13 @@ void APTSculptPlayerController::AcknowledgePossession(APawn* P)
     // APTLobbyPlayerController y conserva el caminar.
     if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(P))
         Char->ApplyGameplayMovementMode(); // vuelo obligatorio + sin orientar al movimiento
+
+    // Avisar al servidor mi idioma (para ver la palabra a adivinar EN MI IDIOMA).
+    if (APTPlayerState* PS = GetPlayerState<APTPlayerState>())
+    {
+        const FString Culture = FInternationalization::Get().GetCurrentCulture()->GetName();
+        PS->Server_SetLanguage(Culture);
+    }
 }
 
 void APTSculptPlayerController::BeginPlay()

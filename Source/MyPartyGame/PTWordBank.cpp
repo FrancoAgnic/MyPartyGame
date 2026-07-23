@@ -49,7 +49,7 @@ namespace
             {
                 const FPTWordRow* Row = reinterpret_cast<const FPTWordRow*>(Pair.Value);
                 if (!Row || Row->Word.IsEmpty()) continue;
-                GWords.Add(FPTWordEntry(Row->Word, Row->Category, DiffFromInt(Row->Difficulty)));
+                GWords.Add(FPTWordEntry(Row->Word, Row->WordEn, Row->Category, DiffFromInt(Row->Difficulty)));
                 if (!Row->Category.IsNone()) SeenCats.Add(Row->Category);
             }
             GCategories = SeenCats.Array();

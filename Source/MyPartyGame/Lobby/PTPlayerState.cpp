@@ -14,6 +14,7 @@ void APTPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     DOREPLIFETIME(APTPlayerState, GameScore);
     DOREPLIFETIME(APTPlayerState, HeadBlob);
     DOREPLIFETIME(APTPlayerState, HeadVersion);
+    DOREPLIFETIME(APTPlayerState, Language);
 }
 
 void APTPlayerState::CopyProperties(APlayerState* NewPlayerState)
@@ -25,6 +26,7 @@ void APTPlayerState::CopyProperties(APlayerState* NewPlayerState)
         PT->bIsHost     = bIsHost;
         PT->HeadBlob    = HeadBlob;    // la cabeza custom viaja al Lvl-01 (seamless travel)
         PT->HeadVersion = HeadVersion; // ...y su versión, para que el pawn nuevo la aplique
+        PT->Language    = Language;    // el idioma también viaja (palabra por idioma en el juego)
         // bHasGuessedThisTurn NO se copia: es estado por-turno, arranca en false en el juego.
     }
 }
@@ -51,3 +53,9 @@ void APTPlayerState::Server_SetHost(bool bInHost)
 }
 
 void APTPlayerState::OnRep_DisplayName() { /* El HUD del lobby lee DisplayName por polling, no necesita reaccionar acá. */ }
+
+void APTPlayerState::Server_SetLanguage_Implementation(const FString& InLanguage)
+{
+    // "es"/"en" (tomamos solo el prefijo de idioma; ignoramos región tipo "es-AR").
+    Language = InLanguage.StartsWith(TEXT("en")) ? TEXT("en") : TEXT("es");
+}
