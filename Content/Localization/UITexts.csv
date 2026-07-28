@@ -1,126 +1,126 @@
-Key,ES,EN,PT
-MENU_PLAY,Jugar,Play,Jogar
-MENU_CREATE_SESSION,Crear partida,Create Game,Criar partida
-MENU_FIND_SESSIONS,Buscar partidas,Find Games,Procurar partidas
-MENU_JOIN_BY_CODE,Unirse con código,Join with Code,Entrar com código
-MENU_SETTINGS,Configuración,Settings,Configurações
-MENU_QUIT,Salir,Quit,Sair
-MENU_BACK,Volver,Back,Voltar
-MENU_CANCEL,Cancelar,Cancel,Cancelar
-MENU_CONFIRM,Confirmar,Confirm,Confirmar
-MENU_CODE_COPIED,Código: {0} (copiado al portapapeles),Code: {0} (copied to clipboard),Código: {0} (copiado)
-CREATE_SESSION_TITLE,Crear partida,Create Game,Criar partida
-CREATE_SESSION_NAME,Nombre de la sala,Room Name,Nome da sala
-CREATE_SESSION_PRIVATE,Sala privada,Private Room,Sala privada
-CREATE_SESSION_PASSWORD,Contraseña,Password,Senha
-CREATE_SESSION_MAX_PLAYERS,Jugadores máximos,Max Players,Jogadores máximos
-CREATE_SESSION_START,Crear,Create,Criar
-FIND_SESSIONS_TITLE,Partidas disponibles,Available Games,Partidas disponíveis
-FIND_SESSIONS_REFRESH,Actualizar,Refresh,Atualizar
-FIND_SESSIONS_EMPTY,No se encontraron partidas,No games found,Nenhuma partida encontrada
-FIND_SESSIONS_SEARCHING,Buscando...,Searching...,Procurando...
-SESSION_JOIN,UNIRSE,JOIN,ENTRAR
-SESSION_FULL,LLENA,FULL,CHEIA
-ENTER_CODE_TITLE,Ingresá el código,Enter the Code,Digite o código
-ENTER_CODE_PLACEHOLDER,Código de sala,Room Code,Código da sala
-ENTER_CODE_JOIN,Unirse,Join,Entrar
-SETTINGS_TITLE,Configuración,Settings,Configurações
-SETTINGS_VOLUME,Volumen,Volume,Volume
-SETTINGS_LANGUAGE,Idioma,Language,Idioma
-SETTINGS_GRAPHICS,Calidad gráfica,Graphics Quality,Qualidade gráfica
-SETTINGS_VSYNC,Sincronización vertical,VSync,Sincronização vertical
-SETTINGS_FULLSCREEN,Pantalla completa,Fullscreen,Tela cheia
-SETTINGS_APPLY,Aplicar,Apply,Aplicar
-SETTINGS_CLOSE,Cerrar,Close,Fechar
-SETTINGS_LOW,Baja,Low,Baixa
-SETTINGS_MEDIUM,Media,Medium,Média
-SETTINGS_HIGH,Alta,High,Alta
-SETTINGS_EPIC,Épica,Epic,Épica
-SETTINGS_LANG_MENU_ONLY,El idioma se cambia desde el menú principal,Language can only be changed from the main menu,O idioma é alterado no menu principal
-LOBBY_TITLE,Sala de espera,Lobby,Sala de espera
-LOBBY_PLAYERS,Jugadores,Players,Jogadores
-LOBBY_HOST,Anfitrión,Host,Anfitrião
-LOBBY_READY,Listo,Ready,Pronto
-LOBBY_WAITING,Esperando,Waiting,Aguardando
-LOBBY_BTN_READY,Listo,Ready,Pronto
-LOBBY_BTN_NOT_READY,No listo,Not Ready,Não pronto
-LOBBY_STARTING,Arrancando...,Starting...,Começando...
-LOBBY_IN_GAME,En partida,In game,Em jogo
-LOBBY_WAITING_PLAYERS,Esperando jugadores...,Waiting for players...,Aguardando jogadores...
-LOBBY_STARTS_IN,Arranca en {0}...,Starts in {0}...,Começa em {0}...
-LOBBY_START_GAME,Empezar partida,Start Game,Começar partida
-LOBBY_GAME_SETTINGS,Opciones de partida,Game Settings,Opções da partida
-LOBBY_ROOM_CODE,Código de sala,Room Code,Código da sala
-LOBBY_LEAVE,Salir de la sala,Leave Room,Sair da sala
-LOBBY_CUSTOMIZE_HEAD,G — Esculpir tu cabeza,G — Sculpt Your Head,G — Esculpir sua cabeça
-LOBBY_TURN_TIME,Tiempo por turno,Turn Time,Tempo por turno
-LOBBY_ROUNDS,Rondas,Rounds,Rodadas
-LOBBY_REVEAL,Letras reveladas,Revealed Letters,Letras reveladas
-LOBBY_DIFFICULTY,Dificultad,Difficulty,Dificuldade
-LOBBY_DIFF_EASY,Fácil,Easy,Fácil
-LOBBY_DIFF_MEDIUM,Media,Medium,Média
-LOBBY_DIFF_HARD,Difícil,Hard,Difícil
-LOBBY_CATEGORIES,Categorías,Categories,Categorias
-LOBBY_LOAD_CSV,Cargar CSV propio,Load Custom CSV,Carregar CSV próprio
-LOBBY_CSV_DEFAULT,Banco default,Default Word Bank,Banco padrão
-LOBBY_CSV_CUSTOM,CSV propio: {0} palabras,Custom CSV: {0} words,CSV próprio: {0} palavras
-HUD_ROUND,Ronda,Round,Rodada
-HUD_SECONDS_SHORT,seg,sec,seg
-HUD_WAITING_PLAYERS,Esperando jugadores...,Waiting for players...,Aguardando jogadores...
-HUD_RESULTS,Resultados,Results,Resultados
-HUD_CHOOSE_WORD,Elegí una palabra,Choose a word,Escolha uma palavra
-HUD_YOUR_TURN,¡Te toca esculpir!,Your turn to sculpt!,Sua vez de esculpir!
-HUD_SCORE,Puntos,Score,Pontos
-HUD_PLAY_AGAIN,Jugar de nuevo,Play Again,Jogar de novo
-HUD_RETURN_LOBBY,Volver a la sala,Return to Lobby,Voltar à sala
-HUD_CHAT_PLACEHOLDER,Escribí tu respuesta...,Type your guess...,Digite seu palpite...
-HUD_OUT_OF_BOUNDS,Fuera del área de modelado,Outside the sculpting area,Fora da área de modelagem
-CHAT_WORD_WAS,La palabra era: {0},The word was: {0},A palavra era: {0}
-CHAT_WINNER,¡Ganó {0} con {1} puntos!,{0} wins with {1} points!,{0} venceu com {1} pontos!
-CHAT_GUESSED_IT,¡adivinó la palabra!,guessed the word!,acertou a palavra!
-BUBBLE_GUESSED_IT,¡Adivinó la palabra!,Guessed the word!,Acertou a palavra!
-TOOL_ADD,Agregar,Add,Adicionar
-TOOL_ERASE,Borrar,Erase,Apagar
-TOOL_PAINT,Pintar,Paint,Pintar
-TOOL_EYES,Ojos,Eyes,Olhos
-TOOL_CLEAR_ALL,Borrar todo,Clear All,Apagar tudo
-SHAPE_SPHERE,Esfera,Sphere,Esfera
-SHAPE_CUBE,Cubo,Cube,Cubo
-SHAPE_CYLINDER,Cilindro,Cylinder,Cilindro
-SHAPE_CONE,Cono,Cone,Cone
-HINT_SAVE_COLOR,Guardar color,Save Color,Salvar cor
-HINT_PLANE_VERTICAL,Plano vertical,Vertical Plane,Plano vertical
-HINT_PLANE_HORIZONTAL,Plano horizontal,Horizontal Plane,Plano horizontal
-PICKER_SAVE_COLOR,E — Guardar color,E — Save Color,E — Salvar cor
-SCULPT_UNDO,Deshacer,Undo,Desfazer
-KEY_MOVE,Mover,Move,Mover
-KEY_LOOK,Cámara,Camera,Câmera
-KEY_FLY_UP,Subir,Fly Up,Subir
-KEY_FLY_DOWN,Bajar,Fly Down,Descer
-KEY_SCULPT,Esculpir,Sculpt,Esculpir
-KEY_BRUSH_SIZE,Tamaño de brocha,Brush Size,Tamanho do pincel
-KEY_MODE_ADD,Modo: Agregar,Mode: Add,Modo: Adicionar
-KEY_MODE_ERASE,Modo: Borrar,Mode: Erase,Modo: Apagar
-KEY_MODE_PAINT,Modo: Pintar,Mode: Paint,Modo: Pintar
-KEY_MODE_EYES,Modo: Ojos,Mode: Eyes,Modo: Olhos
-KEY_CYCLE_SHAPE,Cambiar forma,Cycle Shape,Trocar forma
-KEY_AXIS_VERT,Plano vertical,Vertical Plane,Plano vertical
-KEY_AXIS_HORIZ,Plano horizontal,Horizontal Plane,Plano horizontal
-KEY_ROTATE_SHAPE,Rotar forma,Rotate Shape,Girar forma
-KEY_CLEAR_ALL,Deshacer / Borrar todo (3s),Undo / Clear All (3s),Desfazer / Apagar tudo (3s)
-KEY_COLOR_PICK,Elegir color,Pick Color,Escolher cor
-KEY_SAVE_COLOR,Guardar color,Save Color,Salvar cor
-KEY_CHAT,Chat,Chat,Chat
-KEY_PAUSE,Pausa,Pause,Pausa
-PAUSE_TITLE,Pausa,Paused,Pausado
-PAUSE_RESUME,Continuar,Resume,Continuar
-PAUSE_SETTINGS,Configuración,Settings,Configurações
-PAUSE_LEAVE,Salir al menú,Quit to Menu,Sair para o menu
-ERR_STEAM_CONNECT,No se pudo conectar con Steam,Could not connect to Steam,Não foi possível conectar à Steam
-ERR_CREATE_SESSION,No se pudo crear la sesión,Could not create the game,Não foi possível criar a partida
-ERR_JOIN_SESSION,No se pudo unir a la sesión,Could not join the game,Não foi possível entrar na partida
-ERR_INVALID_CODE,Código inválido,Invalid code,Código inválido
-ERR_WRONG_PASSWORD,Contraseña incorrecta,Wrong password,Senha incorreta
-ERR_CONNECT_SESSION,No se pudo conectar a la sesión,Could not connect to the game,Não foi possível conectar à partida
-ERR_SESSION_FULL,La sala está llena,The room is full,A sala está cheia
-ERR_HOST_LEFT,El anfitrión cerró la partida,The host closed the game,O anfitrião encerrou a partida
+Key,ES,EN,PT,DE,FR,IT
+MENU_PLAY,Jugar,Play,Jogar,Spielen,Jouer,Gioca
+MENU_CREATE_SESSION,Crear partida,Create Game,Criar partida,Spiel erstellen,Créer une partie,Crea partita
+MENU_FIND_SESSIONS,Buscar partidas,Find Games,Procurar partidas,Spiele suchen,Rechercher des parties,Cerca partite
+MENU_JOIN_BY_CODE,Unirse con código,Join with Code,Entrar com código,Mit Code beitreten,Rejoindre avec un code,Entra con codice
+MENU_SETTINGS,Configuración,Settings,Configurações,Einstellungen,Paramètres,Impostazioni
+MENU_QUIT,Salir,Quit,Sair,Beenden,Quitter,Esci
+MENU_BACK,Volver,Back,Voltar,Zurück,Retour,Indietro
+MENU_CANCEL,Cancelar,Cancel,Cancelar,Abbrechen,Annuler,Annulla
+MENU_CONFIRM,Confirmar,Confirm,Confirmar,Bestätigen,Confirmer,Conferma
+MENU_CODE_COPIED,Código: {0} (copiado al portapapeles),Code: {0} (copied to clipboard),Código: {0} (copiado),Code: {0} (kopiert),Code : {0} (copié),Codice: {0} (copiato)
+CREATE_SESSION_TITLE,Crear partida,Create Game,Criar partida,Spiel erstellen,Créer une partie,Crea partita
+CREATE_SESSION_NAME,Nombre de la sala,Room Name,Nome da sala,Raumname,Nom du salon,Nome stanza
+CREATE_SESSION_PRIVATE,Sala privada,Private Room,Sala privada,Privater Raum,Salon privé,Stanza privata
+CREATE_SESSION_PASSWORD,Contraseña,Password,Senha,Passwort,Mot de passe,Password
+CREATE_SESSION_MAX_PLAYERS,Jugadores máximos,Max Players,Jogadores máximos,Max. Spieler,Joueurs max,Giocatori max
+CREATE_SESSION_START,Crear,Create,Criar,Erstellen,Créer,Crea
+FIND_SESSIONS_TITLE,Partidas disponibles,Available Games,Partidas disponíveis,Verfügbare Spiele,Parties disponibles,Partite disponibili
+FIND_SESSIONS_REFRESH,Actualizar,Refresh,Atualizar,Aktualisieren,Actualiser,Aggiorna
+FIND_SESSIONS_EMPTY,No se encontraron partidas,No games found,Nenhuma partida encontrada,Keine Spiele gefunden,Aucune partie trouvée,Nessuna partita trovata
+FIND_SESSIONS_SEARCHING,Buscando...,Searching...,Procurando...,Suche...,Recherche...,Ricerca...
+SESSION_JOIN,UNIRSE,JOIN,ENTRAR,BEITRETEN,REJOINDRE,ENTRA
+SESSION_FULL,LLENA,FULL,CHEIA,VOLL,COMPLET,PIENA
+ENTER_CODE_TITLE,Ingresá el código,Enter the Code,Digite o código,Code eingeben,Entrez le code,Inserisci il codice
+ENTER_CODE_PLACEHOLDER,Código de sala,Room Code,Código da sala,Raumcode,Code du salon,Codice stanza
+ENTER_CODE_JOIN,Unirse,Join,Entrar,Beitreten,Rejoindre,Entra
+SETTINGS_TITLE,Configuración,Settings,Configurações,Einstellungen,Paramètres,Impostazioni
+SETTINGS_VOLUME,Volumen,Volume,Volume,Lautstärke,Volume,Volume
+SETTINGS_LANGUAGE,Idioma,Language,Idioma,Sprache,Langue,Lingua
+SETTINGS_GRAPHICS,Calidad gráfica,Graphics Quality,Qualidade gráfica,Grafikqualität,Qualité graphique,Qualità grafica
+SETTINGS_VSYNC,Sincronización vertical,VSync,Sincronização vertical,VSync,VSync,VSync
+SETTINGS_FULLSCREEN,Pantalla completa,Fullscreen,Tela cheia,Vollbild,Plein écran,Schermo intero
+SETTINGS_APPLY,Aplicar,Apply,Aplicar,Anwenden,Appliquer,Applica
+SETTINGS_CLOSE,Cerrar,Close,Fechar,Schließen,Fermer,Chiudi
+SETTINGS_LOW,Baja,Low,Baixa,Niedrig,Basse,Bassa
+SETTINGS_MEDIUM,Media,Medium,Média,Mittel,Moyenne,Media
+SETTINGS_HIGH,Alta,High,Alta,Hoch,Élevée,Alta
+SETTINGS_EPIC,Épica,Epic,Épica,Episch,Épique,Epica
+SETTINGS_LANG_MENU_ONLY,El idioma se cambia desde el menú principal,Language can only be changed from the main menu,O idioma é alterado no menu principal,Die Sprache wird im Hauptmenü geändert,La langue se change depuis le menu principal,La lingua si cambia dal menu principale
+LOBBY_TITLE,Sala de espera,Lobby,Sala de espera,Lobby,Salon,Lobby
+LOBBY_PLAYERS,Jugadores,Players,Jogadores,Spieler,Joueurs,Giocatori
+LOBBY_HOST,Anfitrión,Host,Anfitrião,Gastgeber,Hôte,Host
+LOBBY_READY,Listo,Ready,Pronto,Bereit,Prêt,Pronto
+LOBBY_WAITING,Esperando,Waiting,Aguardando,Wartet,En attente,In attesa
+LOBBY_BTN_READY,Listo,Ready,Pronto,Bereit,Prêt,Pronto
+LOBBY_BTN_NOT_READY,No listo,Not Ready,Não pronto,Nicht bereit,Pas prêt,Non pronto
+LOBBY_STARTING,Arrancando...,Starting...,Começando...,Startet...,Démarrage...,Avvio...
+LOBBY_IN_GAME,En partida,In game,Em jogo,Im Spiel,En partie,In gioco
+LOBBY_WAITING_PLAYERS,Esperando jugadores...,Waiting for players...,Aguardando jogadores...,Warte auf Spieler...,En attente de joueurs...,In attesa di giocatori...
+LOBBY_STARTS_IN,Arranca en {0}...,Starts in {0}...,Começa em {0}...,Beginnt in {0}...,Commence dans {0}...,Inizia tra {0}...
+LOBBY_START_GAME,Empezar partida,Start Game,Começar partida,Spiel starten,Démarrer la partie,Avvia partita
+LOBBY_GAME_SETTINGS,Opciones de partida,Game Settings,Opções da partida,Spieloptionen,Options de partie,Opzioni partita
+LOBBY_ROOM_CODE,Código de sala,Room Code,Código da sala,Raumcode,Code du salon,Codice stanza
+LOBBY_LEAVE,Salir de la sala,Leave Room,Sair da sala,Raum verlassen,Quitter le salon,Esci dalla stanza
+LOBBY_CUSTOMIZE_HEAD,G — Esculpir tu cabeza,G — Sculpt Your Head,G — Esculpir sua cabeça,G — Kopf formen,G — Sculpter votre tête,G — Scolpisci la testa
+LOBBY_TURN_TIME,Tiempo por turno,Turn Time,Tempo por turno,Zugzeit,Temps par tour,Tempo per turno
+LOBBY_ROUNDS,Rondas,Rounds,Rodadas,Runden,Manches,Round
+LOBBY_REVEAL,Letras reveladas,Revealed Letters,Letras reveladas,Aufgedeckte Buchstaben,Lettres révélées,Lettere rivelate
+LOBBY_DIFFICULTY,Dificultad,Difficulty,Dificuldade,Schwierigkeit,Difficulté,Difficoltà
+LOBBY_DIFF_EASY,Fácil,Easy,Fácil,Leicht,Facile,Facile
+LOBBY_DIFF_MEDIUM,Media,Medium,Média,Mittel,Moyenne,Media
+LOBBY_DIFF_HARD,Difícil,Hard,Difícil,Schwer,Difficile,Difficile
+LOBBY_CATEGORIES,Categorías,Categories,Categorias,Kategorien,Catégories,Categorie
+LOBBY_LOAD_CSV,Cargar CSV propio,Load Custom CSV,Carregar CSV próprio,Eigene CSV laden,Charger un CSV,Carica CSV
+LOBBY_CSV_DEFAULT,Banco default,Default Word Bank,Banco padrão,Standard-Wortbank,Banque par défaut,Banca predefinita
+LOBBY_CSV_CUSTOM,CSV propio: {0} palabras,Custom CSV: {0} words,CSV próprio: {0} palavras,Eigene CSV: {0} Wörter,CSV : {0} mots,CSV: {0} parole
+HUD_ROUND,Ronda,Round,Rodada,Runde,Manche,Round
+HUD_SECONDS_SHORT,seg,sec,seg,Sek,s,sec
+HUD_WAITING_PLAYERS,Esperando jugadores...,Waiting for players...,Aguardando jogadores...,Warte auf Spieler...,En attente de joueurs...,In attesa di giocatori...
+HUD_RESULTS,Resultados,Results,Resultados,Ergebnisse,Résultats,Risultati
+HUD_CHOOSE_WORD,Elegí una palabra,Choose a word,Escolha uma palavra,Wähle ein Wort,Choisis un mot,Scegli una parola
+HUD_YOUR_TURN,¡Te toca esculpir!,Your turn to sculpt!,Sua vez de esculpir!,Du bist dran!,À toi de sculpter !,Tocca a te scolpire!
+HUD_SCORE,Puntos,Score,Pontos,Punkte,Score,Punti
+HUD_PLAY_AGAIN,Jugar de nuevo,Play Again,Jogar de novo,Nochmal spielen,Rejouer,Gioca ancora
+HUD_RETURN_LOBBY,Volver a la sala,Return to Lobby,Voltar à sala,Zurück zur Lobby,Retour au salon,Torna alla lobby
+HUD_CHAT_PLACEHOLDER,Escribí tu respuesta...,Type your guess...,Digite seu palpite...,Tippe deine Antwort...,Écris ta réponse...,Scrivi la tua risposta...
+HUD_OUT_OF_BOUNDS,Fuera del área de modelado,Outside the sculpting area,Fora da área de modelagem,Außerhalb des Modellierbereichs,Hors de la zone de sculpture,Fuori dall'area di modellazione
+CHAT_WORD_WAS,La palabra era: {0},The word was: {0},A palavra era: {0},Das Wort war: {0},Le mot était : {0},La parola era: {0}
+CHAT_WINNER,¡Ganó {0} con {1} puntos!,{0} wins with {1} points!,{0} venceu com {1} pontos!,{0} gewinnt mit {1} Punkten!,{0} gagne avec {1} points !,{0} vince con {1} punti!
+CHAT_GUESSED_IT,¡adivinó la palabra!,guessed the word!,acertou a palavra!,hat das Wort erraten!,a deviné le mot !,ha indovinato la parola!
+BUBBLE_GUESSED_IT,¡Adivinó la palabra!,Guessed the word!,Acertou a palavra!,Wort erraten!,Mot deviné !,Parola indovinata!
+TOOL_ADD,Agregar,Add,Adicionar,Hinzufügen,Ajouter,Aggiungi
+TOOL_ERASE,Borrar,Erase,Apagar,Löschen,Effacer,Cancella
+TOOL_PAINT,Pintar,Paint,Pintar,Malen,Peindre,Dipingi
+TOOL_EYES,Ojos,Eyes,Olhos,Augen,Yeux,Occhi
+TOOL_CLEAR_ALL,Borrar todo,Clear All,Apagar tudo,Alles löschen,Tout effacer,Cancella tutto
+SHAPE_SPHERE,Esfera,Sphere,Esfera,Kugel,Sphère,Sfera
+SHAPE_CUBE,Cubo,Cube,Cubo,Würfel,Cube,Cubo
+SHAPE_CYLINDER,Cilindro,Cylinder,Cilindro,Zylinder,Cylindre,Cilindro
+SHAPE_CONE,Cono,Cone,Cone,Kegel,Cône,Cono
+HINT_SAVE_COLOR,Guardar color,Save Color,Salvar cor,Farbe speichern,Enregistrer la couleur,Salva colore
+HINT_PLANE_VERTICAL,Plano vertical,Vertical Plane,Plano vertical,Vertikale Ebene,Plan vertical,Piano verticale
+HINT_PLANE_HORIZONTAL,Plano horizontal,Horizontal Plane,Plano horizontal,Horizontale Ebene,Plan horizontal,Piano orizzontale
+PICKER_SAVE_COLOR,E — Guardar color,E — Save Color,E — Salvar cor,E — Farbe speichern,E — Enregistrer la couleur,E — Salva colore
+SCULPT_UNDO,Deshacer,Undo,Desfazer,Rückgängig,Annuler,Annulla
+KEY_MOVE,Mover,Move,Mover,Bewegen,Se déplacer,Muovi
+KEY_LOOK,Cámara,Camera,Câmera,Kamera,Caméra,Camera
+KEY_FLY_UP,Subir,Fly Up,Subir,Aufsteigen,Monter,Sali
+KEY_FLY_DOWN,Bajar,Fly Down,Descer,Absteigen,Descendre,Scendi
+KEY_SCULPT,Esculpir,Sculpt,Esculpir,Formen,Sculpter,Scolpisci
+KEY_BRUSH_SIZE,Tamaño de brocha,Brush Size,Tamanho do pincel,Pinselgröße,Taille du pinceau,Dimensione pennello
+KEY_MODE_ADD,Modo: Agregar,Mode: Add,Modo: Adicionar,Modus: Hinzufügen,Mode : Ajouter,Modalità: Aggiungi
+KEY_MODE_ERASE,Modo: Borrar,Mode: Erase,Modo: Apagar,Modus: Löschen,Mode : Effacer,Modalità: Cancella
+KEY_MODE_PAINT,Modo: Pintar,Mode: Paint,Modo: Pintar,Modus: Malen,Mode : Peindre,Modalità: Dipingi
+KEY_MODE_EYES,Modo: Ojos,Mode: Eyes,Modo: Olhos,Modus: Augen,Mode : Yeux,Modalità: Occhi
+KEY_CYCLE_SHAPE,Cambiar forma,Cycle Shape,Trocar forma,Form wechseln,Changer de forme,Cambia forma
+KEY_AXIS_VERT,Plano vertical,Vertical Plane,Plano vertical,Vertikale Ebene,Plan vertical,Piano verticale
+KEY_AXIS_HORIZ,Plano horizontal,Horizontal Plane,Plano horizontal,Horizontale Ebene,Plan horizontal,Piano orizzontale
+KEY_ROTATE_SHAPE,Rotar forma,Rotate Shape,Girar forma,Form drehen,Tourner la forme,Ruota forma
+KEY_CLEAR_ALL,Deshacer / Borrar todo (3s),Undo / Clear All (3s),Desfazer / Apagar tudo (3s),Rückgängig / Alles löschen (3s),Annuler / Tout effacer (3s),Annulla / Cancella tutto (3s)
+KEY_COLOR_PICK,Elegir color,Pick Color,Escolher cor,Farbe wählen,Choisir la couleur,Scegli colore
+KEY_SAVE_COLOR,Guardar color,Save Color,Salvar cor,Farbe speichern,Enregistrer la couleur,Salva colore
+KEY_CHAT,Chat,Chat,Chat,Chat,Chat,Chat
+KEY_PAUSE,Pausa,Pause,Pausa,Pause,Pause,Pausa
+PAUSE_TITLE,Pausa,Paused,Pausado,Pausiert,En pause,In pausa
+PAUSE_RESUME,Continuar,Resume,Continuar,Fortsetzen,Reprendre,Riprendi
+PAUSE_SETTINGS,Configuración,Settings,Configurações,Einstellungen,Paramètres,Impostazioni
+PAUSE_LEAVE,Salir al menú,Quit to Menu,Sair para o menu,Zum Menü,Quitter vers le menu,Esci al menu
+ERR_STEAM_CONNECT,No se pudo conectar con Steam,Could not connect to Steam,Não foi possível conectar à Steam,Verbindung zu Steam fehlgeschlagen,Impossible de se connecter à Steam,Impossibile connettersi a Steam
+ERR_CREATE_SESSION,No se pudo crear la sesión,Could not create the game,Não foi possível criar a partida,Spiel konnte nicht erstellt werden,Impossible de créer la partie,Impossibile creare la partita
+ERR_JOIN_SESSION,No se pudo unir a la sesión,Could not join the game,Não foi possível entrar na partida,Beitritt zum Spiel fehlgeschlagen,Impossible de rejoindre la partie,Impossibile entrare nella partita
+ERR_INVALID_CODE,Código inválido,Invalid code,Código inválido,Ungültiger Code,Code invalide,Codice non valido
+ERR_WRONG_PASSWORD,Contraseña incorrecta,Wrong password,Senha incorreta,Falsches Passwort,Mot de passe incorrect,Password errata
+ERR_CONNECT_SESSION,No se pudo conectar a la sesión,Could not connect to the game,Não foi possível conectar à partida,Verbindung zum Spiel fehlgeschlagen,Impossible de se connecter à la partie,Impossibile connettersi alla partita
+ERR_SESSION_FULL,La sala está llena,The room is full,A sala está cheia,Der Raum ist voll,Le salon est plein,La stanza è piena
+ERR_HOST_LEFT,El anfitrión cerró la partida,The host closed the game,O anfitrião encerrou a partida,Der Gastgeber hat das Spiel beendet,L'hôte a fermé la partie,L'host ha chiuso la partita

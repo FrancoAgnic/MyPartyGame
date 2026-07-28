@@ -15,6 +15,7 @@ class UButton;
 class UTextBlock;
 class UCheckBox;
 class UPanelWidget;
+class UComboBoxString;
 
 UCLASS()
 class MYPARTYGAME_API UPTSettingsWidget : public UUserWidget
@@ -31,17 +32,24 @@ protected:
     UPROPERTY(meta = (BindWidget))         USlider*   VolumeSlider;
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* VolumeValueText;
 
-    UPROPERTY(meta = (BindWidget)) UButton* EnglishButton;
-    UPROPERTY(meta = (BindWidget)) UButton* SpanishButton;
+    // ── Idioma: DESPLEGABLE (ComboBox) que se llena SOLO con los idiomas del CSV ──
+    // Muestra solo el idioma actual; al tocarlo se abre la lista (popup con scroll). Sumar un
+    // idioma = agregar la columna al CSV, no se toca este widget ni el Blueprint.
 
-    /** Botones de idiomas EXTRA (portugués y los que vengan). Se llenan desde Blueprint con
-     *  PT Get Languages + PT Set Language: sumar un idioma no toca C++. */
-    UPROPERTY(BlueprintReadWrite, Category = "Settings") TArray<UButton*> LanguageButtons;
+    /** Desplegable de idiomas. Crear un ComboBox (String) llamado "LanguageCombo". */
+    UPROPERTY(meta = (BindWidgetOptional)) UComboBoxString* LanguageCombo;
 
-    /** Contenedor de la sección de idioma (opcional): se deshabilita entero fuera del menú. */
+    /** Sección entera del idioma (título + combo): se COLAPSA en partida (solo se ve en el menú
+     *  principal). Crear un contenedor llamado "LanguagePanel" que envuelva todo lo del idioma. */
     UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* LanguagePanel;
-    /** Aviso "el idioma se cambia desde el menú principal" (opcional). */
+
+    /** Aviso opcional "el idioma se cambia desde el menú principal". */
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* LanguageHintText;
+
+    // Botones viejos English/Español: quedan OPCIONALES por compatibilidad. Si el WBP ya no los
+    // tiene, no pasa nada.
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* EnglishButton;
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* SpanishButton;
 
     UPROPERTY(meta = (BindWidget)) UButton* LowButton;
     UPROPERTY(meta = (BindWidget)) UButton* MediumButton;
@@ -79,8 +87,18 @@ protected:
     UFUNCTION(BlueprintPure, Category = "Settings")
     bool IsInMainMenu() const;
 
+    /** El jugador eligió un idioma del desplegable. */
+    UFUNCTION() void OnLanguageComboChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
 private:
     void ApplyLanguage(const FString& Code);
     void ApplyGraphics(int32 Quality);
     void ApplyLanguageSectionAvailability();
+
+    /** Llena el desplegable con los idiomas del CSV y selecciona el activo. */
+    void BuildLanguageCombo();
+
+    /** true mientras rellenamos el combo por código, para ignorar el OnSelectionChanged que dispara
+     *  SetSelectedOption (si no, se re-aplicaría el idioma en un bucle al abrir el panel). */
+    bool bUpdatingCombo = false;
 };

@@ -6,6 +6,7 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/CheckBox.h"
+#include "Components/ComboBoxString.h"
 #include "GameFramework/PlayerController.h"
 #include "../Lobby/PTPlayerState.h"
 #include "../Sculpt/PTSculptGameState.h"
@@ -22,6 +23,7 @@ bool UPTSettingsWidget::Initialize()
         VolumeSlider->OnValueChanged.AddDynamic(this, &UPTSettingsWidget::OnVolumeChanged);
     }
 
+    // Botones viejos (opcionales): siguen andando si el WBP todavía los tiene.
     if (EnglishButton) EnglishButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnEnglishClicked);
     if (SpanishButton) SpanishButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnSpanishClicked);
     if (LowButton)     LowButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnLowClicked);
@@ -30,6 +32,8 @@ bool UPTSettingsWidget::Initialize()
     if (ApplyButton)   ApplyButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnApplyClicked);
     if (BackButton)    BackButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnBackClicked);
     if (VSyncCheckBox) VSyncCheckBox->OnCheckStateChanged.AddDynamic(this, &UPTSettingsWidget::OnVSyncChanged);
+
+    if (LanguageCombo) LanguageCombo->OnSelectionChanged.AddDynamic(this, &UPTSettingsWidget::OnLanguageComboChanged);
 
     return true;
 }
@@ -47,8 +51,50 @@ void UPTSettingsWidget::ShowPanel()
         if (VSyncCheckBox) VSyncCheckBox->SetIsChecked(Settings->IsVSyncEnabled());
     }
 
-    ApplyLanguageSectionAvailability();
+    BuildLanguageCombo();               // llena el desplegable con los idiomas del CSV
+    ApplyLanguageSectionAvailability(); // colapsa la sección si no estamos en el menú
     SetVisibility(ESlateVisibility::Visible);
+}
+
+void UPTSettingsWidget::BuildLanguageCombo()
+{
+    if (!LanguageCombo) return;
+
+    FString Current = TEXT("es");
+    if (const UPTGameUserSettings* S = UPTGameUserSettings::Get()) Current = S->GetLanguageCode();
+
+    // Se rellena por código: mientras dura, se ignora el OnSelectionChanged que dispara
+    // SetSelectedOption (si no, re-aplicaría el idioma en bucle al abrir el panel).
+    bUpdatingCombo = true;
+
+    LanguageCombo->ClearOptions();
+    FString CurrentDisplay;
+    // Una opción por idioma del CSV, mostrando su nombre lindo ("Español", "Deutsch"...). Agregar
+    // un idioma nuevo aparece acá solo, sin tocar este código ni el Blueprint.
+    for (const FPTLanguage& Lang : PTText::GetAvailableLanguages())
+    {
+        LanguageCombo->AddOption(Lang.DisplayName.ToString());
+        if (Lang.Code == Current) CurrentDisplay = Lang.DisplayName.ToString();
+    }
+    if (!CurrentDisplay.IsEmpty()) LanguageCombo->SetSelectedOption(CurrentDisplay);
+
+    bUpdatingCombo = false;
+}
+
+void UPTSettingsWidget::OnLanguageComboChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+    if (bUpdatingCombo) return;                          // cambio programático (al abrir), no del usuario
+    if (SelectionType == ESelectInfo::Direct) return;    // idem: no vino de un click
+
+    // El combo maneja nombres visibles; hay que volver del nombre al código ("Español" → "es").
+    for (const FPTLanguage& Lang : PTText::GetAvailableLanguages())
+    {
+        if (Lang.DisplayName.ToString() == SelectedItem)
+        {
+            ApplyLanguage(Lang.Code);
+            break;
+        }
+    }
 }
 
 bool UPTSettingsWidget::IsInMainMenu() const
@@ -64,19 +110,28 @@ void UPTSettingsWidget::ApplyLanguageSectionAvailability()
 {
     const bool bAllowed = IsInMainMenu();
 
-    // Se DESHABILITAN (no se ocultan) para que se vea que la opción existe y por qué está trabada.
-    if (EnglishButton) EnglishButton->SetIsEnabled(bAllowed);
-    if (SpanishButton) SpanishButton->SetIsEnabled(bAllowed);
-    for (UButton* B : LanguageButtons) if (B) B->SetIsEnabled(bAllowed);
+    // En partida el idioma NO se puede cambiar → la sección entera se COLAPSA (desaparece del
+    // layout, no ocupa lugar). Solo se ve en el menú principal.
+    const ESlateVisibility SectionVis = bAllowed ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
 
-    if (LanguagePanel) LanguagePanel->SetIsEnabled(bAllowed);
-    if (LanguageHintText)
+    if (LanguagePanel)
     {
-        LanguageHintText->SetVisibility(bAllowed ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
-        if (!bAllowed) LanguageHintText->SetText(PTText::Get(TEXT("SETTINGS_LANG_MENU_ONLY")));
+        LanguagePanel->SetVisibility(SectionVis);
+    }
+    else
+    {
+        // Sin un contenedor "LanguagePanel", colapsar al menos el combo y los botones viejos.
+        if (LanguageCombo) LanguageCombo->SetVisibility(SectionVis);
+        if (EnglishButton) EnglishButton->SetVisibility(SectionVis);
+        if (SpanishButton) SpanishButton->SetVisibility(SectionVis);
     }
 
-    OnLanguageAvailabilityChanged(bAllowed); // por si el BP quiere atenuarlo visualmente
+    // El aviso solo tendría sentido si mostráramos la sección deshabilitada; como ahora se colapsa,
+    // queda oculto siempre (se deja el binding por si el BP lo quiere usar de otra forma).
+    if (LanguageHintText)
+        LanguageHintText->SetVisibility(ESlateVisibility::Collapsed);
+
+    OnLanguageAvailabilityChanged(bAllowed);
 }
 
 void UPTSettingsWidget::OnVolumeChanged(float NewValue)

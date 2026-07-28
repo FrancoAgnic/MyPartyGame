@@ -5,9 +5,12 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 
+// OJO: los nombres de este namespace anónimo NO pueden repetirse con los de otros .cpp del módulo,
+// porque el unity build concatena varios .cpp en una misma unidad de traducción y colisionarían
+// (le pasó a GLoaded/EnsureLoaded/CsvFullPath contra PTTextTable.cpp). Por eso van con prefijo WB.
 namespace
 {
-    bool                 GLoaded = false;
+    bool                 WB_GLoaded = false;
     TArray<FPTWordEntry> GWords;
     TArray<FName>        GCategories;
 
@@ -38,18 +41,18 @@ namespace
         };
     }
 
-    FString CsvFullPath()
+    FString WB_CsvFullPath()
     {
         return FPaths::ProjectContentDir() / PTWordBank::CsvRelativePath();
     }
 
-    void EnsureLoaded()
+    void WB_EnsureLoaded()
     {
-        if (GLoaded) return;
-        GLoaded = true;
+        if (WB_GLoaded) return;
+        WB_GLoaded = true;
 
         TArray<FString> Lines;
-        const FString Path = CsvFullPath();
+        const FString Path = WB_CsvFullPath();
         if (!FFileHelper::LoadFileToStringArray(Lines, *Path) ||
             !PTWordBank::ParseWordCsv(Lines, GWords))
         {
@@ -132,20 +135,20 @@ bool PTWordBank::ParseWordCsv(const TArray<FString>& Lines, TArray<FPTWordEntry>
 
 const TArray<FPTWordEntry>& PTWordBank::GetDefaultWords()
 {
-    EnsureLoaded();
+    WB_EnsureLoaded();
     return GWords;
 }
 
 const TArray<FName>& PTWordBank::GetDefaultCategories()
 {
-    EnsureLoaded();
+    WB_EnsureLoaded();
     return GCategories;
 }
 
 void PTWordBank::Reload()
 {
-    GLoaded = false;
+    WB_GLoaded = false;
     GWords.Reset();
     GCategories.Reset();
-    EnsureLoaded();
+    WB_EnsureLoaded();
 }
