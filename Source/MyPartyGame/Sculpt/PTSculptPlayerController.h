@@ -172,11 +172,20 @@ public:
     UPROPERTY(EditAnywhere, Category="Sculpt")
     float ShapeRotateSpeed = 3.f;
 
-    /** Forma efectiva: Add/Paint usan la seleccionada; Erase/Smooth siempre esfera. */
+    /** Forma efectiva: Add, Paint y Erase usan la seleccionada (se borra con cualquier forma,
+     *  igual que se esculpe). Solo Smooth queda fijo en esfera. */
     EPTStampShape EffectiveShape() const
     {
-        return (EditMode == EPTEditMode::Add || EditMode == EPTEditMode::Paint)
-             ? StampShape : EPTStampShape::Sphere;
+        return (EditMode == EPTEditMode::Smooth) ? EPTStampShape::Sphere : StampShape;
+    }
+
+    /** true si la herramienta actual usa formas (y por lo tanto el HUD muestra los cuadritos).
+     *  Ojos no (siempre esfera) y Smooth tampoco. */
+    bool ToolUsesShapes() const
+    {
+        return !bEyesTool && (EditMode == EPTEditMode::Add
+                           || EditMode == EPTEditMode::Erase
+                           || EditMode == EPTEditMode::Paint);
     }
 
     // ── Partida (Sculpturillo) ──────────────────────────────────────────────

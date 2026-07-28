@@ -93,17 +93,19 @@ private:
     FTimerHandle StartDelayTimer;   // arranque diferido del primer turno (ver StartDelay)
     bool         bStartScheduled = false; // evita re-agendar el arranque en cada CheckStart
 
-    // Estado del turno (solo servidor). La palabra real vive acá (ES + EN), jamás se replica.
-    FPTWordEntry           CurrentWord;    // ForLang(false)=español, ForLang(true)=inglés
-    TArray<FPTWordEntry>   CurrentChoices; // las 3 opciones, cada una con sus 2 traducciones
+    // Estado del turno (solo servidor). La palabra real vive acá (todas sus traducciones), jamás
+    // se replica: a los clientes solo les llegan las MÁSCARAS.
+    FPTWordEntry           CurrentWord;
+    TArray<FPTWordEntry>   CurrentChoices; // las 3 opciones, cada una con todas sus traducciones
     int32                  TurnsLeftThisRound = 0; // turnos que faltan para cerrar la ronda
 
-    // Revelado progresivo por IDIOMA (las dos traducciones tienen letras distintas → dos sets).
-    TArray<int32> RevealQueueEs, RevealQueueEn;
-    TSet<int32>   RevealedPosEs, RevealedPosEn;
+    // Revelado progresivo POR IDIOMA: cada traducción tiene letras distintas, así que lleva su
+    // propia cola y su propio set de posiciones ya reveladas. Un elemento por idioma del CSV.
+    TArray<TArray<int32>> RevealQueues;
+    TArray<TSet<int32>>   RevealedPos;
     void ScheduleLetterReveals();
     void RevealNextLetter();
-    // Envía a los clientes ambas máscaras (ES/EN) y refresca la local del host.
+    // Envía a los clientes la máscara de CADA idioma y refresca la local del host.
     void PushMaskedWords();
 
     APTSculptGameState* GS() const;

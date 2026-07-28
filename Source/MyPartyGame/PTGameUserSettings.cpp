@@ -5,6 +5,7 @@
 #include "Engine/World.h"
 #include "AudioDevice.h"
 #include "Internationalization/Internationalization.h"
+#include "PTTextTable.h"
 
 void UPTGameUserSettings::SetToDefaults()
 {
@@ -40,6 +41,7 @@ void UPTGameUserSettings::SetLanguageCode(const FString& InLanguageCode)
     UE_LOG(LogTemp, Log, TEXT("[Lang] LanguageCode=%s  SetCurrentCulture=%s"),
            *LanguageCode, bOk ? TEXT("OK") : TEXT("FALLÓ (falta localización)"));
     SaveSettings();
+    PTText::OnLanguageChanged().Broadcast(); // refrescar la UI ya construida
 }
 
 int32 UPTGameUserSettings::GetGraphicsQuality() const

@@ -1,6 +1,7 @@
 #include "PTSculptGameState.h"
 #include "../Lobby/PTPlayerState.h"
 #include "../PTGameUserSettings.h"
+#include "../PTTextTable.h"
 #include "GameFramework/PlayerController.h"
 #include "Internationalization/Internationalization.h"
 #include "Internationalization/Culture.h"
@@ -17,12 +18,12 @@ void APTSculptGameState::RefreshLocalMasked()
     // motor. Motivo: FInternationalization::SetCurrentCulture("en") falla en silencio si el juego
     // todavía no tiene datos de localización para ese idioma → la cultura seguiría en "es" y todos
     // verían la palabra en español. El idioma de la palabra es una opción nuestra, no de UE.
-    FString Lang = TEXT("es");
-    if (const UPTGameUserSettings* S = UPTGameUserSettings::Get()) Lang = S->GetLanguageCode();
-    const bool bEnglish = Lang.StartsWith(TEXT("en"));
-    MaskedWord = bEnglish ? MaskedWordEn : MaskedWordEs;
-    if (MaskedWord.IsEmpty() && !bEnglish) MaskedWord = MaskedWordEn; // fallback si falta el idioma
-    if (MaskedWord.IsEmpty() &&  bEnglish) MaskedWord = MaskedWordEs;
+    const int32 Lang = PTText::GetCurrentLanguageIndex();
+
+    MaskedWord = MaskedWords.IsValidIndex(Lang) ? MaskedWords[Lang] : FString();
+    if (MaskedWord.IsEmpty()) // falta esa traducción → mostrar la primera que haya, nunca vacío
+        for (const FString& S : MaskedWords) if (!S.IsEmpty()) { MaskedWord = S; break; }
+
     OnTurnPhaseChanged.Broadcast(); // el HUD relee MaskedWord
 }
 
@@ -32,8 +33,7 @@ void APTSculptGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
     DOREPLIFETIME(APTSculptGameState, TurnPhase);
     DOREPLIFETIME(APTSculptGameState, CurrentSculptor);
     DOREPLIFETIME(APTSculptGameState, TurnEndServerTime);
-    DOREPLIFETIME(APTSculptGameState, MaskedWordEs);
-    DOREPLIFETIME(APTSculptGameState, MaskedWordEn);
+    DOREPLIFETIME(APTSculptGameState, MaskedWords);
     DOREPLIFETIME(APTSculptGameState, CurrentRound);
     DOREPLIFETIME(APTSculptGameState, TotalRounds);
 }
@@ -62,4 +62,13 @@ void APTSculptGameState::OnRep_TurnPhase()
 void APTSculptGameState::Multicast_ChatLine_Implementation(const FString& Name, const FString& Message, EPTChatType Type)
 {
     OnChatLine.Broadcast(Name, Message, Type);
+}
+
+void APTSculptGameState::Multicast_SystemLine_Implementation(FName Key, const FString& Arg0, int32 Arg1)
+{
+    // Se arma acá, en el cliente, para que cada uno la lea en SU idioma.
+    FFormatOrderedArguments Args;
+    Args.Add(FText::FromString(Arg0));
+    Args.Add(FText::AsNumber(Arg1));
+    OnChatLine.Broadcast(FString(), PTText::Format(Key, Args).ToString(), EPTChatType::System);
 }

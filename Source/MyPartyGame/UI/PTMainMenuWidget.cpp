@@ -2,6 +2,7 @@
 
 #include "PTMainMenuWidget.h"
 #include "MultiplayerSessionsSubsystem.h"
+#include "../PTTextTable.h"
 #include "PTCreateSessionWidget.h"
 #include "PTFindSessionsWidget.h"
 #include "PTEnterCodeWidget.h"
@@ -192,7 +193,7 @@ void UPTMainMenuWidget::OnLogin(bool bWasSuccessful)
     if (!bWasSuccessful && ErrorText)
     {
         // Causa típica: el cliente de Steam no está corriendo en esta PC.
-        ErrorText->SetText(FText::FromString(TEXT("No se pudo conectar con Steam")));
+        ErrorText->SetText(PTText::Get(TEXT("ERR_STEAM_CONNECT")));
 
         if (UWorld* World = GetWorld())
         {
@@ -205,7 +206,7 @@ void UPTMainMenuWidget::OnCreateSession(bool bWasSuccessful)
 {
     if (!bWasSuccessful)
     {
-        if (ErrorText) ErrorText->SetText(FText::FromString(TEXT("No se pudo crear la sesión")));
+        if (ErrorText) ErrorText->SetText(PTText::Get(TEXT("ERR_CREATE_SESSION")));
         return;
     }
 
@@ -219,8 +220,9 @@ void UPTMainMenuWidget::OnCreateSession(bool bWasSuccessful)
             UE_LOG(LogTemp, Log, TEXT("[Menu] Sesión privada — código (copiado al portapapeles): %s"), *Code);
             if (GeneratedCodeText)
             {
-                GeneratedCodeText->SetText(FText::FromString(
-                    FString::Printf(TEXT("Código: %s (copiado al portapapeles)"), *Code)));
+                FFormatOrderedArguments Args;
+                Args.Add(FText::FromString(Code));
+                GeneratedCodeText->SetText(PTText::Format(TEXT("MENU_CODE_COPIED"), Args));
             }
         }
     }
@@ -282,10 +284,9 @@ void UPTMainMenuWidget::OnJoinSession(EOnJoinSessionCompleteResult::Type Result)
     {
         if (ErrorText)
         {
-            const FString Msg = (Result == EOnJoinSessionCompleteResult::SessionDoesNotExist)
-                ? TEXT("Invalid Code")
-                : TEXT("No se pudo unir a la sesión");
-            ErrorText->SetText(FText::FromString(Msg));
+            ErrorText->SetText(PTText::Get(Result == EOnJoinSessionCompleteResult::SessionDoesNotExist
+                ? TEXT("ERR_INVALID_CODE")
+                : TEXT("ERR_JOIN_SESSION")));
 
             if (UWorld* World = GetWorld())
             {

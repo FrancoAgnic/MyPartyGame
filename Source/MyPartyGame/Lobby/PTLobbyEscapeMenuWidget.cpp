@@ -2,6 +2,8 @@
 
 #include "PTLobbyEscapeMenuWidget.h"
 #include "PTSettingsWidget.h"
+#include "PTLobbyGameMode.h"
+#include "Engine/World.h"
 #include "Components/Button.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -61,8 +63,21 @@ void UPTLobbyEscapeMenuWidget::HandleEscape()
 
 void UPTLobbyEscapeMenuWidget::OnLeaveGameClicked()
 {
-    // OpenLevel local desconecta del server (cierra la conexión); en el servidor esto
-    // dispara APTLobbyGameMode::Logout, que ya limpia la sesión si era el último jugador.
+    UWorld* World = GetWorld();
+
+    // Si el que se va es el ANFITRIÓN, no se puede cerrar el mundo de una: eso deja a los clientes
+    // con la conexión muerta y se les cae el juego. El GameMode los saca primero y después cierra.
+    if (World && World->GetNetMode() == NM_ListenServer)
+    {
+        if (APTLobbyGameMode* GM = World->GetAuthGameMode<APTLobbyGameMode>())
+        {
+            GM->HostLeaveGame();
+            return;
+        }
+    }
+
+    // Cliente (o partida local): OpenLevel desconecta del server; en el servidor eso dispara
+    // APTLobbyGameMode::Logout, que ya limpia la sesión si era el último jugador.
     UGameplayStatics::OpenLevel(this, FName("MainMenu"));
 }
 

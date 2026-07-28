@@ -9,6 +9,7 @@
 #include "GameFramework/PlayerController.h"
 #include "../Lobby/PTPlayerState.h"
 #include "../Sculpt/PTSculptGameState.h"
+#include "../PTTextTable.h"
 
 bool UPTSettingsWidget::Initialize()
 {
@@ -46,7 +47,36 @@ void UPTSettingsWidget::ShowPanel()
         if (VSyncCheckBox) VSyncCheckBox->SetIsChecked(Settings->IsVSyncEnabled());
     }
 
+    ApplyLanguageSectionAvailability();
     SetVisibility(ESlateVisibility::Visible);
+}
+
+bool UPTSettingsWidget::IsInMainMenu() const
+{
+    // El idioma se cambia SOLO en el menú principal: adentro de una partida cambiarlo obligaría a
+    // renegociar la palabra del turno con el servidor y dejaría el HUD a mitad de camino.
+    const UWorld* W = GetWorld();
+    if (!W) return false;
+    return W->GetMapName().Contains(TEXT("MainMenu"));
+}
+
+void UPTSettingsWidget::ApplyLanguageSectionAvailability()
+{
+    const bool bAllowed = IsInMainMenu();
+
+    // Se DESHABILITAN (no se ocultan) para que se vea que la opción existe y por qué está trabada.
+    if (EnglishButton) EnglishButton->SetIsEnabled(bAllowed);
+    if (SpanishButton) SpanishButton->SetIsEnabled(bAllowed);
+    for (UButton* B : LanguageButtons) if (B) B->SetIsEnabled(bAllowed);
+
+    if (LanguagePanel) LanguagePanel->SetIsEnabled(bAllowed);
+    if (LanguageHintText)
+    {
+        LanguageHintText->SetVisibility(bAllowed ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+        if (!bAllowed) LanguageHintText->SetText(PTText::Get(TEXT("SETTINGS_LANG_MENU_ONLY")));
+    }
+
+    OnLanguageAvailabilityChanged(bAllowed); // por si el BP quiere atenuarlo visualmente
 }
 
 void UPTSettingsWidget::OnVolumeChanged(float NewValue)
@@ -60,6 +90,22 @@ void UPTSettingsWidget::OnVolumeChanged(float NewValue)
 
 void UPTSettingsWidget::ApplyLanguage(const FString& Code)
 {
+    // Doble control: los botones ya están deshabilitados fuera del menú, pero el idioma no debe
+    // poder cambiarse en partida ni aunque llegue por otro camino (un BP, un rebind...).
+    if (!IsInMainMenu())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[Settings] El idioma solo se cambia desde el menú principal."));
+        return;
+    }
+
+    // Los idiomas salen del CSV: si alguien pide uno que ya no está (por ejemplo se sacó la
+    // columna), no se guarda una preferencia rota — se ignora y queda el que estaba.
+    if (!PTText::IsLanguageAvailable(Code))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[Settings] Idioma '%s' no está en UITexts.csv — se ignora."), *Code);
+        return;
+    }
+
     if (UPTGameUserSettings* Settings = UPTGameUserSettings::Get())
     {
         Settings->SetLanguageCode(Code);

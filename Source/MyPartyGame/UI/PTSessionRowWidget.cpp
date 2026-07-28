@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "PTSessionRowWidget.h"
+#include "../PTTextTable.h"
 #include "MultiplayerSessionsSubsystem.h"
 #include "Components/TextBlock.h"
 #include "Components/Button.h"
@@ -28,7 +29,7 @@ void UPTSessionRowWidget::Init(const FOnlineSessionSearchResult& InResult,
 
     const bool bFull = InCurrent >= InMax;
     if (JoinButton)     JoinButton->SetIsEnabled(!bFull);
-    if (JoinButtonText) JoinButtonText->SetText(FText::FromString(bFull ? TEXT("FULL") : TEXT("JOIN")));
+    if (JoinButtonText) JoinButtonText->SetText(PTText::Get(bFull ? TEXT("SESSION_FULL") : TEXT("SESSION_JOIN")));
 
     if (UGameInstance* GI = GetGameInstance())
         Sessions = GI->GetSubsystem<UMultiplayerSessionsSubsystem>();

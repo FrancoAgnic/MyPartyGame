@@ -49,6 +49,10 @@ protected:
     // BeginPlay) fija la vista al personaje; re-asegurar acá la cámara diorama.
     virtual void AcknowledgePossession(APawn* P) override;
 
+    /** Le manda al servidor quién soy (nombre + idioma) y le pide las cabezas de todos.
+     *  Reintenta solo si el PlayerState todavía no replicó. */
+    void PushIdentityToServer();
+
     /** Asignar IMC_Lobby en el Blueprint derivado BP_LobbyPlayerController. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input")
     UInputMappingContext* LobbyMappingContext;

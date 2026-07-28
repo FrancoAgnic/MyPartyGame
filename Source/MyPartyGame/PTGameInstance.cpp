@@ -1,6 +1,8 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "PTGameInstance.h"
+#include "PTTextTable.h"
+#include "PTWordBank.h"
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/FileHelper.h"
@@ -49,6 +51,35 @@ int32 UPTGameInstance::LoadCustomWordsFromCSVFile(const FString& Path)
     Content.ParseIntoArrayLines(Lines);
 
     TArray<FPTWordEntry> Parsed;
+
+    // Formato NUEVO (multi-idioma): si la primera línea es un encabezado con columnas conocidas
+    // ("Category"/"Difficulty" o códigos de idioma), lo parsea el mismo lector que el banco default,
+    // así un CSV propio también puede traer varios idiomas.
+    if (Lines.Num() > 1)
+    {
+        TArray<FString> Header;
+        PTText::SplitCsvLine(Lines[0], Header);
+        bool bLooksLikeHeader = false;
+        for (const FString& H : Header)
+        {
+            const FString T = H.TrimStartAndEnd();
+            if (T.Equals(TEXT("Category"), ESearchCase::IgnoreCase) ||
+                T.Equals(TEXT("Difficulty"), ESearchCase::IgnoreCase) ||
+                PTText::IsLanguageAvailable(T))
+            { bLooksLikeHeader = true; break; }
+        }
+        if (bLooksLikeHeader && PTWordBank::ParseWordCsv(Lines, Parsed))
+        {
+            PendingMatchSettings.CustomWords     = MoveTemp(Parsed);
+            PendingMatchSettings.bUseCustomWords = true;
+            UE_LOG(LogTemp, Log, TEXT("[GameInstance] CSV multi-idioma: %d palabras desde %s"),
+                   PendingMatchSettings.CustomWords.Num(), *Path);
+            return PendingMatchSettings.CustomWords.Num();
+        }
+    }
+
+    // Formato SIMPLE de siempre: "Palabra,Categoria,Dificultad" (un solo idioma). Se sigue
+    // aceptando para no romper los CSV que la gente ya tenga armados.
     for (int32 i = 0; i < Lines.Num(); ++i)
     {
         const FString Line = Lines[i].TrimStartAndEnd();
@@ -68,7 +99,9 @@ int32 UPTGameInstance::LoadCustomWordsFromCSVFile(const FString& Path)
         const FName Category = (Cols.IsValidIndex(1) && !Cols[1].IsEmpty())
             ? FName(*Cols[1]) : FName(TEXT("Personalizadas"));
         const EPTWordDifficulty Diff = ParseDifficulty(Cols.IsValidIndex(2) ? Cols[2] : FString());
-        Parsed.Add(FPTWordEntry(Word, Category, Diff));
+        // Una sola traducción: va en el idioma de referencia y el resto cae a esa por el fallback.
+        TArray<FString> OneLang; OneLang.Add(Word);
+        Parsed.Add(FPTWordEntry(OneLang, Category, Diff));
     }
 
     if (Parsed.Num() == 0) return 0;
@@ -182,13 +215,22 @@ void UPTGameInstance::HandleTravelFailure(UWorld* World, ETravelFailure::Type Fa
     }
 }
 
+void UPTGameInstance::SetPendingConnectError(const FString& InError)
+{
+    PendingConnectError = InError;
+    // El host cerró a propósito: reintentar la conexión no tiene sentido y dejaría al jugador
+    // golpeando una dirección muerta.
+    PendingReconnectURL.Reset();
+    ReconnectAttemptsRemaining = 0;
+}
+
 void UPTGameInstance::ReturnToMainMenuWithError(const FString& ErrorString)
 {
     // Traducir el token del servidor a un mensaje amigable.
     if (ErrorString.Contains(TEXT("WrongPassword")))
-        PendingConnectError = TEXT("Contraseña incorrecta");
+        PendingConnectError = PTText::GetStr(TEXT("ERR_WRONG_PASSWORD"));
     else if (!ErrorString.IsEmpty())
-        PendingConnectError = TEXT("No se pudo conectar a la sesión");
+        PendingConnectError = PTText::GetStr(TEXT("ERR_CONNECT_SESSION"));
 
     // Se rindió definitivamente: no dejar un intento de reconexión colgado para la próxima sesión.
     PendingReconnectURL.Reset();

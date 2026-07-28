@@ -131,6 +131,7 @@ protected:
 
 private:
     FTimerHandle RefreshTimer;
+    FDelegateHandle LanguageHandle; // suscripción a PTText::OnLanguageChanged
     FString      ChatLog;
     bool         bChatBound     = false;
     bool         bChatOpen      = false;

@@ -20,6 +20,10 @@ public:
     UFUNCTION(BlueprintCallable, Category="Session")
     FString ConsumePendingConnectError();
 
+    /** Deja un mensaje para mostrar al volver al menú (p.ej. "el anfitrión cerró la partida").
+     *  También cancela cualquier reintento de reconexión pendiente: la partida ya no existe. */
+    void SetPendingConnectError(const FString& InError);
+
     /** Llamar justo antes del ClientTravel exitoso a un servidor, para poder reintentar si se cae. */
     void NotifyJoinedServer(const FString& TravelURL);
 

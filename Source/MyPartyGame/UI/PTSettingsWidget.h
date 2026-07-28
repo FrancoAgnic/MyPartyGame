@@ -14,6 +14,7 @@ class USlider;
 class UButton;
 class UTextBlock;
 class UCheckBox;
+class UPanelWidget;
 
 UCLASS()
 class MYPARTYGAME_API UPTSettingsWidget : public UUserWidget
@@ -32,6 +33,15 @@ protected:
 
     UPROPERTY(meta = (BindWidget)) UButton* EnglishButton;
     UPROPERTY(meta = (BindWidget)) UButton* SpanishButton;
+
+    /** Botones de idiomas EXTRA (portugués y los que vengan). Se llenan desde Blueprint con
+     *  PT Get Languages + PT Set Language: sumar un idioma no toca C++. */
+    UPROPERTY(BlueprintReadWrite, Category = "Settings") TArray<UButton*> LanguageButtons;
+
+    /** Contenedor de la sección de idioma (opcional): se deshabilita entero fuera del menú. */
+    UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* LanguagePanel;
+    /** Aviso "el idioma se cambia desde el menú principal" (opcional). */
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* LanguageHintText;
 
     UPROPERTY(meta = (BindWidget)) UButton* LowButton;
     UPROPERTY(meta = (BindWidget)) UButton* MediumButton;
@@ -61,7 +71,16 @@ protected:
     UFUNCTION(BlueprintImplementableEvent, Category = "Settings")
     void OnGraphicsStateChanged(int32 QualityIndex);
 
+    /** bAllowed=false cuando el panel se abre en partida (el idioma solo se cambia en el menú). */
+    UFUNCTION(BlueprintImplementableEvent, Category = "Settings")
+    void OnLanguageAvailabilityChanged(bool bAllowed);
+
+    /** true solo en el mapa MainMenu. */
+    UFUNCTION(BlueprintPure, Category = "Settings")
+    bool IsInMainMenu() const;
+
 private:
     void ApplyLanguage(const FString& Code);
     void ApplyGraphics(int32 Quality);
+    void ApplyLanguageSectionAvailability();
 };

@@ -120,6 +120,43 @@ void APTLobbyGameMode::Logout(AController* Exiting)
     CheckReadyState();
 }
 
+void APTLobbyGameMode::HostLeaveGame()
+{
+    if (!HasAuthority()) return;
+
+    // 1) Avisar a TODOS los clientes para que se vayan al menú por su cuenta. Es un RPC confiable,
+    //    así que sale antes de que el mundo del servidor se cierre.
+    int32 Notified = 0;
+    for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+    {
+        APlayerController* PC = It->Get();
+        if (!PC || PC->IsLocalController()) continue; // el host se va en el paso 2
+        if (APTPlayerState* PS = PC->GetPlayerState<APTPlayerState>())
+        {
+            PS->Client_HostClosedGame();
+            ++Notified;
+        }
+    }
+    UE_LOG(LogTemp, Log, TEXT("[Lobby] El anfitrión cierra la partida: avisando a %d cliente(s)."), Notified);
+
+    // 2) Darles un instante para procesar el aviso y desconectarse solos. Recién ahí se destruye
+    //    la sesión y se va el host. Sin esta espera volvemos al bug: el mundo desaparece con los
+    //    clientes todavía conectados.
+    const float Delay = (Notified > 0) ? 1.0f : 0.f;
+    GetWorldTimerManager().ClearTimer(HostLeaveTimer);
+    GetWorldTimerManager().SetTimer(HostLeaveTimer, this, &APTLobbyGameMode::FinishHostLeave, FMath::Max(Delay, 0.01f), false);
+}
+
+void APTLobbyGameMode::FinishHostLeave()
+{
+    if (UMultiplayerSessionsSubsystem* Sessions =
+            GetGameInstance() ? GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>() : nullptr)
+    {
+        Sessions->DestroySession(); // ahora sí: ya no queda nadie conectado
+    }
+    UGameplayStatics::OpenLevel(this, FName("MainMenu"));
+}
+
 void APTLobbyGameMode::TravelToGame()
 {
     // Acá sí queremos seamless (sin flash) — puede haberse desactivado para el self-travel

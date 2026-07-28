@@ -14,6 +14,8 @@
 #include "Camera/CameraComponent.h"
 #include "../Sculpt/PTSculptVolume.h"
 #include "PTLobbyCharacter.h"
+#include "../PTGameUserSettings.h"
+#include "../Multiplayer/MultiplayerSessionsSubsystem.h"
 #include "Blueprint/UserWidget.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
@@ -125,7 +127,42 @@ void APTLobbyPlayerController::AcknowledgePossession(APawn* P)
         if (!bDioramaReady)
             GetWorldTimerManager().SetTimer(DioramaRetry, this,
                 &APTLobbyPlayerController::SetupDioramaView, 0.2f, true);
+
+        PushIdentityToServer();
     }
+}
+
+void APTLobbyPlayerController::PushIdentityToServer()
+{
+    if (!IsLocalController()) return;
+
+    APTPlayerState* PS = GetPlayerState<APTPlayerState>();
+    if (!PS)
+    {
+        // El PlayerState todavía no replicó → reintentar (si no, el jugador queda sin nombre).
+        FTimerHandle H;
+        GetWorldTimerManager().SetTimer(H, this, &APTLobbyPlayerController::PushIdentityToServer, 0.5f, false);
+        return;
+    }
+
+    // Nombre: backstop del "?Name=" de la URL de travel (si se perdió, nadie vería quién soy).
+    if (UMultiplayerSessionsSubsystem* Sessions =
+            GetGameInstance() ? GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>() : nullptr)
+    {
+        const FString MyName = Sessions->GetLocalPlayerDisplayName();
+        if (!MyName.IsEmpty()) PS->Server_ReportDisplayName(MyName);
+    }
+
+    // Idioma: para que la palabra a adivinar llegue en el mío ya desde el lobby.
+    FString Lang = TEXT("es");
+    if (const UPTGameUserSettings* S = UPTGameUserSettings::Get()) Lang = S->GetLanguageCode();
+    PS->Server_SetLanguage(Lang);
+
+    // MOMENTO 1 de la sincronización de cabezas: me acabo de unir a una sala.
+    //  a) le pido al server las cabezas de todos los que ya estaban;
+    //  b) el personaje sube la mía guardada (LoadHead lo hace al poseer el pawn), y el server la
+    //     reparte al resto. Con las dos direcciones, todos ven a todos.
+    PS->Server_RequestAllHeads();
 }
 
 void APTLobbyPlayerController::ShowLobbyOverlay()

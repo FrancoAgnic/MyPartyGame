@@ -22,7 +22,11 @@ struct FPTKeyBinding
     /** Id estable (no traducir): con esto se guarda el rebind. */
     UPROPERTY(BlueprintReadOnly, Category="Input") FName Id;
 
-    /** Texto para la UI ("Esculpir", "Pintar"...). */
+    /** Clave de localización del nombre visible (ver DT_UITexts). */
+    UPROPERTY(BlueprintReadOnly, Category="Input") FName LabelKey;
+
+    /** Texto para la UI ya traducido al idioma actual. Lo rellena GetBindings() en cada llamada,
+     *  así cambiar de idioma se refleja sin reiniciar. */
     UPROPERTY(BlueprintReadOnly, Category="Input") FText Label;
 
     /** Tecla actual (default o el override guardado). */

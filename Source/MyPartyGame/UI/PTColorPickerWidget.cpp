@@ -1,4 +1,5 @@
 #include "PTColorPickerWidget.h"
+#include "../PTTextTable.h"
 #include "PTColorRingWidget.h"
 #include "Components/Image.h"
 #include "Components/Slider.h"
@@ -23,7 +24,7 @@ void UPTColorPickerWidget::NativeConstruct()
     if (ConfirmButton)
         ConfirmButton->OnClicked.AddDynamic(this, &UPTColorPickerWidget::Confirm);
     if (SaveHintText)
-        SaveHintText->SetText(FText::FromString(TEXT("E — Save Color")));
+        SaveHintText->SetText(PTText::Get(TEXT("PICKER_SAVE_COLOR")));
 
     // Cargar y mostrar la paleta guardada en el anillo.
     LoadPalette();

@@ -1,36 +1,39 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-// Banco de palabras por defecto cargado desde un DataTable (NO hardcodeado). El usuario importa
-// el CSV como DT_WordBank; C++ lo lee por ruta y cachea. Lo usan el SculptGameMode (palabras) y
-// el lobby (categorías, derivadas del propio banco).
+// Banco de palabras cargado desde un CSV suelto (NO hardcodeado, NO DataTable).
+//
+// N IDIOMAS, igual que los textos de la UI: los idiomas salen de los ENCABEZADOS del CSV.
+//     Name,Category,Difficulty,ES,EN
+//     1,ANIMALES,1,ABEJA,BEE
+// Para sumar portugués se agrega la columna PT y sus palabras — sin tocar C++, sin reimportar nada:
+//     Name,Category,Difficulty,ES,EN,PT
+//     1,ANIMALES,1,ABEJA,BEE,ABELHA
+//
+// Las columnas se mapean POR CÓDIGO contra PTText::GetAvailableLanguages(), no por posición: así el
+// índice de idioma significa lo mismo en la UI y en las palabras aunque el orden difiera.
+//
+// Es un CSV suelto (y no un DataTable) por lo mismo que UITexts: un DataTable tiene las columnas
+// fijadas en C++, así que cada idioma nuevo obligaría a recompilar.
 
 #pragma once
 #include "CoreMinimal.h"
-#include "Engine/DataTable.h"
 #include "PTMatchSettings.h"
-#include "PTWordBank.generated.h"
-
-// Fila del DataTable importado del CSV. Columnas: Name (índice, row name), Word, Category, Difficulty(1/2/3).
-USTRUCT(BlueprintType)
-struct FPTWordRow : public FTableRowBase
-{
-    GENERATED_BODY()
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Word") FString Word;   // primaria (español)
-    // Traducción al inglés (columna opcional del CSV/DataTable). Vacía = el inglés cae a Word.
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Word") FString WordEn;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Word") FName   Category;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Word") int32   Difficulty = 2; // 1=Fácil 2=Media 3=Difícil
-};
 
 namespace PTWordBank
 {
-    // Ruta del DataTable (el asset que se importa del CSV). Único "hardcode": la ruta, no los datos.
-    inline const TCHAR* DefaultTablePath() { return TEXT("/Game/Template/Data/DT_WordBank.DT_WordBank"); }
+    /** Ruta del CSV, relativa al Content del proyecto (se empaqueta con la build). */
+    inline const TCHAR* CsvRelativePath() { return TEXT("Localization/WordBank.csv"); }
 
-    // Banco por defecto (Word/Category/Difficulty). Carga el DataTable la primera vez y cachea.
-    // Si el DataTable no existe, devuelve un fallback mínimo (para que el juego no quede sin palabras).
+    /** Banco por defecto. Carga el CSV la primera vez y cachea. */
     const TArray<FPTWordEntry>& GetDefaultWords();
 
-    // Categorías únicas del banco (para los checkboxes del lobby), ordenadas alfabéticamente.
+    /** Categorías únicas del banco (para los checkboxes del lobby), ordenadas alfabéticamente. */
     const TArray<FName>& GetDefaultCategories();
+
+    /** Vuelve a leer el CSV del disco. */
+    void Reload();
+
+    /** Parsea un CSV de palabras (el default, el que sube el host, o el de un mod).
+     *  Acepta el formato con columnas de idioma y también el viejo de una sola columna "Word".
+     *  Devuelve true si sacó al menos una palabra. */
+    bool ParseWordCsv(const TArray<FString>& Lines, TArray<FPTWordEntry>& OutWords);
 }

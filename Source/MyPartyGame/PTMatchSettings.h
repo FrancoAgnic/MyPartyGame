@@ -17,26 +17,39 @@ enum class EPTWordDifficulty : uint8
 };
 
 // Una palabra del banco, con su categoría y dificultad (para filtrar).
+//
+// N IDIOMAS: Words está indexado por el MISMO índice de idioma que la UI
+// (PTText::GetAvailableLanguages()), así "el idioma 2" significa lo mismo en todo el juego.
+// Sumar un idioma es agregar una columna al CSV — no se toca esta struct ni ningún otro código.
 USTRUCT(BlueprintType)
 struct FPTWordEntry
 {
     GENERATED_BODY()
 
-    // Word = traducción primaria (español, el banco default está en español).
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Word") FString Word;
-    // WordEn = traducción al inglés. OPCIONAL: si está vacía, el inglés cae a Word (fallback).
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Word") FString WordEn;
+    /** Traducciones, una por idioma (mismo orden que PTText::GetAvailableLanguages()).
+     *  Una entrada vacía = falta esa traducción → se usa el fallback de ForLang(). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Word") TArray<FString> Words;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Word") FName   Category;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Word") EPTWordDifficulty Difficulty = EPTWordDifficulty::Media;
 
     FPTWordEntry() {}
-    FPTWordEntry(const FString& InWord, const FName& InCat, EPTWordDifficulty InDiff)
-        : Word(InWord), Category(InCat), Difficulty(InDiff) {}
-    FPTWordEntry(const FString& InWord, const FString& InWordEn, const FName& InCat, EPTWordDifficulty InDiff)
-        : Word(InWord), WordEn(InWordEn), Category(InCat), Difficulty(InDiff) {}
+    FPTWordEntry(const TArray<FString>& InWords, const FName& InCat, EPTWordDifficulty InDiff)
+        : Words(InWords), Category(InCat), Difficulty(InDiff) {}
 
-    // Devuelve la traducción para el idioma pedido (con fallback al primario si falta).
-    FString ForLang(bool bEnglish) const { return (bEnglish && !WordEn.IsEmpty()) ? WordEn : Word; }
+    /** Traducción para ese índice de idioma. Si falta, cae a la primera que exista (nunca vacío). */
+    FString ForLang(int32 LangIndex) const
+    {
+        if (Words.IsValidIndex(LangIndex) && !Words[LangIndex].IsEmpty()) return Words[LangIndex];
+        for (const FString& S : Words) if (!S.IsEmpty()) return S;
+        return FString();
+    }
+
+    /** Idioma de referencia (primera columna del CSV). Es el que se usa para logs y para el
+     *  fallback general. */
+    FString Primary() const { return ForLang(0); }
+
+    bool IsValidEntry() const { return !Primary().IsEmpty(); }
 };
 
 // Config de la partida que el host elige en el lobby. Viaja lobby→Lvl-01 por el GameInstance.

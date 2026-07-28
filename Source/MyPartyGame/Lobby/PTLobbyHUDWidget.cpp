@@ -4,6 +4,7 @@
 #include "PTGameState.h"
 #include "PTPlayerState.h"
 #include "PTLobbyPlayerController.h"
+#include "../PTTextTable.h"
 #include "Components/VerticalBox.h"
 #include "Components/TextBlock.h"
 #include "Components/Button.h"
@@ -109,9 +110,9 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
             if (!PTPS) continue;
 
             UTextBlock* Row = NewObject<UTextBlock>(this);
-            FString Label = PTPS->DisplayName;
-            if (PTPS->bIsHost) Label += TEXT(" (Host)");
-            Label += PTPS->bIsReady ? TEXT(" — Listo") : TEXT(" — Esperando");
+            FString Label = PTPS->GetDisplayNameSafe();
+            if (PTPS->bIsHost) Label += TEXT(" (") + PTText::GetStr(TEXT("LOBBY_HOST")) + TEXT(")");
+            Label += TEXT(" — ") + PTText::GetStr(PTPS->bIsReady ? TEXT("LOBBY_READY") : TEXT("LOBBY_WAITING"));
             Row->SetText(FText::FromString(Label));
             PlayersBox->AddChildToVerticalBox(Row);
         }
@@ -128,9 +129,9 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
         FString Status;
         switch (PTGS->LobbyState)
         {
-        case EPTLobbyState::Starting: Status = TEXT("Starting..."); break;
-        case EPTLobbyState::InGame:   Status = TEXT("In game");     break;
-        default:                      Status = TEXT("Waiting for players...");
+        case EPTLobbyState::Starting: Status = PTText::GetStr(TEXT("LOBBY_STARTING")); break;
+        case EPTLobbyState::InGame:   Status = PTText::GetStr(TEXT("LOBBY_IN_GAME"));  break;
+        default:                      Status = PTText::GetStr(TEXT("LOBBY_WAITING_PLAYERS"));
         }
         LobbyStatusText->SetText(FText::FromString(Status));
     }
@@ -168,7 +169,7 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
     {
         const bool bReady = (LocalPS && LocalPS->bIsReady);
         if (ReadyButtonText)
-            ReadyButtonText->SetText(FText::FromString(bReady ? TEXT("Ready") : TEXT("Not Ready")));
+            ReadyButtonText->SetText(PTText::Get(bReady ? TEXT("LOBBY_BTN_READY") : TEXT("LOBBY_BTN_NOT_READY")));
         if (ReadyButton)
             ReadyButton->SetBackgroundColor(bReady
                 ? FLinearColor(0.47f, 0.87f, 0.50f)    // verde pastel (+50% saturación)
@@ -181,7 +182,9 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
         if (Seconds >= 0)
         {
             CountdownText->SetVisibility(ESlateVisibility::Visible);
-            CountdownText->SetText(FText::FromString(FString::Printf(TEXT("Arranca en %d..."), Seconds)));
+            FFormatOrderedArguments Args;
+            Args.Add(FText::AsNumber(Seconds));
+            CountdownText->SetText(PTText::Format(TEXT("LOBBY_STARTS_IN"), Args));
         }
         else
         {
@@ -321,9 +324,15 @@ void UPTLobbyHUDWidget::RefreshHostSettingsUI()
     // Estado del banco / CSV.
     const bool bCustom = S.bUseCustomWords && S.CustomWords.Num() > 0;
     if (CSVStatusText)
-        CSVStatusText->SetText(FText::FromString(bCustom
-            ? FString::Printf(TEXT("CSV propio: %d palabras"), S.CustomWords.Num())
-            : TEXT("Banco default")));
+    {
+        if (bCustom)
+        {
+            FFormatOrderedArguments Args;
+            Args.Add(FText::AsNumber(S.CustomWords.Num()));
+            CSVStatusText->SetText(PTText::Format(TEXT("LOBBY_CSV_CUSTOM"), Args));
+        }
+        else CSVStatusText->SetText(PTText::Get(TEXT("LOBBY_CSV_DEFAULT")));
+    }
     // Con CSV propio, el filtro por categorías del banco default no tiene sentido → deshabilitar.
     for (UCheckBox* C : CategoryChecks) if (C) C->SetIsEnabled(!bCustom);
 }

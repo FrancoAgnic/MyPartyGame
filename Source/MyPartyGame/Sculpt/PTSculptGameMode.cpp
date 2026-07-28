@@ -6,6 +6,7 @@
 #include "../Lobby/PTLobbyCharacter.h"
 #include "../PTGameInstance.h"
 #include "../PTWordBank.h"
+#include "../PTTextTable.h"
 #include "GameFramework/PlayerState.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
@@ -164,8 +165,7 @@ void APTSculptGameMode::GoToWaiting()
     GetWorldTimerManager().ClearTimer(PhaseTimer);
     G->TurnPhase         = EPTTurnPhase::WaitingForPlayers;
     G->CurrentSculptor   = nullptr;
-    G->MaskedWordEs      = FString();
-    G->MaskedWordEn      = FString();
+    G->MaskedWords.Reset();
     G->RefreshLocalMasked();
     G->TurnEndServerTime = 0.0;
     G->OnTurnPhaseChanged.Broadcast();
@@ -215,16 +215,15 @@ void APTSculptGameMode::StartChoosingPhase()
     CurrentWord          = FPTWordEntry();
     G->CurrentSculptor   = Sculptor;
     G->TurnPhase         = EPTTurnPhase::ChoosingWord;
-    G->MaskedWordEs      = FString();
-    G->MaskedWordEn      = FString();
+    G->MaskedWords.Reset();
     G->RefreshLocalMasked();
     G->TurnEndServerTime = 0.0;
     G->OnTurnPhaseChanged.Broadcast();
 
     // Mandarle las opciones SOLO al escultor, EN SU IDIOMA (fallback si falta la traducción).
-    const bool bSculptorEn = Sculptor->IsEnglish();
+    const int32 SculptorLang = Sculptor->GetLanguageIndex();
     TArray<FString> ChoiceTexts;
-    for (const FPTWordEntry& E : CurrentChoices) ChoiceTexts.Add(E.ForLang(bSculptorEn));
+    for (const FPTWordEntry& E : CurrentChoices) ChoiceTexts.Add(E.ForLang(SculptorLang));
     if (APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(Sculptor->GetOwningController()))
         PC->Client_ReceiveWordChoices(ChoiceTexts);
 
@@ -259,8 +258,9 @@ void APTSculptGameMode::BeginDrawing(int32 ChoiceIndex)
     ChoiceIndex = FMath::Clamp(ChoiceIndex, 0, CurrentChoices.Num() - 1);
     CurrentWord = CurrentChoices[ChoiceIndex];
 
-    RevealedPosEs.Reset(); RevealedPosEn.Reset();
-    PushMaskedWords(); // ambas máscaras iniciales (todo "_")
+    RevealedPos.Reset();
+    RevealedPos.SetNum(FMath::Max(1, PTText::GetAvailableLanguages().Num()));
+    PushMaskedWords(); // máscaras iniciales de todos los idiomas (todo "_")
     G->TurnPhase         = EPTTurnPhase::Drawing;
     G->TurnEndServerTime = G->GetServerWorldTimeSeconds() + TurnDuration;
     G->OnTurnPhaseChanged.Broadcast();
@@ -271,11 +271,11 @@ void APTSculptGameMode::BeginDrawing(int32 ChoiceIndex)
     // El escultor recibe la palabra real EN SU IDIOMA (nadie más).
     if (G->CurrentSculptor)
         if (APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(G->CurrentSculptor->GetOwningController()))
-            PC->Client_ReceiveSecretWord(CurrentWord.ForLang(G->CurrentSculptor->IsEnglish()));
+            PC->Client_ReceiveSecretWord(CurrentWord.ForLang(G->CurrentSculptor->GetLanguageIndex()));
 
     // TODO Fase 3: resetear la escultura (limpiar el Volume) acá.
 
-    UE_LOG(LogTemp, Log, TEXT("[SculptGM] Esculpiendo '%s' por %.0fs."), *CurrentWord.Word, TurnDuration);
+    UE_LOG(LogTemp, Log, TEXT("[SculptGM] Esculpiendo '%s' por %.0fs."), *CurrentWord.Primary(), TurnDuration);
 
     GetWorldTimerManager().ClearTimer(PhaseTimer);
     GetWorldTimerManager().SetTimer(PhaseTimer, this, &APTSculptGameMode::EndTurn,
@@ -290,18 +290,22 @@ void APTSculptGameMode::EndTurn()
     GetWorldTimerManager().ClearTimer(RevealTimer);
     G->TurnPhase  = EPTTurnPhase::TurnEnd;
     // Revelar la palabra COMPLETA a todos en su idioma (cada uno ve la suya en MAYÚSCULA).
-    G->MaskedWordEs = CurrentWord.Word.ToUpper();
-    G->MaskedWordEn = CurrentWord.ForLang(true).ToUpper();
+    const int32 NumLangs = FMath::Max(1, PTText::GetAvailableLanguages().Num());
+    G->MaskedWords.SetNum(NumLangs);
+    for (int32 L = 0; L < NumLangs; ++L) G->MaskedWords[L] = CurrentWord.ForLang(L).ToUpper();
     G->RefreshLocalMasked();
     G->OnTurnPhaseChanged.Broadcast();
 
-    // Anunciar por el chat. Si hay traducción distinta, mostrar las dos ("Auto / Car").
-    const FString EnWord = CurrentWord.ForLang(true);
-    const FString Announce = (!CurrentWord.WordEn.IsEmpty() && !EnWord.Equals(CurrentWord.Word, ESearchCase::IgnoreCase))
-        ? FString::Printf(TEXT("%s / %s"), *CurrentWord.Word.ToUpper(), *EnWord.ToUpper())
-        : CurrentWord.Word.ToUpper();
-    G->Multicast_ChatLine(FString(), FString::Printf(TEXT("La palabra era: %s"), *Announce), EPTChatType::System);
-    UE_LOG(LogTemp, Log, TEXT("[SculptGM] Fin de turno. La palabra era '%s'."), *CurrentWord.Word);
+    // Anunciar por el chat todas las traducciones DISTINTAS ("AUTO / CAR / CARRO"), sin repetir:
+    // muchas palabras se escriben igual en varios idiomas y quedaría "PIZZA / PIZZA / PIZZA".
+    TArray<FString> Seen;
+    for (int32 L = 0; L < NumLangs; ++L)
+    {
+        const FString W = CurrentWord.ForLang(L).ToUpper();
+        if (!W.IsEmpty() && !Seen.Contains(W)) Seen.Add(W);
+    }
+    G->Multicast_SystemLine(TEXT("CHAT_WORD_WAS"), FString::Join(Seen, TEXT(" / ")), 0);
+    UE_LOG(LogTemp, Log, TEXT("[SculptGM] Fin de turno. La palabra era '%s'."), *CurrentWord.Primary());
 
     GetWorldTimerManager().ClearTimer(PhaseTimer);
     GetWorldTimerManager().SetTimer(PhaseTimer, this, &APTSculptGameMode::AdvanceTurn,
@@ -332,8 +336,7 @@ void APTSculptGameMode::EndGame()
     GetWorldTimerManager().ClearTimer(PhaseTimer);
     G->TurnPhase         = EPTTurnPhase::GameOver;
     G->CurrentSculptor   = nullptr;
-    G->MaskedWordEs      = FString();
-    G->MaskedWordEn      = FString();
+    G->MaskedWords.Reset();
     G->RefreshLocalMasked();
     G->TurnEndServerTime = 0.0;
     G->OnTurnPhaseChanged.Broadcast();
@@ -344,9 +347,7 @@ void APTSculptGameMode::EndGame()
         if (!Winner || PT->GameScore > Winner->GameScore) Winner = PT;
 
     if (Winner)
-        G->Multicast_ChatLine(FString(),
-            FString::Printf(TEXT("¡Ganó %s con %d puntos!"), *Winner->GetPlayerName(), Winner->GameScore),
-            EPTChatType::System);
+        G->Multicast_SystemLine(TEXT("CHAT_WINNER"), Winner->GetPlayerName(), Winner->GameScore);
 
     UE_LOG(LogTemp, Log, TEXT("[SculptGM] Fin de la partida. Ganador: %s"),
            Winner ? *Winner->GetPlayerName() : TEXT("(nadie)"));
@@ -417,7 +418,7 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
     const FString Name = Sender->GetPlayerName();
 
     // Durante el dibujo: detectar aciertos y bloquear que la palabra aparezca en el chat.
-    if (G && G->TurnPhase == EPTTurnPhase::Drawing && !CurrentWord.Word.IsEmpty())
+    if (G && G->TurnPhase == EPTTurnPhase::Drawing && CurrentWord.IsValidEntry())
     {
         const bool bEligibleGuesser = (Sender != G->CurrentSculptor && !Sender->bHasGuessedThisTurn);
 
@@ -427,16 +428,18 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
             G->Multicast_ChatLine(Name, FString(), EPTChatType::Correct);
             // Globo VERDE "adivinó la palabra" (nunca la palabra) + confetti sobre su cabeza.
             if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(Sender->GetPawn()))
-                Char->Multicast_ShowChatBubble(TEXT("¡Adivinó la palabra!"), true);
+                // Texto vacío a propósito: con bGuess=true cada cliente pone el suyo traducido.
+                Char->Multicast_ShowChatBubble(FString(), true);
             HandlePlayerGuessedCorrectly(Sender);
             return;
         }
 
-        // Anti-spoiler: no dejar que ninguna de las dos traducciones aparezca en el chat.
+        // Anti-spoiler: no dejar que NINGUNA traducción aparezca en el chat, en ningún idioma
+        // (si no, un jugador podría spoilear a los demás escribiendo la palabra en otro idioma).
         const FString NT = Normalize(Text);
-        if (NT.Contains(Normalize(CurrentWord.Word)) ||
-            (!CurrentWord.WordEn.IsEmpty() && NT.Contains(Normalize(CurrentWord.WordEn))))
-            return; // se descarta silenciosamente
+        for (const FString& W : CurrentWord.Words)
+            if (!W.IsEmpty() && NT.Contains(Normalize(W)))
+                return; // se descarta silenciosamente
     }
 
     // Mensaje normal → a todos.
@@ -449,11 +452,11 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
 
 bool APTSculptGameMode::DoesGuessMatch(const FString& Guess) const
 {
-    if (CurrentWord.Word.IsEmpty()) return false;
-    // Cuenta como acierto si coincide con CUALQUIERA de las dos traducciones (escribís "Car" o "Auto").
+    if (!CurrentWord.IsValidEntry()) return false;
+    // Cuenta como acierto si coincide con CUALQUIER traducción: escribís "Auto", "Car" o "Carro".
     const FString G = Normalize(Guess);
-    if (G == Normalize(CurrentWord.Word)) return true;
-    if (!CurrentWord.WordEn.IsEmpty() && G == Normalize(CurrentWord.WordEn)) return true;
+    for (const FString& W : CurrentWord.Words)
+        if (!W.IsEmpty() && G == Normalize(W)) return true;
     return false;
 }
 
@@ -472,19 +475,29 @@ void APTSculptGameMode::PushMaskedWords()
 {
     APTSculptGameState* G = GS();
     if (!G) return;
-    G->MaskedWordEs = MaskWord(CurrentWord.Word,           &RevealedPosEs);
-    G->MaskedWordEn = MaskWord(CurrentWord.ForLang(true),  &RevealedPosEn);
+    const int32 NumLangs = FMath::Max(1, PTText::GetAvailableLanguages().Num());
+    G->MaskedWords.SetNum(NumLangs);
+    for (int32 L = 0; L < NumLangs; ++L)
+        G->MaskedWords[L] = MaskWord(CurrentWord.ForLang(L), RevealedPos.IsValidIndex(L) ? &RevealedPos[L] : nullptr);
     G->RefreshLocalMasked(); // el host es servidor: no recibe OnRep, refresca su máscara local acá
 }
 
 void APTSculptGameMode::ScheduleLetterReveals()
 {
     GetWorldTimerManager().ClearTimer(RevealTimer);
-    // Programa las dos colas (una por idioma), cada una con su fracción de letras.
-    ScheduleRevealsFor(CurrentWord.Word,          RevealFraction, RevealQueueEs);
-    ScheduleRevealsFor(CurrentWord.ForLang(true), RevealFraction, RevealQueueEn);
 
-    const int32 MaxN = FMath::Max(RevealQueueEs.Num(), RevealQueueEn.Num());
+    // Una cola por idioma: cada traducción tiene largo y letras distintas, así que se programan
+    // por separado y todas avanzan a la par (un tick revela una letra de cada una).
+    const int32 NumLangs = FMath::Max(1, PTText::GetAvailableLanguages().Num());
+    RevealQueues.Reset();
+    RevealQueues.SetNum(NumLangs);
+
+    int32 MaxN = 0;
+    for (int32 L = 0; L < NumLangs; ++L)
+    {
+        ScheduleRevealsFor(CurrentWord.ForLang(L), RevealFraction, RevealQueues[L]);
+        MaxN = FMath::Max(MaxN, RevealQueues[L].Num());
+    }
     if (MaxN <= 0) return;
 
     // Un solo timer revela la próxima letra de CADA idioma por tick → ambos avanzan a la par.
@@ -494,17 +507,28 @@ void APTSculptGameMode::ScheduleLetterReveals()
 
 void APTSculptGameMode::RevealNextLetter()
 {
+    auto AnyPending = [this]()
+    {
+        for (const TArray<int32>& Q : RevealQueues) if (Q.Num() > 0) return true;
+        return false;
+    };
+
     APTSculptGameState* G = GS();
-    if (!G || G->TurnPhase != EPTTurnPhase::Drawing ||
-        (RevealQueueEs.Num() == 0 && RevealQueueEn.Num() == 0))
+    if (!G || G->TurnPhase != EPTTurnPhase::Drawing || !AnyPending())
     {
         GetWorldTimerManager().ClearTimer(RevealTimer);
         return;
     }
-    if (RevealQueueEs.Num() > 0) { RevealedPosEs.Add(RevealQueueEs[0]); RevealQueueEs.RemoveAt(0); }
-    if (RevealQueueEn.Num() > 0) { RevealedPosEn.Add(RevealQueueEn[0]); RevealQueueEn.RemoveAt(0); }
+
+    // Una letra de CADA idioma por tick: así todos los jugadores ven avanzar su palabra al mismo ritmo.
+    for (int32 L = 0; L < RevealQueues.Num(); ++L)
+    {
+        if (RevealQueues[L].Num() == 0) continue;
+        if (RevealedPos.IsValidIndex(L)) RevealedPos[L].Add(RevealQueues[L][0]);
+        RevealQueues[L].RemoveAt(0);
+    }
     PushMaskedWords();
-    if (RevealQueueEs.Num() == 0 && RevealQueueEn.Num() == 0) GetWorldTimerManager().ClearTimer(RevealTimer);
+    if (!AnyPending()) GetWorldTimerManager().ClearTimer(RevealTimer);
 }
 
 void APTSculptGameMode::ScheduleRevealsFor(const FString& Word, float Fraction, TArray<int32>& OutQueue)
@@ -568,7 +592,7 @@ FString APTSculptGameMode::Normalize(const FString& In)
 
 void APTSculptGameMode::SeedDefaultWords()
 {
-    // Banco por defecto = DataTable DT_WordBank (importado del CSV). NO hardcodeado (ver PTWordBank).
+    // Banco por defecto = Content/Localization/WordBank.csv. NO hardcodeado (ver PTWordBank).
     WordBank = PTWordBank::GetDefaultWords();
 }
 
@@ -589,12 +613,12 @@ TArray<FPTWordEntry> APTSculptGameMode::BuildEligibleWordPool() const
 
     TArray<FPTWordEntry> Pool; // se lleva la entry entera (con las 2 traducciones)
     for (const FPTWordEntry& E : Source)
-        if (!E.Word.IsEmpty() && Passes(E)) Pool.Add(E);
+        if (E.IsValidEntry() && Passes(E)) Pool.Add(E);
 
     // Fallback: si el filtro no dejó ninguna, usar todas las de la fuente (no dejar sin palabras).
     if (Pool.Num() == 0)
         for (const FPTWordEntry& E : Source)
-            if (!E.Word.IsEmpty()) Pool.Add(E);
+            if (E.IsValidEntry()) Pool.Add(E);
 
     return Pool;
 }

@@ -39,36 +39,94 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
     int32 GameScore = 0;
 
-    // Idioma elegido por el jugador ("es"/"en"). El cliente lo manda al servidor para que el
-    // GameMode le muestre la palabra a adivinar EN SU IDIOMA (ver Server_SetLanguage en el controller).
+    // Idioma elegido por el jugador ("es", "en", "pt", ...). El cliente lo manda al servidor para
+    // que el GameMode le muestre la palabra a adivinar EN SU IDIOMA (ver Server_SetLanguage).
+    // Viaja el CÓDIGO y no el índice: si dos jugadores tuvieran CSV distintos, el código sigue
+    // significando lo mismo y el índice no.
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
     FString Language = TEXT("es");
 
-    bool IsEnglish() const { return Language.StartsWith(TEXT("en")); }
+    /** Índice de idioma del servidor para este jugador (para FPTWordEntry::ForLang). */
+    int32 GetLanguageIndex() const;
 
     // El cliente le dice al servidor su idioma (para la palabra a adivinar por idioma).
     UFUNCTION(Server, Reliable)
     void Server_SetLanguage(const FString& InLanguage);
 
-    // ── Cabeza custom (replicada) ───────────────────────────────────────────
-    // Geometría final horneada de la cabeza (arcilla + pintura + ojos), serializada y COMPRIMIDA
-    // (Zlib) a bytes: así entra en el límite de replicación (la malla cruda supera los ~64KB).
-    // Se replica a todos y sobrevive el seamless travel (CopyProperties) → se ve en lobby y Lvl-01.
-    UPROPERTY(ReplicatedUsing=OnRep_HeadBlob)
+    // ── Cabeza custom (sincronizada POR PARTES) ─────────────────────────────
+    // Geometría final horneada de la cabeza (arcilla + pintura + ojos), serializada y comprimida.
+    //
+    // IMPORTANTE: esto NO se replica como propiedad. Una cabeza detallada supera, incluso
+    // comprimida, el tamaño máximo que Unreal manda en una propiedad replicada, y cuando eso pasa
+    // el dato se descarta EN SILENCIO: el server veía las cabezas de los clientes (esas llegaban
+    // por RPC) pero los clientes nunca veían la del server. Por eso ahora viaja troceada en RPCs
+    // confiables (ver UploadHead / SendHeadTo), que sí soportan cualquier tamaño.
+    // El array vive igual en los dos lados: en el server es el original, en el cliente es lo
+    // reensamblado.
     TArray<uint8> HeadBlob;
 
-    // Sube +1 cada vez que el jugador confirma una cabeza nueva. El pawn compara esta versión
-    // con la que tiene aplicada y se re-aplica si difiere. Es la red de seguridad ante el orden
-    // de llegada: si el blob replica ANTES de que el PlayerState tenga pawn, OnRep_HeadBlob no
-    // encuentra a quién aplicársela y nunca vuelve a dispararse (el valor ya no cambia).
+    // Sube +1 cada vez que el jugador confirma una cabeza nueva. Esto SÍ se replica (son 4 bytes):
+    // el pawn compara esta versión con la que tiene aplicada y se re-aplica si difiere, y el
+    // cliente la usa para saber que le falta pedir una cabeza nueva.
     UPROPERTY(Replicated)
     int32 HeadVersion = 0;
 
-    UFUNCTION() void OnRep_HeadBlob();
+    /** Versión ya reensamblada localmente. Si es < HeadVersion, a este cliente le falta la cabeza. */
+    int32 LocalHeadVersion = 0;
+
+    // ── API de sincronización ───────────────────────────────────────────────
+
+    /** [Cliente dueño] Sube la cabeza al server, troceada. El server la guarda y la reparte a todos. */
+    void UploadHead(const TArray<uint8>& Blob);
+
+    /** [Cliente] Le pide al server TODAS las cabezas de la partida. Se llama al entrar a la sala y
+     *  al entrar al Lvl-01 después del travel — los dos momentos donde un pawn nace sin cabeza. */
+    UFUNCTION(Server, Reliable)
+    void Server_RequestAllHeads();
+
+    /** [Server] Manda esta cabeza a TODOS los jugadores conectados (incluido el propio host). */
+    void BroadcastHeadToAll();
+
+private:
+    UFUNCTION(Server, Reliable)
+    void Server_UploadHeadChunk(int32 Version, int32 ChunkIndex, int32 TotalChunks, const TArray<uint8>& Data);
+
+    UFUNCTION(Client, Reliable)
+    void Client_ReceiveHeadChunk(APTPlayerState* Source, int32 Version, int32 ChunkIndex,
+                                 int32 TotalChunks, const TArray<uint8>& Data);
+
+    /** [Server] Manda MI cabeza a un jugador concreto, troceada. */
+    void SendHeadTo(APTPlayerState* Target);
+
+    /** Buffer de reensamblado (server: lo que sube el dueño; cliente: lo que baja del server). */
+    TArray<uint8> PendingBlob;
+    int32         PendingVersion = -1;
+    int32         PendingChunks  = 0;
+
+public:
 
     // Llamar solo desde el servidor (HasAuthority).
     void Server_SetDisplayName(const FString& InName);
     void Server_SetHost(bool bInHost);
+
+    /** Nombre a MOSTRAR, con red de seguridad. Todo lo que pinte un nombre en la UI debe usar
+     *  esto y NO leer DisplayName directo: si por lo que sea DisplayName todavía no llegó a este
+     *  cliente, se cae a GetPlayerName() (que replica el motor por su cuenta) y en última
+     *  instancia a un texto genérico — nunca un nombre vacío. */
+    UFUNCTION(BlueprintPure, Category="Lobby")
+    FString GetDisplayNameSafe() const;
+
+    /** El cliente le manda su nombre al servidor. Backstop por si el "?Name=" de la URL de travel
+     *  se perdió (contraseña mal formada, reconexión, migración de host): sin esto el jugador
+     *  queda como "Player_2" para todos. */
+    UFUNCTION(Server, Reliable)
+    void Server_ReportDisplayName(const FString& InName);
+
+    /** [Server→cliente] El anfitrión cerró la partida: volvé al menú por las buenas.
+     *  Se manda ANTES de destruir la sesión; si no, el cliente se queda con una conexión muerta
+     *  y el juego se le cae. */
+    UFUNCTION(Client, Reliable)
+    void Client_HostClosedGame();
 
     UFUNCTION() void OnRep_DisplayName();
 

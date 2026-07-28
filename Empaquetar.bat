@@ -7,7 +7,13 @@ set PACKAGED_DIR=%PROJECT_DIR%Packaged
 set UAT=%PROGRAMFILES%\Epic Games\UE_5.8\Engine\Build\BatchFiles\RunUAT.bat
 set ONEDRIVE_DEST=%ONEDRIVE%\Sculpturillo
 set RAR=%PROGRAMFILES%\WinRAR\Rar.exe
-set RAR_NAME=Sculpturillo.rar
+
+REM La version sale de Config\DefaultGame.ini (ProjectVersion) para que el nombre del .rar
+REM y el numero que muestra el menu no puedan quedar desincronizados.
+set VERSION=
+for /f "tokens=2 delims==" %%v in ('findstr /b "ProjectVersion=" "%PROJECT_DIR%Config\DefaultGame.ini"') do set VERSION=%%v
+if "%VERSION%"=="" set VERSION=0.0.0
+set RAR_NAME=Sculpturillo_v%VERSION%.rar
 set RAR_LOCAL=%PACKAGED_DIR%\%RAR_NAME%
 
 echo.
@@ -77,6 +83,10 @@ if exist "%ONEDRIVE_DEST%\MyPartyGame" rmdir /s /q "%ONEDRIVE_DEST%\MyPartyGame"
 del /q "%ONEDRIVE_DEST%\MyPartyGame.exe" 2>nul
 del /q "%ONEDRIVE_DEST%\Manifest_*"      2>nul
 del /q "%ONEDRIVE_DEST%\NOTICES.txt"     2>nul
+
+REM Las builds viejas SI se borran: el nombre ahora lleva la version, asi que si no se limpian
+REM se van acumulando en OneDrive y el que la baja no sabe cual es la ultima.
+del /q "%ONEDRIVE_DEST%\Sculpturillo*.rar" 2>nul
 
 copy /y "%RAR_LOCAL%" "%ONEDRIVE_DEST%\%RAR_NAME%"
 

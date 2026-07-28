@@ -10,6 +10,7 @@
 #include "Components/PanelWidget.h"
 #include "Components/Image.h"
 #include "../PTInputBindings.h"
+#include "../PTTextTable.h"
 #include "../UI/PTControlRowWidget.h"
 #include "../UI/PTToolSlotWidget.h"
 #include "Components/PanelWidget.h"
@@ -88,10 +89,10 @@ void UPTGameplayHUDWidget::BuildToolbar()
     {
         ToolsBox->ClearChildren();
         ToolSlots.Reset();
-        ToolSlots.Add(MakeSlot(ToolsBox, IconAdd,   PTInput::GetKey(TEXT("ModeAdd")),   FText::FromString(TEXT("Agregar"))));
-        ToolSlots.Add(MakeSlot(ToolsBox, IconErase, PTInput::GetKey(TEXT("ModeErase")), FText::FromString(TEXT("Borrar"))));
-        ToolSlots.Add(MakeSlot(ToolsBox, IconPaint, PTInput::GetKey(TEXT("ModePaint")), FText::FromString(TEXT("Pintar"))));
-        ToolSlots.Add(MakeSlot(ToolsBox, IconEyes,  PTInput::GetKey(TEXT("ModeEyes")),  FText::FromString(TEXT("Ojos"))));
+        ToolSlots.Add(MakeSlot(ToolsBox, IconAdd,   PTInput::GetKey(TEXT("ModeAdd")),   PTText::Get(TEXT("TOOL_ADD"))));
+        ToolSlots.Add(MakeSlot(ToolsBox, IconErase, PTInput::GetKey(TEXT("ModeErase")), PTText::Get(TEXT("TOOL_ERASE"))));
+        ToolSlots.Add(MakeSlot(ToolsBox, IconPaint, PTInput::GetKey(TEXT("ModePaint")), PTText::Get(TEXT("TOOL_PAINT"))));
+        ToolSlots.Add(MakeSlot(ToolsBox, IconEyes,  PTInput::GetKey(TEXT("ModeEyes")),  PTText::Get(TEXT("TOOL_EYES"))));
     }
 
     // Formas: todas muestran la tecla de ciclar (TAB), y se resalta la equipada.
@@ -100,10 +101,10 @@ void UPTGameplayHUDWidget::BuildToolbar()
         ShapesBox->ClearChildren();
         ShapeSlots.Reset();
         const FKey TabKey = PTInput::GetKey(TEXT("CycleShape"));
-        ShapeSlots.Add(MakeSlot(ShapesBox, IconSphere,   TabKey, FText::FromString(TEXT("Esfera"))));
-        ShapeSlots.Add(MakeSlot(ShapesBox, IconCube,     TabKey, FText::FromString(TEXT("Cubo"))));
-        ShapeSlots.Add(MakeSlot(ShapesBox, IconCylinder, TabKey, FText::FromString(TEXT("Cilindro"))));
-        ShapeSlots.Add(MakeSlot(ShapesBox, IconCone,     TabKey, FText::FromString(TEXT("Cono"))));
+        ShapeSlots.Add(MakeSlot(ShapesBox, IconSphere,   TabKey, PTText::Get(TEXT("SHAPE_SPHERE"))));
+        ShapeSlots.Add(MakeSlot(ShapesBox, IconCube,     TabKey, PTText::Get(TEXT("SHAPE_CUBE"))));
+        ShapeSlots.Add(MakeSlot(ShapesBox, IconCylinder, TabKey, PTText::Get(TEXT("SHAPE_CYLINDER"))));
+        ShapeSlots.Add(MakeSlot(ShapesBox, IconCone,     TabKey, PTText::Get(TEXT("SHAPE_CONE"))));
     }
 
     // Borrar todo (BACKSPACE mantenido): cuadrito fijo con círculo de progreso + contador.
@@ -111,7 +112,7 @@ void UPTGameplayHUDWidget::BuildToolbar()
     {
         ClearBox->ClearChildren();
         ClearSlot = MakeSlot(ClearBox, IconClearAll, PTInput::GetKey(TEXT("ClearAll")),
-                             FText::FromString(TEXT("Borrar todo")));
+                             PTText::Get(TEXT("TOOL_CLEAR_ALL")));
         if (ClearSlot) ClearSlot->SetProgress(0.f, FText::GetEmpty()); // arranca sin círculo
     }
 }
@@ -145,8 +146,8 @@ void UPTGameplayHUDWidget::RefreshToolbar()
     for (int32 i = 0; i < ToolSlots.Num(); ++i)
         if (ToolSlots[i]) ToolSlots[i]->SetSelected(i == ToolIdx);
 
-    // ── Formas: solo tienen sentido con Add o Paint (Erase/Ojos siempre son esfera) ──
-    const bool bShowShapes = !bEyes && (PC->EditMode == EPTEditMode::Add || PC->EditMode == EPTEditMode::Paint);
+    // ── Formas: Agregar, Borrar y Pintar usan la forma elegida (Ojos siempre es esfera) ──
+    const bool bShowShapes = PC->ToolUsesShapes();
     if (ShapesBox) ShapesBox->SetVisibility(bShowShapes ? ESlateVisibility::HitTestInvisible
                                                         : ESlateVisibility::Collapsed);
     if (bShowShapes)
@@ -182,13 +183,13 @@ void UPTGameplayHUDWidget::RefreshToolbar()
         if (bPicker)
         {
             // Con la rueda de color abierta: E guarda el color donde tenés el puntero.
-            AddHint(IconSaveColor, PTInput::GetKey(TEXT("SaveColor")), FText::FromString(TEXT("Guardar color")));
+            AddHint(IconSaveColor, PTInput::GetKey(TEXT("SaveColor")), PTText::Get(TEXT("HINT_SAVE_COLOR")));
         }
         else if (!bEyes && PC->EditMode == EPTEditMode::Add)
         {
             // Con Agregar: los dos planos de trazo recto.
-            AddHint(IconAxisVert,  PTInput::GetKey(TEXT("AxisVertical")),   FText::FromString(TEXT("Plano vertical")));
-            AddHint(IconAxisHoriz, PTInput::GetKey(TEXT("AxisHorizontal")), FText::FromString(TEXT("Plano horizontal")));
+            AddHint(IconAxisVert,  PTInput::GetKey(TEXT("AxisVertical")),   PTText::Get(TEXT("HINT_PLANE_VERTICAL")));
+            AddHint(IconAxisHoriz, PTInput::GetKey(TEXT("AxisHorizontal")), PTText::Get(TEXT("HINT_PLANE_HORIZONTAL")));
         }
     }
 
@@ -223,12 +224,26 @@ void UPTGameplayHUDWidget::ShowHUD()
     RefreshTick();
     if (UWorld* World = GetWorld())
         World->GetTimerManager().SetTimer(RefreshTimer, this, &UPTGameplayHUDWidget::RefreshTick, 0.1f, true);
+
+    // La hotbar y las filas de controles se arman una sola vez: si el jugador cambia el idioma
+    // desde el menú de pausa hay que rehacerlas, si no quedan en el idioma anterior.
+    if (!LanguageHandle.IsValid())
+        LanguageHandle = PTText::OnLanguageChanged().AddWeakLambda(this, [this]()
+        {
+            BuildToolbar();
+            RebuildControls();
+        });
 }
 
 void UPTGameplayHUDWidget::NativeDestruct()
 {
     if (UWorld* World = GetWorld())
         World->GetTimerManager().ClearTimer(RefreshTimer);
+    if (LanguageHandle.IsValid())
+    {
+        PTText::OnLanguageChanged().Remove(LanguageHandle);
+        LanguageHandle.Reset();
+    }
     Super::NativeDestruct();
 }
 
@@ -287,7 +302,7 @@ void UPTGameplayHUDWidget::RefreshTick()
         WordText = G->MaskedWord; // ya revelada
         break;
     case EPTTurnPhase::WaitingForPlayers:
-        WordText = TEXT("Esperando jugadores...");
+        WordText = PTText::GetStr(TEXT("HUD_WAITING_PLAYERS"));
         break;
     default: break; // GameOver (el panel de resultados tapa esto)
     }
@@ -306,8 +321,9 @@ void UPTGameplayHUDWidget::RefreshTick()
     if (TxtTimer)
     {
         if (G->TurnPhase == EPTTurnPhase::Drawing)
-            TxtTimer->SetText(FText::FromString(FString::Printf(TEXT("%d Seg"),
-                              FMath::CeilToInt(G->GetTurnSecondsRemaining()))));
+            TxtTimer->SetText(FText::FromString(FString::Printf(TEXT("%d %s"),
+                              FMath::CeilToInt(G->GetTurnSecondsRemaining()),
+                              *PTText::GetStr(TEXT("HUD_SECONDS_SHORT")))));
         else
             TxtTimer->SetText(FText::GetEmpty());
     }
@@ -317,7 +333,8 @@ void UPTGameplayHUDWidget::RefreshTick()
     {
         if (G->TotalRounds > 0 && G->TurnPhase != EPTTurnPhase::WaitingForPlayers &&
             G->TurnPhase != EPTTurnPhase::GameOver)
-            TxtRound->SetText(FText::FromString(FString::Printf(TEXT("Round %d/%d"),
+            TxtRound->SetText(FText::FromString(FString::Printf(TEXT("%s %d/%d"),
+                                                               *PTText::GetStr(TEXT("HUD_ROUND")),
                                                                G->CurrentRound, G->TotalRounds)));
         else
             TxtRound->SetText(FText::GetEmpty());
@@ -331,7 +348,7 @@ void UPTGameplayHUDWidget::RefreshTick()
     if (bGameOver)
     {
         if (TxtResults)
-            TxtResults->SetText(FText::FromString(TEXT("Resultados\n") + BuildScoreboard()));
+            TxtResults->SetText(FText::FromString(PTText::GetStr(TEXT("HUD_RESULTS")) + TEXT("\n") + BuildScoreboard()));
         // Los botones de decisión son solo para el anfitrión.
         const bool bHost = IsLocalPlayerHost();
         const ESlateVisibility BtnVis = bHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
@@ -441,7 +458,8 @@ void UPTGameplayHUDWidget::OnChatLine(const FString& Name, const FString& Messag
     FString Line;
     switch (Type)
     {
-    case EPTChatType::Correct: Line = FString::Printf(TEXT("<name>%s</> <correct>adivinó la palabra!</>"), *ShortName); break;
+    case EPTChatType::Correct: Line = FString::Printf(TEXT("<name>%s</> <correct>%s</>"), *ShortName,
+                                                      *PTText::GetStr(TEXT("CHAT_GUESSED_IT"))); break;
     case EPTChatType::System:  Line = Message; break;
     default:                   Line = FString::Printf(TEXT("<name>%s</>: %s"), *ShortName, *Message); break; // Normal
     }
@@ -476,7 +494,7 @@ FString UPTGameplayHUDWidget::BuildScoreboard() const
 
     FString Out;
     for (const APTPlayerState* PT : Players)
-        Out += FString::Printf(TEXT("%s: %d\n"), *PT->DisplayName.Left(10), PT->GameScore);
+        Out += FString::Printf(TEXT("%s: %d\n"), *PT->GetDisplayNameSafe().Left(10), PT->GameScore);
     return Out;
 }
 
@@ -495,7 +513,7 @@ void UPTGameplayHUDWidget::RebuildScoreboard()
     // Firma del estado visible: solo reconstruimos las filas si algo cambió (no cada tick).
     FString Sig;
     for (const APTPlayerState* PT : Players)
-        Sig += FString::Printf(TEXT("%s:%d:%d|"), *PT->DisplayName,
+        Sig += FString::Printf(TEXT("%s:%d:%d|"), *PT->GetDisplayNameSafe(),
                                PT->GameScore, PT == G->CurrentSculptor ? 1 : 0);
     if (Sig == CachedScoreSig) return;
     CachedScoreSig = Sig;
@@ -505,7 +523,7 @@ void UPTGameplayHUDWidget::RebuildScoreboard()
     {
         UPTScoreRowWidget* Row = CreateWidget<UPTScoreRowWidget>(GetOwningPlayer(), ScoreRowClass);
         if (!Row) continue;
-        Row->SetRow(PT->DisplayName, PT->GameScore, PT == G->CurrentSculptor);
+        Row->SetRow(PT->GetDisplayNameSafe(), PT->GameScore, PT == G->CurrentSculptor);
         ScoreboardBox->AddChild(Row);
     }
 }

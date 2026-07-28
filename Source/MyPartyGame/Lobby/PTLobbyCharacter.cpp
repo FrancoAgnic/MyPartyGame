@@ -3,6 +3,7 @@
 #include "PTLobbyCharacter.h"
 #include "PTPlayerState.h"
 #include "PTNameTagWidget.h"
+#include "../PTTextTable.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/WidgetComponent.h"
@@ -150,20 +151,7 @@ void APTLobbyCharacter::BakeAndReplicateHead(UProceduralMeshComponent* ClaySrc, 
     // Replicar: serializar+comprimir → mandar al servidor → PlayerState → OnRep en todos.
     TArray<uint8> Blob;
     SectionsToBlob(Secs, Blob);
-    Server_SetHeadBlob(Blob);
-}
-
-void APTLobbyCharacter::Server_SetHeadBlob_Implementation(const TArray<uint8>& Blob)
-{
-    if (APTPlayerState* PS = GetPlayerState<APTPlayerState>())
-    {
-        PS->HeadBlob = Blob;      // se replica a los clientes (OnRep_HeadBlob)
-        PS->HeadVersion++;        // ...y sube la versión → los pawns se re-aplican sí o sí
-        UE_LOG(LogTemp, Log, TEXT("[Head] Cabeza replicada: %d bytes (v%d) de %s"),
-               Blob.Num(), PS->HeadVersion, *PS->GetPlayerName());
-    }
-    // En el servidor no salta OnRep: aplicar acá para que el host/servidor también la vea.
-    ApplyReplicatedHead();
+    if (APTPlayerState* PS = GetPlayerState<APTPlayerState>()) PS->UploadHead(Blob);
 }
 
 void APTLobbyCharacter::ApplyReplicatedHead()
@@ -367,7 +355,7 @@ void APTLobbyCharacter::LoadHead()
             // Replicar tu cabeza guardada (comprimida) para que los demás la vean sin re-esculpir.
             TArray<uint8> Blob;
             SectionsToBlob(Save->Sections, Blob);
-            Server_SetHeadBlob(Blob);
+            if (APTPlayerState* PS = GetPlayerState<APTPlayerState>()) PS->UploadHead(Blob);
         }
 }
 
@@ -470,7 +458,7 @@ void APTLobbyCharacter::UpdateNameTag()
             // DisplayName lo setea el GameMode y se replica; a veces (sobre todo tras el seamless
             // travel) puede llegar vacío. Caer al nombre nativo del PlayerState (el "?Name=" de
             // Steam) evita el cartel en blanco.
-            FString N = PS->DisplayName;
+            FString N = PS->GetDisplayNameSafe();
             if (N.IsEmpty()) N = PS->GetPlayerName();
             W->SetPlayerName(N);
         }
@@ -484,7 +472,9 @@ void APTLobbyCharacter::Multicast_ShowChatBubble_Implementation(const FString& T
         NameTag->SetVisibility(true);
         if (UPTNameTagWidget* W = Cast<UPTNameTagWidget>(NameTag->GetUserWidgetObject()))
         {
-            if (bGuess) W->ShowGuessMessage(Text); // verde
+            // El globo de acierto se traduce ACÁ, en cada cliente: el servidor manda Text vacío
+            // para que cada uno lo lea en su idioma (y para no filtrar nunca la palabra).
+            if (bGuess) W->ShowGuessMessage(PTText::GetStr(TEXT("BUBBLE_GUESSED_IT"))); // verde
             else        W->ShowMessage(Text);
         }
     }
@@ -617,9 +607,13 @@ void APTLobbyCharacter::Tick(float DeltaSeconds)
         // re-edición, seamless travel) — los OnRep solos se perdían carreras y no reintentaban.
         if (const APTPlayerState* PS = GetPlayerState<APTPlayerState>())
         {
-            if (PS->HeadVersion != AppliedHeadVersion && PS->HeadBlob.Num() > 0)
+            // Se compara contra LocalHeadVersion (lo que este cliente REALMENTE reensambló), no
+            // contra HeadVersion (que replica antes que los datos): si no, se aplicaría una cabeza
+            // a medio bajar y no se volvería a intentar.
+            const int32 Have = FMath::Max(PS->LocalHeadVersion, HasAuthority() ? PS->HeadVersion : 0);
+            if (Have != AppliedHeadVersion && PS->HeadBlob.Num() > 0)
             {
-                AppliedHeadVersion = PS->HeadVersion;
+                AppliedHeadVersion = Have;
                 ApplyReplicatedHead();
             }
         }

@@ -20,6 +20,8 @@
 #include "../PTInputBindings.h"
 #include "../Lobby/PTPlayerState.h"
 #include "../PTGameUserSettings.h"
+#include "../PTTextTable.h"
+#include "../Multiplayer/MultiplayerSessionsSubsystem.h"
 #include "Internationalization/Internationalization.h"
 #include "Internationalization/Culture.h"
 #include "Engine/Engine.h"
@@ -59,6 +61,20 @@ void APTSculptPlayerController::PushLanguageToServer()
     if (APTPlayerState* PS = GetPlayerState<APTPlayerState>())
     {
         PS->Server_SetLanguage(Lang);
+
+        // De paso, reportar el nombre: si el "?Name=" de la URL de travel se perdió, este es el
+        // único camino por el que el servidor (y con él los demás clientes) se entera de quién soy.
+        if (UMultiplayerSessionsSubsystem* Sessions =
+                GetGameInstance() ? GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>() : nullptr)
+        {
+            const FString MyName = Sessions->GetLocalPlayerDisplayName();
+            if (!MyName.IsEmpty()) PS->Server_ReportDisplayName(MyName);
+        }
+
+        // MOMENTO 3 de la sincronización de cabezas: recién entramos a Lvl-01 después del travel.
+        // Los pawns se crearon de cero, así que le pedimos al server TODAS las cabezas otra vez.
+        PS->Server_RequestAllHeads();
+
         UE_LOG(LogTemp, Log, TEXT("[Lang] Idioma enviado al servidor: %s"), *Lang);
         return;
     }
@@ -749,7 +765,7 @@ void APTSculptPlayerController::UpdatePreviewVisual()
     case EPTEditMode::Paint:  ToolMesh = PreviewToolMeshPaint;  break;
     }
     UStaticMesh* ShapeMesh = nullptr;
-    switch (EffectiveShape()) // Erase siempre esfera
+    switch (EffectiveShape())
     {
     case EPTStampShape::Sphere:   ShapeMesh = PreviewMeshSphere;   break;
     case EPTStampShape::Cube:     ShapeMesh = PreviewMeshCube;     break;
@@ -817,7 +833,7 @@ void APTSculptPlayerController::OnClearAllReleased()
     {
         Server_Undo();
         if (GEngine) GEngine->AddOnScreenDebugMessage(987723, 1.2f, FColor(150, 220, 255),
-            TEXT("Deshacer"));
+            PTText::GetStr(TEXT("SCULPT_UNDO")));
     }
     bClearHeld    = false;
     ClearHoldTime = 0.f;
@@ -1033,6 +1049,15 @@ void APTSculptPlayerController::SetModeInternal(EPTEditMode M, bool bResetAxis)
     if (bResetAxis && bAxisLock) SetAxisMode(false, bAxisHorizontal);
 
     bEyesTool = false; // 1/2/3 salen de la herramienta de ojos
+
+    // Entrar en Borrar arranca SIEMPRE en Esfera: es la forma que uno espera para corregir, y si
+    // quedara la última usada en Agregar (un cono, por ejemplo) el primer borrado sale raro.
+    if (M == EPTEditMode::Erase && EditMode != EPTEditMode::Erase)
+    {
+        StampShape     = EPTStampShape::Sphere;
+        StampRotation  = FRotator::ZeroRotator; // y sin la rotación que traía el shape anterior
+    }
+
     EditMode = M;
     ClampStampSize(); // respetar el mínimo del nuevo modo (Paint permite más chico)
     bPreviewDirty = true;

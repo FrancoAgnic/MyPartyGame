@@ -49,20 +49,19 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
     double TurnEndServerTime = 0.0;
 
-    // Palabra enmascarada en cada idioma ("_ u _ o" / "_ a _"). Anti-spoiler: son máscaras, la real
-    // no se replica. Se replican las dos; cada cliente muestra la de SU idioma (ver MaskedWord).
+    // Palabra enmascarada en CADA idioma ("_ u _ o" / "_ a _" / ...), indexada igual que
+    // PTText::GetAvailableLanguages(). Anti-spoiler: son máscaras, la palabra real no se replica.
+    // Se replican todas y cada cliente muestra la de SU idioma (ver MaskedWord).
     UPROPERTY(ReplicatedUsing=OnRep_Masked, BlueprintReadOnly, Category="Game")
-    FString MaskedWordEs;
-    UPROPERTY(ReplicatedUsing=OnRep_Masked, BlueprintReadOnly, Category="Game")
-    FString MaskedWordEn;
+    TArray<FString> MaskedWords;
 
     // Máscara en el idioma del JUGADOR LOCAL (la que muestra el HUD). NO se replica: se calcula
-    // en cada cliente a partir de las dos de arriba y la cultura actual. El HUD lee esta.
+    // en cada cliente a partir del array de arriba. El HUD lee esta y no se entera de los idiomas.
     UPROPERTY(BlueprintReadOnly, Category="Game")
     FString MaskedWord;
 
     UFUNCTION() void OnRep_Masked();
-    // Recalcula MaskedWord (idioma local) desde MaskedWordEs/En. La llama el server tras setearlas
+    // Recalcula MaskedWord (idioma local) desde MaskedWords. La llama el server tras setearlas
     // (no recibe OnRep) y el cliente en OnRep_Masked. Refresca el HUD.
     void RefreshLocalMasked();
 
@@ -96,4 +95,11 @@ public:
     // como texto (los aciertos llegan como EPTChatType::Correct sin Message).
     UFUNCTION(NetMulticast, Reliable)
     void Multicast_ChatLine(const FString& Name, const FString& Message, EPTChatType Type);
+
+    // Línea de sistema LOCALIZADA. Viaja la CLAVE + los datos, no el texto armado: si mandáramos
+    // el texto, todos lo verían en el idioma del host. Cada cliente lo traduce al suyo y lo emite
+    // por el mismo OnChatLine (así el HUD y los Blueprints ya enganchados no cambian).
+    // La clave usa {0} para Arg0 (nombre/palabra) y {1} para Arg1 (número).
+    UFUNCTION(NetMulticast, Reliable)
+    void Multicast_SystemLine(FName Key, const FString& Arg0, int32 Arg1);
 };

@@ -23,6 +23,19 @@ public:
     virtual void PostLogin(APlayerController* NewPlayer) override;
     virtual void Logout(AController* Exiting) override;
 
+    /** El ANFITRIÓN se va. Saca a los clientes primero y recién después destruye la sesión y se
+     *  va él: si el host cierra el mundo de una, los clientes se quedan con la conexión muerta y
+     *  el juego se les cae. Lo llama el botón "Salir" cuando corre en el listen server. */
+    void HostLeaveGame();
+
+private:
+    /** Segundo paso de HostLeaveGame, una vez que los avisos ya salieron hacia los clientes. */
+    void FinishHostLeave();
+
+    FTimerHandle HostLeaveTimer;
+
+public:
+
     /** Ruta del mapa de juego. Asignar en BP_LobbyGameMode si se quiere cambiar sin recompilar. */
     UPROPERTY(EditDefaultsOnly, Category="Travel")
     FString GameMapPath = TEXT("/Game/Template/levels/Lvl-01");
