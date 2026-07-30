@@ -5,6 +5,8 @@
 #include "TextureResource.h"
 #include "RenderUtils.h"
 #include "Net/UnrealNetwork.h"
+#include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
 #include "../Lobby/PTLobbyCharacter.h" // BuildEyesSection (esferas/mesh de ojos)
 
 // ─── Marching Cubes lookup tables (Bourke / Lorensen & Cline) ──────────────
@@ -365,6 +367,19 @@ void APTSculptVolume::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
+    // Apagar la fuente de partículas cuando pasa un ratito sin sellar (soltaste el click). No se
+    // desactiva de golpe al soltar para que la "fuente" no corte seca; se deja terminar el chorro.
+    if (SculptFX && SculptFX->IsActive() && GetWorld()
+        && GetWorld()->GetTimeSeconds() - SculptFXLastTime > SculptFXIdleTimeout)
+    {
+        SculptFX->Deactivate(); // deja de emitir; las partículas vivas terminan su vida solas
+    }
+
+    // Reloj del material del clay: el brillo de la arcilla nueva se desvanece comparando este
+    // "NowTime" con el tiempo de agregado horneado en la UV0 de cada vértice.
+    if (ClayMID && GetWorld())
+        ClayMID->SetScalarParameterValue(TEXT("NowTime"), GetWorld()->GetTimeSeconds());
+
     // Subida throttled de la textura de pintura.
     if (bPaintDirty)
     {
@@ -461,6 +476,10 @@ void APTSculptVolume::SetupClayMID()
     ClayMID->SetScalarParameterValue(TEXT("AtlasW"),     AtlasW);
     ClayMID->SetScalarParameterValue(TEXT("AtlasH"),     AtlasH);
     ClayMID->SetScalarParameterValue(TEXT("CB"),         CB);
+    // Brillo de la arcilla nueva: el material desvanece según (NowTime - UV0.x)/Seconds.
+    ClayMID->SetScalarParameterValue(TEXT("NewClayGlowSeconds"),    NewClayGlowSeconds);
+    ClayMID->SetScalarParameterValue(TEXT("NewClayGlowBrightness"), NewClayGlowBrightness);
+    ClayMID->SetScalarParameterValue(TEXT("NowTime"), GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f);
 }
 
 bool APTSculptVolume::WriteColorVoxel(int32 vx, int32 vy, int32 vz, const FColor& C)
@@ -768,14 +787,14 @@ float APTSculptVolume::StampSDF(EPTStampShape Shape, FVector P, float HalfSize)
     }
 }
 
-void APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
+bool APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
                                   EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot)
 {
     // Paint: escribe en el volumen 3D de pintura (per-pixel, no toca la geometría).
     if (Mode == EPTEditMode::Paint)
     {
         WritePaintStamp(WorldPos, Shape, Size, PaintColor);
-        return;
+        return true;
     }
 
     // Erase también borra la pintura de esa zona (libera bricks, sin fantasmas).
@@ -805,6 +824,11 @@ void APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
     const int32 z1 = FMath::Min(BMax.Z, FMath::CeilToInt(GC.Z) + R);
 
     bool bAnyChange = false;
+    bool bRemovedSolid = false; // Borrar: true si se sacó arcilla sólida (para las partículas)
+    float BestErasePrev = 0.f;  // el SDF más alto entre las celdas borradas (la más interior)
+    // Instante de este sello: se hornea en las muestras que Agregar crea, para que la arcilla
+    // nueva brille y se desvanezca (ver UV0 del mesher + material del clay).
+    const float StampNow = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 
     // ── Smooth: Laplaciano suave de dos pasos con falloff radial y leve empuje
     //    hacia afuera (SmoothBias) para que suavice sin encoger el modelo. ────
@@ -843,9 +867,9 @@ void APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
             if (nv != Field.GetSDF(x, y, z)) { Field.SetSDF(x, y, z, nv); bAnyChange = true; }
         }
 
-        if (!bAnyChange) return;
+        if (!bAnyChange) return false;
         MarkStampDirty(x0, y0, z0, x1, y1, z1);
-        return;
+        return true;
     }
 
     for (int32 z = z0; z <= z1; ++z)
@@ -866,18 +890,41 @@ void APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
             if (sdf > -1.f)
             {
                 Field.SetColor(x, y, z, PaintColor.ToFColor(true));
+                Field.SetAddTime(x, y, z, StampNow); // marca la arcilla nueva como "fresca"
                 bAnyChange = true;
             }
         }
         else // Erase
         {
-            const float next = FMath::Min(prev, -sdf);
-            if (next != prev) { Field.SetSDF(x, y, z, next); bAnyChange = true; }
+            // Clampear ANTES de comparar (si no, borrar en aire "profundo" marcaba cambio falso).
+            const float next = FMath::Clamp(FMath::Min(prev, -sdf), -1.f, 1.f);
+            if (next != prev)
+            {
+                // ¿Se sacó geometría SÓLIDA? (SDF > 0 = dentro de la arcilla). Solo eso cuenta para
+                // las partículas: la banda de transición alrededor de la superficie (prev en (-1,0])
+                // también cambia al borrar cerca, pero ahí NO hay arcilla visible → no debe saltar.
+                if (prev > 0.f)
+                {
+                    // Capturar el color de la arcilla que se borra (de una celda SÓLIDA, que sí tiene
+                    // color) ANTES de sacarla. Así la partícula sale del color real, no del gris de
+                    // una celda de borde. Se queda con la más interior (mayor SDF).
+                    if (!bRemovedSolid || prev > BestErasePrev)
+                    {
+                        BestErasePrev  = prev;
+                        LastErasedColor = FLinearColor::FromSRGBColor(Field.GetColor(x, y, z));
+                    }
+                    bRemovedSolid = true;
+                }
+                Field.SetSDF(x, y, z, next);
+                bAnyChange = true;
+            }
         }
     }
 
-    if (!bAnyChange) return;
+    if (!bAnyChange) return false;
     MarkStampDirty(x0, y0, z0, x1, y1, z1);
+    // Para Borrar, "true" = se sacó arcilla REAL (para lanzar partículas). Add/Paint siempre true.
+    return (Mode == EPTEditMode::Erase) ? bRemovedSolid : true;
 }
 
 // Marca todos los bricks que cubren el bbox de celdas (+1 de borde para que los
@@ -1080,7 +1127,7 @@ void APTSculptVolume::RebuildDirty()
             {
                 // Colisión ON con cocinado asíncrono (barato). Con VoxelSize alto
                 // la malla ya es de baja densidad, así que la colisión es liviana.
-                MeshPtr->CreateMeshSection(M.Section, M.Verts, M.Tris, M.Normals, {}, M.Colors, {}, /*collision=*/true);
+                MeshPtr->CreateMeshSection(M.Section, M.Verts, M.Tris, M.Normals, M.UV0, M.Colors, {}, /*collision=*/true);
                 if (Mat) MeshPtr->SetMaterial(M.Section, Mat);
             }
             bRebuildInProgress = false;
@@ -1106,7 +1153,83 @@ void APTSculptVolume::Multicast_ApplyStamp_Implementation(FVector WorldPos, EPTS
                                                            float Size, EPTEditMode Mode, FLinearColor PaintColor,
                                                            FRotator StampRot)
 {
-    ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot);
+    // ApplyStamp, para Borrar, deja en LastErasedColor el color de la arcilla sólida que sacó (o
+    // devuelve false si no borró nada sólido). Así el color de la partícula es exacto, no un
+    // muestreo del borde que a veces caía en una celda sin color (salía gris).
+    const bool bChanged = ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot);
+
+    // Corre en TODOS los clientes (es un Multicast) → también lo ven los que adivinan.
+    // Agregar NO tiene partículas: la arcilla nueva "brilla" y se desvanece en la PROPIA malla
+    // (el tiempo de agregado va horneado en la UV0 y el material del clay lo desvanece).
+    switch (Mode)
+    {
+    case EPTEditMode::Erase:
+        // Solo si REALMENTE borró arcilla sólida: los cubitos "son" lo que sacaste, con su color.
+        if (bChanged) PlaySculptFX(FXErase, Mode, WorldPos, LastErasedColor);
+        break;
+    case EPTEditMode::Paint: PlaySculptFX(FXPaint, Mode, WorldPos, PaintColor); break;
+    default: break; // Add / Smooth: sin partículas
+    }
+}
+
+void APTSculptVolume::PlaySculptFX(UNiagaraSystem* Sys, EPTEditMode Mode, const FVector& WorldPos, const FLinearColor& Color)
+{
+    if (!Sys) return;
+
+    // Crear la fuente una sola vez (dedicated server no renderiza → no la creamos ahí).
+    if (!SculptFX)
+    {
+        if (GetNetMode() == NM_DedicatedServer) return;
+        SculptFX = NewObject<UNiagaraComponent>(this, TEXT("SculptFX"));
+        SculptFX->SetupAttachment(GetRootComponent());
+        SculptFX->SetAutoActivate(false);
+        SculptFX->SetAutoDestroy(false); // es persistente: se reusa entre trazos
+        SculptFX->RegisterComponent();
+    }
+
+    // Cambiar el sistema solo si cambió la herramienta (reasignar por frame es caro).
+    const bool bAssetChanged = (SculptFXMode != Mode || SculptFX->GetAsset() != Sys);
+    if (bAssetChanged)
+    {
+        SculptFX->SetAsset(Sys);
+        SculptFXMode = Mode;
+    }
+
+    SculptFX->SetWorldLocation(WorldPos);
+    // Setear el color del User param bajo LOS DOS nombres ("Color" y "User.Color"): según la versión
+    // de Unreal, SetVariableLinearColor espera el nombre con o sin el prefijo "User.". Poner el que
+    // no existe es inofensivo (no-op), así funciona en cualquier caso.
+    SculptFX->SetVariableLinearColor(SculptFXColorParam, Color);
+    {
+        const FString N = SculptFXColorParam.ToString();
+        if (!N.StartsWith(TEXT("User.")))
+            SculptFX->SetVariableLinearColor(FName(*(TEXT("User.") + N)), Color);
+    }
+
+    // Borrar usa un MESH renderer: para teñir su material (parámetro "Color") se le pasa un material
+    // dinámico como override (parámetro User de tipo Material). Así el color del cubito = color de
+    // la arcilla borrada. El color del MID se actualiza en vivo cada sello; el binding del material
+    // en cambio hay que (re)aplicarlo cuando se (re)asigna el sistema y forzar un reinit para que el
+    // mesh renderer lo tome (si no, sigue usando su material fijo con el color por defecto).
+    bool bNeedReinit = false;
+    if (Mode == EPTEditMode::Erase && EraseParticleMaterial)
+    {
+        if (!EraseMID) EraseMID = UMaterialInstanceDynamic::Create(EraseParticleMaterial, this);
+        if (EraseMID)
+        {
+            EraseMID->SetVectorParameterValue(EraseMaterialColorParam, Color); // en vivo
+            if (bAssetChanged || !SculptFX->IsActive())
+            {
+                SculptFX->SetVariableMaterial(EraseMaterialUserParam, EraseMID);
+                bNeedReinit = true;
+            }
+        }
+    }
+
+    if (!SculptFX->IsActive()) SculptFX->Activate();
+    if (bNeedReinit) SculptFX->ReinitializeSystem(); // el renderer toma el material override
+
+    SculptFXLastTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 }
 
 void APTSculptVolume::ClearAll()

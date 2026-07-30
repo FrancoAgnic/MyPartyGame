@@ -142,6 +142,23 @@ void FPTSculptField::SetColor(int32 X, int32 Y, int32 Z, FColor C)
     B.Color[FPTBrick::LocalIdx(lx, ly, lz)] = C;
 }
 
+float FPTSculptField::GetAddTime(int32 X, int32 Y, int32 Z) const
+{
+    FPTBrickKey Key; int32 lx, ly, lz;
+    CellToBrick(X, Y, Z, Key, lx, ly, lz);
+    if (const FPTBrick* B = FindBrick(Key))
+        return B->AddTime[FPTBrick::LocalIdx(lx, ly, lz)];
+    return -1.e9f;
+}
+
+void FPTSculptField::SetAddTime(int32 X, int32 Y, int32 Z, float T)
+{
+    FPTBrickKey Key; int32 lx, ly, lz;
+    CellToBrick(X, Y, Z, Key, lx, ly, lz);
+    FPTBrick& B = FindOrAddBrick(Key);
+    B.AddTime[FPTBrick::LocalIdx(lx, ly, lz)] = T;
+}
+
 float FPTSculptField::SampleSDF(float X, float Y, float Z) const
 {
     const int32 x0 = FMath::FloorToInt(X), y0 = FMath::FloorToInt(Y), z0 = FMath::FloorToInt(Z);
@@ -175,6 +192,7 @@ void FPTSculptField::SnapshotBrick(const FPTBrickKey& Key, FBrickSnapshot& Out)
     Out.VoxelSize = VoxelSize;
     Out.SDF.SetNumUninitialized(SS * SS * SS);
     Out.Color.SetNumUninitialized(SS * SS * SS);
+    Out.AddTime.SetNumUninitialized(SS * SS * SS);
 
     const int32 baseX = Key.X * BS - SNMargin;
     const int32 baseY = Key.Y * BS - SNMargin;
@@ -199,8 +217,9 @@ void FPTSculptField::SnapshotBrick(const FPTBrickKey& Key, FBrickSnapshot& Out)
         }
 
         const int32 idx = i + j * SS + k * SS * SS;
-        Out.SDF[idx]   = v;
-        Out.Color[idx] = GetColor(gx, gy, gz);
+        Out.SDF[idx]     = v;
+        Out.Color[idx]   = GetColor(gx, gy, gz);
+        Out.AddTime[idx] = GetAddTime(gx, gy, gz);
         if (v > 0.f) bHasPos = true; else bHasNeg = true;
     }
     Out.bEmpty = !(bHasPos && bHasNeg);
@@ -272,7 +291,7 @@ static float BrickFlatness(const FPTSculptField::FBrickSnapshot& Snap, int32 SS)
 void FPTSculptField::MeshBrick(const FBrickSnapshot& Snap, FPTBrickMesh& Out)
 {
     Out.Section = Snap.Section;
-    Out.Verts.Reset(); Out.Normals.Reset(); Out.Tris.Reset(); Out.Colors.Reset();
+    Out.Verts.Reset(); Out.Normals.Reset(); Out.Tris.Reset(); Out.Colors.Reset(); Out.UV0.Reset();
     if (Snap.bEmpty) return;
 
     const int32 BS = FPTBrick::BrickSize;
@@ -301,6 +320,10 @@ void FPTSculptField::MeshBrick(const FBrickSnapshot& Snap, FPTBrickMesh& Out)
         const int32 i = FineIdx(kx), j = FineIdx(ky), k = FineIdx(kz);
         return Snap.Color[i + j * SS + k * SS * SS];
     };
+    auto TimeAt = [&](int32 kx, int32 ky, int32 kz) -> float {
+        const int32 i = FineIdx(kx), j = FineIdx(ky), k = FineIdx(kz);
+        return Snap.AddTime[i + j * SS + k * SS * SS];
+    };
     // Coord fina (float) de una esquina gruesa, para posicionar vértices.
     auto FineCoordX = [&](float k){ return gBaseX + FineIdx(0) + k * step; };
     auto FineCoordY = [&](float k){ return gBaseY + FineIdx(0) + k * step; };
@@ -317,18 +340,20 @@ void FPTSculptField::MeshBrick(const FBrickSnapshot& Snap, FPTBrickMesh& Out)
     for (int32 cy = 0; cy < CN; ++cy)
     for (int32 cx = 0; cx < CN; ++cx)
     {
-        float cv[8]; FColor cc[8];
+        float cv[8]; FColor cc[8]; float ct[8];
         int32 mask = 0;
         for (int32 c = 0; c < 8; ++c)
         {
             cv[c] = SDFAt(cx + GCornerX[c], cy + GCornerY[c], cz + GCornerZ[c]);
             cc[c] = ColAt(cx + GCornerX[c], cy + GCornerY[c], cz + GCornerZ[c]);
+            ct[c] = TimeAt(cx + GCornerX[c], cy + GCornerY[c], cz + GCornerZ[c]);
             if (cv[c] > 0.f) mask |= (1 << c);
         }
         if (mask == 0 || mask == 0xFF) continue;
 
         FVector4 accumCol(0,0,0,0);
         FVector  accumOff = FVector::ZeroVector; // offset dentro de la celda [0,1]
+        float    accumTime = -1.e9f;             // el MÁS reciente de los cruces (lo nuevo manda)
         int32 crossings = 0;
         for (int32 e = 0; e < 12; ++e)
         {
@@ -344,6 +369,9 @@ void FPTSculptField::MeshBrick(const FBrickSnapshot& Snap, FPTBrickMesh& Out)
                 FMath::Lerp((float)ca.G, (float)cb.G, t),
                 FMath::Lerp((float)ca.B, (float)cb.B, t),
                 FMath::Lerp((float)ca.A, (float)cb.A, t));
+            // Frescura: se queda con el instante MÁS reciente de las esquinas del cruce, para que
+            // el vértice brille si CUALQUIER parte de él es arcilla nueva.
+            accumTime = FMath::Max3(accumTime, ct[a], ct[b]);
             ++crossings;
         }
         if (crossings == 0) continue;
@@ -375,6 +403,8 @@ void FPTSculptField::MeshBrick(const FBrickSnapshot& Snap, FPTBrickMesh& Out)
             (uint8)FMath::Clamp(accumCol.Z, 0.f, 255.f),
             (uint8)FMath::Clamp(accumCol.W, 0.f, 255.f));
         Out.Colors.Add(FLinearColor(SRGBCol).ToFColor(false));
+        // UV0.x = instante de agregado del vértice → el material lo desvanece (brillo de lo nuevo).
+        Out.UV0.Add(FVector2D(accumTime, 0.f));
     }
 
     // 2) Quads: solo celdas reales cc en [1,CPA]. Lado - (min) para dedupe con vecinos.

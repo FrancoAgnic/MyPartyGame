@@ -408,6 +408,9 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         bPreviewDirty      = false;
     }
 
+    // Brillo del preview mientras esculpís en Add (cada frame, barato: solo setea el MID).
+    UpdatePreviewBrightness(DeltaTime);
+
     // Mover preview al punto de stamp. La rotación del actor = rotación del sello, así ves la
     // forma girada antes de colocarla (los demás componentes —gizmo, ring, sombra, límite— fijan
     // su propio transform WORLD cada tick, así que no les afecta).
@@ -726,21 +729,52 @@ void APTSculptPlayerController::ApplyPreviewMaterial()
     // (parámetro "Color"). Funciona tanto en el mesh procedural como en uno custom.
     const bool bTint = (EditMode == EPTEditMode::Add || EditMode == EPTEditMode::Paint);
 
-    auto ApplyTo = [&](UMeshComponent* Comp)
+    PreviewMID = nullptr;
+    PreviewStaticMID = nullptr;
+    auto ApplyTo = [&](UMeshComponent* Comp) -> UMaterialInstanceDynamic*
     {
-        if (!Comp) return;
+        if (!Comp) return nullptr;
         if (bTint)
         {
             UMaterialInstanceDynamic* MID = Comp->CreateDynamicMaterialInstance(0, Mat);
             if (MID) MID->SetVectorParameterValue(TEXT("Color"), CurrentPaintColor);
+            return MID;
         }
-        else
-        {
-            Comp->SetMaterial(0, Mat);
-        }
+        Comp->SetMaterial(0, Mat);
+        return nullptr;
     };
-    ApplyTo(PreviewMesh);
-    ApplyTo(PreviewStaticMesh);
+    PreviewMID       = ApplyTo(PreviewMesh);
+    PreviewStaticMID = ApplyTo(PreviewStaticMesh);
+}
+
+void APTSculptPlayerController::UpdatePreviewBrightness(float Dt)
+{
+    if (!PreviewMID && !PreviewStaticMID) return;
+
+    // Objetivo: 1 mientras mantenés el sello en Agregar, 0 si no. Sube rápido al apretar y se
+    // DESVANECE suave al soltar (mismo tiempo que el brillo de la arcilla nueva), en vez de cortar
+    // seco. Así el preview "acompaña" el brillo del trazo.
+    const bool  bBright = bIsStamping && EditMode == EPTEditMode::Add && !bEyesTool;
+    const float Target  = bBright ? 1.f : 0.f;
+    const float FadeSec = Volume ? Volume->NewClayGlowSeconds : 1.2f;
+    const float UpSpeed = 14.f;                         // casi instantáneo al empezar a esculpir
+    const float DnSpeed = 1.f / FMath::Max(FadeSec, 0.05f);
+    PreviewGlowAmt = FMath::FInterpTo(PreviewGlowAmt, Target, Dt, (Target > PreviewGlowAmt) ? UpSpeed : DnSpeed);
+
+    // El color base NO cambia (el preview mantiene su color real); el brillo lo maneja el
+    // parámetro "Glow" (0..1). Con Glow=0 el material del preview NO emite → se ve como el material
+    // original; con Glow=1 emite el glow. El material del preview Add debe multiplicar su Emissive
+    // por "Glow" (así queda apagado cuando no esculpís).
+    if (PreviewMID)
+    {
+        PreviewMID->SetVectorParameterValue(TEXT("Color"), CurrentPaintColor);
+        PreviewMID->SetScalarParameterValue(TEXT("Glow"), PreviewGlowAmt);
+    }
+    if (PreviewStaticMID)
+    {
+        PreviewStaticMID->SetVectorParameterValue(TEXT("Color"), CurrentPaintColor);
+        PreviewStaticMID->SetScalarParameterValue(TEXT("Glow"), PreviewGlowAmt);
+    }
 }
 
 // Elige el mesh de preview: override por tool > override por stamp > procedural.
@@ -1176,6 +1210,12 @@ void APTSculptPlayerController::Client_ReceiveSecretWord_Implementation(const FS
     CurrentSecretWord = Word;
     UE_LOG(LogTemp, Log, TEXT("[SculptPC] Tu palabra a esculpir: %s"), *Word);
     OnSecretWordReceived.Broadcast(Word);
+}
+
+void APTSculptPlayerController::Client_SystemLine_Implementation(FName Key, const FString& Arg0, int32 Arg1)
+{
+    if (APTSculptGameState* GS = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr)
+        GS->EmitLocalSystemLine(Key, Arg0, Arg1);
 }
 
 void APTSculptPlayerController::Server_ChooseWord_Implementation(int32 Index)

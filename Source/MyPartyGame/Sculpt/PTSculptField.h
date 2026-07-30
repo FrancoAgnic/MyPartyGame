@@ -23,11 +23,16 @@ struct FPTBrick
 
     TArray<float>  SDF;    // NumSamples, init a -1 (vacío)
     TArray<FColor> Color;  // NumSamples, init a blanco
+    // Instante (segundos de mundo) en que se AGREGÓ arcilla en esta muestra. El mesher lo hornea
+    // por vértice (UV0.x) y el material lo usa para que la arcilla NUEVA brille y se desvanezca.
+    // Init muy negativo = "vieja" (no brilla).
+    TArray<float>  AddTime;
 
     FPTBrick()
     {
         SDF.Init(-1.f, NumSamples);
         Color.Init(FColor::White, NumSamples);
+        AddTime.Init(-1.e9f, NumSamples);
     }
 
     static FORCEINLINE int32 LocalIdx(int32 x, int32 y, int32 z)
@@ -42,11 +47,13 @@ using FPTBrickKey = FIntVector;
 // Resultado de mallar un brick: se sube al ProceduralMesh en el GameThread.
 struct FPTBrickMesh
 {
-    int32           Section = INDEX_NONE;
-    TArray<FVector> Verts;
-    TArray<FVector> Normals;
-    TArray<int32>   Tris;
-    TArray<FColor>  Colors;
+    int32              Section = INDEX_NONE;
+    TArray<FVector>    Verts;
+    TArray<FVector>    Normals;
+    TArray<int32>      Tris;
+    TArray<FColor>     Colors;
+    // UV0.x = instante de agregado por vértice (para el brillo de la arcilla nueva). UV0.y sin usar.
+    TArray<FVector2D>  UV0;
 };
 
 // Campo disperso. Vive en APTSculptVolume. Las escrituras (brush) corren en el
@@ -63,10 +70,13 @@ public:
     // ── Acceso a muestras (coordenadas globales de celda) ──────────────────
     float  GetSDF  (int32 X, int32 Y, int32 Z) const;
     FColor GetColor(int32 X, int32 Y, int32 Z) const;
+    float  GetAddTime(int32 X, int32 Y, int32 Z) const;
     // Escribe allocando el brick si hace falta. Marca el brick (y vecinos de
     // borde) como dirty.
     void   SetSDF  (int32 X, int32 Y, int32 Z, float V);
     void   SetColor(int32 X, int32 Y, int32 Z, FColor C);
+    // Marca la muestra como "recién agregada" en el instante T (segundos de mundo).
+    void   SetAddTime(int32 X, int32 Y, int32 Z, float T);
 
     // SDF interpolado trilineal en coordenadas de celda (float). Para raymarch.
     float  SampleSDF(float X, float Y, float Z) const;
@@ -90,6 +100,7 @@ public:
         int32       Step = 1;         // paso de mallado (1=fino, 2=grueso)
         TArray<float>  SDF;
         TArray<FColor> Color;
+        TArray<float>  AddTime;       // paralelo a Color: instante de agregado por muestra
         bool           bEmpty = true; // sin superficie → sección vacía
     };
     // Actualiza el cache de "flatness" del brick (por eso no es const).

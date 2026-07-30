@@ -66,6 +66,11 @@ void APTSculptGameState::Multicast_ChatLine_Implementation(const FString& Name, 
 
 void APTSculptGameState::Multicast_SystemLine_Implementation(FName Key, const FString& Arg0, int32 Arg1)
 {
+    EmitLocalSystemLine(Key, Arg0, Arg1);
+}
+
+void APTSculptGameState::EmitLocalSystemLine(FName Key, const FString& Arg0, int32 Arg1)
+{
     // Se arma acá, en el cliente, para que cada uno la lea en SU idioma.
     FFormatOrderedArguments Args;
     Args.Add(FText::FromString(Arg0));

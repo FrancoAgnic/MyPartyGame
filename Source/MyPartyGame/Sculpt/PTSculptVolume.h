@@ -10,6 +10,8 @@
 class UTexture2D;
 class UMaterialInstanceDynamic;
 class UStaticMesh;
+class UNiagaraSystem;
+class UNiagaraComponent;
 
 UENUM(BlueprintType)
 enum class EPTStampShape : uint8 { Sphere, Cube, Cylinder, TriPrism };
@@ -27,6 +29,50 @@ public:
     // Resolución del campo (tamaño de celda en UU). Menor = más geometría/detalle.
     UPROPERTY(EditAnywhere, Category="Sculpt") float VoxelSize = 5.f;
     UPROPERTY(EditAnywhere, Category="Sculpt") UMaterialInterface* ClayMaterial = nullptr;
+
+    // ── Partículas de feedback (Borrar / Pintar) ─────────────────────────────
+    // Se emiten mientras mantenés el sello. Las ve TODO EL MUNDO (salen en el Multicast del sello).
+    // El color va por el parámetro User del sistema (ver SculptFXColorParam):
+    //  - Borrar: el color de la arcilla QUE SE BORRA (no el del picker).
+    //  - Pintar: el color del picker.
+    // Asignar los sistemas en BP_SculptVolume; si quedan vacíos, no hay partículas.
+    // (Agregar YA NO usa partículas: ahora la arcilla nueva "brilla" — ver AddGlow* abajo.)
+    UPROPERTY(EditAnywhere, Category="Sculpt|FX") UNiagaraSystem* FXErase = nullptr; // piedritas rotas al borrar
+    UPROPERTY(EditAnywhere, Category="Sculpt|FX") UNiagaraSystem* FXPaint = nullptr; // gotitas al pintar
+
+    // Nombre del parámetro de color (User.*) que los sistemas usan para teñir las partículas.
+    UPROPERTY(EditAnywhere, Category="Sculpt|FX") FName SculptFXColorParam = TEXT("Color");
+
+    // ── Material de los cubitos de Borrar ────────────────────────────────────
+    // El emisor de Borrar usa un MESH renderer; su material tiene un parámetro "Color". Para
+    // teñirlo con el color de la arcilla que se borra, se crea un material dinámico y se le pasa al
+    // sistema como override (parámetro User de tipo Material). Requiere que el sistema Niagara tenga
+    // un parámetro User Material y que el mesh renderer use ESE parámetro (ver instrucciones).
+    // Asignar acá el MISMO material del cubito.
+    UPROPERTY(EditAnywhere, Category="Sculpt|FX") UMaterialInterface* EraseParticleMaterial = nullptr;
+    // Parámetro de color DENTRO de ese material.
+    UPROPERTY(EditAnywhere, Category="Sculpt|FX") FName EraseMaterialColorParam = TEXT("Color");
+    // Nombre del parámetro User (de tipo Material) del sistema Niagara al que se le pasa el override.
+    UPROPERTY(EditAnywhere, Category="Sculpt|FX") FName EraseMaterialUserParam  = TEXT("MeshMaterial");
+
+    // Segundos sin sellar tras los cuales la fuente de partículas se apaga (soltaste el click).
+    UPROPERTY(EditAnywhere, Category="Sculpt|FX", meta=(ClampMin="0.05", ClampMax="1.0"))
+    float SculptFXIdleTimeout = 0.15f;
+
+    // Color base de la arcilla (para el color de las partículas de Borrar si esa zona no estaba
+    // pintada). En la práctica Agregar siempre pinta, así que rara vez se usa.
+    UPROPERTY(EditAnywhere, Category="Sculpt|FX") FLinearColor ClayBaseColor = FLinearColor(0.62f, 0.55f, 0.5f);
+
+    // ── Brillo de la arcilla nueva (Agregar, SOBRE la propia malla) ──────────
+    // NO es un mesh aparte: el material del clay hace brillar los vértices recién agregados y los
+    // desvanece hasta su color normal. Solo brilla lo NUEVO (el tiempo de agregado va horneado en
+    // la UV0 de cada vértice). El material del clay debe leer TexCoord[0].x como "tiempo de agregado"
+    // y compararlo con el parámetro escalar "NowTime" (que este actor actualiza cada frame):
+    //     fresh = saturate(1 - (NowTime - TexCoord0.x) / NewClayGlowSeconds)
+    //     Emissive += BaseColor * fresh * NewClayGlowBrightness
+    // Estos dos valores se le pasan al material como parámetros (NewClayGlowSeconds/Brightness).
+    UPROPERTY(EditAnywhere, Category="Sculpt|FX", meta=(ClampMin="0.05")) float NewClayGlowSeconds    = 1.2f;
+    UPROPERTY(EditAnywhere, Category="Sculpt|FX", meta=(ClampMin="0.0"))  float NewClayGlowBrightness = 2.5f;
 
     // ── Modo Smooth (tuneables) ─────────────────────────────────────────────
     // Intensidad del suavizado por aplicación (0..1). Más alto = suaviza más rápido.
@@ -57,9 +103,12 @@ public:
 
     // StampRot = rotación del sello (rueda del mouse + arrastrar). Solo afecta la GEOMETRÍA
     // (Add/Erase/Smooth); Paint es un splat sobre la superficie y la ignora.
-    void ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
+    // Devuelve true si el sello CAMBIÓ algo (para Borrar: hubo malla que borrar). Sirve para no
+    // lanzar partículas de borrado en el aire.
+    bool ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
                     EPTEditMode Mode, FLinearColor PaintColor,
                     FRotator StampRot = FRotator::ZeroRotator);
+
 
     // ── Ojos (tecla 4): esferas/mesh aparte, replicadas, que se apoyan sobre la escultura ──
     UPROPERTY(EditAnywhere, Category="Sculpt|Eyes") UStaticMesh*        EyeMesh     = nullptr; // necesita "Allow CPU Access"
@@ -126,6 +175,18 @@ protected:
 
     UFUNCTION() void OnRep_Eyes();
     void RebuildEyesMesh(); // reconstruye EyesMesh desde Eyes (usa EyeMesh/EyeMaterial)
+
+    // ── Fuente de partículas al esculpir (Borrar/Pintar) ─────────────────────
+    // Componente único reusado: se lo reubica en cada sello, se le setea el sistema según la
+    // herramienta y el color, y se apaga solo cuando pasa SculptFXIdleTimeout sin sellar.
+    UPROPERTY() UNiagaraComponent* SculptFX = nullptr;
+    UPROPERTY() UMaterialInstanceDynamic* EraseMID = nullptr; // material dinámico de los cubitos de Borrar
+    EPTEditMode  SculptFXMode = EPTEditMode::Smooth; // último sistema puesto (para no re-asignar por frame)
+    float        SculptFXLastTime = -1000.f;         // último instante en que se selló
+    FLinearColor LastErasedColor  = FLinearColor::White; // color de la última arcilla sólida borrada
+    // Emite/reubica la fuente en el punto del sello (llamado desde el Multicast → lo ven todos).
+    void PlaySculptFX(UNiagaraSystem* Sys, EPTEditMode Mode, const FVector& WorldPos, const FLinearColor& Color);
+
 
 private:
     UPROPERTY(VisibleAnywhere) UProceduralMeshComponent* Mesh;

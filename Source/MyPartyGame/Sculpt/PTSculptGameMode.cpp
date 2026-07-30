@@ -296,15 +296,16 @@ void APTSculptGameMode::EndTurn()
     G->RefreshLocalMasked();
     G->OnTurnPhaseChanged.Broadcast();
 
-    // Anunciar por el chat todas las traducciones DISTINTAS ("AUTO / CAR / CARRO"), sin repetir:
-    // muchas palabras se escriben igual en varios idiomas y quedaría "PIZZA / PIZZA / PIZZA".
-    TArray<FString> Seen;
-    for (int32 L = 0; L < NumLangs; ++L)
+    // Anunciar "la palabra era X" A CADA JUGADOR EN SU IDIOMA. No se usa Multicast (mandaría el
+    // mismo texto a todos): se manda un Client RPC por jugador con la palabra en el idioma de ESE
+    // jugador, así el que juega en inglés ve "CAR" y el que juega en español "AUTO".
+    for (APTPlayerState* PT : GetActivePlayers())
     {
-        const FString W = CurrentWord.ForLang(L).ToUpper();
-        if (!W.IsEmpty() && !Seen.Contains(W)) Seen.Add(W);
+        if (!PT) continue;
+        const FString W = CurrentWord.ForLang(PT->GetLanguageIndex()).ToUpper();
+        if (APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(PT->GetOwningController()))
+            PC->Client_SystemLine(TEXT("CHAT_WORD_WAS"), W, 0);
     }
-    G->Multicast_SystemLine(TEXT("CHAT_WORD_WAS"), FString::Join(Seen, TEXT(" / ")), 0);
     UE_LOG(LogTemp, Log, TEXT("[SculptGM] Fin de turno. La palabra era '%s'."), *CurrentWord.Primary());
 
     GetWorldTimerManager().ClearTimer(PhaseTimer);

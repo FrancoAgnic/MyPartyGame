@@ -197,6 +197,11 @@ public:
     UFUNCTION(Client, Reliable)
     void Client_ReceiveSecretWord(const FString& Word);
 
+    /** El servidor manda una línea de sistema SOLO a este jugador (para textos que dependen de su
+     *  idioma, como "la palabra era X": cada uno la recibe con su traducción, no la de todos). */
+    UFUNCTION(Client, Reliable)
+    void Client_SystemLine(FName Key, const FString& Arg0, int32 Arg1);
+
     /** El escultor elige una de las 3 (cliente → servidor). Llamar desde el HUD. */
     UFUNCTION(Server, Reliable, BlueprintCallable, Category="Game")
     void Server_ChooseWord(int32 Index);
@@ -327,6 +332,14 @@ private:
     UPROPERTY() AActor*                   PreviewActor      = nullptr;
     UPROPERTY() UProceduralMeshComponent* PreviewMesh       = nullptr;
     UPROPERTY() UStaticMeshComponent*     PreviewStaticMesh = nullptr;
+    // MIDs del preview tintado (Add/Paint): se guardan para poder subirles el brillo mientras
+    // esculpís (Add) sin reconstruir el mesh cada frame.
+    UPROPERTY() class UMaterialInstanceDynamic* PreviewMID       = nullptr;
+    UPROPERTY() class UMaterialInstanceDynamic* PreviewStaticMID = nullptr;
+    /** Multiplicador de brillo del preview mientras mantenés el sello en Agregar. */
+    UPROPERTY(EditAnywhere, Category="Sculpt") float PreviewSculptBrightness = 2.f;
+    // Cuánto brillo tiene el preview AHORA (0..1). Sube al apretar, baja suave al soltar (fade).
+    float PreviewGlowAmt = 0.f;
     UPROPERTY() UStaticMeshComponent*     AxisGizmo         = nullptr;
     UPROPERTY() UStaticMeshComponent*     PaintRing         = nullptr;
     UPROPERTY() class UMaterialInstanceDynamic* PaintRingMID = nullptr;
@@ -344,6 +357,7 @@ private:
     void RebuildPreviewMesh();
     void UpdatePreviewVisual();  // elige mesh (tool/stamp/procedural) y material
     void ApplyPreviewMaterial(); // aplica el material según EditMode
+    void UpdatePreviewBrightness(float Dt); // brillo del preview (sube al esculpir, fade al soltar)
     bool    GetCameraRay(FVector& Start, FVector& Dir) const;
     FVector GetStampPoint(FVector& OutNormal) const;
     float   VoxelHint() const;

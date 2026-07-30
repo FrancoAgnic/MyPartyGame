@@ -102,4 +102,9 @@ public:
     // La clave usa {0} para Arg0 (nombre/palabra) y {1} para Arg1 (número).
     UFUNCTION(NetMulticast, Reliable)
     void Multicast_SystemLine(FName Key, const FString& Arg0, int32 Arg1);
+
+    /** Emite una línea de sistema SOLO en esta instancia (sin red): arma el texto con PTText (en
+     *  el idioma local) y lo tira por OnChatLine. Lo usa Multicast_SystemLine y también los Client
+     *  RPC que mandan un texto por jugador (p. ej. "la palabra era X" en el idioma de cada uno). */
+    void EmitLocalSystemLine(FName Key, const FString& Arg0, int32 Arg1);
 };
