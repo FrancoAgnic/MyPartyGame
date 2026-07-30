@@ -41,6 +41,22 @@ public:
     UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Lobby")
     void Server_SetReady(bool bInReady);
 
+    // ── Estado del modo cabeza (lo lee la hotbar del modo G para resaltar la herramienta) ──
+    bool          IsHeadSculptMode()      const { return bHeadSculptMode; }
+    EPTEditMode   GetHeadEditMode()       const { return HeadEditMode; }
+    bool          IsHeadEyesToolActive()  const { return bHeadEyesTool; }
+    bool          IsHeadColorPickerOpen() const { return bHeadColorActive; }
+    EPTStampShape GetHeadStampShape()     const { return HeadStampShape; }
+    bool          IsHeadStampOutside()    const { return bHeadStampOutside; }
+
+    /** true si la herramienta actual del modo G usa formas (Add/Erase/Paint; Ojos no). */
+    bool HeadToolUsesShapes() const
+    {
+        return !bHeadEyesTool && (HeadEditMode == EPTEditMode::Add
+                              || HeadEditMode == EPTEditMode::Erase
+                              || HeadEditMode == EPTEditMode::Paint);
+    }
+
 protected:
     virtual void BeginPlay() override;
     virtual void SetupInputComponent() override;
@@ -158,6 +174,13 @@ private:
     void EnterHeadSculpt();
     void ExitHeadSculpt();
 
+    /** Hotbar del modo G (parent = PTHeadSculptHUDWidget). Asignar en BP_LobbyPlayerController.
+     *  Se crea al entrar al modo cabeza y se saca al salir. */
+    UPROPERTY(EditAnywhere, Category="Lobby")
+    TSubclassOf<class UPTHeadSculptHUDWidget> HeadHUDClass;
+
+    UPROPERTY() class UPTHeadSculptHUDWidget* HeadHUD = nullptr;
+
     // Órbita de cámara (WASD) alrededor del volumen de cabeza.
     float HeadOrbitYaw   = 0.f;
     float HeadOrbitPitch = -8.f;
@@ -192,9 +215,16 @@ private:
     // modo actual; 1/2/3 cambian el modo (Add/Erase/Paint). RMB queda para el color (paso siguiente).
     bool bHeadStamping = false;
     EPTEditMode HeadEditMode = EPTEditMode::Add;
+    // Forma del sello (como el gameplay): TAB cicla; al entrar en Borrar vuelve a Esfera.
+    EPTStampShape HeadStampShape = EPTStampShape::Sphere;
+    // true cuando la brocha quedó fuera del área de esculpido (para el icono 🚫 y para no sellar).
+    bool bHeadStampOutside = false;
+    /** Forma efectiva: Esfera si es Ojos (colocan esferas aparte); si no, la elegida. */
+    EPTStampShape EffectiveHeadShape() const { return bHeadEyesTool ? EPTStampShape::Sphere : HeadStampShape; }
     void OnHeadStampPressed();  void OnHeadStampReleased();
     void OnHeadScrollUp();      void OnHeadScrollDown();
     void OnHeadModeAdd();       void OnHeadModeErase();  void OnHeadModePaint();  void OnHeadModeEyes();
+    void OnHeadCycleShape();    // TAB: cicla Esfera→Cubo→Cilindro→Cono
 
     // ── Ojos (tecla 4): esferas aparte que se hornean junto a la cabeza ─────────
     bool bHeadEyesTool = false;                 // tecla 4 activa: colocar ojos con el LMB

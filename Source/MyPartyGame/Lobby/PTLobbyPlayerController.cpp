@@ -14,6 +14,7 @@
 #include "Camera/CameraComponent.h"
 #include "../Sculpt/PTSculptVolume.h"
 #include "PTLobbyCharacter.h"
+#include "PTHeadSculptHUDWidget.h"
 #include "../PTGameUserSettings.h"
 #include "../Multiplayer/MultiplayerSessionsSubsystem.h"
 #include "Blueprint/UserWidget.h"
@@ -265,6 +266,8 @@ void APTLobbyPlayerController::SetupInputComponent()
     InputComponent->BindKey(EKeys::Two,   IE_Pressed, this, &APTLobbyPlayerController::OnHeadModeErase);
     InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &APTLobbyPlayerController::OnHeadModePaint);
     InputComponent->BindKey(EKeys::Four,  IE_Pressed, this, &APTLobbyPlayerController::OnHeadModeEyes);
+    // TAB = ciclar la forma del sello (esfera/cubo/cilindro/cono), igual que el gameplay.
+    InputComponent->BindKey(EKeys::Tab,   IE_Pressed, this, &APTLobbyPlayerController::OnHeadCycleShape);
     // RMB mantenido = color picker (igual que el gameplay).
     InputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed,  this, &APTLobbyPlayerController::OnHeadColorPickPressed);
     InputComponent->BindKey(EKeys::RightMouseButton, IE_Released, this, &APTLobbyPlayerController::OnHeadColorPickReleased);
@@ -274,6 +277,9 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
     if (!bHeadSculptMode) return;
+
+    // Mantener el resaltado de la hotbar al día con la herramienta equipada (1/2/3/4).
+    if (HeadHUD) HeadHUD->Refresh(this);
 
     // Órbita de cámara con WASD (A/D = yaw, W/S = pitch).
     const float dYaw   = (IsInputKeyDown(EKeys::D) ? 1.f : 0.f) - (IsInputKeyDown(EKeys::A) ? 1.f : 0.f);
@@ -301,12 +307,15 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
     FVector Pt, Nrm = FVector::UpVector;
     const bool bHavePt = GetHeadStampPoint(Pt, Nrm);
 
+    // ¿La brocha quedó fuera del área de esculpido? → icono 🚫 y no se sella ahí.
+    bHeadStampOutside = bHavePt && HeadVolume && !HeadVolume->IsInsideCanvas(Pt);
+
     // Preview de la herramienta siguiendo el cursor.
     UpdateHeadPreview(bHavePt ? &Pt : nullptr, Nrm);
 
-    // Stamp continuo mientras se mantiene el LMB.
-    if (HeadVolume && bHeadStamping && bHavePt)
-        HeadVolume->ApplyStamp(Pt, EPTStampShape::Sphere, HeadBrushSize, HeadEditMode, HeadPaintColor);
+    // Stamp continuo mientras se mantiene el LMB (con la forma elegida; nunca fuera del área).
+    if (HeadVolume && bHeadStamping && bHavePt && !bHeadStampOutside)
+        HeadVolume->ApplyStamp(Pt, EffectiveHeadShape(), HeadBrushSize, HeadEditMode, HeadPaintColor);
 }
 
 void APTLobbyPlayerController::UpdateHeadPreview(const FVector* At, const FVector& Normal)
@@ -367,10 +376,10 @@ void APTLobbyPlayerController::UpdateHeadPreview(const FVector* At, const FVecto
         }
         else
         {
-            // Sin mesh propio → forma procedural del sello (esfera para Add/Erase/Ojos).
+            // Sin mesh propio → forma procedural del sello (la forma elegida; esfera para Ojos).
             if (HeadPreviewStatic) HeadPreviewStatic->SetVisibility(false);
             TArray<FVector> V, Nn; TArray<int32> Tt;
-            APTSculptVolume::BuildStampPreview(EPTStampShape::Sphere, HeadBrushSize,
+            APTSculptVolume::BuildStampPreview(EffectiveHeadShape(), HeadBrushSize,
                 HeadVolume ? HeadVolume->VoxelSize : 5.f, V, Tt, Nn);
             HeadPreviewMesh->CreateMeshSection(0, V, Tt, Nn, {}, {}, {}, false);
             if (Mat) { if (bTint) HeadPreviewMID = HeadPreviewMesh->CreateDynamicMaterialInstance(0, Mat); else HeadPreviewMesh->SetMaterial(0, Mat); }
@@ -445,9 +454,28 @@ void APTLobbyPlayerController::OnHeadScrollDown()
     HeadBrushSize = FMath::Clamp(HeadBrushSize - 4.f, 6.f, 80.f);
 }
 void APTLobbyPlayerController::OnHeadModeAdd()   { if (bHeadSculptMode) { HeadEditMode = EPTEditMode::Add;   bHeadEyesTool = false; } }
-void APTLobbyPlayerController::OnHeadModeErase() { if (bHeadSculptMode) { HeadEditMode = EPTEditMode::Erase; bHeadEyesTool = false; } }
+void APTLobbyPlayerController::OnHeadModeErase()
+{
+    if (!bHeadSculptMode) return;
+    // Entrar en Borrar arranca siempre en Esfera (igual que el gameplay): es la forma esperada
+    // para corregir, y una forma rara heredada de Agregar haría el primer borrado confuso.
+    if (HeadEditMode != EPTEditMode::Erase) HeadStampShape = EPTStampShape::Sphere;
+    HeadEditMode = EPTEditMode::Erase; bHeadEyesTool = false;
+}
 void APTLobbyPlayerController::OnHeadModePaint() { if (bHeadSculptMode) { HeadEditMode = EPTEditMode::Paint; bHeadEyesTool = false; } }
 void APTLobbyPlayerController::OnHeadModeEyes()  { if (bHeadSculptMode) { bHeadEyesTool = true; } }
+void APTLobbyPlayerController::OnHeadCycleShape()
+{
+    if (!bHeadSculptMode || bHeadEyesTool) return; // los ojos siempre son esferas
+    switch (HeadStampShape)
+    {
+    case EPTStampShape::Sphere:   HeadStampShape = EPTStampShape::Cube;     break;
+    case EPTStampShape::Cube:     HeadStampShape = EPTStampShape::Cylinder; break;
+    case EPTStampShape::Cylinder: HeadStampShape = EPTStampShape::TriPrism; break;
+    default:                      HeadStampShape = EPTStampShape::Sphere;   break;
+    }
+    HeadPreviewSize = -1.f; // forzar reconstruir el mesh del preview con la nueva forma
+}
 
 void APTLobbyPlayerController::PlaceEyeAtCursor()
 {
@@ -662,6 +690,19 @@ void APTLobbyPlayerController::EnterHeadSculpt()
     SetIgnoreLookInput(true);
     ApplyHeadSculptInputMode();
 
+    // Hotbar del modo G (las 4 herramientas + leyenda de controles). Se muestra encima de todo,
+    // la UI del lobby ya está colapsada. HitTestInvisible: no roba el mouse al esculpido.
+    if (HeadHUDClass && !HeadHUD)
+    {
+        HeadHUD = CreateWidget<UPTHeadSculptHUDWidget>(this, HeadHUDClass);
+        if (HeadHUD)
+        {
+            HeadHUD->AddToViewport();
+            HeadHUD->SetVisibility(ESlateVisibility::HitTestInvisible);
+            HeadHUD->Refresh(this);
+        }
+    }
+
     UE_LOG(LogTemp, Log, TEXT("[Lobby] Modo esculpir-cabeza: ON."));
 }
 
@@ -692,6 +733,9 @@ void APTLobbyPlayerController::ExitHeadSculpt()
     if (HeadVolume)       { HeadVolume->Destroy();       HeadVolume = nullptr; }
     if (HeadCam)          { HeadCam->Destroy();          HeadCam = nullptr; }
     if (HeadPreviewActor) { HeadPreviewActor->Destroy(); HeadPreviewActor = nullptr; HeadPreviewMesh = nullptr; }
+
+    // Sacar la hotbar del modo G.
+    if (HeadHUD) { HeadHUD->RemoveFromParent(); HeadHUD = nullptr; }
 
     // Restaurar la UI del lobby.
     if (ActiveOverlay) ActiveOverlay->SetVisibility(ESlateVisibility::Visible);
