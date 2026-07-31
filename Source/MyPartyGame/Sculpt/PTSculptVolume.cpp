@@ -520,9 +520,10 @@ bool APTSculptVolume::WriteColorVoxel(int32 vx, int32 vy, int32 vz, const FColor
     return true;
 }
 
-void APTSculptVolume::WritePaintStamp(FVector WorldPos, EPTStampShape Shape, float Size, FLinearColor Color, bool bFull)
+bool APTSculptVolume::WritePaintStamp(FVector WorldPos, EPTStampShape Shape, float Size, FLinearColor Color, bool bFull)
 {
-    if (!AtlasTex) return;
+    if (!AtlasTex) return false;
+    bool bPaintedAny = false; // true si al menos un vóxel cayó sobre la superficie (no en el aire)
     const float CV = FMath::Max(ColorVoxel, 0.5f);
     const FVector Local = GetActorTransform().InverseTransformPosition(WorldPos);
     const FColor  FCol  = Color.ToFColor(true);
@@ -565,8 +566,10 @@ void APTSculptVolume::WritePaintStamp(FVector WorldPos, EPTStampShape Shape, flo
             const int32 vy = FMath::FloorToInt((P.Y - CanvasMinLocal.Y) / CV);
             const int32 vz = FMath::FloorToInt((P.Z - CanvasMinLocal.Z) / CV);
             WriteColorVoxel(vx, vy, vz, Out);
+            bPaintedAny = true; // pintó sobre superficie
         }
     }
+    return bPaintedAny;
 }
 
 void APTSculptVolume::ClearColorVoxel(int32 vx, int32 vy, int32 vz)
@@ -791,11 +794,9 @@ bool APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
                                   EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot)
 {
     // Paint: escribe en el volumen 3D de pintura (per-pixel, no toca la geometría).
+    // Devuelve si pintó sobre superficie: pintar en el aire no debe lanzar partículas.
     if (Mode == EPTEditMode::Paint)
-    {
-        WritePaintStamp(WorldPos, Shape, Size, PaintColor);
-        return true;
-    }
+        return WritePaintStamp(WorldPos, Shape, Size, PaintColor);
 
     // Erase también borra la pintura de esa zona (libera bricks, sin fantasmas).
     if (Mode == EPTEditMode::Erase)
@@ -1153,26 +1154,34 @@ void APTSculptVolume::Multicast_ApplyStamp_Implementation(FVector WorldPos, EPTS
                                                            float Size, EPTEditMode Mode, FLinearColor PaintColor,
                                                            FRotator StampRot)
 {
-    // ApplyStamp, para Borrar, deja en LastErasedColor el color de la arcilla sólida que sacó (o
-    // devuelve false si no borró nada sólido). Así el color de la partícula es exacto, no un
-    // muestreo del borde que a veces caía en una celda sin color (salía gris).
+    // Corre en TODOS los clientes (es un Multicast) → también lo ven los que adivinan.
+    ApplyStampAndFX(WorldPos, Shape, Size, Mode, PaintColor, StampRot);
+}
+
+void APTSculptVolume::ApplyStampAndFX(FVector WorldPos, EPTStampShape Shape, float Size,
+                                       EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot)
+{
+    // ApplyStamp devuelve, según la herramienta:
+    //  · Borrar: true si sacó arcilla sólida (y deja su color en LastErasedColor).
+    //  · Pintar: true si pintó sobre superficie (no en el aire).
+    //  · Agregar: true si cambió algo (no usa partículas: la arcilla nueva brilla en la malla).
     const bool bChanged = ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot);
 
-    // Corre en TODOS los clientes (es un Multicast) → también lo ven los que adivinan.
-    // Agregar NO tiene partículas: la arcilla nueva "brilla" y se desvanece en la PROPIA malla
-    // (el tiempo de agregado va horneado en la UV0 y el material del clay lo desvanece).
     switch (Mode)
     {
     case EPTEditMode::Erase:
-        // Solo si REALMENTE borró arcilla sólida: los cubitos "son" lo que sacaste, con su color.
-        if (bChanged) PlaySculptFX(FXErase, Mode, WorldPos, LastErasedColor);
+        // Solo si borró arcilla sólida: los cubitos "son" lo que sacaste, con su color.
+        if (bChanged) PlaySculptFX(FXErase, Mode, WorldPos, LastErasedColor, Size);
         break;
-    case EPTEditMode::Paint: PlaySculptFX(FXPaint, Mode, WorldPos, PaintColor); break;
+    case EPTEditMode::Paint:
+        // Solo si pintó sobre la malla (no en el aire).
+        if (bChanged) PlaySculptFX(FXPaint, Mode, WorldPos, PaintColor, Size);
+        break;
     default: break; // Add / Smooth: sin partículas
     }
 }
 
-void APTSculptVolume::PlaySculptFX(UNiagaraSystem* Sys, EPTEditMode Mode, const FVector& WorldPos, const FLinearColor& Color)
+void APTSculptVolume::PlaySculptFX(UNiagaraSystem* Sys, EPTEditMode Mode, const FVector& WorldPos, const FLinearColor& Color, float BrushSize)
 {
     if (!Sys) return;
 
@@ -1204,6 +1213,16 @@ void APTSculptVolume::PlaySculptFX(UNiagaraSystem* Sys, EPTEditMode Mode, const 
         const FString N = SculptFXColorParam.ToString();
         if (!N.StartsWith(TEXT("User.")))
             SculptFX->SetVariableLinearColor(FName(*(TEXT("User.") + N)), Color);
+    }
+
+    // Radio de la brocha (en UU): BrushSize es el diámetro del sello, así que el radio = mitad.
+    // Se manda a un User param float para que el Shape Location (esfera) escale con el pincel.
+    const float BrushRadius = BrushSize * 0.5f;
+    SculptFX->SetVariableFloat(SculptFXRadiusParam, BrushRadius);
+    {
+        const FString N = SculptFXRadiusParam.ToString();
+        if (!N.StartsWith(TEXT("User.")))
+            SculptFX->SetVariableFloat(FName(*(TEXT("User.") + N)), BrushRadius);
     }
 
     // Borrar usa un MESH renderer: para teñir su material (parámetro "Color") se le pasa un material

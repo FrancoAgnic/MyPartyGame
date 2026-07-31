@@ -43,6 +43,10 @@ public:
     // Nombre del parámetro de color (User.*) que los sistemas usan para teñir las partículas.
     UPROPERTY(EditAnywhere, Category="Sculpt|FX") FName SculptFXColorParam = TEXT("Color");
 
+    // Nombre del parámetro float (User.*) al que se le manda el RADIO de la brocha (en UU), para que
+    // el Shape Location (esfera) de las partículas de Borrar/Pintar escale con el tamaño del pincel.
+    UPROPERTY(EditAnywhere, Category="Sculpt|FX") FName SculptFXRadiusParam = TEXT("Radius");
+
     // ── Material de los cubitos de Borrar ────────────────────────────────────
     // El emisor de Borrar usa un MESH renderer; su material tiene un parámetro "Color". Para
     // teñirlo con el color de la arcilla que se borra, se crea un material dinámico y se le pasa al
@@ -142,6 +146,12 @@ public:
     void Multicast_ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
                               EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot);
 
+    // Aplica el sello Y dispara el feedback (partículas de Borrar/Pintar, brillo de Agregar).
+    // Lo llama el Multicast (gameplay, en todos los clientes) y también el modo G del lobby
+    // (esculpido de la cabeza, local). Así el modo G tiene las mismas partículas que el gameplay.
+    void ApplyStampAndFX(FVector WorldPos, EPTStampShape Shape, float Size,
+                         EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot = FRotator::ZeroRotator);
+
     // Limpia toda la escultura (geometría + color) dejando el lienzo en blanco.
     // Reusa las texturas de color existentes (solo re-sube la page table vacía).
     void ClearAll();
@@ -185,7 +195,7 @@ protected:
     float        SculptFXLastTime = -1000.f;         // último instante en que se selló
     FLinearColor LastErasedColor  = FLinearColor::White; // color de la última arcilla sólida borrada
     // Emite/reubica la fuente en el punto del sello (llamado desde el Multicast → lo ven todos).
-    void PlaySculptFX(UNiagaraSystem* Sys, EPTEditMode Mode, const FVector& WorldPos, const FLinearColor& Color);
+    void PlaySculptFX(UNiagaraSystem* Sys, EPTEditMode Mode, const FVector& WorldPos, const FLinearColor& Color, float BrushSize);
 
 
 private:
@@ -255,7 +265,8 @@ private:
 
     void InitColorField();
     void SetupClayMID();
-    void WritePaintStamp(FVector WorldPos, EPTStampShape Shape, float Size, FLinearColor Color, bool bFull = false);
+    // Devuelve true si pintó sobre superficie (para no lanzar partículas al pintar en el aire).
+    bool WritePaintStamp(FVector WorldPos, EPTStampShape Shape, float Size, FLinearColor Color, bool bFull = false);
     // Escribe un voxel de color (alloca brick si hace falta). false = atlas lleno.
     bool WriteColorVoxel(int32 vx, int32 vy, int32 vz, const FColor& C);
     // Limpia un voxel de color (libera el brick si queda vacío).

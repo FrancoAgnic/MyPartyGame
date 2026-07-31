@@ -314,8 +314,10 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
     UpdateHeadPreview(bHavePt ? &Pt : nullptr, Nrm);
 
     // Stamp continuo mientras se mantiene el LMB (con la forma elegida; nunca fuera del área).
+    // ApplyStampAndFX = igual que el gameplay: aplica + dispara partículas (Borrar/Pintar) y el
+    // brillo de la arcilla nueva (Agregar). En el modo G es local (solo lo ves vos esculpiendo).
     if (HeadVolume && bHeadStamping && bHavePt && !bHeadStampOutside)
-        HeadVolume->ApplyStamp(Pt, EffectiveHeadShape(), HeadBrushSize, HeadEditMode, HeadPaintColor);
+        HeadVolume->ApplyStampAndFX(Pt, EffectiveHeadShape(), HeadBrushSize, HeadEditMode, HeadPaintColor);
 }
 
 void APTLobbyPlayerController::UpdateHeadPreview(const FVector* At, const FVector& Normal)

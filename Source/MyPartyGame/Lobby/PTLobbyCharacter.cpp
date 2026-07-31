@@ -96,7 +96,12 @@ TArray<FPTHeadSection> APTLobbyCharacter::ExtractSections(UProceduralMeshCompone
         const FTransform SrcXform = Src->GetComponentTransform();
         for (const FProcMeshVertex& V : Sec->ProcVertexBuffer)
         {
-            H.Verts.Add(V.Position); H.Normals.Add(V.Normal); H.UVs.Add(V.UV0);
+            H.Verts.Add(V.Position); H.Normals.Add(V.Normal);
+            // UV0 en el clay guarda el "tiempo de agregado" para el brillo de la arcilla nueva.
+            // En la cabeza HORNEADA no queremos ese brillo (el NowTime del material del head no se
+            // actualiza y el glow quedaría clavado al máximo). Se hornea con tiempo "muy viejo" para
+            // que el término del glow dé 0 → la cabeza sale con su color normal.
+            H.UVs.Add(FVector2D(-1.e9f, 0.f));
             // Color base = vertex color del campo (lo que pintás con Add-con-color). Si se pasó el
             // volumen y ese vértice fue PINTADO (modo Paint → atlas), usar ese color en su lugar,
             // para que la pintura quede horneada en el vertex color del mesh de la cabeza.
