@@ -268,6 +268,8 @@ void APTLobbyPlayerController::SetupInputComponent()
     InputComponent->BindKey(EKeys::Four,  IE_Pressed, this, &APTLobbyPlayerController::OnHeadModeEyes);
     // TAB = ciclar la forma del sello (esfera/cubo/cilindro/cono), igual que el gameplay.
     InputComponent->BindKey(EKeys::Tab,   IE_Pressed, this, &APTLobbyPlayerController::OnHeadCycleShape);
+    // SHIFT = (solo en Paint) alternar entre pintar la cabeza (arcilla) y el cuerpo (piel).
+    InputComponent->BindKey(EKeys::LeftShift, IE_Pressed, this, &APTLobbyPlayerController::OnHeadToggleBodyPaint);
     // RMB mantenido = color picker (igual que el gameplay).
     InputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed,  this, &APTLobbyPlayerController::OnHeadColorPickPressed);
     InputComponent->BindKey(EKeys::RightMouseButton, IE_Released, this, &APTLobbyPlayerController::OnHeadColorPickReleased);
@@ -280,6 +282,15 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
 
     // Mantener el resaltado de la hotbar al día con la herramienta equipada (1/2/3/4).
     if (HeadHUD) HeadHUD->Refresh(this);
+
+    // Blend de cámara: mover HeadCam suave hacia el destino (cambio cabeza↔cuerpo y órbita WASD).
+    if (HeadCam && bHeadCamInit)
+    {
+        const FVector  L = FMath::VInterpTo(HeadCam->GetActorLocation(), DesiredCamLoc, DeltaTime, HeadCamBlendSpeed);
+        const FRotator R = FMath::RInterpTo(HeadCam->GetActorRotation(), DesiredCamRot, DeltaTime, HeadCamBlendSpeed);
+        HeadCam->SetActorLocation(L);
+        HeadCam->SetActorRotation(R);
+    }
 
     // Órbita de cámara con WASD (A/D = yaw, W/S = pitch).
     const float dYaw   = (IsInputKeyDown(EKeys::D) ? 1.f : 0.f) - (IsInputKeyDown(EKeys::A) ? 1.f : 0.f);
@@ -300,6 +311,59 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
             HeadPaintColor = CP->CurrentColor; // color en vivo en la brocha
         }
         UpdateHeadPreview(nullptr, FVector::UpVector); // ocultar el preview mientras elegís color
+        return;
+    }
+
+    // Sub-modo "pintar el CUERPO" (SHIFT en Paint): el LMB pinta la piel del personaje por UV
+    // (no toca la arcilla). Muestra el mismo anillo de preview que el paint de la cabeza, pero
+    // apoyado sobre el cuerpo, y dispara las gotitas de pintura al pintar.
+    if (bBodyPaintMode)
+    {
+        APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn());
+
+        // Cursor actual + raycast para el preview del anillo sobre el cuerpo.
+        float MX = 0.f, MY = 0.f;
+        const bool bHaveCursor = GetMousePosition(MX, MY);
+        const FVector2D Cur(MX, MY);
+        FVector2D UV; FVector BPt, BN = FVector::UpVector;
+        bool bHit = false;
+        if (Char && bHaveCursor)
+        {
+            FVector O, D;
+            if (DeprojectScreenPositionToWorld(MX, MY, O, D))
+                bHit = Char->RaycastSkinnedMeshUV(O, D, UV, BPt, BN);
+        }
+
+        // Anillo de preview sobre el cuerpo (mismo mesh/material del paint de la cabeza, teñido).
+        UpdateHeadPreview(bHit ? &BPt : nullptr, BN);
+
+        if (Char && bHeadStamping && bHaveCursor)
+        {
+            // Radio del pincel EN EL MUNDO (cm). El pintado sin costuras trabaja en 3D, no en el UV.
+            const float R = FMath::Max(1.f, HeadBrushSize * 0.5f * BodyPaintBrushScale);
+
+            // Interpolar EN PANTALLA desde el último cursor: cada muestra hace su propio raycast y
+            // pinta una esfera de mundo (los dos lados de una costura se pintan juntos → sin cortes).
+            const FVector2D From = bHasLastBodyCursor ? LastBodyCursor : Cur;
+            const float DistPx   = FVector2D::Distance(From, Cur);
+            const int32 Steps    = bHasLastBodyCursor ? FMath::Clamp(FMath::CeilToInt(DistPx / 6.f), 1, 128) : 1;
+            for (int32 s = 1; s <= Steps; ++s)
+            {
+                const FVector2D P = FMath::Lerp(From, Cur, (float)s / (float)Steps);
+                FVector O, D, HP, HN; FVector2D StepUV;
+                if (DeprojectScreenPositionToWorld(P.X, P.Y, O, D)
+                    && Char->RaycastSkinnedMeshUV(O, D, StepUV, HP, HN))
+                    Char->PaintBodyWorldSphere(HP, R, HeadPaintColor);
+            }
+            Char->FlushBodyPaint(); // una sola subida al GPU por frame
+            if (bHit && HeadVolume) HeadVolume->PlayPaintFXAt(BPt, HeadPaintColor, HeadBrushSize); // gotitas
+            LastBodyCursor     = Cur;
+            bHasLastBodyCursor = true;
+        }
+        else
+        {
+            bHasLastBodyCursor = false;
+        }
         return;
     }
 
@@ -332,8 +396,9 @@ void APTLobbyPlayerController::UpdateHeadPreview(const FVector* At, const FVecto
     HeadPreviewActor->SetActorHiddenInGame(!bShow);
     if (!bShow) return;
 
-    // Reconstruir/elegir el mesh de la brocha sólo si cambió tamaño, modo o el toggle de ojos.
-    if (HeadPreviewSize != HeadBrushSize || HeadPreviewMode != HeadEditMode || bHeadPreviewEyesCached != bEyes)
+    // Reconstruir/elegir el mesh de la brocha sólo si cambió tamaño, modo, forma o el toggle de ojos.
+    if (HeadPreviewSize != HeadBrushSize || HeadPreviewMode != HeadEditMode
+        || bHeadPreviewEyesCached != bEyes || HeadPreviewShapeCached != EffectiveHeadShape())
     {
         HeadPreviewMID = nullptr;
 
@@ -354,6 +419,12 @@ void APTLobbyPlayerController::UpdateHeadPreview(const FVector* At, const FVecto
         case EPTEditMode::Paint: ToolMesh = HeadPreviewMeshPaint; Mat = HeadPreviewMatPaint; break;
         default:                 ToolMesh = HeadPreviewMeshAdd;   Mat = HeadPreviewMatAdd;   break; // Add
         }
+
+        // Con Add/Erase, el mesh estático (esfera) solo sirve para la forma ESFERA. Para cubo/
+        // cilindro/cono hay que usar el procedural (que sí respeta la forma), si no el preview
+        // mostraba siempre la esfera aunque esculpieras otra forma.
+        if (!bEyes && HeadEditMode != EPTEditMode::Paint && EffectiveHeadShape() != EPTStampShape::Sphere)
+            ToolMesh = nullptr;
 
         if (ToolMesh && HeadPreviewStatic)
         {
@@ -391,6 +462,7 @@ void APTLobbyPlayerController::UpdateHeadPreview(const FVector* At, const FVecto
         HeadPreviewSize        = HeadBrushSize;
         HeadPreviewMode        = HeadEditMode;
         bHeadPreviewEyesCached = bEyes;
+        HeadPreviewShapeCached = EffectiveHeadShape();
     }
 
     HeadPreviewActor->SetActorLocation(*At);
@@ -402,12 +474,36 @@ void APTLobbyPlayerController::UpdateHeadPreview(const FVector* At, const FVecto
 
 void APTLobbyPlayerController::UpdateHeadCam()
 {
-    if (!HeadCam || !HeadVolume) return;
-    const FVector C   = HeadVolume->GetActorLocation();
+    if (!HeadCam) return;
+
+    // Foco: en modo "pintar cuerpo" apunta al CENTRO DEL PERSONAJE (más lejos, para encuadrar todo
+    // el cuerpo); si no, al volumen de la cabeza.
+    FVector Center;
+    float   Dist;
+    if (bBodyPaintMode)
+    {
+        const APawn* P = GetPawn();
+        Center = P ? P->GetActorLocation() : (HeadVolume ? HeadVolume->GetActorLocation() : FVector::ZeroVector);
+        Dist   = BodyCamDistance;
+    }
+    else
+    {
+        if (!HeadVolume) return;
+        Center = HeadVolume->GetActorLocation();
+        Dist   = HeadCamDistance;
+    }
+
     const FVector Dir = FRotator(HeadOrbitPitch, HeadOrbitYaw, 0.f).Vector(); // dirección de mirada
-    const FVector CamLoc = C - Dir * HeadCamDistance;
-    HeadCam->SetActorLocation(CamLoc);
-    HeadCam->SetActorRotation(Dir.Rotation());
+    DesiredCamLoc = Center - Dir * Dist;
+    DesiredCamRot = Dir.Rotation();
+
+    // La primera vez (al entrar) se coloca de una, sin blend (si no arrancaría viajando desde el origen).
+    if (!bHeadCamInit)
+    {
+        HeadCam->SetActorLocation(DesiredCamLoc);
+        HeadCam->SetActorRotation(DesiredCamRot);
+        bHeadCamInit = true;
+    }
 }
 
 void APTLobbyPlayerController::ApplyHeadSculptInputMode()
@@ -455,17 +551,27 @@ void APTLobbyPlayerController::OnHeadScrollDown()
     }
     HeadBrushSize = FMath::Clamp(HeadBrushSize - 4.f, 6.f, 80.f);
 }
-void APTLobbyPlayerController::OnHeadModeAdd()   { if (bHeadSculptMode) { HeadEditMode = EPTEditMode::Add;   bHeadEyesTool = false; } }
+void APTLobbyPlayerController::OnHeadToggleBodyPaint()
+{
+    // Solo tiene sentido con la herramienta Paint (no Ojos): alterna cabeza ↔ cuerpo.
+    if (!bHeadSculptMode || bHeadEyesTool || HeadEditMode != EPTEditMode::Paint) return;
+    bBodyPaintMode = !bBodyPaintMode;
+    bHeadStamping  = false; // no arrastrar pintura al cambiar de foco
+    UpdateHeadCam();        // reencuadra al cuerpo o a la cabeza
+}
+
+void APTLobbyPlayerController::OnHeadModeAdd()   { if (bHeadSculptMode) { if (bBodyPaintMode) { bBodyPaintMode = false; UpdateHeadCam(); } HeadEditMode = EPTEditMode::Add;   bHeadEyesTool = false; } }
 void APTLobbyPlayerController::OnHeadModeErase()
 {
     if (!bHeadSculptMode) return;
     // Entrar en Borrar arranca siempre en Esfera (igual que el gameplay): es la forma esperada
     // para corregir, y una forma rara heredada de Agregar haría el primer borrado confuso.
+    if (bBodyPaintMode) { bBodyPaintMode = false; UpdateHeadCam(); } // Borrar es siempre en la cabeza
     if (HeadEditMode != EPTEditMode::Erase) HeadStampShape = EPTStampShape::Sphere;
     HeadEditMode = EPTEditMode::Erase; bHeadEyesTool = false;
 }
-void APTLobbyPlayerController::OnHeadModePaint() { if (bHeadSculptMode) { HeadEditMode = EPTEditMode::Paint; bHeadEyesTool = false; } }
-void APTLobbyPlayerController::OnHeadModeEyes()  { if (bHeadSculptMode) { bHeadEyesTool = true; } }
+void APTLobbyPlayerController::OnHeadModePaint() { if (bHeadSculptMode) { HeadEditMode = EPTEditMode::Paint; bHeadEyesTool = false; } } // Paint arranca en la cabeza; SHIFT lleva al cuerpo
+void APTLobbyPlayerController::OnHeadModeEyes()  { if (bHeadSculptMode) { if (bBodyPaintMode) { bBodyPaintMode = false; UpdateHeadCam(); } bHeadEyesTool = true; } }
 void APTLobbyPlayerController::OnHeadCycleShape()
 {
     if (!bHeadSculptMode || bHeadEyesTool) return; // los ojos siempre son esferas
@@ -684,6 +790,7 @@ void APTLobbyPlayerController::EnterHeadSculpt()
     HeadCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass());
     HeadOrbitYaw   = P->GetActorRotation().Yaw + 180.f; // mirar desde el frente hacia el personaje
     HeadOrbitPitch = -8.f;
+    bHeadCamInit   = false; // al entrar, colocar la cámara de una (sin blend desde el origen)
     UpdateHeadCam();
     if (HeadCam) SetViewTargetWithBlend(HeadCam, 0.35f);
 
@@ -713,6 +820,7 @@ void APTLobbyPlayerController::ExitHeadSculpt()
     if (!bHeadSculptMode) return;
     bHeadSculptMode = false;
     bHeadStamping = false;
+    bBodyPaintMode = false;
 
     // Hornear: copiar la escultura (malla local del volumen) a la cabeza del personaje, pegada
     // al HeadSocket. La arcilla se esculpió centrada en el origen del volumen → queda centrada

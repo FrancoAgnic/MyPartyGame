@@ -57,6 +57,7 @@ void UPTHeadSculptHUDWidget::BuildOnce()
     // ── Slots contextuales fijos (color / salir) y cruz WASD ──
     if (ColorSlot) ColorSlot->SetSlot(IconColor, FText::FromString(TEXT("RMB")), PTText::Get(TEXT("KEY_COLOR_PICK")));
     if (ExitSlot)  ExitSlot->SetSlot(IconExit,   FText::FromString(TEXT("G")),   PTText::Get(TEXT("HEAD_APPLY")));
+    if (PaintBodySlot) PaintBodySlot->SetSlot(IconPaintBody, FText::FromString(TEXT("Shift")), PTText::Get(TEXT("HEAD_PAINT_BODY")));
 
     // La cruz WASD: cada tecla en su lugar (W arriba, S abajo, A izq, D der). El "glow" es el
     // resaltado (SetSelected) que se prende mientras la tecla está apretada.
@@ -107,6 +108,15 @@ void UPTHeadSculptHUDWidget::Refresh(APTLobbyPlayerController* PC)
 
     // ── El slot de color se resalta mientras el picker está abierto ──
     if (ColorSlot) ColorSlot->SetSelected(PC->IsHeadColorPickerOpen());
+
+    // ── SHIFT (pintar cuerpo): solo visible con Paint; resaltado si estás en modo cuerpo ──
+    if (PaintBodySlot)
+    {
+        const bool bPaintTool = !PC->IsHeadEyesToolActive() && PC->GetHeadEditMode() == EPTEditMode::Paint;
+        PaintBodySlot->SetVisibility(bPaintTool ? ESlateVisibility::HitTestInvisible
+                                                : ESlateVisibility::Collapsed);
+        if (bPaintTool) PaintBodySlot->SetSelected(PC->IsBodyPaintMode());
+    }
 
     // ── Cruz WASD: brillan mientras se mantiene la tecla ──
     if (WasdUp)    WasdUp->SetSelected(PC->IsInputKeyDown(EKeys::W));

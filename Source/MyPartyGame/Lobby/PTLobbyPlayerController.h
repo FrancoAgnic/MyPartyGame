@@ -48,6 +48,9 @@ public:
     bool          IsHeadColorPickerOpen() const { return bHeadColorActive; }
     EPTStampShape GetHeadStampShape()     const { return HeadStampShape; }
     bool          IsHeadStampOutside()    const { return bHeadStampOutside; }
+    // Sub-modo "pintar el CUERPO" (solo con la herramienta Paint; se alterna con SHIFT). false =
+    // foco en la cabeza (pinta la arcilla); true = foco en el cuerpo (pinta la piel del personaje).
+    bool          IsBodyPaintMode()       const { return bBodyPaintMode; }
 
     /** true si la herramienta actual del modo G usa formas (Add/Erase/Paint; Ojos no). */
     bool HeadToolUsesShapes() const
@@ -115,6 +118,9 @@ protected:
     UPROPERTY(EditAnywhere, Category="Head") float HeadFrontDistance = 140.f;
     UPROPERTY(EditAnywhere, Category="Head") float HeadUpOffset      = 60.f;
     UPROPERTY(EditAnywhere, Category="Head") float HeadCamDistance   = 220.f;
+    // Encuadre al pintar el CUERPO (SHIFT en modo Paint): distancia de cámara y píxeles de brocha.
+    UPROPERTY(EditAnywhere, Category="Head") float BodyCamDistance   = 400.f;
+    UPROPERTY(EditAnywhere, Category="Head") float BodyPaintBrushScale = 2.f; // px = HeadBrushSize * esto
     // Radio de la esfera de sculpt (donde caen los stamps si el raycast no pega en la arcilla).
     UPROPERTY(EditAnywhere, Category="Head") float HeadRadius        = 55.f;
     // Velocidad de órbita de la cámara con WASD (grados/seg).
@@ -184,7 +190,14 @@ private:
     // Órbita de cámara (WASD) alrededor del volumen de cabeza.
     float HeadOrbitYaw   = 0.f;
     float HeadOrbitPitch = -8.f;
-    void  UpdateHeadCam(); // reposiciona HeadCam según yaw/pitch alrededor del centro del volumen
+    void  UpdateHeadCam(); // recalcula el DESTINO de la cámara (la cámara se mueve hacia él suave)
+
+    // Blend de cámara: UpdateHeadCam setea el destino; el tick interpola la cámara hacia él, así el
+    // cambio cabeza↔cuerpo (y la órbita WASD) es suave en vez de un salto.
+    FVector  DesiredCamLoc = FVector::ZeroVector;
+    FRotator DesiredCamRot = FRotator::ZeroRotator;
+    bool     bHeadCamInit  = false; // false = al entrar/primer frame se coloca de una (sin blend)
+    UPROPERTY(EditAnywhere, Category="Head") float HeadCamBlendSpeed = 8.f;
 
     // Input mode del modo cabeza: GameAndUI + cursor pero con CaptureDuringMouseDown, así el LMB
     // llega al esculpido (el modo diorama usa NoCapture y los clicks solo iban a la UI).
@@ -198,6 +211,7 @@ private:
     UPROPERTY() UStaticMeshComponent*     HeadPreviewStatic = nullptr;
     float       HeadPreviewSize = -1.f;                 // cache para reconstruir sólo si cambia
     EPTEditMode HeadPreviewMode = EPTEditMode::Smooth;  // idem (valor inicial != Add/Erase)
+    EPTStampShape HeadPreviewShapeCached = EPTStampShape::TriPrism; // idem para la forma (valor != esfera)
     void UpdateHeadPreview(const FVector* At, const FVector& Normal); // At=nullptr → oculta el preview
 
     // Color picker (mantener RMB), reusando el WBP del gameplay: se abre, se tickea con el cursor
@@ -225,6 +239,13 @@ private:
     void OnHeadScrollUp();      void OnHeadScrollDown();
     void OnHeadModeAdd();       void OnHeadModeErase();  void OnHeadModePaint();  void OnHeadModeEyes();
     void OnHeadCycleShape();    // TAB: cicla Esfera→Cubo→Cilindro→Cono
+    // SHIFT (solo en Paint): alterna foco cabeza (arcilla) ↔ cuerpo (piel del personaje).
+    bool bBodyPaintMode = false;
+    void OnHeadToggleBodyPaint();
+    // Para trazos continuos al pintar el cuerpo: se interpola el movimiento del cursor EN PANTALLA
+    // (cada paso hace su propio raycast) así el trazo no se corta al cruzar una costura del UV.
+    FVector2D LastBodyCursor     = FVector2D::ZeroVector;
+    bool      bHasLastBodyCursor = false;
 
     // ── Ojos (tecla 4): esferas aparte que se hornean junto a la cabeza ─────────
     bool bHeadEyesTool = false;                 // tecla 4 activa: colocar ojos con el LMB

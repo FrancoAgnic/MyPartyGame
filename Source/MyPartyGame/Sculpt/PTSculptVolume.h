@@ -152,6 +152,11 @@ public:
     void ApplyStampAndFX(FVector WorldPos, EPTStampShape Shape, float Size,
                          EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot = FRotator::ZeroRotator);
 
+    // Dispara SOLO la partícula de pintar (gotitas) en un punto del mundo, sin tocar la escultura.
+    // Lo usa el pintado del CUERPO en el modo G (que pinta una textura, no el volumen).
+    void PlayPaintFXAt(const FVector& WorldPos, const FLinearColor& Color, float BrushSize)
+    { PlaySculptFX(FXPaint, EPTEditMode::Paint, WorldPos, Color, BrushSize); }
+
     // Limpia toda la escultura (geometría + color) dejando el lienzo en blanco.
     // Reusa las texturas de color existentes (solo re-sube la page table vacía).
     void ClearAll();

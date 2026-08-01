@@ -20,6 +20,9 @@ class UWidgetComponent;
 class UAnimMontage;
 class UNiagaraSystem;
 class UProceduralMeshComponent;
+class UTextureRenderTarget2D;
+class UMaterialInstanceDynamic;
+class UTexture2D;
 struct FInputActionValue;
 
 UCLASS()
@@ -66,9 +69,14 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Head")
     UArrowComponent* FacingArrow;
 
-    // Material de la cabeza (arcilla que lee vertex color). Asignar en BP_LobbyCharacter.
+    // Material de la cabeza (arcilla). Debe muestrear la textura de pintura "PaintTex" por UV0 igual
+    // que el material del cuerpo: Base Color = lerp(color base, PaintTex.RGB, PaintTex.A).
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head")
     UMaterialInterface* HeadMaterial = nullptr;
+
+    // Textura de pintura HORNEADA de la cabeza (el atlas 3D cocido a 2D). Alta resolución, sin costuras.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head") int32 HeadPaintTexSize = 1024;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head") FName HeadPaintTexParam = TEXT("PaintTex");
 
     // Material de los OJOS. Asignar el material de "ojos locos". Si es null usa HeadMaterial.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head")
@@ -212,6 +220,11 @@ private:
     TArray<FPTHeadSection> ExtractSections(UProceduralMeshComponent* Src, const APTSculptVolume* PaintSource = nullptr) const;
     // Reconstruye el HeadMesh desde secciones (HeadMaterial en arcilla, EyeMaterial en ojos).
     void ApplyHeadSections(const TArray<FPTHeadSection>& Secs);
+    // Cocina el atlas 3D de color a una TEXTURA 2D: le da UV por-triángulo a las secciones de arcilla
+    // (in/out) y rellena HeadPaintTex muestreando el atlas por posición 3D. Resultado = alta resolución
+    // sin costuras, igual que el cuerpo. Si no hay atlas o pintura, deja HeadPaintTex en null.
+    void BakeHeadPaintTexture(TArray<FPTHeadSection>& Secs, const FTransform& SrcXform, const APTSculptVolume* Atlas);
+    UPROPERTY() UTexture2D* HeadPaintTex = nullptr;
     // Aplica la cabeza del PlayerState si tiene; si no y es el pawn local, carga la guardada (disco).
     void TryApplyReplicatedHead();
 
@@ -223,4 +236,56 @@ private:
     void  UpdateNameTag();
     float NameTagAccum = 0.f;
     float ChatBubbleUntil = 0.f; // tiempo (world) hasta el que se muestra el globo de chat
+
+public:
+    // ── SPIKE: pintar la piel del personaje (Render Target por UV) ───────────
+    // La pintura se guarda en una textura (RT) que el material del personaje muestrea por UV. Como
+    // las UV no cambian con la animación, la pintura queda "pegada" a la piel y se mueve con ella.
+    // El material M_SculperCharacter debe tener un Texture Parameter "PaintTex" (default negro) y
+    // usarlo así: Base Color = lerp(ColorSólido, PaintTex.RGB, PaintTex.A).
+
+    // Textura de brocha: un círculo suave (blanco con alpha, o blanco sobre negro si usás material).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Paint") UTexture2D* PaintBrushTexture = nullptr;
+    // Resolución de la textura de pintura del personaje.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Paint") int32 PaintRTSize = 1024;
+    // Nombre del parámetro de textura en M_SculperCharacter.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Paint") FName PaintTexParam = TEXT("PaintTex");
+    // Cuánto se "derrama" la pintura hacia afuera de cada isla UV (en téxeles), para tapar el pixel de
+    // corte justo sobre la costura. 0 = sin dilatado.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Paint") int32 PaintSeamDilation = 4;
+
+    /** Crea la textura de pintura y engancha el material dinámico del personaje (idempotente). */
+    UFUNCTION(BlueprintCallable, Category="Paint") void InitCharacterPaint();
+
+    /** Pinta donde apunta el cursor del jugador local (raycast + esfera de mundo). */
+    UFUNCTION(BlueprintCallable, Category="Paint")
+    void PaintCharacterAtCursor(FLinearColor Color, float BrushPixels = 64.f);
+
+    /** Rayo (Origin+Dir) contra los triángulos skinneados → UV, punto y normal del más cercano.
+     *  Lo usa el controller para el preview del anillo y para saber dónde pintar. */
+    bool RaycastSkinnedMeshUV(const FVector& Origin, const FVector& Dir,
+                              FVector2D& OutUV, FVector& OutPoint, FVector& OutNormal) const;
+
+    /** Pintado SIN COSTURAS: pinta todos los téxeles cuya posición 3D cae dentro de la esfera del
+     *  pincel (centro world P, radio R en cm). Como trabaja en el mundo, los dos lados de una costura
+     *  UV se pintan juntos → el trazo no se corta nunca. Acumula en un buffer; llamar FlushBodyPaint(). */
+    void PaintBodyWorldSphere(const FVector& P, float R, FLinearColor Color);
+    /** Sube al GPU lo pintado desde el último flush (una sola actualización por frame). */
+    void FlushBodyPaint();
+
+private:
+    UPROPERTY() UTexture2D*               PaintTex     = nullptr; // textura de pintura del cuerpo
+    UPROPERTY() UMaterialInstanceDynamic* CharPaintMID = nullptr;
+
+    // Buffer CPU de la textura de pintura (BGRA, alpha recto). Se pinta acá y se sube por regiones.
+    TArray<FColor> PaintPixels;
+    int32 PaintTexN = 0;                       // lado de la textura (= PaintRTSize)
+    // Rectángulo "sucio" a subir en el próximo FlushBodyPaint.
+    int32 DirtyMinX = 0, DirtyMinY = 0, DirtyMaxX = -1, DirtyMaxY = -1;
+    void MarkDirty(int32 X, int32 Y);
+
+    // Cache de posiciones skinneadas (mundo) para no recomputarlas por cada estampa dentro del frame.
+    TArray<FVector> CachedWorldPos;
+    double CachedPosTime = -1.0;
+    const class FSkeletalMeshLODRenderData* EnsureSkinnedCache();
 };

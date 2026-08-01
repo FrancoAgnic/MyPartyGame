@@ -117,6 +117,7 @@ HEAD_CTRL_BRUSH,Rueda — Tamaño,Wheel — Size,Roda — Tamanho,Rad — Größ
 HEAD_CTRL_COLOR,Click der. — Color,Right click — Color,Botão dir. — Cor,Rechtsklick — Farbe,Clic droit — Couleur,Tasto dx — Colore
 HEAD_CTRL_EXIT,G — Salir y guardar,G — Exit and save,G — Sair e salvar,G — Beenden und speichern,G — Quitter et enregistrer,G — Esci e salva
 HEAD_APPLY,Aplicar y salir,Apply and exit,Aplicar e sair,Anwenden und beenden,Appliquer et quitter,Applica ed esci
+HEAD_PAINT_BODY,Cabeza / Cuerpo,Head / Body,Cabeça / Corpo,Kopf / Körper,Tête / Corps,Testa / Corpo
 PAUSE_TITLE,Pausa,Paused,Pausado,Pausiert,En pause,In pausa
 PAUSE_RESUME,Continuar,Resume,Continuar,Fortsetzen,Reprendre,Riprendi
 PAUSE_SETTINGS,Configuración,Settings,Configurações,Einstellungen,Paramètres,Impostazioni

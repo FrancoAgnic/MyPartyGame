@@ -24,6 +24,16 @@
 #include "NiagaraSystem.h"
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Engine/Texture2D.h"
+#include "TextureResource.h"
+#include "RenderUtils.h"
+#include "Kismet/KismetRenderingLibrary.h"
+#include "Engine/Canvas.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Rendering/SkeletalMeshRenderData.h"
+#include "Rendering/SkeletalMeshLODRenderData.h"
+#include "GameFramework/PlayerController.h"
 
 APTLobbyCharacter::APTLobbyCharacter()
 {
@@ -110,7 +120,10 @@ TArray<FPTHeadSection> APTLobbyCharacter::ExtractSections(UProceduralMeshCompone
             {
                 bool bPainted = false;
                 const FLinearColor PC = PaintSource->SampleWorldPaintColor(SrcXform.TransformPosition(FVector(V.Position)), bPainted);
-                if (bPainted) Col = PC.ToFColor(true);
+                // MISMA conversión que usa el mesher del clay para el vertex color (si no, la pintura
+                // horneada sale más pálida que en vivo): tomar los bytes sRGB y reinterpretarlos como
+                // lineales (ToFColor(false)). El color base (V.Color) ya viene así del mesher.
+                if (bPainted) Col = FLinearColor(PC.ToFColor(true)).ToFColor(false);
             }
             H.Colors.Add(Col);
         }
@@ -131,9 +144,133 @@ void APTLobbyCharacter::ApplyHeadSections(const TArray<FPTHeadSection>& Secs)
         const FPTHeadSection& H = Secs[s];
         if (H.Verts.Num() == 0) continue;
         HeadMesh->CreateMeshSection(s, H.Verts, H.Tris, H.Normals, H.UVs, H.Colors, NoTangents, /*bCreateCollision=*/false);
-        UMaterialInterface* Mat = (H.bEye && EyeMaterial) ? EyeMaterial : HeadMaterial;
-        if (Mat) HeadMesh->SetMaterial(s, Mat);
+        if (H.bEye && EyeMaterial) { HeadMesh->SetMaterial(s, EyeMaterial); continue; }
+        if (!HeadMaterial) continue;
+        // Arcilla: si horneamos la textura de pintura, engancharla en un material dinámico (PaintTex);
+        // si no, material plano (usa el vertex color como antes).
+        if (HeadPaintTex)
+        {
+            if (UMaterialInstanceDynamic* M = HeadMesh->CreateDynamicMaterialInstance(s, HeadMaterial))
+                M->SetTextureParameterValue(HeadPaintTexParam, HeadPaintTex);
+        }
+        else HeadMesh->SetMaterial(s, HeadMaterial);
     }
+}
+
+void APTLobbyCharacter::BakeHeadPaintTexture(TArray<FPTHeadSection>& Secs, const FTransform& SrcXform, const APTSculptVolume* Atlas)
+{
+    HeadPaintTex = nullptr;
+    if (!Atlas) return;
+
+    // Contar triángulos de arcilla (no ojos) para dimensionar el atlas por-triángulo.
+    int32 TotalTris = 0;
+    for (const FPTHeadSection& S : Secs) if (!S.bEye) TotalTris += S.Tris.Num() / 3;
+    if (TotalTris == 0) return;
+
+    const int32 N    = FMath::Clamp(HeadPaintTexSize, 256, 4096);
+    const int32 Grid = FMath::CeilToInt(FMath::Sqrt((float)TotalTris)); // celdas por lado
+    const float Cell = 1.f / (float)Grid;                              // tamaño de celda en UV
+    const float Pad  = Cell * 0.15f;                                   // margen dentro de la celda
+
+    TArray<FColor> Px; Px.Init(FColor(255, 255, 255, 255), N * N);
+
+    // Baricéntricas 2D de un punto respecto de un triángulo (en píxeles).
+    auto Bary = [](double fx, double fy, const FVector2D& A, const FVector2D& B, const FVector2D& C,
+                   double& L1, double& L2, double& L3) -> bool
+    {
+        const double Den = (double)(B.Y - C.Y) * (A.X - C.X) + (double)(C.X - B.X) * (A.Y - C.Y);
+        if (FMath::Abs(Den) < 1e-9) return false;
+        const double Inv = 1.0 / Den;
+        L1 = ((double)(B.Y - C.Y) * (fx - C.X) + (double)(C.X - B.X) * (fy - C.Y)) * Inv;
+        L2 = ((double)(C.Y - A.Y) * (fx - C.X) + (double)(A.X - C.X) * (fy - C.Y)) * Inv;
+        L3 = 1.0 - L1 - L2;
+        return true;
+    };
+
+    int32 TriCounter = 0;
+    for (FPTHeadSection& S : Secs)
+    {
+        if (S.bEye) continue;
+        const int32 Tri = S.Tris.Num() / 3;
+
+        // Nueva geometría "desoldada": 3 verts por triángulo, cada uno con su UV de atlas.
+        FPTHeadSection U; U.bEye = false;
+        U.Verts.Reserve(Tri * 3); U.Normals.Reserve(Tri * 3);
+        U.UVs.Reserve(Tri * 3);   U.Colors.Reserve(Tri * 3); U.Tris.Reserve(Tri * 3);
+
+        for (int32 t = 0; t < Tri; ++t)
+        {
+            const int32 i0 = S.Tris[t * 3], i1 = S.Tris[t * 3 + 1], i2 = S.Tris[t * 3 + 2];
+            if (!S.Verts.IsValidIndex(i0) || !S.Verts.IsValidIndex(i1) || !S.Verts.IsValidIndex(i2)) continue;
+
+            const FVector P0 = S.Verts[i0],  P1 = S.Verts[i1],  P2 = S.Verts[i2];
+            const FVector Wn0(S.Normals.IsValidIndex(i0) ? S.Normals[i0] : FVector::UpVector);
+            const FVector Wn1(S.Normals.IsValidIndex(i1) ? S.Normals[i1] : FVector::UpVector);
+            const FVector Wn2(S.Normals.IsValidIndex(i2) ? S.Normals[i2] : FVector::UpVector);
+            const FColor  C0 = S.Colors.IsValidIndex(i0) ? S.Colors[i0] : FColor::White;
+            const FColor  C1 = S.Colors.IsValidIndex(i1) ? S.Colors[i1] : FColor::White;
+            const FColor  C2 = S.Colors.IsValidIndex(i2) ? S.Colors[i2] : FColor::White;
+
+            // Celda del triángulo → sub-triángulo (esquinas UL, UR, LL) con padding.
+            const int32 gx = TriCounter % Grid, gy = TriCounter / Grid;
+            const float x0 = gx * Cell + Pad, y0 = gy * Cell + Pad;
+            const float x1 = (gx + 1) * Cell - Pad, y1 = (gy + 1) * Cell - Pad;
+            const FVector2D UV0(x0, y0), UV1(x1, y0), UV2(x0, y1);
+
+            const int32 base = U.Verts.Num();
+            U.Verts.Add(P0); U.Verts.Add(P1); U.Verts.Add(P2);
+            U.Normals.Add(Wn0); U.Normals.Add(Wn1); U.Normals.Add(Wn2);
+            U.UVs.Add(UV0); U.UVs.Add(UV1); U.UVs.Add(UV2);
+            U.Colors.Add(C0); U.Colors.Add(C1); U.Colors.Add(C2);
+            U.Tris.Add(base); U.Tris.Add(base + 1); U.Tris.Add(base + 2);
+
+            // Rasterizar la celda: cada téxel → posición 3D → color del atlas (o base si no pintado).
+            const FVector2D T0(UV0 * N), T1(UV1 * N), T2(UV2 * N);
+            int32 MinX = FMath::FloorToInt(FMath::Min3(T0.X, T1.X, T2.X)) - 1;
+            int32 MaxX = FMath::CeilToInt (FMath::Max3(T0.X, T1.X, T2.X)) + 1;
+            int32 MinY = FMath::FloorToInt(FMath::Min3(T0.Y, T1.Y, T2.Y)) - 1;
+            int32 MaxY = FMath::CeilToInt (FMath::Max3(T0.Y, T1.Y, T2.Y)) + 1;
+            MinX = FMath::Clamp(MinX, 0, N - 1); MaxX = FMath::Clamp(MaxX, 0, N - 1);
+            MinY = FMath::Clamp(MinY, 0, N - 1); MaxY = FMath::Clamp(MaxY, 0, N - 1);
+
+            for (int32 py = MinY; py <= MaxY; ++py)
+            for (int32 px = MinX; px <= MaxX; ++px)
+            {
+                double L1, L2, L3;
+                if (!Bary(px + 0.5, py + 0.5, T0, T1, T2, L1, L2, L3)) continue;
+                const double Tol = 1.5 / (double)FMath::Max(1, (int32)((x1 - x0) * N)); // ~1.5 téxeles de borde
+                if (L1 < -Tol || L2 < -Tol || L3 < -Tol) continue;
+                const double c1 = FMath::Clamp(L1, 0.0, 1.0), c2 = FMath::Clamp(L2, 0.0, 1.0);
+                const double c3 = FMath::Max(0.0, 1.0 - c1 - c2);
+
+                const FVector Wp = SrcXform.TransformPosition(c1 * P0 + c2 * P1 + c3 * P2);
+                bool bPainted = false;
+                const FLinearColor AtlasCol = Atlas->SampleWorldPaintColor(Wp, bPainted);
+
+                FLinearColor Lin;
+                if (bPainted) Lin = AtlasCol; // color lineal real de la pintura (alta resolución)
+                else          Lin = FLinearColor(c1 * (C0.R / 255.0) + c2 * (C1.R / 255.0) + c3 * (C2.R / 255.0),
+                                                 c1 * (C0.G / 255.0) + c2 * (C1.G / 255.0) + c3 * (C2.G / 255.0),
+                                                 c1 * (C0.B / 255.0) + c2 * (C1.B / 255.0) + c3 * (C2.B / 255.0), 1.f);
+                Px[py * N + px] = Lin.ToFColor(true); // se guarda sRGB (la textura es SRGB=true)
+            }
+            ++TriCounter;
+        }
+        S = MoveTemp(U);
+    }
+
+    // Crear la textura y subir los píxeles.
+    HeadPaintTex = UTexture2D::CreateTransient(N, N, PF_B8G8R8A8);
+    if (!HeadPaintTex) return;
+    HeadPaintTex->SRGB = true;
+    HeadPaintTex->CompressionSettings = TC_Default;
+    HeadPaintTex->Filter = TF_Bilinear;
+    HeadPaintTex->AddToRoot();
+    FTexture2DMipMap& Mip = HeadPaintTex->GetPlatformData()->Mips[0];
+    void* Data = Mip.BulkData.Lock(LOCK_READ_WRITE);
+    FMemory::Memcpy(Data, Px.GetData(), Px.Num() * sizeof(FColor));
+    Mip.BulkData.Unlock();
+    HeadPaintTex->UpdateResource();
 }
 
 void APTLobbyCharacter::BakeAndReplicateHead(UProceduralMeshComponent* ClaySrc, APTSculptVolume* PaintSource,
@@ -148,6 +285,10 @@ void APTLobbyCharacter::BakeAndReplicateHead(UProceduralMeshComponent* ClaySrc, 
         FPTHeadSection Eyes = BuildEyesSection(LocalEyes, HeadEyeMesh, HeadEyeBaseSize);
         if (Eyes.Verts.Num() > 0) Secs.Add(MoveTemp(Eyes));
     }
+
+    // Cocinar el atlas 3D de color a una textura 2D de alta resolución (le da UV por-triángulo a las
+    // secciones de arcilla). Así la cabeza usada se ve nítida y sin costuras, igual que el cuerpo.
+    BakeHeadPaintTexture(Secs, ClaySrc->GetComponentTransform(), PaintSource);
 
     ApplyHeadSections(Secs);
     UpdateHeadCollision();
@@ -383,6 +524,7 @@ void APTLobbyCharacter::BeginPlay()
 {
     Super::BeginPlay();
     TryApplyReplicatedHead();
+    InitCharacterPaint(); // deja el RT enganchado desde el arranque (evita ver el material gris)
 }
 
 void APTLobbyCharacter::OnRep_PlayerState()
@@ -634,4 +776,235 @@ void APTLobbyCharacter::Tick(float DeltaSeconds)
     if (!bFlying) return;
     if (bAscend)  AddMovementInput(FVector::UpVector,  1.f);
     if (bDescend) AddMovementInput(FVector::UpVector, -1.f);
+}
+
+// ── SPIKE: pintado de la piel del personaje por Render Target (UV) ─────────────
+
+void APTLobbyCharacter::InitCharacterPaint()
+{
+    if (PaintTex || !GetMesh()) return; // ya inicializado / sin mesh
+
+    PaintTexN = FMath::Max(64, PaintRTSize);
+
+    // Textura CPU-backed (BGRA) que el material muestrea por UV. Empieza transparente (alpha 0 = sin
+    // pintar). Se pinta en el buffer CPU y se sube por regiones con UpdateTextureRegions.
+    PaintTex = UTexture2D::CreateTransient(PaintTexN, PaintTexN, PF_B8G8R8A8);
+    if (!PaintTex) return;
+    PaintTex->SRGB = true;                       // guardamos bytes sRGB → el material los decodifica bien
+    PaintTex->CompressionSettings = TC_VectorDisplacementmap; // sin compresión (nítido)
+    PaintTex->Filter = TF_Bilinear;
+    PaintTex->AddToRoot();
+
+    PaintPixels.Init(FColor(0, 0, 0, 0), PaintTexN * PaintTexN);
+
+    // Subir el estado inicial (transparente) al mip 0.
+    FTexture2DMipMap& Mip = PaintTex->GetPlatformData()->Mips[0];
+    void* Data = Mip.BulkData.Lock(LOCK_READ_WRITE);
+    FMemory::Memcpy(Data, PaintPixels.GetData(), PaintPixels.Num() * sizeof(FColor));
+    Mip.BulkData.Unlock();
+    PaintTex->UpdateResource();
+
+    // Material dinámico del personaje con la textura enganchada en "PaintTex".
+    if (UMaterialInterface* Base = GetMesh()->GetMaterial(0))
+    {
+        CharPaintMID = GetMesh()->CreateDynamicMaterialInstance(0, Base);
+        if (CharPaintMID) CharPaintMID->SetTextureParameterValue(PaintTexParam, PaintTex);
+    }
+}
+
+const FSkeletalMeshLODRenderData* APTLobbyCharacter::EnsureSkinnedCache()
+{
+    USkeletalMeshComponent* SK = GetMesh();
+    if (!SK) return nullptr;
+    USkeletalMesh* SkelAsset = SK->GetSkeletalMeshAsset();
+    if (!SkelAsset) return nullptr;
+    FSkeletalMeshRenderData* RD = SkelAsset->GetResourceForRendering();
+    if (!RD || !RD->LODRenderData.IsValidIndex(0)) return nullptr;
+    FSkeletalMeshLODRenderData& LOD = RD->LODRenderData[0];
+
+    // Reusar el cache si ya se computó en este mismo frame (una estampa de trazo puede llamar muchas
+    // veces por frame; recomputar el skinning cada vez sería carísimo).
+    const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+    if (CachedPosTime == Now && CachedWorldPos.Num() > 0) return &LOD;
+
+    FSkinWeightVertexBuffer* SkinBuf = LOD.GetSkinWeightVertexBuffer();
+    if (!SkinBuf) return nullptr;
+    TArray<FMatrix44f> RefToLocals;
+    SK->GetCurrentRefToLocalMatrices(RefToLocals, 0);
+    TArray<FVector3f> Pos;
+    USkinnedMeshComponent::ComputeSkinnedPositions(SK, Pos, RefToLocals, LOD, *SkinBuf);
+    if (Pos.Num() == 0) return nullptr;
+
+    const FTransform& X = SK->GetComponentTransform();
+    CachedWorldPos.SetNum(Pos.Num());
+    for (int32 i = 0; i < Pos.Num(); ++i) CachedWorldPos[i] = X.TransformPosition(FVector(Pos[i]));
+    CachedPosTime = Now;
+    return &LOD;
+}
+
+bool APTLobbyCharacter::RaycastSkinnedMeshUV(const FVector& Origin, const FVector& Dir,
+                                             FVector2D& OutUV, FVector& OutPoint, FVector& OutNormal) const
+{
+    const FSkeletalMeshLODRenderData* LODp = const_cast<APTLobbyCharacter*>(this)->EnsureSkinnedCache();
+    if (!LODp) return false;
+    const FSkeletalMeshLODRenderData& LOD = *LODp;
+    const FRawStaticIndexBuffer16or32Interface* Idx = LOD.MultiSizeIndexContainer.GetIndexBuffer();
+    if (!Idx) return false;
+
+    const FVector Start = Origin;
+    const FVector End   = Origin + Dir * 100000.f;
+
+    // Interseca el rayo contra CADA triángulo y se queda con el más cercano al origen.
+    float   BestDistSq = TNumericLimits<float>::Max();
+    int32   BestBase   = INDEX_NONE;
+    FVector BestPoint  = FVector::ZeroVector;
+    FVector BestNormal = FVector::UpVector;
+    const int32 NumIdx = Idx->Num();
+    for (int32 i = 0; i + 2 < NumIdx; i += 3)
+    {
+        const uint32 A = Idx->Get(i), B = Idx->Get(i + 1), C = Idx->Get(i + 2);
+        if (!CachedWorldPos.IsValidIndex(A) || !CachedWorldPos.IsValidIndex(B) || !CachedWorldPos.IsValidIndex(C)) continue;
+        const FVector PA = CachedWorldPos[A], PB = CachedWorldPos[B], PC = CachedWorldPos[C];
+
+        FVector IP, HitN;
+        if (FMath::SegmentTriangleIntersection(Start, End, PA, PB, PC, IP, HitN))
+        {
+            const float D = (IP - Start).SizeSquared();
+            if (D < BestDistSq) { BestDistSq = D; BestBase = i; BestPoint = IP; BestNormal = HitN; }
+        }
+    }
+    if (BestBase == INDEX_NONE) return false;
+    OutPoint  = BestPoint;
+    OutNormal = BestNormal.GetSafeNormal();
+
+    const uint32 A = Idx->Get(BestBase), B = Idx->Get(BestBase + 1), C = Idx->Get(BestBase + 2);
+    const FVector Bary = FMath::ComputeBaryCentric2D(BestPoint, CachedWorldPos[A], CachedWorldPos[B], CachedWorldPos[C]);
+    const FVector2D UVA(LOD.StaticVertexBuffers.StaticMeshVertexBuffer.GetVertexUV(A, 0));
+    const FVector2D UVB(LOD.StaticVertexBuffers.StaticMeshVertexBuffer.GetVertexUV(B, 0));
+    const FVector2D UVC(LOD.StaticVertexBuffers.StaticMeshVertexBuffer.GetVertexUV(C, 0));
+    OutUV = Bary.X * UVA + Bary.Y * UVB + Bary.Z * UVC;
+    return true;
+}
+
+void APTLobbyCharacter::MarkDirty(int32 X, int32 Y)
+{
+    if (DirtyMaxX < DirtyMinX) { DirtyMinX = DirtyMaxX = X; DirtyMinY = DirtyMaxY = Y; return; }
+    DirtyMinX = FMath::Min(DirtyMinX, X); DirtyMaxX = FMath::Max(DirtyMaxX, X);
+    DirtyMinY = FMath::Min(DirtyMinY, Y); DirtyMaxY = FMath::Max(DirtyMaxY, Y);
+}
+
+void APTLobbyCharacter::PaintBodyWorldSphere(const FVector& P, float R, FLinearColor Color)
+{
+    InitCharacterPaint();
+    const FSkeletalMeshLODRenderData* LODp = EnsureSkinnedCache();
+    if (!LODp || !PaintTex || PaintPixels.Num() == 0) return;
+    const FSkeletalMeshLODRenderData& LOD = *LODp;
+    const FRawStaticIndexBuffer16or32Interface* Idx = LOD.MultiSizeIndexContainer.GetIndexBuffer();
+    if (!Idx) return;
+
+    const int32  N   = PaintTexN;
+    const FColor Src = Color.ToFColor(true); // bytes sRGB (la textura es SRGB=true)
+    const float  R2  = R * R;
+    const auto&  UVBuf = LOD.StaticVertexBuffers.StaticMeshVertexBuffer;
+    const int32  NumIdx = Idx->Num();
+
+    for (int32 i = 0; i + 2 < NumIdx; i += 3)
+    {
+        const uint32 A = Idx->Get(i), B = Idx->Get(i + 1), C = Idx->Get(i + 2);
+        if (!CachedWorldPos.IsValidIndex(A) || !CachedWorldPos.IsValidIndex(B) || !CachedWorldPos.IsValidIndex(C)) continue;
+        const FVector WA = CachedWorldPos[A], WB = CachedWorldPos[B], WC = CachedWorldPos[C];
+
+        // Descartar triángulos lejos de la esfera del pincel (barato).
+        FBox Tb(ForceInit); Tb += WA; Tb += WB; Tb += WC;
+        if (Tb.ComputeSquaredDistanceToPoint(P) > R2) continue;
+
+        // UV → coordenadas de téxel.
+        const FVector2D TA = FVector2D(UVBuf.GetVertexUV(A, 0)) * N;
+        const FVector2D TB = FVector2D(UVBuf.GetVertexUV(B, 0)) * N;
+        const FVector2D TC = FVector2D(UVBuf.GetVertexUV(C, 0)) * N;
+
+        // Denominador baricéntrico 2D (área*2); si es ~0, el triángulo es degenerado en el UV.
+        const double Den = (double)(TB.Y - TC.Y) * (TA.X - TC.X) + (double)(TC.X - TB.X) * (TA.Y - TC.Y);
+        if (FMath::Abs(Den) < 1e-8) continue;
+        const double InvDen = 1.0 / Den;
+
+        // Recorrer la caja de téxeles del triángulo (con 1 téxel de margen para el borde suave).
+        int32 MinX = FMath::FloorToInt(FMath::Min3(TA.X, TB.X, TC.X)) - 1;
+        int32 MaxX = FMath::CeilToInt (FMath::Max3(TA.X, TB.X, TC.X)) + 1;
+        int32 MinY = FMath::FloorToInt(FMath::Min3(TA.Y, TB.Y, TC.Y)) - 1;
+        int32 MaxY = FMath::CeilToInt (FMath::Max3(TA.Y, TB.Y, TC.Y)) + 1;
+        MinX = FMath::Clamp(MinX, 0, N - 1); MaxX = FMath::Clamp(MaxX, 0, N - 1);
+        MinY = FMath::Clamp(MinY, 0, N - 1); MaxY = FMath::Clamp(MaxY, 0, N - 1);
+
+        for (int32 py = MinY; py <= MaxY; ++py)
+        for (int32 px = MinX; px <= MaxX; ++px)
+        {
+            const double fx = px + 0.5, fy = py + 0.5;
+            // Baricéntricas del centro del téxel respecto del triángulo en el UV.
+            const double L1 = ((double)(TB.Y - TC.Y) * (fx - TC.X) + (double)(TC.X - TB.X) * (fy - TC.Y)) * InvDen;
+            const double L2 = ((double)(TC.Y - TA.Y) * (fx - TC.X) + (double)(TA.X - TC.X) * (fy - TC.Y)) * InvDen;
+            const double L3 = 1.0 - L1 - L2;
+            // Pequeña tolerancia = derrama ~1 téxel fuera de la isla (tapa la costura bajo el filtrado).
+            const double Tol = 0.02;
+            if (L1 < -Tol || L2 < -Tol || L3 < -Tol) continue;
+
+            // Reconstruir la posición 3D de este téxel y medir distancia a la esfera del pincel.
+            const FVector WP = L1 * WA + L2 * WB + L3 * WC;
+            const float   D2 = (float)(WP - P).SizeSquared();
+            if (D2 > R2) continue;
+
+            const float t = FMath::Sqrt(D2) / R;             // 0 centro → 1 borde
+            const float a = 1.f - FMath::SmoothStep(0.7f, 1.f, t); // cobertura con borde suave
+            if (a <= 0.f) continue;
+
+            FColor& Dst = PaintPixels[py * N + px];
+            const float inv = 1.f - a;
+            Dst.R = (uint8)FMath::Clamp(FMath::RoundToInt(Src.R * a + Dst.R * inv), 0, 255);
+            Dst.G = (uint8)FMath::Clamp(FMath::RoundToInt(Src.G * a + Dst.G * inv), 0, 255);
+            Dst.B = (uint8)FMath::Clamp(FMath::RoundToInt(Src.B * a + Dst.B * inv), 0, 255);
+            Dst.A = (uint8)FMath::Clamp(FMath::RoundToInt(255  * a + Dst.A * inv), 0, 255);
+            MarkDirty(px, py);
+        }
+    }
+}
+
+void APTLobbyCharacter::FlushBodyPaint()
+{
+    if (!PaintTex || DirtyMaxX < DirtyMinX || DirtyMaxY < DirtyMinY) return;
+
+    const int32 N  = PaintTexN;
+    const int32 x0 = DirtyMinX, y0 = DirtyMinY;
+    const int32 w  = DirtyMaxX - DirtyMinX + 1;
+    const int32 h  = DirtyMaxY - DirtyMinY + 1;
+
+    // Copiar el rectángulo sucio a un buffer propio (UpdateTextureRegions lo consume en el render thread).
+    uint8* Buf = (uint8*)FMemory::Malloc(w * h * 4);
+    for (int32 yy = 0; yy < h; ++yy)
+        FMemory::Memcpy(Buf + yy * w * 4, &PaintPixels[(y0 + yy) * N + x0], w * 4);
+
+    FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(x0, y0, 0, 0, w, h);
+    PaintTex->UpdateTextureRegions(0, 1, Region, (uint32)(w * 4), 4, Buf,
+        [](uint8* Src, const FUpdateTextureRegion2D* Reg) { FMemory::Free(Src); delete Reg; });
+
+    // Reset del rectángulo sucio.
+    DirtyMinX = DirtyMinY = 0; DirtyMaxX = DirtyMaxY = -1;
+}
+
+void APTLobbyCharacter::PaintCharacterAtCursor(FLinearColor Color, float BrushPixels)
+{
+    APlayerController* PC = Cast<APlayerController>(GetController());
+    if (!PC) PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+    if (!PC) return;
+
+    float MX = 0.f, MY = 0.f;
+    if (!PC->GetMousePosition(MX, MY)) return;
+    FVector Origin, Dir;
+    if (!PC->DeprojectScreenPositionToWorld(MX, MY, Origin, Dir)) return;
+
+    FVector2D UV; FVector Pt, N;
+    if (RaycastSkinnedMeshUV(Origin, Dir, UV, Pt, N))
+    {
+        PaintBodyWorldSphere(Pt, FMath::Max(1.f, BrushPixels), Color);
+        FlushBodyPaint();
+    }
 }
