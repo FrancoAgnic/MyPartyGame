@@ -1156,6 +1156,46 @@ void APTLobbyCharacter::ClearBodyPaint()
     FlushBodyPaint();
 }
 
+// ── Undo de pintura (snapshot por trazo) ──────────────────────────────────────
+static void PT_UploadWholeTex(UTexture2D* Tex, const TArray<FColor>& Px)
+{
+    if (!Tex || Px.Num() == 0) return;
+    FTexture2DMipMap& Mip = Tex->GetPlatformData()->Mips[0];
+    void* D = Mip.BulkData.Lock(LOCK_READ_WRITE);
+    FMemory::Memcpy(D, Px.GetData(), Px.Num() * sizeof(FColor));
+    Mip.BulkData.Unlock();
+    Tex->UpdateResource();
+}
+
+void APTLobbyCharacter::PushHeadPaintUndo()
+{
+    if (HeadPaintPixels.Num() == 0) return;
+    HeadPaintUndoStack.Add(HeadPaintPixels); // copia del estado ANTES del trazo
+    while (HeadPaintUndoStack.Num() > MaxPaintUndo) HeadPaintUndoStack.RemoveAt(0);
+}
+bool APTLobbyCharacter::UndoHeadPaint()
+{
+    if (HeadPaintUndoStack.Num() == 0 || !HeadPaintTex) return false;
+    HeadPaintPixels = MoveTemp(HeadPaintUndoStack.Last());
+    HeadPaintUndoStack.Pop();
+    PT_UploadWholeTex(HeadPaintTex, HeadPaintPixels);
+    return true;
+}
+void APTLobbyCharacter::PushBodyPaintUndo()
+{
+    if (PaintPixels.Num() == 0) return;
+    BodyPaintUndoStack.Add(PaintPixels);
+    while (BodyPaintUndoStack.Num() > MaxPaintUndo) BodyPaintUndoStack.RemoveAt(0);
+}
+bool APTLobbyCharacter::UndoBodyPaint()
+{
+    if (BodyPaintUndoStack.Num() == 0 || !PaintTex) return false;
+    PaintPixels = MoveTemp(BodyPaintUndoStack.Last());
+    BodyPaintUndoStack.Pop();
+    PT_UploadWholeTex(PaintTex, PaintPixels);
+    return true;
+}
+
 void APTLobbyCharacter::FlushHeadPaint()
 {
     if (!HeadPaintTex || HDirtyMaxX < HDirtyMinX || HDirtyMaxY < HDirtyMinY) return;

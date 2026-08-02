@@ -244,6 +244,7 @@ private:
     bool bHeadColorActive = false;
     void OnHeadColorPickPressed();
     void OnHeadColorPickReleased();
+    void OnHeadColorSave(); // E: guarda el color actual en el anillo del picker
 
     // Overlay del lobby activo (MainMenu o LobbyHUD): se colapsa mientras esculpís la cabeza
     // para que el mouse no lo agarre la UI y llegue al esculpido (igual que el gameplay).
@@ -280,6 +281,8 @@ private:
     UPROPERTY(EditAnywhere, Category="Head") float HeadClearHoldDuration = 3.f;   // mantener → borrar todo
     UPROPERTY(EditAnywhere, Category="Head") float HeadUndoTapMaxTime    = 0.35f; // toque → undo
     bool bHeadStrokeActive = false; // hay un trazo de geometría abierto (para el undo)
+    // Orden de los trazos para el undo unificado: 0=geometría (volumen), 1=pintura cabeza, 2=pintura cuerpo.
+    TArray<uint8> HeadUndoKinds;
     void OnHeadModeAdd();       void OnHeadModeErase();  void OnHeadModePaint();  void OnHeadModeEyes();
     void OnHeadCycleShape();    // TAB: cicla Esfera→Cubo→Cilindro→Cono
     // SHIFT (solo en Paint): alterna foco cabeza (arcilla) ↔ cuerpo (piel del personaje).

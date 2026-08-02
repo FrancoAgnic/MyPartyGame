@@ -128,8 +128,19 @@ void APTPlayerState::RefreshHeadsIfMissing()
 {
     // Solo tiene sentido en CLIENTES: el host tiene todas las cabezas por autoridad.
     if (HasAuthority()) return;
-    const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
+    UWorld* W = GetWorld();
+    const AGameStateBase* GS = W ? W->GetGameState() : nullptr;
     if (!GS) return;
+
+    // 1) Si ya hay una cabeza ENSAMBLÁNDOSE, no pedir nada (no amontonar re-envíos → evita el overflow
+    //    confiable que cortaba la conexión en loop).
+    for (APlayerState* PS : GS->PlayerArray)
+        if (const APTPlayerState* PT = Cast<APTPlayerState>(PS))
+            if (PT->PendingVersion != -1) return;
+
+    // 2) Cooldown: como mucho un re-pedido cada HeadRequestCooldown segundos.
+    const double Now = W->GetTimeSeconds();
+    if (Now - LastHeadRequestTime < HeadRequestCooldown) return;
 
     bool bMissing = false;
     for (APlayerState* PS : GS->PlayerArray)
@@ -141,7 +152,7 @@ void APTPlayerState::RefreshHeadsIfMissing()
         if (PT->HeadVersion > 0 && (PT->HeadBlob.Num() == 0 || PT->LocalHeadVersion < PT->HeadVersion))
         { bMissing = true; break; }
     }
-    if (bMissing) Server_RequestAllHeads(); // el server me reenvía todas (troceadas)
+    if (bMissing) { Server_RequestAllHeads(); LastHeadRequestTime = Now; }
 }
 
 void APTPlayerState::Server_RequestAllHeads_Implementation()

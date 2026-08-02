@@ -308,6 +308,14 @@ public:
     /** Borra toda la pintura del CUERPO (textura transparente). */
     void ClearBodyPaint();
 
+    // Undo de PINTURA (snapshot por trazo). El controller llama Push* al empezar un trazo de Paint y
+    // Undo* al deshacer. Acotado a MaxPaintUndo niveles; se limpia al salir del modo G.
+    void PushHeadPaintUndo();
+    bool UndoHeadPaint();
+    void PushBodyPaintUndo();
+    bool UndoBodyPaint();
+    void ClearPaintUndo() { HeadPaintUndoStack.Reset(); BodyPaintUndoStack.Reset(); }
+
 private:
     // Estado del pintado 2D de la cabeza.
     UPROPERTY() UTexture2D* HeadPaintTex = nullptr;
@@ -315,6 +323,11 @@ private:
     int32 HeadPaintN = 0;
     FVector HeadPaintCenterLocal = FVector::ZeroVector; // centro fijo de la proyección esférica (local)
     int32 HDirtyMinX = 0, HDirtyMinY = 0, HDirtyMaxX = -1, HDirtyMaxY = -1;
+
+    // Pilas de undo de pintura (copias de los buffers antes de cada trazo). Acotadas.
+    TArray<TArray<FColor>> HeadPaintUndoStack;
+    TArray<TArray<FColor>> BodyPaintUndoStack;
+    static constexpr int32 MaxPaintUndo = 5;
 
 
     UPROPERTY() UTexture2D*               PaintTex     = nullptr; // textura de pintura del cuerpo

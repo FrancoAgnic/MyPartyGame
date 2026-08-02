@@ -108,6 +108,12 @@ private:
     int32         PendingVersion = -1;
     int32         PendingChunks  = 0;
 
+    // Anti-flood del heartbeat: no re-pedir cabezas mientras hay una transferencia en curso, ni más
+    // seguido que este cooldown (si no, durante la carga del join el cliente re-pide todo cada tick y
+    // el server le reenvía cientos de RPC confiables → desborda el buffer confiable → corta y hace loop).
+    double LastHeadRequestTime = -100.0;
+    static constexpr double HeadRequestCooldown = 6.0;
+
 public:
 
     // Llamar solo desde el servidor (HasAuthority).

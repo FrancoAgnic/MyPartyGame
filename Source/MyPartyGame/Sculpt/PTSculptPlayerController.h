@@ -270,10 +270,8 @@ protected:
         Reintenta solo si el PlayerState todavía no replicó. */
     void PushLanguageToServer();
 
-    // Sincronización de cabezas en el Lvl-01: heartbeat que re-pide las que falten + ráfagas espaciadas
-    // tras el travel (por si un cliente estaba cargando en el momento del broadcast).
+    // Sincronización de cabezas en el Lvl-01: heartbeat gateado que re-pide SOLO lo que falte (anti-flood).
     void HeadSyncHeartbeat();
-    void RequestHeadsBurst();
     FTimerHandle HeadSyncTimer;
 
 public:

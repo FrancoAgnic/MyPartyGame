@@ -75,19 +75,12 @@ void APTSculptPlayerController::PushLanguageToServer()
         // Los pawns se crearon de cero, así que le pedimos al server TODAS las cabezas otra vez.
         PS->Server_RequestAllHeads();
 
-        // Robustez: como algún cliente puede estar todavía cargando cuando el server hace el broadcast,
-        // reforzamos con RÁFAGAS espaciadas (por si HeadVersion aún no replicó) + un heartbeat que
-        // re-pide solo lo que falte. Cubre "a veces se veían, a veces no" en el Lvl-01.
-        if (IsLocalController() && GetWorld())
-        {
-            FTimerHandle B1, B2, B3;
-            GetWorldTimerManager().SetTimer(B1, this, &APTSculptPlayerController::RequestHeadsBurst, 5.f,  false);
-            GetWorldTimerManager().SetTimer(B2, this, &APTSculptPlayerController::RequestHeadsBurst, 12.f, false);
-            GetWorldTimerManager().SetTimer(B3, this, &APTSculptPlayerController::RequestHeadsBurst, 20.f, false);
-            if (!GetWorldTimerManager().IsTimerActive(HeadSyncTimer))
-                GetWorldTimerManager().SetTimer(HeadSyncTimer, this,
-                    &APTSculptPlayerController::HeadSyncHeartbeat, 4.f, /*loop=*/true, /*firstDelay=*/4.f);
-        }
+        // Robustez: heartbeat que re-pide SOLO lo que falte, y con anti-flood (no re-pide mientras hay
+        // una transferencia en curso ni más seguido que el cooldown). Cubre "a veces se veían, a veces
+        // no" en el Lvl-01 sin desbordar el buffer confiable (que causaba el loop de conexión).
+        if (IsLocalController() && GetWorld() && !GetWorldTimerManager().IsTimerActive(HeadSyncTimer))
+            GetWorldTimerManager().SetTimer(HeadSyncTimer, this,
+                &APTSculptPlayerController::HeadSyncHeartbeat, 4.f, /*loop=*/true, /*firstDelay=*/8.f);
 
         UE_LOG(LogTemp, Log, TEXT("[Lang] Idioma enviado al servidor: %s"), *Lang);
         return;
@@ -99,11 +92,6 @@ void APTSculptPlayerController::PushLanguageToServer()
         FTimerHandle H;
         W->GetTimerManager().SetTimer(H, this, &APTSculptPlayerController::PushLanguageToServer, 0.5f, false);
     }
-}
-
-void APTSculptPlayerController::RequestHeadsBurst()
-{
-    if (APTPlayerState* PS = GetPlayerState<APTPlayerState>()) PS->Server_RequestAllHeads();
 }
 
 void APTSculptPlayerController::HeadSyncHeartbeat()

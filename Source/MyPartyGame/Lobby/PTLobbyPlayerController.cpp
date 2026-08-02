@@ -291,6 +291,8 @@ void APTLobbyPlayerController::SetupInputComponent()
     // RMB mantenido = color picker (igual que el gameplay).
     InputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed,  this, &APTLobbyPlayerController::OnHeadColorPickPressed);
     InputComponent->BindKey(EKeys::RightMouseButton, IE_Released, this, &APTLobbyPlayerController::OnHeadColorPickReleased);
+    // E: guardar el color actual en el anillo del color picker (igual que el gameplay).
+    InputComponent->BindKey(EKeys::E, IE_Pressed, this, &APTLobbyPlayerController::OnHeadColorSave);
 }
 
 void APTLobbyPlayerController::PlayerTick(float DeltaTime)
@@ -409,10 +411,12 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
             bHeadClearHeld = false; HeadClearHoldTime = 0.f;
             if (HeadVolume) HeadVolume->Multicast_ClearAll_Implementation(); // geometría de la cabeza
             HeadStampRotation = FRotator::ZeroRotator;
+            HeadUndoKinds.Reset();
             if (APTLobbyCharacter* C = Cast<APTLobbyCharacter>(GetPawn()))
             {
                 C->ClearHeadPaint(); // pintura de la cabeza
                 C->ClearBodyPaint(); // pintura del cuerpo
+                C->ClearPaintUndo();
             }
         }
     }
@@ -618,12 +622,28 @@ void APTLobbyPlayerController::OnHeadStampPressed()
     if (!bHeadSculptMode) return;
     if (bHeadEyesTool) { PlaceEyeAtCursor(); return; } // ojos: un ojo por click (no continuo)
     bHeadStamping = true;
-    // Abrir un trazo de GEOMETRÍA para el undo (solo Add/Erase cambian la malla; Paint es textura).
-    if (HeadVolume && !bBodyPaintMode && (HeadEditMode == EPTEditMode::Add || HeadEditMode == EPTEditMode::Erase))
+
+    APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn());
+    if (bBodyPaintMode)
     {
+        // Trazo de pintura del CUERPO: snapshot para el undo.
+        if (Char) Char->PushBodyPaintUndo();
+        HeadUndoKinds.Add(2);
+    }
+    else if (HeadEditMode == EPTEditMode::Paint)
+    {
+        // Trazo de pintura de la CABEZA: snapshot para el undo.
+        if (Char) Char->PushHeadPaintUndo();
+        HeadUndoKinds.Add(1);
+    }
+    else if (HeadVolume && (HeadEditMode == EPTEditMode::Add || HeadEditMode == EPTEditMode::Erase))
+    {
+        // Trazo de GEOMETRÍA: lo maneja el volumen (undo de la malla).
         HeadVolume->Multicast_BeginStroke_Implementation();
         bHeadStrokeActive = true;
+        HeadUndoKinds.Add(0);
     }
+    while (HeadUndoKinds.Num() > 32) HeadUndoKinds.RemoveAt(0);
 }
 void APTLobbyPlayerController::OnHeadStampReleased()
 {
@@ -663,12 +683,25 @@ void APTLobbyPlayerController::OnHeadClearPressed()
 }
 void APTLobbyPlayerController::OnHeadClearReleased()
 {
-    // Toque corto = undo del último trazo de geometría. Mantener hasta el final = borrar todo (lo
-    // dispara el tick, que ya apagó bHeadClearHeld).
-    if (bHeadClearHeld && HeadClearHoldTime < HeadUndoTapMaxTime && HeadVolume)
-        HeadVolume->Multicast_Undo_Implementation();
+    // Toque corto = undo del ÚLTIMO trazo, sea geometría o pintura (cabeza/cuerpo), en orden.
+    if (bHeadClearHeld && HeadClearHoldTime < HeadUndoTapMaxTime && HeadUndoKinds.Num() > 0)
+    {
+        const uint8 Kind = HeadUndoKinds.Last();
+        APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn());
+        bool bDone = false;
+        if      (Kind == 0 && HeadVolume) { HeadVolume->Multicast_Undo_Implementation(); bDone = true; }
+        else if (Kind == 1 && Char)       { bDone = Char->UndoHeadPaint(); }
+        else if (Kind == 2 && Char)       { bDone = Char->UndoBodyPaint(); }
+        if (bDone) HeadUndoKinds.Pop();
+    }
     bHeadClearHeld    = false;
     HeadClearHoldTime = 0.f;
+}
+void APTLobbyPlayerController::OnHeadColorSave()
+{
+    // Solo con el picker abierto: guarda el color actual en el anillo (igual que el gameplay).
+    if (!bHeadSculptMode || !bHeadColorActive) return;
+    if (UPTColorPickerWidget* CP = Cast<UPTColorPickerWidget>(HeadColorPicker)) CP->SaveCurrentColor();
 }
 void APTLobbyPlayerController::OnHeadScrollUp()
 {
@@ -991,6 +1024,8 @@ void APTLobbyPlayerController::ExitHeadSculpt()
     bHeadRotatingShape = false; bHeadClearHeld = false; HeadClearHoldTime = 0.f;
     bHeadStrokeActive = false; HeadStampRotation = FRotator::ZeroRotator;
     HeadPaintMID = nullptr;
+    HeadUndoKinds.Reset();
+    if (APTLobbyCharacter* C = Cast<APTLobbyCharacter>(GetPawn())) C->ClearPaintUndo();
 
     // Hornear: copiar la escultura (malla local del volumen) a la cabeza del personaje, pegada
     // al HeadSocket. La arcilla se esculpió centrada en el origen del volumen → queda centrada
