@@ -175,6 +175,9 @@ private:
 
     // Estado del modo esculpir-cabeza.
     UPROPERTY() APTSculptVolume* HeadVolume = nullptr;
+    // Material dinámico que muestrea la textura 2D de pintura de la cabeza (proyección esférica). Se
+    // aplica a la malla viva del volumen para ver la pintura mientras esculpís/pintás.
+    UPROPERTY() UMaterialInstanceDynamic* HeadPaintMID = nullptr;
     UPROPERTY() ACameraActor*    HeadCam    = nullptr;
     bool bHeadSculptMode = false;
     void EnterHeadSculpt();
@@ -212,6 +215,7 @@ private:
     float       HeadPreviewSize = -1.f;                 // cache para reconstruir sólo si cambia
     EPTEditMode HeadPreviewMode = EPTEditMode::Smooth;  // idem (valor inicial != Add/Erase)
     EPTStampShape HeadPreviewShapeCached = EPTStampShape::TriPrism; // idem para la forma (valor != esfera)
+    float HeadPreviewGlow = 0.f; // brillo del preview: 0 en reposo, sube a 1 mientras esculpís (Add)
     void UpdateHeadPreview(const FVector* At, const FVector& Normal); // At=nullptr → oculta el preview
 
     // Color picker (mantener RMB), reusando el WBP del gameplay: se abre, se tickea con el cursor

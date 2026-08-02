@@ -74,9 +74,6 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head")
     UMaterialInterface* HeadMaterial = nullptr;
 
-    // Textura de pintura HORNEADA de la cabeza (el atlas 3D cocido a 2D). Alta resolución, sin costuras.
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head") int32 HeadPaintTexSize = 1024;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head") FName HeadPaintTexParam = TEXT("PaintTex");
 
     // Material de los OJOS. Asignar el material de "ojos locos". Si es null usa HeadMaterial.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head")
@@ -218,13 +215,14 @@ private:
     // ── Cabeza custom: helpers de secciones ─────────────────────────────────
     // Lee las secciones (verts/tris/normales/UV/color) de un ProceduralMesh a structs guardables.
     TArray<FPTHeadSection> ExtractSections(UProceduralMeshComponent* Src, const APTSculptVolume* PaintSource = nullptr) const;
-    // Reconstruye el HeadMesh desde secciones (HeadMaterial en arcilla, EyeMaterial en ojos).
+    // Reconstruye el HeadMesh desde secciones. Arcilla: usa HeadColorMID (muestrea el atlas 3D, idéntico
+    // al vivo) si existe; si no, HeadMaterial plano con vertex color. Ojos: EyeMaterial.
     void ApplyHeadSections(const TArray<FPTHeadSection>& Secs);
-    // Cocina el atlas 3D de color a una TEXTURA 2D: le da UV por-triángulo a las secciones de arcilla
-    // (in/out) y rellena HeadPaintTex muestreando el atlas por posición 3D. Resultado = alta resolución
-    // sin costuras, igual que el cuerpo. Si no hay atlas o pintura, deja HeadPaintTex en null.
-    void BakeHeadPaintTexture(TArray<FPTHeadSection>& Secs, const FTransform& SrcXform, const APTSculptVolume* Atlas);
-    UPROPERTY() UTexture2D* HeadPaintTex = nullptr;
+    // Material dinámico de la cabeza horneada que muestrea las copias del atlas 3D (lo crea el volumen).
+    // Da el mismo resultado EXACTO que el clay en vivo. Null hasta hornear (o en pawns remotos, por ahora).
+    UPROPERTY() UMaterialInstanceDynamic* HeadColorMID = nullptr;
+    // El pawn local acaba de hornear su cabeza esta sesión → no pisarla al re-aplicar desde el blob.
+    bool bLocallyBakedHead = false;
     // Aplica la cabeza del PlayerState si tiene; si no y es el pawn local, carga la guardada (disco).
     void TryApplyReplicatedHead();
 
@@ -273,7 +271,35 @@ public:
     /** Sube al GPU lo pintado desde el último flush (una sola actualización por frame). */
     void FlushBodyPaint();
 
+    // ── Pintado de la CABEZA con textura 2D (igual que el cuerpo, NO el atlas de vóxeles) ──
+    // La cabeza se pinta en una textura 2D de 1024, mapeada por proyección ESFÉRICA desde un centro
+    // FIJO (local). Como el mapeo depende solo de la posición, la pintura se preserva aunque re-esculpas
+    // (el mismo punto 3D → mismo téxel). El material M_HeadPaint muestrea la textura con esa proyección.
+
+    // Material de la cabeza pintada: muestrea "PaintTex" por proyección esférica desde "Center".
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head") UMaterialInterface* HeadPaintMaterial = nullptr;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head") int32 HeadPaintTexSize = 1024;
+
+    /** Crea la textura 2D de pintura de la cabeza (transparente) y fija el centro de proyección. */
+    void InitHeadPaint(const FVector& CenterLocal);
+    /** MID de HeadPaintMaterial con PaintTex + Center seteados (para la malla viva y la horneada). */
+    UMaterialInstanceDynamic* CreateHeadPaintMID();
+    /** Pinta (world-space, sin costuras) sobre la textura de la cabeza: téxeles cuyo punto 3D cae en la
+     *  esfera del pincel (centro world P, radio R). Mesh = la malla de arcilla (misma escala/espacio). */
+    void PaintHeadWorldSphere(UProceduralMeshComponent* ClayMesh, const FVector& P, float R, FLinearColor Color);
+    /** Sube al GPU lo pintado en la cabeza desde el último flush. */
+    void FlushHeadPaint();
+    UTexture2D* GetHeadPaintTex() const { return HeadPaintTex; }
+
 private:
+    // Estado del pintado 2D de la cabeza.
+    UPROPERTY() UTexture2D* HeadPaintTex = nullptr;
+    TArray<FColor> HeadPaintPixels;
+    int32 HeadPaintN = 0;
+    FVector HeadPaintCenterLocal = FVector::ZeroVector; // centro fijo de la proyección esférica (local)
+    int32 HDirtyMinX = 0, HDirtyMinY = 0, HDirtyMaxX = -1, HDirtyMaxY = -1;
+
+
     UPROPERTY() UTexture2D*               PaintTex     = nullptr; // textura de pintura del cuerpo
     UPROPERTY() UMaterialInstanceDynamic* CharPaintMID = nullptr;
 

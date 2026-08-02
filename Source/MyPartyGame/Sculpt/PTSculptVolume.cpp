@@ -359,7 +359,8 @@ void APTSculptVolume::BeginPlay()
     Field.DisplaySmoothing = DisplaySmoothing;
     InitColorField();
     SetupClayMID();
-    if (UMaterialInterface* M = ClayMID ? (UMaterialInterface*)ClayMID : ClayMaterial)
+    if (UMaterialInterface* M = ClayMaterialOverride ? ClayMaterialOverride
+                                : (ClayMID ? (UMaterialInterface*)ClayMID : ClayMaterial))
         Mesh->SetMaterial(0, M);
 }
 
@@ -480,6 +481,59 @@ void APTSculptVolume::SetupClayMID()
     ClayMID->SetScalarParameterValue(TEXT("NewClayGlowSeconds"),    NewClayGlowSeconds);
     ClayMID->SetScalarParameterValue(TEXT("NewClayGlowBrightness"), NewClayGlowBrightness);
     ClayMID->SetScalarParameterValue(TEXT("NowTime"), GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f);
+}
+
+UMaterialInstanceDynamic* APTSculptVolume::CreateBakedColorMID(UObject* Outer)
+{
+    if (!ClayMaterial || !PageTex || !AtlasTex) return nullptr;
+
+    // Copiar la page table (R32F) a una textura persistente (el volumen se destruye al salir del modo G).
+    const int32 PGW = ColorBrickDim.X;
+    const int32 PGH = ColorBrickDim.Y * ColorBrickDim.Z;
+    UTexture2D* PageCopy = UTexture2D::CreateTransient(PGW, PGH, PF_R32_FLOAT);
+    if (!PageCopy) return nullptr;
+    PageCopy->SRGB = false; PageCopy->Filter = TF_Nearest; PageCopy->AddressX = TA_Clamp; PageCopy->AddressY = TA_Clamp;
+    {
+        FTexture2DMipMap& Mip = PageCopy->GetPlatformData()->Mips[0];
+        void* D = Mip.BulkData.Lock(LOCK_READ_WRITE);
+        FMemory::Memcpy(D, PageBuf.GetData(),
+            FMath::Min<int64>((int64)PageBuf.Num() * sizeof(float), Mip.BulkData.GetBulkDataSize()));
+        Mip.BulkData.Unlock();
+    }
+    PageCopy->UpdateResource();
+
+    // Copiar el atlas (BGRA8) a una textura persistente.
+    UTexture2D* AtlasCopy = UTexture2D::CreateTransient(AtlasW, AtlasH, PF_B8G8R8A8);
+    if (!AtlasCopy) return nullptr;
+    AtlasCopy->SRGB = true; AtlasCopy->Filter = TF_Bilinear; AtlasCopy->AddressX = TA_Clamp; AtlasCopy->AddressY = TA_Clamp;
+    {
+        FTexture2DMipMap& Mip = AtlasCopy->GetPlatformData()->Mips[0];
+        void* D = Mip.BulkData.Lock(LOCK_READ_WRITE);
+        FMemory::Memcpy(D, AtlasBuf.GetData(),
+            FMath::Min<int64>((int64)AtlasBuf.Num() * sizeof(FColor), Mip.BulkData.GetBulkDataSize()));
+        Mip.BulkData.Unlock();
+    }
+    AtlasCopy->UpdateResource();
+
+    // MID con los MISMOS parámetros que el clay en vivo, pero apuntando a las copias y con glow apagado.
+    UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(ClayMaterial, Outer);
+    if (!MID) return nullptr;
+    MID->SetTextureParameterValue(TEXT("PageTable"), PageCopy);
+    MID->SetTextureParameterValue(TEXT("Atlas"),     AtlasCopy);
+    MID->SetVectorParameterValue(TEXT("CanvasMin"),  CanvasMinLocal);
+    MID->SetScalarParameterValue(TEXT("ColorVoxel"), FMath::Max(ColorVoxel, 0.5f));
+    MID->SetVectorParameterValue(TEXT("VoxDim"),     FVector(ColorVoxDim));
+    MID->SetVectorParameterValue(TEXT("BrickDim"),   FVector(ColorBrickDim));
+    MID->SetScalarParameterValue(TEXT("PageW"),      ColorBrickDim.X);
+    MID->SetScalarParameterValue(TEXT("PageH"),      ColorBrickDim.Y * ColorBrickDim.Z);
+    MID->SetScalarParameterValue(TEXT("TilesPerRow"), AtlasTilesPerRow);
+    MID->SetScalarParameterValue(TEXT("AtlasW"),     AtlasW);
+    MID->SetScalarParameterValue(TEXT("AtlasH"),     AtlasH);
+    MID->SetScalarParameterValue(TEXT("CB"),         CB);
+    MID->SetScalarParameterValue(TEXT("NewClayGlowBrightness"), 0.f); // sin brillo de arcilla nueva
+    MID->SetScalarParameterValue(TEXT("NewClayGlowSeconds"),    NewClayGlowSeconds);
+    MID->SetScalarParameterValue(TEXT("NowTime"), GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f);
+    return MID;
 }
 
 bool APTSculptVolume::WriteColorVoxel(int32 vx, int32 vy, int32 vz, const FColor& C)
@@ -1108,7 +1162,8 @@ void APTSculptVolume::RebuildDirty()
         S.Step = Field.DecideStep(S.Key);
 
     UProceduralMeshComponent* MeshPtr = Mesh;
-    UMaterialInterface* Mat = ClayMID ? (UMaterialInterface*)ClayMID : ClayMaterial;
+    UMaterialInterface* Mat = ClayMaterialOverride ? ClayMaterialOverride
+                            : (ClayMID ? (UMaterialInterface*)ClayMID : ClayMaterial);
 
     Async(EAsyncExecution::ThreadPool, [this, MeshPtr, Mat, Snaps]()
     {

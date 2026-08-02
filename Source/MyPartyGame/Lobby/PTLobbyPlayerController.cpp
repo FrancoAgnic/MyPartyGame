@@ -377,11 +377,28 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
     // Preview de la herramienta siguiendo el cursor.
     UpdateHeadPreview(bHavePt ? &Pt : nullptr, Nrm);
 
-    // Stamp continuo mientras se mantiene el LMB (con la forma elegida; nunca fuera del área).
-    // ApplyStampAndFX = igual que el gameplay: aplica + dispara partículas (Borrar/Pintar) y el
-    // brillo de la arcilla nueva (Agregar). En el modo G es local (solo lo ves vos esculpiendo).
-    if (HeadVolume && bHeadStamping && bHavePt && !bHeadStampOutside)
-        HeadVolume->ApplyStampAndFX(Pt, EffectiveHeadShape(), HeadBrushSize, HeadEditMode, HeadPaintColor);
+    // Glow de arcilla nueva: el material de la cabeza (M_HeadPaint) usa NowTime igual que el clay.
+    APTLobbyCharacter* HeadChar = Cast<APTLobbyCharacter>(GetPawn());
+    if (HeadPaintMID && GetWorld())
+        HeadPaintMID->SetScalarParameterValue(TEXT("NowTime"), GetWorld()->GetTimeSeconds());
+
+    // Stamp continuo mientras se mantiene el LMB.
+    if (HeadVolume && bHeadStamping && bHavePt)
+    {
+        // Paint (no ojos): pintar la TEXTURA 2D de la cabeza (world-space, sin costuras, igual al cuerpo),
+        // NO el atlas. Se permite pintar aunque la cara esté PEGADA AL LÍMITE del área (no agrega
+        // geometría, solo colorea). Add/Erase sí respetan el límite (geometría) como en el gameplay.
+        if (HeadChar && !bHeadEyesTool && HeadEditMode == EPTEditMode::Paint)
+        {
+            HeadChar->PaintHeadWorldSphere(HeadVolume->GetMeshComponent(), Pt, HeadBrushSize * 0.5f, HeadPaintColor);
+            HeadChar->FlushHeadPaint();
+            HeadVolume->PlayPaintFXAt(Pt, HeadPaintColor, HeadBrushSize); // gotitas de pintura
+        }
+        else if (!bHeadStampOutside)
+        {
+            HeadVolume->ApplyStampAndFX(Pt, EffectiveHeadShape(), HeadBrushSize, HeadEditMode, HeadPaintColor);
+        }
+    }
 }
 
 void APTLobbyPlayerController::UpdateHeadPreview(const FVector* At, const FVector& Normal)
@@ -468,8 +485,16 @@ void APTLobbyPlayerController::UpdateHeadPreview(const FVector* At, const FVecto
     HeadPreviewActor->SetActorLocation(*At);
     // Paint/Ojos: orientar a la normal de la superficie (se "apoyan" sobre la malla). Add/Erase sin rotar.
     HeadPreviewActor->SetActorRotation((bPaint || bEyes) ? Normal.Rotation() : FRotator::ZeroRotator);
-    // Color en vivo del preview (Add/Paint): mostrar el color seleccionado, incluso mientras lo editás.
-    if (HeadPreviewMID) HeadPreviewMID->SetVectorParameterValue(TEXT("Color"), HeadPaintColor);
+    // Color + glow del preview. El material del preview (M_HeadPreview, custom node) usa:
+    //   Color = color seleccionado, Glow = 0 en reposo → sube a 1 mientras mantenés apretado al esculpir.
+    const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+    const bool  bSculptingNow = bHeadStamping && !bEyes && (HeadEditMode == EPTEditMode::Add);
+    HeadPreviewGlow = FMath::FInterpTo(HeadPreviewGlow, bSculptingNow ? 1.f : 0.f, Dt, 12.f);
+    if (HeadPreviewMID)
+    {
+        HeadPreviewMID->SetVectorParameterValue(TEXT("Color"), HeadPaintColor);
+        HeadPreviewMID->SetScalarParameterValue(TEXT("Glow"),  HeadPreviewGlow);
+    }
 }
 
 void APTLobbyPlayerController::UpdateHeadCam()
@@ -744,13 +769,37 @@ void APTLobbyPlayerController::EnterHeadSculpt()
         SpawnRot = ST.Rotator();
     }
 
-    FActorSpawnParameters SP;
-    SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-    HeadVolume = GetWorld()->SpawnActor<APTSculptVolume>(HeadVolumeClass, Center, SpawnRot, SP);
+    // Spawn DIFERIDO: la cabeza es chica (radio ~40), así que con el ColorVoxel por defecto (3) el
+    // atlas de color queda a ~27 vóxeles de ancho → pixelado. Lo bajamos ANTES de que el volumen
+    // inicialice el campo de color (BeginPlay) para tener color de alta resolución en la cabeza.
+    const FTransform HeadXform(SpawnRot, Center);
+    HeadVolume = GetWorld()->SpawnActorDeferred<APTSculptVolume>(
+        HeadVolumeClass, HeadXform, nullptr, nullptr,
+        ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+    if (HeadVolume)
+    {
+        HeadVolume->ColorVoxel = 0.5f; // color de alta resolución (el mínimo efectivo del sistema)
+        UGameplayStatics::FinishSpawningActor(HeadVolume, HeadXform);
+    }
 
     // Bolita inicial de arcilla para que haya algo que esculpir (color piel neutro).
     if (HeadVolume)
         HeadVolume->ApplyStamp(Center, EPTStampShape::Sphere, 40.f, EPTEditMode::Add, FLinearColor(0.95f, 0.78f, 0.66f));
+
+    // Pintado 2D de la cabeza (igual al cuerpo): centro FIJO de proyección esférica = centro del volumen
+    // en espacio LOCAL. La malla viva usa el material que muestrea esa textura, así ves la pintura al toque.
+    if (HeadVolume)
+        if (APTLobbyCharacter* PaintChar = Cast<APTLobbyCharacter>(GetPawn()))
+        {
+            const FVector CenterLocal = HeadVolume->GetActorTransform().InverseTransformPosition(Center);
+            PaintChar->InitHeadPaint(CenterLocal);
+            HeadPaintMID = PaintChar->CreateHeadPaintMID();
+            // El volumen usa este material al re-mallar (sin pelear con un set-por-tick → sin parpadeo).
+            HeadVolume->ClayMaterialOverride = HeadPaintMID;
+            if (HeadPaintMID)
+                if (UProceduralMeshComponent* CM = HeadVolume->GetMeshComponent())
+                    for (int32 s = 0; s < CM->GetNumSections(); ++s) CM->SetMaterial(s, HeadPaintMID);
+        }
 
     // Reset de la herramienta de ojos + malla viva de ojos (pegada al volumen para verlos colocados).
     bHeadEyesTool = false;
@@ -765,6 +814,8 @@ void APTLobbyPlayerController::EnterHeadSculpt()
     }
 
     // Actor de preview de la brocha (fantasma que sigue al cursor, como el gameplay).
+    FActorSpawnParameters SP;
+    SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
     HeadPreviewActor = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), Center, FRotator::ZeroRotator, SP);
     if (HeadPreviewActor)
     {

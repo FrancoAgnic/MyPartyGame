@@ -29,6 +29,10 @@ public:
     // Resolución del campo (tamaño de celda en UU). Menor = más geometría/detalle.
     UPROPERTY(EditAnywhere, Category="Sculpt") float VoxelSize = 5.f;
     UPROPERTY(EditAnywhere, Category="Sculpt") UMaterialInterface* ClayMaterial = nullptr;
+    // Override opcional del material de la malla de arcilla. Si se asigna, el volumen lo usa en vez del
+    // ClayMID (atlas) al crear/re-crear las secciones. Lo usa la CABEZA del modo G (material de pintura
+    // 2D) para no pelear con el re-mallado. Default null → gameplay usa el atlas como siempre.
+    UPROPERTY() UMaterialInterface* ClayMaterialOverride = nullptr;
 
     // ── Partículas de feedback (Borrar / Pintar) ─────────────────────────────
     // Se emiten mientras mantenés el sello. Las ve TODO EL MUNDO (salen en el Multicast del sello).
@@ -156,6 +160,13 @@ public:
     // Lo usa el pintado del CUERPO en el modo G (que pinta una textura, no el volumen).
     void PlayPaintFXAt(const FVector& WorldPos, const FLinearColor& Color, float BrushSize)
     { PlaySculptFX(FXPaint, EPTEditMode::Paint, WorldPos, Color, BrushSize); }
+
+    // Crea un material dinámico (de ClayMaterial) para la cabeza HORNEADA que muestrea COPIAS de las
+    // texturas de color 3D (PageTable + Atlas) con los mismos parámetros que el clay en vivo. Como es
+    // el mismo material + mismos datos + mismo espacio (posiciones locales), la cabeza usada se ve
+    // EXACTAMENTE igual a como la pintaste (sin re-muestrear ni perder resolución). Sin glow.
+    // Las copias quedan referenciadas por el MID (Outer = el personaje), así sobreviven al volumen.
+    UMaterialInstanceDynamic* CreateBakedColorMID(UObject* Outer);
 
     // Limpia toda la escultura (geometría + color) dejando el lienzo en blanco.
     // Reusa las texturas de color existentes (solo re-sube la page table vacía).

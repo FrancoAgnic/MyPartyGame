@@ -145,132 +145,11 @@ void APTLobbyCharacter::ApplyHeadSections(const TArray<FPTHeadSection>& Secs)
         if (H.Verts.Num() == 0) continue;
         HeadMesh->CreateMeshSection(s, H.Verts, H.Tris, H.Normals, H.UVs, H.Colors, NoTangents, /*bCreateCollision=*/false);
         if (H.bEye && EyeMaterial) { HeadMesh->SetMaterial(s, EyeMaterial); continue; }
-        if (!HeadMaterial) continue;
-        // Arcilla: si horneamos la textura de pintura, engancharla en un material dinámico (PaintTex);
-        // si no, material plano (usa el vertex color como antes).
-        if (HeadPaintTex)
-        {
-            if (UMaterialInstanceDynamic* M = HeadMesh->CreateDynamicMaterialInstance(s, HeadMaterial))
-                M->SetTextureParameterValue(HeadPaintTexParam, HeadPaintTex);
-        }
-        else HeadMesh->SetMaterial(s, HeadMaterial);
+        // Arcilla: si tenemos el MID de color (muestrea el atlas 3D → idéntico al vivo), usarlo;
+        // si no, el material plano que lee el vertex color (fallback / pawns remotos por ahora).
+        if (HeadColorMID)      HeadMesh->SetMaterial(s, HeadColorMID);
+        else if (HeadMaterial) HeadMesh->SetMaterial(s, HeadMaterial);
     }
-}
-
-void APTLobbyCharacter::BakeHeadPaintTexture(TArray<FPTHeadSection>& Secs, const FTransform& SrcXform, const APTSculptVolume* Atlas)
-{
-    HeadPaintTex = nullptr;
-    if (!Atlas) return;
-
-    // Contar triángulos de arcilla (no ojos) para dimensionar el atlas por-triángulo.
-    int32 TotalTris = 0;
-    for (const FPTHeadSection& S : Secs) if (!S.bEye) TotalTris += S.Tris.Num() / 3;
-    if (TotalTris == 0) return;
-
-    const int32 N    = FMath::Clamp(HeadPaintTexSize, 256, 4096);
-    const int32 Grid = FMath::CeilToInt(FMath::Sqrt((float)TotalTris)); // celdas por lado
-    const float Cell = 1.f / (float)Grid;                              // tamaño de celda en UV
-    const float Pad  = Cell * 0.15f;                                   // margen dentro de la celda
-
-    TArray<FColor> Px; Px.Init(FColor(255, 255, 255, 255), N * N);
-
-    // Baricéntricas 2D de un punto respecto de un triángulo (en píxeles).
-    auto Bary = [](double fx, double fy, const FVector2D& A, const FVector2D& B, const FVector2D& C,
-                   double& L1, double& L2, double& L3) -> bool
-    {
-        const double Den = (double)(B.Y - C.Y) * (A.X - C.X) + (double)(C.X - B.X) * (A.Y - C.Y);
-        if (FMath::Abs(Den) < 1e-9) return false;
-        const double Inv = 1.0 / Den;
-        L1 = ((double)(B.Y - C.Y) * (fx - C.X) + (double)(C.X - B.X) * (fy - C.Y)) * Inv;
-        L2 = ((double)(C.Y - A.Y) * (fx - C.X) + (double)(A.X - C.X) * (fy - C.Y)) * Inv;
-        L3 = 1.0 - L1 - L2;
-        return true;
-    };
-
-    int32 TriCounter = 0;
-    for (FPTHeadSection& S : Secs)
-    {
-        if (S.bEye) continue;
-        const int32 Tri = S.Tris.Num() / 3;
-
-        // Nueva geometría "desoldada": 3 verts por triángulo, cada uno con su UV de atlas.
-        FPTHeadSection U; U.bEye = false;
-        U.Verts.Reserve(Tri * 3); U.Normals.Reserve(Tri * 3);
-        U.UVs.Reserve(Tri * 3);   U.Colors.Reserve(Tri * 3); U.Tris.Reserve(Tri * 3);
-
-        for (int32 t = 0; t < Tri; ++t)
-        {
-            const int32 i0 = S.Tris[t * 3], i1 = S.Tris[t * 3 + 1], i2 = S.Tris[t * 3 + 2];
-            if (!S.Verts.IsValidIndex(i0) || !S.Verts.IsValidIndex(i1) || !S.Verts.IsValidIndex(i2)) continue;
-
-            const FVector P0 = S.Verts[i0],  P1 = S.Verts[i1],  P2 = S.Verts[i2];
-            const FVector Wn0(S.Normals.IsValidIndex(i0) ? S.Normals[i0] : FVector::UpVector);
-            const FVector Wn1(S.Normals.IsValidIndex(i1) ? S.Normals[i1] : FVector::UpVector);
-            const FVector Wn2(S.Normals.IsValidIndex(i2) ? S.Normals[i2] : FVector::UpVector);
-            const FColor  C0 = S.Colors.IsValidIndex(i0) ? S.Colors[i0] : FColor::White;
-            const FColor  C1 = S.Colors.IsValidIndex(i1) ? S.Colors[i1] : FColor::White;
-            const FColor  C2 = S.Colors.IsValidIndex(i2) ? S.Colors[i2] : FColor::White;
-
-            // Celda del triángulo → sub-triángulo (esquinas UL, UR, LL) con padding.
-            const int32 gx = TriCounter % Grid, gy = TriCounter / Grid;
-            const float x0 = gx * Cell + Pad, y0 = gy * Cell + Pad;
-            const float x1 = (gx + 1) * Cell - Pad, y1 = (gy + 1) * Cell - Pad;
-            const FVector2D UV0(x0, y0), UV1(x1, y0), UV2(x0, y1);
-
-            const int32 base = U.Verts.Num();
-            U.Verts.Add(P0); U.Verts.Add(P1); U.Verts.Add(P2);
-            U.Normals.Add(Wn0); U.Normals.Add(Wn1); U.Normals.Add(Wn2);
-            U.UVs.Add(UV0); U.UVs.Add(UV1); U.UVs.Add(UV2);
-            U.Colors.Add(C0); U.Colors.Add(C1); U.Colors.Add(C2);
-            U.Tris.Add(base); U.Tris.Add(base + 1); U.Tris.Add(base + 2);
-
-            // Rasterizar la celda: cada téxel → posición 3D → color del atlas (o base si no pintado).
-            const FVector2D T0(UV0 * N), T1(UV1 * N), T2(UV2 * N);
-            int32 MinX = FMath::FloorToInt(FMath::Min3(T0.X, T1.X, T2.X)) - 1;
-            int32 MaxX = FMath::CeilToInt (FMath::Max3(T0.X, T1.X, T2.X)) + 1;
-            int32 MinY = FMath::FloorToInt(FMath::Min3(T0.Y, T1.Y, T2.Y)) - 1;
-            int32 MaxY = FMath::CeilToInt (FMath::Max3(T0.Y, T1.Y, T2.Y)) + 1;
-            MinX = FMath::Clamp(MinX, 0, N - 1); MaxX = FMath::Clamp(MaxX, 0, N - 1);
-            MinY = FMath::Clamp(MinY, 0, N - 1); MaxY = FMath::Clamp(MaxY, 0, N - 1);
-
-            for (int32 py = MinY; py <= MaxY; ++py)
-            for (int32 px = MinX; px <= MaxX; ++px)
-            {
-                double L1, L2, L3;
-                if (!Bary(px + 0.5, py + 0.5, T0, T1, T2, L1, L2, L3)) continue;
-                const double Tol = 1.5 / (double)FMath::Max(1, (int32)((x1 - x0) * N)); // ~1.5 téxeles de borde
-                if (L1 < -Tol || L2 < -Tol || L3 < -Tol) continue;
-                const double c1 = FMath::Clamp(L1, 0.0, 1.0), c2 = FMath::Clamp(L2, 0.0, 1.0);
-                const double c3 = FMath::Max(0.0, 1.0 - c1 - c2);
-
-                const FVector Wp = SrcXform.TransformPosition(c1 * P0 + c2 * P1 + c3 * P2);
-                bool bPainted = false;
-                const FLinearColor AtlasCol = Atlas->SampleWorldPaintColor(Wp, bPainted);
-
-                FLinearColor Lin;
-                if (bPainted) Lin = AtlasCol; // color lineal real de la pintura (alta resolución)
-                else          Lin = FLinearColor(c1 * (C0.R / 255.0) + c2 * (C1.R / 255.0) + c3 * (C2.R / 255.0),
-                                                 c1 * (C0.G / 255.0) + c2 * (C1.G / 255.0) + c3 * (C2.G / 255.0),
-                                                 c1 * (C0.B / 255.0) + c2 * (C1.B / 255.0) + c3 * (C2.B / 255.0), 1.f);
-                Px[py * N + px] = Lin.ToFColor(true); // se guarda sRGB (la textura es SRGB=true)
-            }
-            ++TriCounter;
-        }
-        S = MoveTemp(U);
-    }
-
-    // Crear la textura y subir los píxeles.
-    HeadPaintTex = UTexture2D::CreateTransient(N, N, PF_B8G8R8A8);
-    if (!HeadPaintTex) return;
-    HeadPaintTex->SRGB = true;
-    HeadPaintTex->CompressionSettings = TC_Default;
-    HeadPaintTex->Filter = TF_Bilinear;
-    HeadPaintTex->AddToRoot();
-    FTexture2DMipMap& Mip = HeadPaintTex->GetPlatformData()->Mips[0];
-    void* Data = Mip.BulkData.Lock(LOCK_READ_WRITE);
-    FMemory::Memcpy(Data, Px.GetData(), Px.Num() * sizeof(FColor));
-    Mip.BulkData.Unlock();
-    HeadPaintTex->UpdateResource();
 }
 
 void APTLobbyCharacter::BakeAndReplicateHead(UProceduralMeshComponent* ClaySrc, APTSculptVolume* PaintSource,
@@ -286,9 +165,11 @@ void APTLobbyCharacter::BakeAndReplicateHead(UProceduralMeshComponent* ClaySrc, 
         if (Eyes.Verts.Num() > 0) Secs.Add(MoveTemp(Eyes));
     }
 
-    // Cocinar el atlas 3D de color a una textura 2D de alta resolución (le da UV por-triángulo a las
-    // secciones de arcilla). Así la cabeza usada se ve nítida y sin costuras, igual que el cuerpo.
-    BakeHeadPaintTexture(Secs, ClaySrc->GetComponentTransform(), PaintSource);
+    // La cabeza horneada usa el MISMO material/textura de pintura 2D que en vivo (proyección esférica
+    // desde el centro fijo). Mismo dato + mismo shader + mismas posiciones locales → idéntico a lo
+    // que pintaste, con la nitidez de una textura 1024 (no el atlas de vóxeles).
+    HeadColorMID = CreateHeadPaintMID();
+    bLocallyBakedHead = true; // no pisar este resultado al re-aplicar desde el blob replicado
 
     ApplyHeadSections(Secs);
     UpdateHeadCollision();
@@ -302,6 +183,10 @@ void APTLobbyCharacter::BakeAndReplicateHead(UProceduralMeshComponent* ClaySrc, 
 
 void APTLobbyCharacter::ApplyReplicatedHead()
 {
+    // Si este pawn acaba de hornear su cabeza localmente, ya tiene el material de color 3D (idéntico
+    // al vivo); no re-aplicar desde el blob (que solo trae vertex color plano) para no degradarla.
+    if (bLocallyBakedHead) return;
+
     const APTPlayerState* PS = GetPlayerState<APTPlayerState>();
     if (!PS || PS->HeadBlob.Num() == 0) return;
     TArray<FPTHeadSection> Secs;
@@ -1007,4 +892,155 @@ void APTLobbyCharacter::PaintCharacterAtCursor(FLinearColor Color, float BrushPi
         PaintBodyWorldSphere(Pt, FMath::Max(1.f, BrushPixels), Color);
         FlushBodyPaint();
     }
+}
+
+// ─── Pintado 2D de la CABEZA (proyección esférica desde centro fijo; igual al cuerpo, sin atlas) ───
+
+// UV esférica de un punto local respecto del centro fijo. u wrapea atrás; v de polo a polo.
+static FVector2D PT_HeadSphUV(const FVector& LocalPos, const FVector& Center)
+{
+    FVector d = LocalPos - Center;
+    if (!d.Normalize()) return FVector2D(0.5, 0.5);
+    const float u = (float)(FMath::Atan2(d.Y, d.X) / (2.0 * PI)) + 0.5f;      // [0,1)
+    const float v = (float)(FMath::Acos(FMath::Clamp(d.Z, -1.f, 1.f)) / PI);  // [0,1]
+    return FVector2D(u, v);
+}
+
+void APTLobbyCharacter::InitHeadPaint(const FVector& CenterLocal)
+{
+    HeadPaintN = FMath::Clamp(HeadPaintTexSize, 256, 4096);
+    HeadPaintCenterLocal = CenterLocal;
+    HeadPaintPixels.Init(FColor(0, 0, 0, 0), HeadPaintN * HeadPaintN); // transparente = sin pintar
+    HDirtyMinX = HDirtyMinY = 0; HDirtyMaxX = HDirtyMaxY = -1;
+
+    HeadPaintTex = UTexture2D::CreateTransient(HeadPaintN, HeadPaintN, PF_B8G8R8A8);
+    if (!HeadPaintTex) return;
+    HeadPaintTex->SRGB = true;
+    HeadPaintTex->Filter = TF_Bilinear;
+    HeadPaintTex->AddressX = TA_Wrap;   // la costura esférica (u=0/1) queda continua
+    HeadPaintTex->AddressY = TA_Clamp;
+    HeadPaintTex->AddToRoot();
+    FTexture2DMipMap& Mip = HeadPaintTex->GetPlatformData()->Mips[0];
+    void* Data = Mip.BulkData.Lock(LOCK_READ_WRITE);
+    FMemory::Memcpy(Data, HeadPaintPixels.GetData(), HeadPaintPixels.Num() * sizeof(FColor));
+    Mip.BulkData.Unlock();
+    HeadPaintTex->UpdateResource();
+}
+
+UMaterialInstanceDynamic* APTLobbyCharacter::CreateHeadPaintMID()
+{
+    if (!HeadPaintMaterial || !HeadPaintTex) return nullptr;
+    UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(HeadPaintMaterial, this);
+    if (!MID) return nullptr;
+    MID->SetTextureParameterValue(TEXT("PaintTex"), HeadPaintTex);
+    MID->SetVectorParameterValue(TEXT("Center"), HeadPaintCenterLocal);
+    return MID;
+}
+
+void APTLobbyCharacter::PaintHeadWorldSphere(UProceduralMeshComponent* ClayMesh, const FVector& P, float R, FLinearColor Color)
+{
+    if (!ClayMesh || !HeadPaintTex || HeadPaintPixels.Num() == 0) return;
+
+    const int32  N   = HeadPaintN;
+    const FColor Src = Color.ToFColor(true);
+    const float  R2  = R * R;
+    const FTransform Xf = ClayMesh->GetComponentTransform();
+
+    auto MarkH = [this, N](int32 X, int32 Y)
+    {
+        X = ((X % N) + N) % N; // wrap en X (costura)
+        if (Y < 0 || Y >= N) return;
+        if (HDirtyMaxX < HDirtyMinX) { HDirtyMinX = HDirtyMaxX = X; HDirtyMinY = HDirtyMaxY = Y; return; }
+        HDirtyMinX = FMath::Min(HDirtyMinX, X); HDirtyMaxX = FMath::Max(HDirtyMaxX, X);
+        HDirtyMinY = FMath::Min(HDirtyMinY, Y); HDirtyMaxY = FMath::Max(HDirtyMaxY, Y);
+    };
+
+    for (int32 s = 0; s < ClayMesh->GetNumSections(); ++s)
+    {
+        const FProcMeshSection* Sec = ClayMesh->GetProcMeshSection(s);
+        if (!Sec || Sec->ProcVertexBuffer.Num() == 0) continue;
+        const TArray<FProcMeshVertex>& VB = Sec->ProcVertexBuffer;
+        const TArray<uint32>& IB = Sec->ProcIndexBuffer;
+
+        for (int32 i = 0; i + 2 < IB.Num(); i += 3)
+        {
+            const uint32 A = IB[i], B = IB[i + 1], C = IB[i + 2];
+            if (!VB.IsValidIndex(A) || !VB.IsValidIndex(B) || !VB.IsValidIndex(C)) continue;
+            const FVector LA = VB[A].Position, LB = VB[B].Position, LC = VB[C].Position;
+            const FVector WA = Xf.TransformPosition(LA), WB = Xf.TransformPosition(LB), WC = Xf.TransformPosition(LC);
+
+            FBox Tb(ForceInit); Tb += WA; Tb += WB; Tb += WC;
+            if (Tb.ComputeSquaredDistanceToPoint(P) > R2) continue;
+
+            // UV esférica por vértice.
+            FVector2D UA = PT_HeadSphUV(LA, HeadPaintCenterLocal);
+            FVector2D UB = PT_HeadSphUV(LB, HeadPaintCenterLocal);
+            FVector2D UC = PT_HeadSphUV(LC, HeadPaintCenterLocal);
+            // Costura: si el triángulo cruza u=0/1, "desdoblar" sumando 1 a las u chicas (se wrapea al escribir).
+            const float uMin = FMath::Min3(UA.X, UB.X, UC.X), uMax = FMath::Max3(UA.X, UB.X, UC.X);
+            if (uMax - uMin > 0.5f)
+            {
+                if (UA.X < 0.5f) UA.X += 1.f;
+                if (UB.X < 0.5f) UB.X += 1.f;
+                if (UC.X < 0.5f) UC.X += 1.f;
+            }
+            const FVector2D TA = UA * N, TB = UB * N, TC = UC * N;
+
+            const double Den = (double)(TB.Y - TC.Y) * (TA.X - TC.X) + (double)(TC.X - TB.X) * (TA.Y - TC.Y);
+            if (FMath::Abs(Den) < 1e-8) continue;
+            const double InvDen = 1.0 / Den;
+
+            int32 MinX = FMath::FloorToInt(FMath::Min3(TA.X, TB.X, TC.X)) - 1;
+            int32 MaxX = FMath::CeilToInt (FMath::Max3(TA.X, TB.X, TC.X)) + 1;
+            int32 MinY = FMath::FloorToInt(FMath::Min3(TA.Y, TB.Y, TC.Y)) - 1;
+            int32 MaxY = FMath::CeilToInt (FMath::Max3(TA.Y, TB.Y, TC.Y)) + 1;
+            MinY = FMath::Clamp(MinY, 0, N - 1); MaxY = FMath::Clamp(MaxY, 0, N - 1);
+
+            for (int32 py = MinY; py <= MaxY; ++py)
+            for (int32 pxu = MinX; pxu <= MaxX; ++pxu) // pxu puede exceder N (costura) → se wrapea
+            {
+                const double fx = pxu + 0.5, fy = py + 0.5;
+                const double L1 = ((double)(TB.Y - TC.Y) * (fx - TC.X) + (double)(TC.X - TB.X) * (fy - TC.Y)) * InvDen;
+                const double L2 = ((double)(TC.Y - TA.Y) * (fx - TC.X) + (double)(TA.X - TC.X) * (fy - TC.Y)) * InvDen;
+                const double L3 = 1.0 - L1 - L2;
+                const double Tol = 0.02;
+                if (L1 < -Tol || L2 < -Tol || L3 < -Tol) continue;
+
+                const FVector WP = L1 * WA + L2 * WB + L3 * WC;
+                const float   D2 = (float)(WP - P).SizeSquared();
+                if (D2 > R2) continue;
+                const float t = FMath::Sqrt(D2) / R;
+                const float a = 1.f - FMath::SmoothStep(0.7f, 1.f, t);
+                if (a <= 0.f) continue;
+
+                const int32 px = ((pxu % N) + N) % N;
+                FColor& Dst = HeadPaintPixels[py * N + px];
+                const float inv = 1.f - a;
+                Dst.R = (uint8)FMath::Clamp(FMath::RoundToInt(Src.R * a + Dst.R * inv), 0, 255);
+                Dst.G = (uint8)FMath::Clamp(FMath::RoundToInt(Src.G * a + Dst.G * inv), 0, 255);
+                Dst.B = (uint8)FMath::Clamp(FMath::RoundToInt(Src.B * a + Dst.B * inv), 0, 255);
+                Dst.A = (uint8)FMath::Clamp(FMath::RoundToInt(255  * a + Dst.A * inv), 0, 255);
+                MarkH(px, py);
+            }
+        }
+    }
+}
+
+void APTLobbyCharacter::FlushHeadPaint()
+{
+    if (!HeadPaintTex || HDirtyMaxX < HDirtyMinX || HDirtyMaxY < HDirtyMinY) return;
+    const int32 N  = HeadPaintN;
+    const int32 x0 = HDirtyMinX, y0 = HDirtyMinY;
+    const int32 w  = HDirtyMaxX - HDirtyMinX + 1;
+    const int32 h  = HDirtyMaxY - HDirtyMinY + 1;
+
+    uint8* Buf = (uint8*)FMemory::Malloc(w * h * 4);
+    for (int32 yy = 0; yy < h; ++yy)
+        FMemory::Memcpy(Buf + yy * w * 4, &HeadPaintPixels[(y0 + yy) * N + x0], w * 4);
+
+    FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(x0, y0, 0, 0, w, h);
+    HeadPaintTex->UpdateTextureRegions(0, 1, Region, (uint32)(w * 4), 4, Buf,
+        [](uint8* Src, const FUpdateTextureRegion2D* Reg) { FMemory::Free(Src); delete Reg; });
+
+    HDirtyMinX = HDirtyMinY = 0; HDirtyMaxX = HDirtyMaxY = -1;
 }
