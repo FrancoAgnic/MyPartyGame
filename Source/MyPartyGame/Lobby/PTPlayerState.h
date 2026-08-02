@@ -87,6 +87,11 @@ public:
     /** [Server] Manda esta cabeza a TODOS los jugadores conectados (incluido el propio host). */
     void BroadcastHeadToAll();
 
+    /** [Cliente] Si a ESTE cliente le falta la cabeza (o una versión nueva) de algún jugador, se las
+     *  re-pide al server. Es idempotente y no hace nada si ya está todo sincronizado → sirve para
+     *  llamarlo en un heartbeat y auto-reparar carreras de carga (refresh que llegó mientras cargabas). */
+    void RefreshHeadsIfMissing();
+
 private:
     UFUNCTION(Server, Reliable)
     void Server_UploadHeadChunk(int32 Version, int32 ChunkIndex, int32 TotalChunks, const TArray<uint8>& Data);

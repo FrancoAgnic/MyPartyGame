@@ -27,5 +27,9 @@ class MYPARTYGAME_API UPTHeadSaveGame : public USaveGame
 {
     GENERATED_BODY()
 public:
+    // Legacy (saves viejos): solo geometría por secciones.
     UPROPERTY() TArray<FPTHeadSection> Sections;
+    // Nuevo: blob completo (geometría + centro + texturas de pintura de cabeza/cuerpo en PNG). Es el
+    // MISMO blob que se replica, así el guardado y la red comparten formato.
+    UPROPERTY() TArray<uint8> Blob;
 };

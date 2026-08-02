@@ -123,8 +123,8 @@ public:
     // Borra la cabeza custom (vuelve a sin cabeza).
     void ClearHeadMesh();
 
-    // Persistencia local: guardar (secciones dadas) / cargar la cabeza esculpida en un SaveGame.
-    void SaveHead(const TArray<FPTHeadSection>& Secs);
+    // Persistencia local: guardar/cargar la cabeza (blob completo: geometría + texturas de pintura).
+    void SaveHeadBlob(const TArray<uint8>& Blob);
     void LoadHead();
 
     // Pose de esculpido: true = recto/quieto (bypass del AnimBP → pose fija, sin baile ni jiggle
@@ -142,6 +142,18 @@ public:
     // Serializa+comprime / descomprime+deserializa las secciones de la cabeza a/desde bytes.
     static void SectionsToBlob(const TArray<FPTHeadSection>& Secs, TArray<uint8>& OutBlob);
     static bool BlobToSections(const TArray<uint8>& Blob, TArray<FPTHeadSection>& OutSecs);
+
+    // Blob COMBINADO (geometría + centro de proyección + texturas PNG de cabeza y cuerpo). Es lo que
+    // se replica y se guarda. Backward-compatible: si el blob no tiene el header nuevo, se lee como
+    // geometría vieja (solo secciones).
+    void BuildHeadBlob(const TArray<FPTHeadSection>& Secs, TArray<uint8>& OutBlob) const;
+    bool ParseHeadBlob(const TArray<uint8>& Blob, TArray<FPTHeadSection>& OutSecs,
+                       FVector& OutCenter, TArray<uint8>& OutHeadPNG, TArray<uint8>& OutBodyPNG) const;
+    // Reconstruye las texturas de pintura desde PNG (para pawns remotos / al cargar del disco).
+    void ApplyHeadPaintFromPNG(const TArray<uint8>& PNG, const FVector& CenterLocal);
+    void ApplyBodyPaintFromPNG(const TArray<uint8>& PNG);
+    // Aplica un blob combinado localmente (geometría + texturas + materiales). Remotos y carga de disco.
+    void ApplyHeadBlobLocal(const TArray<uint8>& Blob);
 
 protected:
     virtual void BeginPlay() override;
@@ -290,6 +302,11 @@ public:
     /** Sube al GPU lo pintado en la cabeza desde el último flush. */
     void FlushHeadPaint();
     UTexture2D* GetHeadPaintTex() const { return HeadPaintTex; }
+
+    /** Borra toda la pintura de la CABEZA (textura transparente). */
+    void ClearHeadPaint();
+    /** Borra toda la pintura del CUERPO (textura transparente). */
+    void ClearBodyPaint();
 
 private:
     // Estado del pintado 2D de la cabeza.

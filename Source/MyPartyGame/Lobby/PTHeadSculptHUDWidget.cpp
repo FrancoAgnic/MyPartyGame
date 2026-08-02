@@ -58,6 +58,7 @@ void UPTHeadSculptHUDWidget::BuildOnce()
     if (ColorSlot) ColorSlot->SetSlot(IconColor, FText::FromString(TEXT("RMB")), PTText::Get(TEXT("KEY_COLOR_PICK")));
     if (ExitSlot)  ExitSlot->SetSlot(IconExit,   FText::FromString(TEXT("G")),   PTText::Get(TEXT("HEAD_APPLY")));
     if (PaintBodySlot) PaintBodySlot->SetSlot(IconPaintBody, FText::FromString(TEXT("Shift")), PTText::Get(TEXT("HEAD_PAINT_BODY")));
+    if (ClearSlot)     ClearSlot->SetSlot(IconClear, FText::FromString(TEXT("Backspace")), PTText::Get(TEXT("SCULPT_CLEAR")));
 
     // La cruz WASD: cada tecla en su lugar (W arriba, S abajo, A izq, D der). El "glow" es el
     // resaltado (SetSelected) que se prende mientras la tecla está apretada.
@@ -116,6 +117,15 @@ void UPTHeadSculptHUDWidget::Refresh(APTLobbyPlayerController* PC)
         PaintBodySlot->SetVisibility(bPaintTool ? ESlateVisibility::HitTestInvisible
                                                 : ESlateVisibility::Collapsed);
         if (bPaintTool) PaintBodySlot->SetSelected(PC->IsBodyPaintMode());
+    }
+
+    // ── Backspace: círculo de "borrar todo" que se llena al mantener (con el contador 3→1) ──
+    if (ClearSlot)
+    {
+        const float P = PC->GetHeadClearHoldProgress();
+        ClearSlot->SetProgress(P, P > 0.f
+            ? FText::AsNumber(FMath::CeilToInt(PC->GetHeadClearHoldRemaining()))
+            : FText::GetEmpty());
     }
 
     // ── Cruz WASD: brillan mientras se mantiene la tecla ──

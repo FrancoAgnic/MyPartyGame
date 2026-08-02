@@ -42,6 +42,8 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* ExitSlot;
     // SHIFT: alternar pintar cabeza ↔ cuerpo. Solo visible con la herramienta Paint.
     UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* PaintBodySlot;
+    // BACKSPACE: toque = deshacer; mantener = borrar todo (muestra el círculo de progreso 3s).
+    UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* ClearSlot;
 
     // Cruz de cámara (WASD): brillan mientras mantenés la tecla.
     UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* WasdUp;    // W
@@ -72,6 +74,7 @@ protected:
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconColor    = nullptr;
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconExit     = nullptr;
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconPaintBody = nullptr;
+    UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconClear    = nullptr;
 
 private:
     void BuildOnce();          // arma tools + shapes + slots contextuales (una sola vez)

@@ -93,6 +93,7 @@ HINT_PLANE_VERTICAL,Plano vertical,Vertical Plane,Plano vertical,Vertikale Ebene
 HINT_PLANE_HORIZONTAL,Plano horizontal,Horizontal Plane,Plano horizontal,Horizontale Ebene,Plan horizontal,Piano orizzontale
 PICKER_SAVE_COLOR,E — Guardar color,E — Save Color,E — Salvar cor,E — Farbe speichern,E — Enregistrer la couleur,E — Salva colore
 SCULPT_UNDO,Deshacer,Undo,Desfazer,Rückgängig,Annuler,Annulla
+SCULPT_CLEAR,Borrar,Clear,Limpar,Löschen,Effacer,Cancella
 KEY_MOVE,Mover,Move,Mover,Bewegen,Se déplacer,Muovi
 KEY_LOOK,Cámara,Camera,Câmera,Kamera,Caméra,Camera
 KEY_FLY_UP,Subir,Fly Up,Subir,Aufsteigen,Monter,Sali

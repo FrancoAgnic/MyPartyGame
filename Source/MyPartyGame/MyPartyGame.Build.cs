@@ -17,6 +17,7 @@ public class MyPartyGame : ModuleRules
 			"ProceduralMeshComponent",
 			"RHI",
 			"RenderCore",
+			"ImageWrapper", // PNG encode/decode de las texturas de pintura (cabeza + cuerpo)
 			"AIModule",
 			"StateTreeModule",
 			"GameplayStateTreeModule",

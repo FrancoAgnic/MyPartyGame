@@ -270,6 +270,12 @@ protected:
         Reintenta solo si el PlayerState todavía no replicó. */
     void PushLanguageToServer();
 
+    // Sincronización de cabezas en el Lvl-01: heartbeat que re-pide las que falten + ráfagas espaciadas
+    // tras el travel (por si un cliente estaba cargando en el momento del broadcast).
+    void HeadSyncHeartbeat();
+    void RequestHeadsBurst();
+    FTimerHandle HeadSyncTimer;
+
 public:
     /** true si el menú de pausa (ESC) está abierto. Lo consulta el HUD para no pisar el
      *  cursor con su ApplyInputMode mientras el menú necesita el mouse para la UI. */

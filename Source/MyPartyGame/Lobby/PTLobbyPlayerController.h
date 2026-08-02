@@ -51,13 +51,22 @@ public:
     // Sub-modo "pintar el CUERPO" (solo con la herramienta Paint; se alterna con SHIFT). false =
     // foco en la cabeza (pinta la arcilla); true = foco en el cuerpo (pinta la piel del personaje).
     bool          IsBodyPaintMode()       const { return bBodyPaintMode; }
+    /** Progreso 0..1 del "borrar todo" (Backspace mantenido). 0 durante la ventana del toque (undo). */
+    float GetHeadClearHoldProgress() const
+    {
+        if (!bHeadClearHeld || HeadClearHoldTime <= HeadUndoTapMaxTime) return 0.f;
+        return FMath::Clamp((HeadClearHoldTime - HeadUndoTapMaxTime) / FMath::Max(0.01f, HeadClearHoldDuration - HeadUndoTapMaxTime), 0.f, 1.f);
+    }
+    /** Segundos que faltan para borrar todo (para el contador del cuadrito). */
+    float GetHeadClearHoldRemaining() const
+    { return bHeadClearHeld ? FMath::Max(0.f, HeadClearHoldDuration - HeadClearHoldTime) : HeadClearHoldDuration; }
 
-    /** true si la herramienta actual del modo G usa formas (Add/Erase/Paint; Ojos no). */
+    /** true si la herramienta actual del modo G usa formas: SOLO Agregar. Borrar usa siempre esfera,
+     *  Paint usa el círculo, Ojos esfera, y el pintado del cuerpo tampoco → en todos esos se colapsa
+     *  la barra de formas (igual que al equipar el ojo). */
     bool HeadToolUsesShapes() const
     {
-        return !bHeadEyesTool && (HeadEditMode == EPTEditMode::Add
-                              || HeadEditMode == EPTEditMode::Erase
-                              || HeadEditMode == EPTEditMode::Paint);
+        return !bHeadEyesTool && !bBodyPaintMode && HeadEditMode == EPTEditMode::Add;
     }
 
 protected:
@@ -71,6 +80,10 @@ protected:
     /** Le manda al servidor quién soy (nombre + idioma) y le pide las cabezas de todos.
      *  Reintenta solo si el PlayerState todavía no replicó. */
     void PushIdentityToServer();
+
+    /** Heartbeat de sincronización de cabezas: re-pide las que falten (auto-repara carreras de carga). */
+    void HeadSyncHeartbeat();
+    FTimerHandle HeadSyncTimer;
 
     /** Asignar IMC_Lobby en el Blueprint derivado BP_LobbyPlayerController. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input")
@@ -143,9 +156,16 @@ protected:
 
     // Meshes propios para el preview de cada tool (opcional). Si se asignan, se usan en vez del
     // mesh procedural de la brocha, escalados al tamaño del pincel (base = HeadPreviewMeshBaseSize).
-    UPROPERTY(EditAnywhere, Category="Head") UStaticMesh* HeadPreviewMeshAdd   = nullptr;
     UPROPERTY(EditAnywhere, Category="Head") UStaticMesh* HeadPreviewMeshErase = nullptr;
     UPROPERTY(EditAnywhere, Category="Head") float        HeadPreviewMeshBaseSize = 100.f;
+
+    // Preview de AGREGAR: un mesh por FORMA (asigná el que quieras a cada uno). Si alguno queda null,
+    // esa forma usa el preview procedural. HeadPreviewMeshAdd = fallback general si no hay por-forma.
+    UPROPERTY(EditAnywhere, Category="Head") UStaticMesh* HeadPreviewMeshAdd      = nullptr;
+    UPROPERTY(EditAnywhere, Category="Head|Shapes") UStaticMesh* HeadShapeMeshSphere   = nullptr;
+    UPROPERTY(EditAnywhere, Category="Head|Shapes") UStaticMesh* HeadShapeMeshCube     = nullptr;
+    UPROPERTY(EditAnywhere, Category="Head|Shapes") UStaticMesh* HeadShapeMeshCylinder = nullptr;
+    UPROPERTY(EditAnywhere, Category="Head|Shapes") UStaticMesh* HeadShapeMeshCone     = nullptr;
 
     // Animación de pose recta a forzar mientras esculpís (si null, usa la del BP_LobbyCharacter).
     UPROPERTY(EditAnywhere, Category="Head") UAnimationAsset* HeadSculptPoseAnim = nullptr;
@@ -237,10 +257,29 @@ private:
     EPTStampShape HeadStampShape = EPTStampShape::Sphere;
     // true cuando la brocha quedó fuera del área de esculpido (para el icono 🚫 y para no sellar).
     bool bHeadStampOutside = false;
-    /** Forma efectiva: Esfera si es Ojos (colocan esferas aparte); si no, la elegida. */
-    EPTStampShape EffectiveHeadShape() const { return bHeadEyesTool ? EPTStampShape::Sphere : HeadStampShape; }
+    /** Forma efectiva: solo Agregar usa la forma elegida. Ojos, Borrar y Paint usan Esfera/círculo. */
+    EPTStampShape EffectiveHeadShape() const
+    { return (bHeadEyesTool || HeadEditMode != EPTEditMode::Add) ? EPTStampShape::Sphere : HeadStampShape; }
     void OnHeadStampPressed();  void OnHeadStampReleased();
     void OnHeadScrollUp();      void OnHeadScrollDown();
+    // Rotar el shape manteniendo la RUEDA del mouse y arrastrando (igual que el gameplay). Doble click
+    // de rueda = reset de rotación.
+    void OnHeadRotatePressed(); void OnHeadRotateReleased();
+    FRotator HeadStampRotation = FRotator::ZeroRotator;
+    bool     bHeadRotatingShape = false;
+    float    LastHeadWheelPressTime = -10.f;
+    // Para rotar EN EL LUGAR: se congela el punto del sello y se fija el cursor mientras rotás.
+    float    HeadRotateCursorX = 0.f, HeadRotateCursorY = 0.f;
+    FVector  HeadRotateFrozenPt = FVector::ZeroVector, HeadRotateFrozenNrm = FVector::UpVector;
+    bool     bHeadRotateHasFrozen = false;
+    UPROPERTY(EditAnywhere, Category="Head") float HeadShapeRotateSpeed = 0.5f;
+    // Undo (BACKSPACE toque) / borrar todo (BACKSPACE mantenido), igual que el gameplay.
+    void OnHeadClearPressed();  void OnHeadClearReleased();
+    bool  bHeadClearHeld   = false;
+    float HeadClearHoldTime = 0.f;
+    UPROPERTY(EditAnywhere, Category="Head") float HeadClearHoldDuration = 3.f;   // mantener → borrar todo
+    UPROPERTY(EditAnywhere, Category="Head") float HeadUndoTapMaxTime    = 0.35f; // toque → undo
+    bool bHeadStrokeActive = false; // hay un trazo de geometría abierto (para el undo)
     void OnHeadModeAdd();       void OnHeadModeErase();  void OnHeadModePaint();  void OnHeadModeEyes();
     void OnHeadCycleShape();    // TAB: cicla Esfera→Cubo→Cilindro→Cono
     // SHIFT (solo en Paint): alterna foco cabeza (arcilla) ↔ cuerpo (piel del personaje).

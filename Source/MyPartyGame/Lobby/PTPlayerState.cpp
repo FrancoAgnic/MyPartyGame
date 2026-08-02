@@ -124,6 +124,26 @@ void APTPlayerState::BroadcastHeadToAll()
             SendHeadTo(PT);
 }
 
+void APTPlayerState::RefreshHeadsIfMissing()
+{
+    // Solo tiene sentido en CLIENTES: el host tiene todas las cabezas por autoridad.
+    if (HasAuthority()) return;
+    const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
+    if (!GS) return;
+
+    bool bMissing = false;
+    for (APlayerState* PS : GS->PlayerArray)
+    {
+        const APTPlayerState* PT = Cast<APTPlayerState>(PS);
+        if (!PT || PT == this) continue;
+        // Falta si: el server dice que tiene cabeza (HeadVersion>0) pero a mí no me llegaron los bytes,
+        // o me llegó una versión vieja (re-editó y me perdí el broadcast).
+        if (PT->HeadVersion > 0 && (PT->HeadBlob.Num() == 0 || PT->LocalHeadVersion < PT->HeadVersion))
+        { bMissing = true; break; }
+    }
+    if (bMissing) Server_RequestAllHeads(); // el server me reenvía todas (troceadas)
+}
+
 void APTPlayerState::Server_RequestAllHeads_Implementation()
 {
     // Un cliente entró (a la sala o al Lvl-01) y su mundo está lleno de pawns sin cabeza:

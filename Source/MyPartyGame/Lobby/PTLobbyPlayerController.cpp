@@ -164,6 +164,18 @@ void APTLobbyPlayerController::PushIdentityToServer()
     //  b) el personaje sube la mía guardada (LoadHead lo hace al poseer el pawn), y el server la
     //     reparte al resto. Con las dos direcciones, todos ven a todos.
     PS->Server_RequestAllHeads();
+
+    // Heartbeat: en el LOBBY re-pido cada 2s las cabezas que me falten (si tu cabeza se actualizó a los
+    // demás pero vos entraste cargando y te perdiste el broadcast, esto lo repara solo). No manda nada
+    // cuando ya está todo sincronizado.
+    if (IsLocalController() && !GetWorldTimerManager().IsTimerActive(HeadSyncTimer))
+        GetWorldTimerManager().SetTimer(HeadSyncTimer, this,
+            &APTLobbyPlayerController::HeadSyncHeartbeat, 2.0f, /*loop=*/true, /*firstDelay=*/2.0f);
+}
+
+void APTLobbyPlayerController::HeadSyncHeartbeat()
+{
+    if (APTPlayerState* PS = GetPlayerState<APTPlayerState>()) PS->RefreshHeadsIfMissing();
 }
 
 void APTLobbyPlayerController::ShowLobbyOverlay()
@@ -268,6 +280,12 @@ void APTLobbyPlayerController::SetupInputComponent()
     InputComponent->BindKey(EKeys::Four,  IE_Pressed, this, &APTLobbyPlayerController::OnHeadModeEyes);
     // TAB = ciclar la forma del sello (esfera/cubo/cilindro/cono), igual que el gameplay.
     InputComponent->BindKey(EKeys::Tab,   IE_Pressed, this, &APTLobbyPlayerController::OnHeadCycleShape);
+    // Rueda del mouse mantenida = rotar el shape (doble click = reset). Igual que el gameplay.
+    InputComponent->BindKey(EKeys::MiddleMouseButton, IE_Pressed,  this, &APTLobbyPlayerController::OnHeadRotatePressed);
+    InputComponent->BindKey(EKeys::MiddleMouseButton, IE_Released, this, &APTLobbyPlayerController::OnHeadRotateReleased);
+    // Backspace: toque = undo; mantenido = borrar todo (cabeza + pintura del cuerpo).
+    InputComponent->BindKey(EKeys::BackSpace, IE_Pressed,  this, &APTLobbyPlayerController::OnHeadClearPressed);
+    InputComponent->BindKey(EKeys::BackSpace, IE_Released, this, &APTLobbyPlayerController::OnHeadClearReleased);
     // SHIFT = (solo en Paint) alternar entre pintar la cabeza (arcilla) y el cuerpo (piel).
     InputComponent->BindKey(EKeys::LeftShift, IE_Pressed, this, &APTLobbyPlayerController::OnHeadToggleBodyPaint);
     // RMB mantenido = color picker (igual que el gameplay).
@@ -367,9 +385,50 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
         return;
     }
 
+    // Rotar el shape EN EL LUGAR mientras se mantiene la rueda (solo con forma = Agregar). El punto
+    // del sello se congela y el cursor se fija, así el shape rota sin desplazarse.
+    if (bHeadRotatingShape && HeadToolUsesShapes())
+    {
+        float DX = 0.f, DY = 0.f;
+        GetInputMouseDelta(DX, DY);
+        if (DX != 0.f || DY != 0.f)
+        {
+            HeadStampRotation.Yaw   += DX * HeadShapeRotateSpeed;
+            HeadStampRotation.Pitch += DY * HeadShapeRotateSpeed;
+            HeadStampRotation.Normalize();
+        }
+        SetMouseLocation((int32)HeadRotateCursorX, (int32)HeadRotateCursorY); // fijar el cursor
+    }
+
+    // Borrar TODO: mantener BACKSPACE HeadClearHoldDuration segundos → limpia cabeza + pintura del cuerpo.
+    if (bHeadClearHeld)
+    {
+        HeadClearHoldTime += DeltaTime;
+        if (HeadClearHoldTime >= HeadClearHoldDuration)
+        {
+            bHeadClearHeld = false; HeadClearHoldTime = 0.f;
+            if (HeadVolume) HeadVolume->Multicast_ClearAll_Implementation(); // geometría de la cabeza
+            HeadStampRotation = FRotator::ZeroRotator;
+            if (APTLobbyCharacter* C = Cast<APTLobbyCharacter>(GetPawn()))
+            {
+                C->ClearHeadPaint(); // pintura de la cabeza
+                C->ClearBodyPaint(); // pintura del cuerpo
+            }
+        }
+    }
+
     // Punto de la brocha (cursor) — sirve para el preview y para esculpir. Normal para el preview.
     FVector Pt, Nrm = FVector::UpVector;
-    const bool bHavePt = GetHeadStampPoint(Pt, Nrm);
+    bool bHavePt = GetHeadStampPoint(Pt, Nrm);
+    // Mientras rotás, el sello queda CONGELADO en su lugar (rota sin moverse). Se captura al primer frame.
+    if (bHeadRotatingShape)
+    {
+        if (!bHeadRotateHasFrozen && bHavePt)
+        {
+            HeadRotateFrozenPt = Pt; HeadRotateFrozenNrm = Nrm; bHeadRotateHasFrozen = true;
+        }
+        if (bHeadRotateHasFrozen) { Pt = HeadRotateFrozenPt; Nrm = HeadRotateFrozenNrm; bHavePt = true; }
+    }
 
     // ¿La brocha quedó fuera del área de esculpido? → icono 🚫 y no se sella ahí.
     bHeadStampOutside = bHavePt && HeadVolume && !HeadVolume->IsInsideCanvas(Pt);
@@ -396,7 +455,7 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
         }
         else if (!bHeadStampOutside)
         {
-            HeadVolume->ApplyStampAndFX(Pt, EffectiveHeadShape(), HeadBrushSize, HeadEditMode, HeadPaintColor);
+            HeadVolume->ApplyStampAndFX(Pt, EffectiveHeadShape(), HeadBrushSize, HeadEditMode, HeadPaintColor, HeadStampRotation);
         }
     }
 }
@@ -434,14 +493,19 @@ void APTLobbyPlayerController::UpdateHeadPreview(const FVector* At, const FVecto
         {
         case EPTEditMode::Erase: ToolMesh = HeadPreviewMeshErase; Mat = HeadPreviewMatErase; break;
         case EPTEditMode::Paint: ToolMesh = HeadPreviewMeshPaint; Mat = HeadPreviewMatPaint; break;
-        default:                 ToolMesh = HeadPreviewMeshAdd;   Mat = HeadPreviewMatAdd;   break; // Add
+        default: // Add: un mesh por FORMA (asignable). Si esa forma no tiene mesh → preview procedural.
+            switch (EffectiveHeadShape())
+            {
+            case EPTStampShape::Sphere:   ToolMesh = HeadShapeMeshSphere;   break;
+            case EPTStampShape::Cube:     ToolMesh = HeadShapeMeshCube;     break;
+            case EPTStampShape::Cylinder: ToolMesh = HeadShapeMeshCylinder; break;
+            case EPTStampShape::TriPrism: ToolMesh = HeadShapeMeshCone;     break;
+            default: break;
+            }
+            if (!ToolMesh) ToolMesh = HeadPreviewMeshAdd; // fallback general (si lo asignaste)
+            Mat = HeadPreviewMatAdd;
+            break;
         }
-
-        // Con Add/Erase, el mesh estático (esfera) solo sirve para la forma ESFERA. Para cubo/
-        // cilindro/cono hay que usar el procedural (que sí respeta la forma), si no el preview
-        // mostraba siempre la esfera aunque esculpieras otra forma.
-        if (!bEyes && HeadEditMode != EPTEditMode::Paint && EffectiveHeadShape() != EPTStampShape::Sphere)
-            ToolMesh = nullptr;
 
         if (ToolMesh && HeadPreviewStatic)
         {
@@ -483,8 +547,9 @@ void APTLobbyPlayerController::UpdateHeadPreview(const FVector* At, const FVecto
     }
 
     HeadPreviewActor->SetActorLocation(*At);
-    // Paint/Ojos: orientar a la normal de la superficie (se "apoyan" sobre la malla). Add/Erase sin rotar.
-    HeadPreviewActor->SetActorRotation((bPaint || bEyes) ? Normal.Rotation() : FRotator::ZeroRotator);
+    // Paint/Ojos: se apoyan sobre la normal de la superficie. Add: usa la rotación del shape (rueda).
+    HeadPreviewActor->SetActorRotation((bPaint || bEyes) ? Normal.Rotation()
+        : (HeadEditMode == EPTEditMode::Add ? HeadStampRotation : FRotator::ZeroRotator));
     // Color + glow del preview. El material del preview (M_HeadPreview, custom node) usa:
     //   Color = color seleccionado, Glow = 0 en reposo → sube a 1 mientras mantenés apretado al esculpir.
     const float Dt = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
@@ -553,8 +618,58 @@ void APTLobbyPlayerController::OnHeadStampPressed()
     if (!bHeadSculptMode) return;
     if (bHeadEyesTool) { PlaceEyeAtCursor(); return; } // ojos: un ojo por click (no continuo)
     bHeadStamping = true;
+    // Abrir un trazo de GEOMETRÍA para el undo (solo Add/Erase cambian la malla; Paint es textura).
+    if (HeadVolume && !bBodyPaintMode && (HeadEditMode == EPTEditMode::Add || HeadEditMode == EPTEditMode::Erase))
+    {
+        HeadVolume->Multicast_BeginStroke_Implementation();
+        bHeadStrokeActive = true;
+    }
 }
-void APTLobbyPlayerController::OnHeadStampReleased() { bHeadStamping = false; }
+void APTLobbyPlayerController::OnHeadStampReleased()
+{
+    bHeadStamping = false;
+    if (bHeadStrokeActive && HeadVolume)
+    {
+        HeadVolume->Multicast_EndStroke_Implementation(); // cierra el trazo (queda en la pila de undo)
+        bHeadStrokeActive = false;
+    }
+}
+
+void APTLobbyPlayerController::OnHeadRotatePressed()
+{
+    if (!bHeadSculptMode || !HeadToolUsesShapes()) return; // solo rota cuando hay forma (Agregar)
+    const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+    if (Now - LastHeadWheelPressTime <= 0.35f) // doble click de rueda → reset de rotación
+    {
+        HeadStampRotation = FRotator::ZeroRotator;
+        HeadPreviewSize   = -1.f; // forzar reconstruir/reorientar el preview
+    }
+    LastHeadWheelPressTime = Now;
+    bHeadRotatingShape = true;
+    bHeadRotateHasFrozen = false;                       // el próximo tick congela el punto del sello
+    GetMousePosition(HeadRotateCursorX, HeadRotateCursorY); // para fijar el cursor mientras rotás
+}
+void APTLobbyPlayerController::OnHeadRotateReleased()
+{
+    bHeadRotatingShape = false;
+    bHeadRotateHasFrozen = false;
+}
+
+void APTLobbyPlayerController::OnHeadClearPressed()
+{
+    if (!bHeadSculptMode) return;
+    bHeadClearHeld    = true;
+    HeadClearHoldTime = 0.f;
+}
+void APTLobbyPlayerController::OnHeadClearReleased()
+{
+    // Toque corto = undo del último trazo de geometría. Mantener hasta el final = borrar todo (lo
+    // dispara el tick, que ya apagó bHeadClearHeld).
+    if (bHeadClearHeld && HeadClearHoldTime < HeadUndoTapMaxTime && HeadVolume)
+        HeadVolume->Multicast_Undo_Implementation();
+    bHeadClearHeld    = false;
+    HeadClearHoldTime = 0.f;
+}
 void APTLobbyPlayerController::OnHeadScrollUp()
 {
     if (!bHeadSculptMode) return;
@@ -607,6 +722,7 @@ void APTLobbyPlayerController::OnHeadCycleShape()
     case EPTStampShape::Cylinder: HeadStampShape = EPTStampShape::TriPrism; break;
     default:                      HeadStampShape = EPTStampShape::Sphere;   break;
     }
+    HeadStampRotation = FRotator::ZeroRotator; // forma nueva arranca sin rotar (como el gameplay)
     HeadPreviewSize = -1.f; // forzar reconstruir el mesh del preview con la nueva forma
 }
 
@@ -872,6 +988,9 @@ void APTLobbyPlayerController::ExitHeadSculpt()
     bHeadSculptMode = false;
     bHeadStamping = false;
     bBodyPaintMode = false;
+    bHeadRotatingShape = false; bHeadClearHeld = false; HeadClearHoldTime = 0.f;
+    bHeadStrokeActive = false; HeadStampRotation = FRotator::ZeroRotator;
+    HeadPaintMID = nullptr;
 
     // Hornear: copiar la escultura (malla local del volumen) a la cabeza del personaje, pegada
     // al HeadSocket. La arcilla se esculpió centrada en el origen del volumen → queda centrada
