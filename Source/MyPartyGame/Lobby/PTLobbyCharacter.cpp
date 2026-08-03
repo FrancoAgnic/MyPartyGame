@@ -22,6 +22,7 @@
 #include "IImageWrapper.h"
 #include "IImageWrapperModule.h"
 #include "Modules/ModuleManager.h"
+#include "Engine/Engine.h" // GEngine->AddOnScreenDebugMessage (debug de tamaño del blob)
 #include "Kismet/GameplayStatics.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
@@ -433,6 +434,39 @@ void APTLobbyCharacter::BuildHeadBlob(const TArray<FPTHeadSection>& Secs, TArray
     FVector Center = HeadPaintCenterLocal; Ar << Center;
     int32 HN = HeadPNG.Num(); Ar << HN; if (HN) Ar.Serialize(HeadPNG.GetData(), HN);
     int32 BN = BodyPNG.Num(); Ar << BN; if (BN) Ar.Serialize(BodyPNG.GetData(), BN);
+
+    // ── DEBUG de tamaño del blob (para elegir la mejor resolución de textura) ──
+    // El blob viaja en chunks de 8 KB por RPC confiable; UE corta la conexión si se encolan más de
+    // ~256 bunches confiables de una. Por eso logueamos el desglose y el conteo de chunks, y avisamos
+    // cuando se acerca al límite peligroso.
+    const int32 kChunkBytes = 8 * 1024;
+    const int32 kSafeChunks = 180; // margen bajo el límite real (~256 bunches confiables por canal)
+    const int32 Chunks = FMath::DivideAndRoundUp(OutBlob.Num(), kChunkBytes);
+    auto KB = [](int32 B){ return B / 1024.0f; };
+    UE_LOG(LogTemp, Warning,
+        TEXT("[HeadBlob] geom=%.1f KB | cabeza PNG=%.1f KB (%dx%d) | cuerpo PNG=%.1f KB (%dx%d) | TOTAL=%.1f KB -> %d chunks (limite seguro ~%d)"),
+        KB(GN), KB(HN), HeadPaintN, HeadPaintN, KB(BN), PaintTexN, PaintTexN, KB(OutBlob.Num()), Chunks, kSafeChunks);
+
+    // ── Print en PANTALLA (para tunear la resolución en vivo) ──
+    if (GEngine)
+    {
+        const FColor Safe   = FColor(120, 230, 120);
+        const FColor Warn   = FColor(240, 210, 90);
+        const FColor Danger = FColor(255, 90, 90);
+        const float  Dur    = 12.f;
+
+        GEngine->AddOnScreenDebugMessage(7001, Dur, FColor(200, 200, 255),
+            FString::Printf(TEXT("CABEZA: %.0f KB  (%dx%d)"), KB(HN), HeadPaintN, HeadPaintN));
+        GEngine->AddOnScreenDebugMessage(7002, Dur, FColor(200, 200, 255),
+            FString::Printf(TEXT("CUERPO: %.0f KB  (%dx%d)"), KB(BN), PaintTexN, PaintTexN));
+
+        const FColor TotalCol = (Chunks > kSafeChunks) ? Danger : (Chunks > kSafeChunks * 3 / 4 ? Warn : Safe);
+        const TCHAR* Estado   = (Chunks > kSafeChunks) ? TEXT("!! SUPERA EL LIMITE !!")
+                              : (Chunks > kSafeChunks * 3 / 4 ? TEXT("(cerca del limite)") : TEXT("(OK)"));
+        GEngine->AddOnScreenDebugMessage(7003, Dur, TotalCol,
+            FString::Printf(TEXT("BLOB TOTAL: %.0f KB  ->  %d / %d chunks  %s"),
+                KB(OutBlob.Num()), Chunks, kSafeChunks, Estado));
+    }
 }
 
 bool APTLobbyCharacter::ParseHeadBlob(const TArray<uint8>& Blob, TArray<FPTHeadSection>& OutSecs,
@@ -1146,6 +1180,7 @@ void APTLobbyCharacter::ClearHeadPaint()
     for (FColor& C : HeadPaintPixels) C = FColor(0, 0, 0, 0);
     HDirtyMinX = HDirtyMinY = 0; HDirtyMaxX = HeadPaintN - 1; HDirtyMaxY = HeadPaintN - 1;
     FlushHeadPaint();
+    RecomputeHeadPaintBytes();
 }
 
 void APTLobbyCharacter::ClearBodyPaint()
@@ -1154,6 +1189,18 @@ void APTLobbyCharacter::ClearBodyPaint()
     for (FColor& C : PaintPixels) C = FColor(0, 0, 0, 0);
     DirtyMinX = DirtyMinY = 0; DirtyMaxX = PaintTexN - 1; DirtyMaxY = PaintTexN - 1;
     FlushBodyPaint();
+    RecomputeBodyPaintBytes();
+}
+
+void APTLobbyCharacter::RecomputeHeadPaintBytes()
+{
+    TArray<uint8> P;
+    CachedHeadPngBytes = (HeadPaintPixels.Num() > 0 && PT_EncodePNG_BGRA(HeadPaintPixels, HeadPaintN, P)) ? P.Num() : 0;
+}
+void APTLobbyCharacter::RecomputeBodyPaintBytes()
+{
+    TArray<uint8> P;
+    CachedBodyPngBytes = (PaintPixels.Num() > 0 && PT_EncodePNG_BGRA(PaintPixels, PaintTexN, P)) ? P.Num() : 0;
 }
 
 // ── Undo de pintura (snapshot por trazo) ──────────────────────────────────────
@@ -1179,6 +1226,7 @@ bool APTLobbyCharacter::UndoHeadPaint()
     HeadPaintPixels = MoveTemp(HeadPaintUndoStack.Last());
     HeadPaintUndoStack.Pop();
     PT_UploadWholeTex(HeadPaintTex, HeadPaintPixels);
+    RecomputeHeadPaintBytes();
     return true;
 }
 void APTLobbyCharacter::PushBodyPaintUndo()
@@ -1193,6 +1241,7 @@ bool APTLobbyCharacter::UndoBodyPaint()
     PaintPixels = MoveTemp(BodyPaintUndoStack.Last());
     BodyPaintUndoStack.Pop();
     PT_UploadWholeTex(PaintTex, PaintPixels);
+    RecomputeBodyPaintBytes();
     return true;
 }
 

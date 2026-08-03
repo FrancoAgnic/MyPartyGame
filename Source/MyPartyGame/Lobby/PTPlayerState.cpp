@@ -51,23 +51,67 @@ void APTPlayerState::CopyProperties(APlayerState* NewPlayerState)
 
 namespace { constexpr int32 HeadChunkBytes = 8 * 1024; }
 
+// ── Cola de envío trottleado ───────────────────────────────────────────────────
+void APTPlayerState::EnqueueHeadJob(APTPlayerState* Target, const TSharedPtr<TArray<uint8>>& Data,
+                                    int32 Version, bool bToServer)
+{
+    if (!Data.IsValid() || Data->Num() == 0) return;
+    // Reemplazar un trabajo previo al MISMO destino (re-subida / re-envío supersede al anterior).
+    OutHeadJobs.RemoveAll([&](const FHeadSendJob& J)
+        { return J.bToServer == bToServer && (bToServer || J.Target.Get() == Target); });
+
+    FHeadSendJob Job;
+    Job.Target    = Target;
+    Job.Data      = Data;
+    Job.Version   = Version;
+    Job.Next      = 0;
+    Job.Total     = FMath::DivideAndRoundUp(Data->Num(), HeadChunkBytes);
+    Job.bToServer = bToServer;
+    OutHeadJobs.Add(MoveTemp(Job));
+    EnsureHeadPump();
+}
+
+void APTPlayerState::EnsureHeadPump()
+{
+    if (GetWorld() && !GetWorldTimerManager().IsTimerActive(HeadSendTimer))
+        GetWorldTimerManager().SetTimer(HeadSendTimer, this, &APTPlayerState::PumpHeadSend, 0.05f, /*loop=*/true);
+}
+
+void APTPlayerState::PumpHeadSend()
+{
+    const int32 ChunksPerPump = 3; // ~60 chunks/s: nunca acumula cerca del límite del buffer confiable
+    int32 Sent = 0;
+    while (Sent < ChunksPerPump && OutHeadJobs.Num() > 0)
+    {
+        FHeadSendJob& J = OutHeadJobs[0];
+        // Descartar trabajos inválidos (destino desconectado, datos nulos, ya completo).
+        if (!J.Data.IsValid() || J.Next >= J.Total || (!J.bToServer && !J.Target.IsValid()))
+        { OutHeadJobs.RemoveAt(0); continue; }
+
+        const int32 Offset = J.Next * HeadChunkBytes;
+        if (Offset >= J.Data->Num()) { OutHeadJobs.RemoveAt(0); continue; }
+        const int32 Count = FMath::Min(HeadChunkBytes, J.Data->Num() - Offset);
+        TArray<uint8> Chunk(J.Data->GetData() + Offset, Count);
+
+        if (J.bToServer) Server_UploadHeadChunk(J.Version, J.Next, J.Total, Chunk);
+        else             J.Target->Client_ReceiveHeadChunk(this, J.Version, J.Next, J.Total, Chunk);
+
+        ++J.Next; ++Sent;
+        if (J.Next >= J.Total) OutHeadJobs.RemoveAt(0);
+    }
+    if (OutHeadJobs.Num() == 0) GetWorldTimerManager().ClearTimer(HeadSendTimer);
+}
+
 void APTPlayerState::UploadHead(const TArray<uint8>& Blob)
 {
     if (Blob.Num() == 0) return;
 
     HeadBlob = Blob; // copia local: el dueño ve su cabeza sin esperar la vuelta del server
-    const int32 Version     = HeadVersion + 1;
-    const int32 TotalChunks = FMath::DivideAndRoundUp(Blob.Num(), HeadChunkBytes);
-
-    for (int32 i = 0; i < TotalChunks; ++i)
-    {
-        const int32 Offset = i * HeadChunkBytes;
-        const int32 Count  = FMath::Min(HeadChunkBytes, Blob.Num() - Offset);
-        TArray<uint8> Chunk(Blob.GetData() + Offset, Count);
-        Server_UploadHeadChunk(Version, i, TotalChunks, Chunk);
-    }
-    UE_LOG(LogTemp, Log, TEXT("[Head] Subiendo cabeza: %d bytes en %d partes (v%d)."),
-           Blob.Num(), TotalChunks, Version);
+    const int32 Version = HeadVersion + 1;
+    // Encolar la subida troceada al server (se manda de a poco en PumpHeadSend).
+    EnqueueHeadJob(nullptr, MakeShared<TArray<uint8>>(Blob), Version, /*bToServer=*/true);
+    UE_LOG(LogTemp, Log, TEXT("[Head] Subiendo cabeza: %d bytes en %d partes (v%d), trottleado."),
+           Blob.Num(), FMath::DivideAndRoundUp(Blob.Num(), HeadChunkBytes), Version);
 }
 
 void APTPlayerState::Server_UploadHeadChunk_Implementation(int32 Version, int32 ChunkIndex,
@@ -96,21 +140,10 @@ void APTPlayerState::Server_UploadHeadChunk_Implementation(int32 Version, int32 
 
 void APTPlayerState::SendHeadTo(APTPlayerState* Target)
 {
-    if (!Target || HeadBlob.Num() == 0) return;
-
-    // El dueño de esta cabeza ya la tiene aplicada localmente: no hace falta mandársela.
-    if (Target == this) return;
-
-    const int32 TotalChunks = FMath::DivideAndRoundUp(HeadBlob.Num(), HeadChunkBytes);
-    for (int32 i = 0; i < TotalChunks; ++i)
-    {
-        const int32 Offset = i * HeadChunkBytes;
-        const int32 Count  = FMath::Min(HeadChunkBytes, HeadBlob.Num() - Offset);
-        TArray<uint8> Chunk(HeadBlob.GetData() + Offset, Count);
-        // El RPC va en el PlayerState del DESTINATARIO (es el que ese cliente posee), y lleva
-        // como parámetro de quién es la cabeza.
-        Target->Client_ReceiveHeadChunk(this, HeadVersion, i, TotalChunks, Chunk);
-    }
+    if (!Target || Target == this || HeadBlob.Num() == 0) return;
+    // Encolar (se manda troceado y paceado en PumpHeadSend). El RPC final va en el PlayerState del
+    // DESTINATARIO y lleva de quién es la cabeza.
+    EnqueueHeadJob(Target, MakeShared<TArray<uint8>>(HeadBlob), HeadVersion, /*bToServer=*/false);
 }
 
 void APTPlayerState::BroadcastHeadToAll()
@@ -119,9 +152,12 @@ void APTPlayerState::BroadcastHeadToAll()
     const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
     if (!GS) return;
 
+    // Una sola copia del blob compartida entre todos los destinos (no copiar por jugador).
+    TSharedPtr<TArray<uint8>> Shared = MakeShared<TArray<uint8>>(HeadBlob);
     for (APlayerState* PS : GS->PlayerArray)
         if (APTPlayerState* PT = Cast<APTPlayerState>(PS))
-            SendHeadTo(PT);
+            if (PT != this)
+                EnqueueHeadJob(PT, Shared, HeadVersion, /*bToServer=*/false);
 }
 
 void APTPlayerState::RefreshHeadsIfMissing()

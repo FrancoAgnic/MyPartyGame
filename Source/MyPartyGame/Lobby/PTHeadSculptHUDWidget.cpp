@@ -7,6 +7,8 @@
 #include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
 #include "Components/Image.h"
+#include "Components/ProgressBar.h"
+#include "Materials/MaterialInterface.h"
 
 void UPTHeadSculptHUDWidget::BuildOnce()
 {
@@ -119,6 +121,45 @@ void UPTHeadSculptHUDWidget::Refresh(APTLobbyPlayerController* PC)
         if (bPaintTool) PaintBodySlot->SetSelected(PC->IsBodyPaintMode());
     }
 
+    const bool  bPaintTool = PC->IsHeadPaintingTool();
+    const float Budget     = PC->GetPaintBudget01();
+    const bool  bFull      = Budget >= 1.f;
+    const bool  bWarn      = Budget >= 0.8f; // amarillo/rojo → pulso de aviso
+    // Pulso 0..1 (para el brillo). Se calcula siempre; solo se aplica en amarillo/rojo.
+    const float T     = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+    const float Pulse = 0.65f + 0.35f * FMath::Sin(T * 7.f); // ~1.1 Hz
+
+    // ── Barra de presupuesto: visible solo con Paint; verde→amarillo→rojo; pulsa en amarillo y rojo ──
+    if (PaintBudgetBar)
+    {
+        PaintBudgetBar->SetVisibility(bPaintTool ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+        if (bPaintTool)
+        {
+            PaintBudgetBar->SetPercent(Budget);
+            FLinearColor Fill = bFull ? FLinearColor(0.95f, 0.25f, 0.25f)   // rojo = lleno
+                              : (bWarn ? FLinearColor(0.95f, 0.8f, 0.2f)    // amarillo = por llegar
+                                       : FLinearColor(0.35f, 0.8f, 0.4f));  // verde = ok
+            if (bWarn) Fill *= Pulse;                                       // brillo pulsante de aviso
+            PaintBudgetBar->SetFillColorAndOpacity(Fill);
+        }
+    }
+
+    // Texto de la barra: "Pintura" normal; "¡Sin pintura!" en rojo + material de pulse al llegar al límite.
+    if (PaintBudgetText)
+    {
+        PaintBudgetText->SetVisibility(bPaintTool ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+        if (bPaintTool)
+        {
+            PaintBudgetText->SetText(PTText::Get(bFull ? TEXT("HEAD_PAINT_BUDGET_FULL") : TEXT("HEAD_PAINT_BUDGET")));
+            PaintBudgetText->SetColorAndOpacity(bFull ? FSlateColor(FLinearColor(0.95f, 0.25f, 0.25f))
+                                                      : FSlateColor(FLinearColor::White));
+            // Material de pulse (MUI_Pulse) SOLO cuando te quedaste sin pintura, para que se note.
+            FSlateFontInfo F = PaintBudgetText->GetFont();
+            F.FontMaterial = bFull ? PulseMaterial : nullptr;
+            PaintBudgetText->SetFont(F);
+        }
+    }
+
     // ── Backspace: círculo de "borrar todo" que se llena al mantener (con el contador 3→1) ──
     if (ClearSlot)
     {
@@ -134,8 +175,11 @@ void UPTHeadSculptHUDWidget::Refresh(APTLobbyPlayerController* PC)
     if (WasdLeft)  WasdLeft->SetSelected(PC->IsInputKeyDown(EKeys::A));
     if (WasdRight) WasdRight->SetSelected(PC->IsInputKeyDown(EKeys::D));
 
-    // ── 🚫 fuera del área de esculpido ──
+    // ── 🚫 fuera del área de esculpido, o SIN PINTURA (para que se note el límite) ──
     if (OutOfBoundsIcon)
-        OutOfBoundsIcon->SetVisibility(PC->IsHeadStampOutside() ? ESlateVisibility::HitTestInvisible
-                                                                : ESlateVisibility::Collapsed);
+    {
+        const bool bShowIcon = PC->IsHeadStampOutside() || (bPaintTool && bFull);
+        OutOfBoundsIcon->SetVisibility(bShowIcon ? ESlateVisibility::HitTestInvisible
+                                                 : ESlateVisibility::Collapsed);
+    }
 }

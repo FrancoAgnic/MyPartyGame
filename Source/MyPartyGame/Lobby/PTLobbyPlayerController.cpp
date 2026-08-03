@@ -357,7 +357,7 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
         // Anillo de preview sobre el cuerpo (mismo mesh/material del paint de la cabeza, teñido).
         UpdateHeadPreview(bHit ? &BPt : nullptr, BN);
 
-        if (Char && bHeadStamping && bHaveCursor)
+        if (Char && bHeadStamping && bHaveCursor && !IsPaintBudgetFull())
         {
             // Radio del pincel EN EL MUNDO (cm). El pintado sin costuras trabaja en 3D, no en el UV.
             const float R = FMath::Max(1.f, HeadBrushSize * 0.5f * BodyPaintBrushScale);
@@ -379,10 +379,15 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
             if (bHit && HeadVolume) HeadVolume->PlayPaintFXAt(BPt, HeadPaintColor, HeadBrushSize); // gotitas
             LastBodyCursor     = Cur;
             bHasLastBodyCursor = true;
+            // Recalcular el peso cada ~0.3s mientras pintás (para la barra y el corte por presupuesto).
+            PaintBudgetAccum += DeltaTime;
+            if (PaintBudgetAccum >= 0.3f) { PaintBudgetAccum = 0.f; Char->RecomputeBodyPaintBytes(); }
         }
         else
         {
+            if (bHasLastBodyCursor && Char) Char->RecomputeBodyPaintBytes(); // soltaste → peso final
             bHasLastBodyCursor = false;
+            PaintBudgetAccum = 0.f;
         }
         return;
     }
@@ -409,14 +414,19 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
         if (HeadClearHoldTime >= HeadClearHoldDuration)
         {
             bHeadClearHeld = false; HeadClearHoldTime = 0.f;
-            if (HeadVolume) HeadVolume->Multicast_ClearAll_Implementation(); // geometría de la cabeza
-            HeadStampRotation = FRotator::ZeroRotator;
-            HeadUndoKinds.Reset();
-            if (APTLobbyCharacter* C = Cast<APTLobbyCharacter>(GetPawn()))
+            APTLobbyCharacter* C = Cast<APTLobbyCharacter>(GetPawn());
+            // Reset INDIVIDUAL: solo lo del contexto en el que estás.
+            if (bBodyPaintMode)
             {
-                C->ClearHeadPaint(); // pintura de la cabeza
-                C->ClearBodyPaint(); // pintura del cuerpo
-                C->ClearPaintUndo();
+                if (C) C->ClearBodyPaint(); // solo la pintura del cuerpo
+            }
+            else
+            {
+                if (HeadVolume) HeadVolume->Multicast_ClearAll_Implementation(); // geometría de la cabeza
+                HeadStampRotation = FRotator::ZeroRotator;
+                HeadEyes.Reset(); RebuildEyesLiveMesh();     // ojos
+                HeadUndoKinds.Reset();
+                if (C) C->ClearHeadPaint();                  // pintura de la cabeza
             }
         }
     }
@@ -453,9 +463,14 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
         // geometría, solo colorea). Add/Erase sí respetan el límite (geometría) como en el gameplay.
         if (HeadChar && !bHeadEyesTool && HeadEditMode == EPTEditMode::Paint)
         {
-            HeadChar->PaintHeadWorldSphere(HeadVolume->GetMeshComponent(), Pt, HeadBrushSize * 0.5f, HeadPaintColor);
-            HeadChar->FlushHeadPaint();
-            HeadVolume->PlayPaintFXAt(Pt, HeadPaintColor, HeadBrushSize); // gotitas de pintura
+            if (!IsPaintBudgetFull()) // límite de pintura: no pintar más allá del peso replicable
+            {
+                HeadChar->PaintHeadWorldSphere(HeadVolume->GetMeshComponent(), Pt, HeadBrushSize * 0.5f, HeadPaintColor);
+                HeadChar->FlushHeadPaint();
+                HeadVolume->PlayPaintFXAt(Pt, HeadPaintColor, HeadBrushSize); // gotitas de pintura
+                PaintBudgetAccum += DeltaTime;
+                if (PaintBudgetAccum >= 0.3f) { PaintBudgetAccum = 0.f; HeadChar->RecomputeHeadPaintBytes(); }
+            }
         }
         else if (!bHeadStampOutside)
         {
@@ -617,18 +632,44 @@ void APTLobbyPlayerController::ApplyHeadSculptInputMode()
         }
 }
 
+float APTLobbyPlayerController::GetPaintBudget01() const
+{
+    const APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn());
+    if (!Char || MaxPaintChunks <= 0) return 0.f;
+    const int32 Chunks = FMath::DivideAndRoundUp(Char->GetPaintPngBytes(), 8 * 1024);
+    return FMath::Clamp((float)Chunks / (float)MaxPaintChunks, 0.f, 1.f);
+}
+bool APTLobbyPlayerController::IsPaintBudgetFull() const
+{
+    const APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn());
+    if (!Char) return false;
+    const int32 Chunks = FMath::DivideAndRoundUp(Char->GetPaintPngBytes(), 8 * 1024);
+    return Chunks >= MaxPaintChunks;
+}
+
 void APTLobbyPlayerController::OnHeadStampPressed()
 {
     if (!bHeadSculptMode) return;
     if (bHeadEyesTool) { PlaceEyeAtCursor(); return; } // ojos: un ojo por click (no continuo)
-    bHeadStamping = true;
 
     APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn());
+    const bool bPainting = bBodyPaintMode || HeadEditMode == EPTEditMode::Paint;
+
+    // Límite de pintura: si ya llegaste al máximo replicable, no dejar pintar más (hay que deshacer
+    // o resetear para liberar). Add/Erase (geometría) NO se bloquean.
+    if (bPainting && IsPaintBudgetFull())
+    {
+        if (GEngine) GEngine->AddOnScreenDebugMessage(7010, 2.f, FColor(255, 90, 90),
+            TEXT("Límite de pintura alcanzado — deshacé (Backspace) o reseteá para pintar más."));
+        return; // no arranca el trazo
+    }
+
+    bHeadStamping = true;
+
     if (bBodyPaintMode)
     {
-        // Trazo de pintura del CUERPO: snapshot para el undo.
+        // Trazo de pintura del CUERPO: snapshot para el undo (el body es su propia pila, aparte).
         if (Char) Char->PushBodyPaintUndo();
-        HeadUndoKinds.Add(2);
     }
     else if (HeadEditMode == EPTEditMode::Paint)
     {
@@ -653,6 +694,10 @@ void APTLobbyPlayerController::OnHeadStampReleased()
         HeadVolume->Multicast_EndStroke_Implementation(); // cierra el trazo (queda en la pila de undo)
         bHeadStrokeActive = false;
     }
+    // Peso final del trazo de pintura de la cabeza (para la barra / el corte por presupuesto).
+    PaintBudgetAccum = 0.f;
+    if (!bBodyPaintMode && !bHeadEyesTool && HeadEditMode == EPTEditMode::Paint)
+        if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn())) Char->RecomputeHeadPaintBytes();
 }
 
 void APTLobbyPlayerController::OnHeadRotatePressed()
@@ -683,16 +728,25 @@ void APTLobbyPlayerController::OnHeadClearPressed()
 }
 void APTLobbyPlayerController::OnHeadClearReleased()
 {
-    // Toque corto = undo del ÚLTIMO trazo, sea geometría o pintura (cabeza/cuerpo), en orden.
-    if (bHeadClearHeld && HeadClearHoldTime < HeadUndoTapMaxTime && HeadUndoKinds.Num() > 0)
+    // Toque corto = UNDO, INDIVIDUAL por contexto:
+    //  - En modo cuerpo: deshace el último trazo del CUERPO.
+    //  - En modo cabeza: deshace lo último de la cabeza (geometría / pintura / ojos), en orden.
+    if (bHeadClearHeld && HeadClearHoldTime < HeadUndoTapMaxTime)
     {
-        const uint8 Kind = HeadUndoKinds.Last();
         APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn());
-        bool bDone = false;
-        if      (Kind == 0 && HeadVolume) { HeadVolume->Multicast_Undo_Implementation(); bDone = true; }
-        else if (Kind == 1 && Char)       { bDone = Char->UndoHeadPaint(); }
-        else if (Kind == 2 && Char)       { bDone = Char->UndoBodyPaint(); }
-        if (bDone) HeadUndoKinds.Pop();
+        if (bBodyPaintMode)
+        {
+            if (Char) Char->UndoBodyPaint(); // ya recalcula el peso adentro
+        }
+        else if (HeadUndoKinds.Num() > 0)
+        {
+            const uint8 Kind = HeadUndoKinds.Last();
+            bool bDone = false;
+            if      (Kind == 0 && HeadVolume) { HeadVolume->Multicast_Undo_Implementation(); bDone = true; }
+            else if (Kind == 1 && Char)       { bDone = Char->UndoHeadPaint(); }
+            else if (Kind == 3)               { if (HeadEyes.Num() > 0) { HeadEyes.Pop(); RebuildEyesLiveMesh(); } bDone = true; }
+            if (bDone) HeadUndoKinds.Pop();
+        }
     }
     bHeadClearHeld    = false;
     HeadClearHoldTime = 0.f;
@@ -768,6 +822,8 @@ void APTLobbyPlayerController::PlaceEyeAtCursor()
     const FVector Local = HeadVolume->GetActorTransform().InverseTransformPosition(Pt);
     HeadEyes.Add(FVector4(Local.X, Local.Y, Local.Z, HeadBrushSize * 0.5f));
     RebuildEyesLiveMesh();
+    HeadUndoKinds.Add(3); // los ojos también entran al undo (Backspace saca el último)
+    while (HeadUndoKinds.Num() > 32) HeadUndoKinds.RemoveAt(0);
 }
 
 void APTLobbyPlayerController::RebuildEyesLiveMesh()
@@ -943,6 +999,8 @@ void APTLobbyPlayerController::EnterHeadSculpt()
             const FVector CenterLocal = HeadVolume->GetActorTransform().InverseTransformPosition(Center);
             PaintChar->InitHeadPaint(CenterLocal);
             HeadPaintMID = PaintChar->CreateHeadPaintMID();
+            PaintChar->RecomputeHeadPaintBytes(); // peso inicial (para la barra de presupuesto)
+            PaintChar->RecomputeBodyPaintBytes();
             // El volumen usa este material al re-mallar (sin pelear con un set-por-tick → sin parpadeo).
             HeadVolume->ClayMaterialOverride = HeadPaintMID;
             if (HeadPaintMID)

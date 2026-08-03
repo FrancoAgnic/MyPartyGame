@@ -108,6 +108,24 @@ private:
     int32         PendingVersion = -1;
     int32         PendingChunks  = 0;
 
+    // ── Envío TROTTLEADO de chunks (evita desbordar el buffer confiable de UE) ──
+    // En vez de mandar todos los chunks de golpe (lo que tiraba a los clientes con pintura pesada),
+    // se encolan y se mandan de a pocos por tick. Sirve para cualquier tamaño y cualquier cantidad.
+    struct FHeadSendJob
+    {
+        TWeakObjectPtr<APTPlayerState> Target;   // destino (server→cliente); inválido = cliente→server
+        TSharedPtr<TArray<uint8>>      Data;     // blob a mandar (compartido entre destinos del broadcast)
+        int32 Version = 0;
+        int32 Next    = 0;
+        int32 Total   = 0;
+        bool  bToServer = false;
+    };
+    TArray<FHeadSendJob> OutHeadJobs;
+    FTimerHandle         HeadSendTimer;
+    void EnqueueHeadJob(APTPlayerState* Target, const TSharedPtr<TArray<uint8>>& Data, int32 Version, bool bToServer);
+    void EnsureHeadPump();
+    void PumpHeadSend();
+
     // Anti-flood del heartbeat: no re-pedir cabezas mientras hay una transferencia en curso, ni más
     // seguido que este cooldown (si no, durante la carga del join el cliente re-pide todo cada tick y
     // el server le reenvía cientos de RPC confiables → desborda el buffer confiable → corta y hace loop).

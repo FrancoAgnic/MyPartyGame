@@ -21,6 +21,8 @@
 class UPanelWidget;
 class UTextBlock;
 class UImage;
+class UProgressBar;
+class UMaterialInterface;
 class UTexture2D;
 class UPTToolSlotWidget;
 class APTLobbyPlayerController;
@@ -44,6 +46,12 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* PaintBodySlot;
     // BACKSPACE: toque = deshacer; mantener = borrar todo (muestra el círculo de progreso 3s).
     UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* ClearSlot;
+    // Barra de presupuesto de pintura: solo visible con la herramienta Paint (cabeza o cuerpo). Se
+    // llena al pintar; roja al llegar al límite. Nombrarla EXACTO "PaintBudgetBar" en el WBP.
+    UPROPERTY(meta = (BindWidgetOptional)) UProgressBar* PaintBudgetBar;
+    // Texto de la barra: dice "Pintura" y cambia a "¡Sin pintura!" (rojo) al llegar al límite.
+    // Nombrarlo EXACTO "PaintBudgetText" en el WBP. Solo visible con la herramienta Paint.
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* PaintBudgetText;
 
     // Cruz de cámara (WASD): brillan mientras mantenés la tecla.
     UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* WasdUp;    // W
@@ -75,6 +83,8 @@ protected:
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconExit     = nullptr;
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconPaintBody = nullptr;
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconClear    = nullptr;
+    // Material de "pulse" (MUI_Pulse): se aplica al texto "¡Sin pintura!" para que parpadee y se note.
+    UPROPERTY(EditAnywhere, Category = "HeadHUD") UMaterialInterface* PulseMaterial = nullptr;
 
 private:
     void BuildOnce();          // arma tools + shapes + slots contextuales (una sola vez)

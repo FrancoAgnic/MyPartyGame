@@ -316,6 +316,12 @@ public:
     bool UndoBodyPaint();
     void ClearPaintUndo() { HeadPaintUndoStack.Reset(); BodyPaintUndoStack.Reset(); }
 
+    // Presupuesto de pintura: peso REAL (PNG) cacheado de cada textura, para limitar cuánto se puede
+    // pintar y no pasarse del tamaño replicable. Se recalcula al pintar/deshacer/borrar (no por frame).
+    void RecomputeHeadPaintBytes();
+    void RecomputeBodyPaintBytes();
+    int32 GetPaintPngBytes() const { return CachedHeadPngBytes + CachedBodyPngBytes; }
+
 private:
     // Estado del pintado 2D de la cabeza.
     UPROPERTY() UTexture2D* HeadPaintTex = nullptr;
@@ -328,6 +334,10 @@ private:
     TArray<TArray<FColor>> HeadPaintUndoStack;
     TArray<TArray<FColor>> BodyPaintUndoStack;
     static constexpr int32 MaxPaintUndo = 5;
+
+    // Peso PNG cacheado de cada textura de pintura (para el presupuesto).
+    int32 CachedHeadPngBytes = 0;
+    int32 CachedBodyPngBytes = 0;
 
 
     UPROPERTY() UTexture2D*               PaintTex     = nullptr; // textura de pintura del cuerpo

@@ -94,6 +94,8 @@ HINT_PLANE_HORIZONTAL,Plano horizontal,Horizontal Plane,Plano horizontal,Horizon
 PICKER_SAVE_COLOR,E — Guardar color,E — Save Color,E — Salvar cor,E — Farbe speichern,E — Enregistrer la couleur,E — Salva colore
 SCULPT_UNDO,Deshacer,Undo,Desfazer,Rückgängig,Annuler,Annulla
 SCULPT_CLEAR,Borrar,Clear,Limpar,Löschen,Effacer,Cancella
+HEAD_PAINT_BUDGET,Pintura,Paint,Tinta,Farbe,Peinture,Vernice
+HEAD_PAINT_BUDGET_FULL,¡Sin pintura!,Out of paint!,Sem tinta!,Keine Farbe mehr!,Plus de peinture!,Vernice esaurita!
 KEY_MOVE,Mover,Move,Mover,Bewegen,Se déplacer,Muovi
 KEY_LOOK,Cámara,Camera,Câmera,Kamera,Caméra,Camera
 KEY_FLY_UP,Subir,Fly Up,Subir,Aufsteigen,Monter,Sali

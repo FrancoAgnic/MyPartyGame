@@ -51,6 +51,11 @@ public:
     // Sub-modo "pintar el CUERPO" (solo con la herramienta Paint; se alterna con SHIFT). false =
     // foco en la cabeza (pinta la arcilla); true = foco en el cuerpo (pinta la piel del personaje).
     bool          IsBodyPaintMode()       const { return bBodyPaintMode; }
+    /** true si la herramienta actual pinta (Paint en cabeza, o pintar el cuerpo). Para la barra de presupuesto. */
+    bool          IsHeadPaintingTool()    const { return bHeadSculptMode && !bHeadEyesTool && (bBodyPaintMode || HeadEditMode == EPTEditMode::Paint); }
+    /** Presupuesto de pintura 0..1 (peso PNG replicable / máximo permitido). */
+    float         GetPaintBudget01()      const;
+    bool          IsPaintBudgetFull()     const;
     /** Progreso 0..1 del "borrar todo" (Backspace mantenido). 0 durante la ventana del toque (undo). */
     float GetHeadClearHoldProgress() const
     {
@@ -236,6 +241,10 @@ private:
     EPTEditMode HeadPreviewMode = EPTEditMode::Smooth;  // idem (valor inicial != Add/Erase)
     EPTStampShape HeadPreviewShapeCached = EPTStampShape::TriPrism; // idem para la forma (valor != esfera)
     float HeadPreviewGlow = 0.f; // brillo del preview: 0 en reposo, sube a 1 mientras esculpís (Add)
+    // Presupuesto de pintura: la pintura (cabeza + cuerpo) no puede pasar de este peso replicable.
+    // Un chunk = 8 KB; el server corta ~a los 50 chunks. Dejamos margen para la geometría.
+    UPROPERTY(EditAnywhere, Category="Head") int32 MaxPaintChunks = 45;
+    float PaintBudgetAccum = 0.f; // throttle del recálculo del peso mientras pintás
     void UpdateHeadPreview(const FVector* At, const FVector& Normal); // At=nullptr → oculta el preview
 
     // Color picker (mantener RMB), reusando el WBP del gameplay: se abre, se tickea con el cursor
