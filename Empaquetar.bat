@@ -4,7 +4,7 @@ setlocal
 set PROJECT_DIR=%~dp0
 set PROJECT_FILE=%PROJECT_DIR%MyPartyGame.uproject
 set PACKAGED_DIR=%PROJECT_DIR%Packaged
-set UAT=%PROGRAMFILES%\Epic Games\UE_5.8\Engine\Build\BatchFiles\RunUAT.bat
+set UAT=D:\UnrealEngineVeersions\UE_5.8\Engine\Build\BatchFiles\RunUAT.bat
 set ONEDRIVE_DEST=%ONEDRIVE%\Sculpturillo
 
 echo.
