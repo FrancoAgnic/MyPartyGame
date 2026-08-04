@@ -8,6 +8,7 @@
 #include "Components/TextBlock.h"
 #include "Components/Image.h"
 #include "Components/ProgressBar.h"
+#include "Components/Button.h"
 #include "Materials/MaterialInterface.h"
 
 void UPTHeadSculptHUDWidget::BuildOnce()
@@ -70,6 +71,20 @@ void UPTHeadSculptHUDWidget::BuildOnce()
     if (WasdRight) WasdRight->SetSlot(nullptr, FText::FromString(TEXT("D")), FText::GetEmpty());
 
     if (OutOfBoundsIcon) OutOfBoundsIcon->SetVisibility(ESlateVisibility::Collapsed);
+
+    // Confirmar / Back / popup: slots visuales (WBP_ToolSlot) con el icono de la tecla. Se operan por TECLAS.
+    if (ConfirmSlot)  ConfirmSlot->SetSlot(IconEnter, FText::FromString(TEXT("Enter")), PTText::Get(TEXT("LOCKER_CONFIRM")));
+    if (BackSlot)     BackSlot->SetSlot(IconEsc,      FText::FromString(TEXT("Esc")),   PTText::Get(TEXT("LOCKER_BACK")));
+    if (PopupYesSlot) PopupYesSlot->SetSlot(IconEnter, FText::FromString(TEXT("Enter")), PTText::Get(TEXT("LOCKER_SAVE")));
+    if (PopupNoSlot)  PopupNoSlot->SetSlot(IconEsc,    FText::FromString(TEXT("Esc")),   PTText::Get(TEXT("LOCKER_DISCARD")));
+    if (PopupText)    PopupText->SetText(PTText::Get(TEXT("LOCKER_SAVE_CHANGES")));
+    ShowDiscardPopup(false); // arranca oculto
+}
+
+void UPTHeadSculptHUDWidget::ShowDiscardPopup(bool bShow)
+{
+    if (DiscardPopup)
+        DiscardPopup->SetVisibility(bShow ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 }
 
 void UPTHeadSculptHUDWidget::RefreshControlsText()

@@ -94,6 +94,19 @@ HINT_PLANE_HORIZONTAL,Plano horizontal,Horizontal Plane,Plano horizontal,Horizon
 PICKER_SAVE_COLOR,E — Guardar color,E — Save Color,E — Salvar cor,E — Farbe speichern,E — Enregistrer la couleur,E — Salva colore
 SCULPT_UNDO,Deshacer,Undo,Desfazer,Rückgängig,Annuler,Annulla
 SCULPT_CLEAR,Borrar,Clear,Limpar,Löschen,Effacer,Cancella
+LOCKER,Casillero,Locker,Armário,Spind,Casier,Armadietto
+LOCKER_HEAD,Cabeza,Head,Cabeça,Kopf,Tête,Testa
+LOCKER_BODY,Cuerpo,Body,Corpo,Körper,Corps,Corpo
+LOCKER_EMPTY,Vacío,Empty,Vazio,Leer,Vide,Vuoto
+LOCKER_EQUIPPED,equipado,equipped,equipado,ausgerüstet,équipé,equipaggiato
+LOCKER_EQUIP,Equipar,Equip,Equipar,Ausrüsten,Équiper,Equipaggia
+LOCKER_CREATE,Crear,Create,Criar,Erstellen,Créer,Crea
+LOCKER_EDIT,Editar,Edit,Editar,Bearbeiten,Modifier,Modifica
+LOCKER_SAVE_CHANGES,¿Guardar los cambios?,Save changes?,Salvar alterações?,Änderungen speichern?,Enregistrer les modifications?,Salvare le modifiche?
+LOCKER_CONFIRM,Confirmar,Confirm,Confirmar,Bestätigen,Confirmer,Conferma
+LOCKER_BACK,Salir,Exit,Sair,Zurück,Quitter,Esci
+LOCKER_SAVE,Guardar,Save,Salvar,Speichern,Enregistrer,Salva
+LOCKER_DISCARD,Descartar,Discard,Descartar,Verwerfen,Abandonner,Scarta
 HEAD_PAINT_BUDGET,Pintura,Paint,Tinta,Farbe,Peinture,Vernice
 HEAD_PAINT_BUDGET_FULL,¡Sin pintura!,Out of paint!,Sem tinta!,Keine Farbe mehr!,Plus de peinture!,Vernice esaurita!
 KEY_MOVE,Mover,Move,Mover,Bewegen,Se déplacer,Muovi

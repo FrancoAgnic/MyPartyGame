@@ -35,6 +35,8 @@ class MYPARTYGAME_API UPTHeadSculptHUDWidget : public UUserWidget
 public:
     /** Refresca resaltados, cruz WASD e icono de fuera-de-área. La primera vez arma los cuadritos. */
     void Refresh(APTLobbyPlayerController* PC);
+    /** Muestra/oculta el popup "¿Guardar los cambios?" (Sí = guardar, No = descartar). */
+    void ShowDiscardPopup(bool bShow);
 
 protected:
     UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* ToolsBox;
@@ -64,6 +66,17 @@ protected:
 
     /** Leyenda de controles por texto (opcional; alternativa simple a la cruz WASD). */
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* ControlsText;
+
+    // ── Confirmar / Back / popup de descartar — son WBP_ToolSlot (solo visual, se opera por TECLAS) ──
+    UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* ConfirmSlot;  // Enter: guarda y equipa
+    UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* BackSlot;     // Escape: abre el popup
+    UPROPERTY(meta = (BindWidgetOptional)) UWidget*           DiscardPopup; // panel del popup (oculto por defecto)
+    UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* PopupYesSlot; // Enter = Sí (guardar)
+    UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* PopupNoSlot;  // Escape = No (descartar)
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*        PopupText;    // texto del popup
+    // Iconos de las teclas (asignar en Details): Enter para confirmar/Sí, Esc para back/No.
+    UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconEnter = nullptr;
+    UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconEsc   = nullptr;
 
     /** WBP del cuadrito (el mismo WBP_ToolSlot del gameplay). */
     UPROPERTY(EditAnywhere, Category = "HeadHUD") TSubclassOf<UPTToolSlotWidget> ToolSlotClass;

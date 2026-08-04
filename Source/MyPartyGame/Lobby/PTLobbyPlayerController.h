@@ -206,7 +206,53 @@ private:
     UPROPERTY() ACameraActor*    HeadCam    = nullptr;
     bool bHeadSculptMode = false;
     void EnterHeadSculpt();
-    void ExitHeadSculpt();
+    void ExitHeadSculpt(bool bSaveChanges = true); // true=guardar+equipar; false=descartar (restaura equipado)
+public:
+    /** Confirmar la edición (Enter / botón): guarda en el slot, equipa y vuelve al Locker. */
+    void ConfirmHeadEdit();
+    /** Pedir salir de la edición (Escape / botón Back): muestra el popup de guardar/descartar. */
+    void RequestHeadBack();
+    /** Resolución del popup: true=guardar (como Confirmar), false=descartar y volver al Locker. */
+    void ResolveHeadBack(bool bSave);
+protected:
+
+    // ── Locker (casillero): reemplaza a la tecla G ──
+    // Slot que se está editando (-1 = ninguno). Al confirmar se guarda en ese slot + se equipa.
+    int32 EditingHeadSlot = -1;
+    int32 EditingBodySlot = -1;
+    bool  bHeadSculptBodyOnly = false; // modo edición de un slot de CUERPO (sin volumen de cabeza)
+public:
+    /** Abre el Locker: colapsa el menú, lleva la cámara a la vista lateral (blend) y muestra el widget. */
+    void OpenLocker();
+    /** Cierra el Locker y vuelve al menú principal (cámara diorama). */
+    void CloseLocker();
+    bool IsLockerOpen() const { return bLockerOpen; }
+    /** Equipa un slot (aplica al personaje y replica solo lo equipado). */
+    void EquipHeadSlot(int32 Idx);
+    void EquipBodySlot(int32 Idx);
+    /** Entra a crear/editar un slot de cabeza o de cuerpo. */
+    void EnterHeadSculptForSlot(int32 Idx);
+    void EnterBodyPaintForSlot(int32 Idx);
+protected:
+    /** WBP del Locker (deriva de UPTLockerWidget). Asignar en BP_LobbyPlayerController. */
+    UPROPERTY(EditAnywhere, Category="Lobby") TSubclassOf<class UPTLockerWidget> LockerWidgetClass;
+    UPROPERTY() class UPTLockerWidget* LockerWidget = nullptr;
+
+    // ── Cámara del Locker (sigue la POSICIÓN del personaje, pero NO rota: dirección fija al mundo) ──
+    // El personaje rota/se mueve; la cámara solo se desplaza con él manteniendo un offset y una rotación
+    // FIJOS EN EL MUNDO. Editá estos valores para reencuadrar.
+    UPROPERTY() ACameraActor* LockerCam = nullptr;
+    // Offset en MUNDO respecto de la posición del personaje (la cámara se para en CharPos + este offset).
+    UPROPERTY(EditAnywhere, Category="Locker") FVector  LockerCamOffset   = FVector(-260.f, 130.f, 60.f);
+    // Rotación FIJA de la cámara en el mundo (no depende de hacia dónde mire el personaje).
+    UPROPERTY(EditAnywhere, Category="Locker") FRotator LockerCamRotation = FRotator(-5.f, 25.f, 0.f);
+    UPROPERTY(EditAnywhere, Category="Locker") float    LockerCamBlend    = 0.6f;
+
+    bool bLockerOpen = false;
+    bool bReturnToLockerAfterEdit = false; // al confirmar la edición, volver a la vista Locker (no al menú)
+    bool bDiscardPopupOpen = false;        // el popup guardar/descartar está visible (edición)
+    void SetupLockerCam();  // crea y ubica la LockerCam
+    void UpdateLockerCam(); // la reubica siguiendo al personaje (dirección fija)
 
     /** Hotbar del modo G (parent = PTHeadSculptHUDWidget). Asignar en BP_LobbyPlayerController.
      *  Se crea al entrar al modo cabeza y se saca al salir. */

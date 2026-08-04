@@ -23,6 +23,17 @@
 #include "IImageWrapperModule.h"
 #include "Modules/ModuleManager.h"
 #include "Engine/Engine.h" // GEngine->AddOnScreenDebugMessage (debug de tamaño del blob)
+#include "PTLockerSubsystem.h"
+#include "Engine/GameInstance.h"
+#include "Engine/SceneCapture2D.h"
+#include "Components/SceneCaptureComponent2D.h"
+#include "TextureResource.h"
+
+// Forward-decls de helpers estáticos (definidos más abajo en este archivo).
+static bool PT_EncodePNG_BGRA(const TArray<FColor>& Px, int32 N, TArray<uint8>& Out);
+static bool PT_DecodePNG_BGRA(const TArray<uint8>& In, TArray<FColor>& OutPx, int32& OutN);
+static void PT_SerializeHeadBlob(const TArray<uint8>& Geo, const FVector& Center,
+                                 const TArray<uint8>& HeadPNG, const TArray<uint8>& BodyPNG, TArray<uint8>& Out);
 #include "Kismet/GameplayStatics.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
@@ -157,8 +168,9 @@ void APTLobbyCharacter::ApplyHeadSections(const TArray<FPTHeadSection>& Secs)
 }
 
 void APTLobbyCharacter::BakeAndReplicateHead(UProceduralMeshComponent* ClaySrc, APTSculptVolume* PaintSource,
-                                             const TArray<FVector4>& LocalEyes)
+                                             const TArray<FVector4>& LocalEyes, TArray<uint8>& OutBlob)
 {
+    OutBlob.Reset();
     if (!HeadMesh || !ClaySrc) return;
 
     // Componer: arcilla (con pintura horneada) + una sección de OJOS (esferas).
@@ -169,21 +181,83 @@ void APTLobbyCharacter::BakeAndReplicateHead(UProceduralMeshComponent* ClaySrc, 
         if (Eyes.Verts.Num() > 0) Secs.Add(MoveTemp(Eyes));
     }
 
-    // La cabeza horneada usa el MISMO material/textura de pintura 2D que en vivo (proyección esférica
-    // desde el centro fijo). Mismo dato + mismo shader + mismas posiciones locales → idéntico a lo
-    // que pintaste, con la nitidez de una textura 1024 (no el atlas de vóxeles).
+    // La cabeza horneada usa el MISMO material/textura de pintura 2D que en vivo (idéntica a lo pintado).
     HeadColorMID = CreateHeadPaintMID();
     bLocallyBakedHead = true; // no pisar este resultado al re-aplicar desde el blob replicado
 
     ApplyHeadSections(Secs);
     UpdateHeadCollision();
 
-    // Blob combinado: geometría + centro de proyección + texturas de pintura (cabeza y cuerpo en PNG).
-    // Se usa para guardar en disco Y para replicar (mismo formato). El pipeline de UploadHead lo trocea.
-    TArray<uint8> Blob;
-    BuildHeadBlob(Secs, Blob);
-    SaveHeadBlob(Blob);           // persistencia local (disco)
-    if (APTPlayerState* PS = GetPlayerState<APTPlayerState>()) PS->UploadHead(Blob);
+    // Blob combinado (geometría + centro + PNG cabeza + PNG cuerpo). Guardar/equipar/subir lo hace el Locker.
+    BuildHeadBlob(Secs, OutBlob);
+}
+
+bool APTLobbyCharacter::GetBodyPaintPNG(TArray<uint8>& OutPNG)
+{
+    return PaintPixels.Num() > 0 && PT_EncodePNG_BGRA(PaintPixels, PaintTexN, OutPNG);
+}
+
+bool APTLobbyCharacter::CaptureLookThumbnailPNG(TArray<uint8>& OutPNG, int32 Size)
+{
+    UWorld* W = GetWorld();
+    if (!W || !GetMesh()) return false;
+    Size = FMath::Clamp(Size, 64, 1024);
+
+    UTextureRenderTarget2D* RT = UKismetRenderingLibrary::CreateRenderTarget2D(this, Size, Size, RTF_RGBA8);
+    if (!RT) return false;
+
+    ASceneCapture2D* Cap = W->SpawnActor<ASceneCapture2D>();
+    if (!Cap) return false;
+    USceneCaptureComponent2D* C = Cap->GetCaptureComponent2D();
+    C->TextureTarget       = RT;
+    C->CaptureSource       = ESceneCaptureSource::SCS_FinalColorLDR;
+    C->bCaptureEveryFrame  = false;
+    C->bCaptureOnMovement  = false;
+    C->FOVAngle            = 45.f;
+    C->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
+    C->ShowOnlyActors.Add(this); // solo el personaje (fondo limpio)
+
+    // De frente al personaje, a la altura pecho/cabeza.
+    const FVector Center = GetActorLocation() + FVector(0, 0, ThumbHeight);
+    const FVector Loc    = Center + GetActorForwardVector() * ThumbDistance;
+    Cap->SetActorLocation(Loc);
+    Cap->SetActorRotation((Center - Loc).Rotation());
+
+    C->CaptureScene();
+
+    FTextureRenderTargetResource* Res = RT->GameThread_GetRenderTargetResource();
+    TArray<FColor> Px;
+    const bool bOk = Res && Res->ReadPixels(Px) && Px.Num() == Size * Size;
+    Cap->Destroy();
+    if (!bOk) return false;
+    for (FColor& P : Px) P.A = 255; // opaco (evita miniaturas "vacías" por alpha 0)
+    return PT_EncodePNG_BGRA(Px, Size, OutPNG);
+}
+
+UTexture2D* APTLobbyCharacter::MakeTextureFromPNG(UObject* Outer, const TArray<uint8>& PNG)
+{
+    TArray<FColor> Px; int32 N = 0;
+    if (PNG.Num() == 0 || !PT_DecodePNG_BGRA(PNG, Px, N) || N <= 0) return nullptr;
+    UTexture2D* T = UTexture2D::CreateTransient(N, N, PF_B8G8R8A8, NAME_None);
+    if (!T) return nullptr;
+    T->SRGB = true; T->Filter = TF_Bilinear;
+    FTexture2DMipMap& Mip = T->GetPlatformData()->Mips[0];
+    void* D = Mip.BulkData.Lock(LOCK_READ_WRITE);
+    FMemory::Memcpy(D, Px.GetData(), Px.Num() * sizeof(FColor));
+    Mip.BulkData.Unlock();
+    T->UpdateResource();
+    return T;
+}
+
+void APTLobbyCharacter::AssembleReplicatedBlob(const TArray<uint8>& HeadBlob, const TArray<uint8>& BodyPNG, TArray<uint8>& Out)
+{
+    Out.Reset();
+    TArray<FPTHeadSection> Secs; FVector Center; TArray<uint8> HeadPNG, OldBodyPNG;
+    if (!ParseHeadBlob(HeadBlob, Secs, Center, HeadPNG, OldBodyPNG) || Secs.Num() == 0) { Out = HeadBlob; return; }
+
+    TArray<uint8> Geo; SectionsToBlob(Secs, Geo);
+    const TArray<uint8>& UseBody = (BodyPNG.Num() > 0) ? BodyPNG : OldBodyPNG; // vacío = conservar el que traía
+    PT_SerializeHeadBlob(Geo, Center, HeadPNG, UseBody, Out);
 }
 
 void APTLobbyCharacter::ApplyReplicatedHead()
@@ -378,17 +452,27 @@ void APTLobbyCharacter::SaveHeadBlob(const TArray<uint8>& Blob)
 
 void APTLobbyCharacter::LoadHead()
 {
-    if (!UGameplayStatics::DoesSaveGameExist(PTHeadSaveSlot, 0)) return;
-    UPTHeadSaveGame* Save = Cast<UPTHeadSaveGame>(UGameplayStatics::LoadGameFromSlot(PTHeadSaveSlot, 0));
-    if (!Save) return;
+    // Carga y REPLICA la combinación EQUIPADA del Locker (cabeza equipada + cuerpo equipado).
+    UPTLockerSubsystem* L = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLockerSubsystem>() : nullptr;
+    if (!L) return;
 
-    TArray<uint8> Blob = Save->Blob;
-    if (Blob.Num() == 0 && Save->Sections.Num() > 0)   // save viejo (solo geometría) → convertir
-        SectionsToBlob(Save->Sections, Blob);
+    const TArray<uint8>& Head = L->GetEquippedHeadBaked();
+    const TArray<uint8>& Body = L->GetEquippedBodyPNG();
+    if (Head.Num() == 0)
+    {
+        // Slot "Default" (o nada equipado): look base → sacar la cabeza custom y aplicar el cuerpo equipado.
+        ClearHeadMesh();
+        if (Body.Num() > 0) ApplyBodyPaintFromPNG(Body); else ClearBodyPaint();
+        bLocallyBakedHead = true; // no re-aplicar un blob replicado viejo encima del default
+        return;
+    }
+
+    TArray<uint8> Blob;
+    AssembleReplicatedBlob(Head, Body, Blob); // cabeza equipada + (si hay) cuerpo equipado
     if (Blob.Num() == 0) return;
 
     ApplyHeadBlobLocal(Blob);
-    // Replicar tu cabeza guardada para que los demás la vean sin re-esculpir.
+    bLocallyBakedHead = true; // es MI look equipado; no pisarlo con el blob que vuelve replicado
     if (APTPlayerState* PS = GetPlayerState<APTPlayerState>()) PS->UploadHead(Blob);
 }
 
@@ -422,18 +506,28 @@ static bool PT_DecodePNG_BGRA(const TArray<uint8>& In, TArray<FColor>& OutPx, in
 // ── Blob combinado: geometría + centro + PNG cabeza + PNG cuerpo ───────────────
 static const uint32 PT_HEADBLOB_MAGIC = 0x50544832; // 'PTH2'
 
+// Serializador de bajo nivel del blob combinado (reusado por BuildHeadBlob y AssembleReplicatedBlob).
+static void PT_SerializeHeadBlob(const TArray<uint8>& Geo, const FVector& Center,
+                                 const TArray<uint8>& HeadPNG, const TArray<uint8>& BodyPNG, TArray<uint8>& Out)
+{
+    Out.Reset();
+    FMemoryWriter Ar(Out);
+    uint32 Magic = PT_HEADBLOB_MAGIC; Ar << Magic;
+    int32 GN = Geo.Num();     Ar << GN; if (GN) Ar.Serialize(const_cast<uint8*>(Geo.GetData()), GN);
+    FVector C = Center;       Ar << C;
+    int32 HN = HeadPNG.Num(); Ar << HN; if (HN) Ar.Serialize(const_cast<uint8*>(HeadPNG.GetData()), HN);
+    int32 BN = BodyPNG.Num(); Ar << BN; if (BN) Ar.Serialize(const_cast<uint8*>(BodyPNG.GetData()), BN);
+}
+
 void APTLobbyCharacter::BuildHeadBlob(const TArray<FPTHeadSection>& Secs, TArray<uint8>& OutBlob) const
 {
     TArray<uint8> Geo;  SectionsToBlob(Secs, Geo);                       // geometría (ya comprimida)
     TArray<uint8> HeadPNG; PT_EncodePNG_BGRA(HeadPaintPixels, HeadPaintN, HeadPNG);
     TArray<uint8> BodyPNG; PT_EncodePNG_BGRA(PaintPixels,     PaintTexN, BodyPNG);
 
-    FMemoryWriter Ar(OutBlob);
-    uint32 Magic = PT_HEADBLOB_MAGIC; Ar << Magic;
-    int32 GN = Geo.Num(); Ar << GN; if (GN) Ar.Serialize(Geo.GetData(), GN);
-    FVector Center = HeadPaintCenterLocal; Ar << Center;
-    int32 HN = HeadPNG.Num(); Ar << HN; if (HN) Ar.Serialize(HeadPNG.GetData(), HN);
-    int32 BN = BodyPNG.Num(); Ar << BN; if (BN) Ar.Serialize(BodyPNG.GetData(), BN);
+    PT_SerializeHeadBlob(Geo, HeadPaintCenterLocal, HeadPNG, BodyPNG, OutBlob);
+
+    const int32 GN = Geo.Num(), HN = HeadPNG.Num(), BN = BodyPNG.Num();
 
     // ── DEBUG de tamaño del blob (para elegir la mejor resolución de textura) ──
     // El blob viaja en chunks de 8 KB por RPC confiable; UE corta la conexión si se encolan más de

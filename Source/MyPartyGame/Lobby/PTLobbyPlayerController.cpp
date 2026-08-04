@@ -14,6 +14,9 @@
 #include "Camera/CameraComponent.h"
 #include "../Sculpt/PTSculptVolume.h"
 #include "PTLobbyCharacter.h"
+#include "PTLockerWidget.h"
+#include "PTLockerSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "PTHeadSculptHUDWidget.h"
 #include "../PTGameUserSettings.h"
 #include "../Multiplayer/MultiplayerSessionsSubsystem.h"
@@ -266,7 +269,7 @@ void APTLobbyPlayerController::SetupInputComponent()
     InputComponent->BindKey(EKeys::P, IE_Pressed, this, &APTLobbyPlayerController::OnPressedStartGame);
 
     // Tecla G: entrar/salir del modo esculpir tu cabeza custom.
-    InputComponent->BindKey(EKeys::G, IE_Pressed, this, &APTLobbyPlayerController::ToggleHeadSculptMode);
+    // (La tecla G quedó reemplazada por el botón "Locker" del menú principal.)
 
     // Esculpido de la cabeza (solo hace algo en modo cabeza; los handlers gatean con bHeadSculptMode).
     // Mismos inputs que el gameplay: LMB esculpe en el modo actual, 1/2/3 = Add/Erase/Paint, rueda = tamaño.
@@ -278,6 +281,9 @@ void APTLobbyPlayerController::SetupInputComponent()
     InputComponent->BindKey(EKeys::Two,   IE_Pressed, this, &APTLobbyPlayerController::OnHeadModeErase);
     InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &APTLobbyPlayerController::OnHeadModePaint);
     InputComponent->BindKey(EKeys::Four,  IE_Pressed, this, &APTLobbyPlayerController::OnHeadModeEyes);
+    // Enter = confirmar la edición (guarda + equipa + vuelve al Locker). Escape = popup guardar/descartar.
+    InputComponent->BindKey(EKeys::Enter,  IE_Pressed, this, &APTLobbyPlayerController::ConfirmHeadEdit);
+    InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &APTLobbyPlayerController::RequestHeadBack);
     // TAB = ciclar la forma del sello (esfera/cubo/cilindro/cono), igual que el gameplay.
     InputComponent->BindKey(EKeys::Tab,   IE_Pressed, this, &APTLobbyPlayerController::OnHeadCycleShape);
     // Rueda del mouse mantenida = rotar el shape (doble click = reset). Igual que el gameplay.
@@ -298,6 +304,10 @@ void APTLobbyPlayerController::SetupInputComponent()
 void APTLobbyPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
+
+    // En el Locker (sin editar): la cámara sigue la POSICIÓN del personaje pero no rota (dirección fija).
+    if (bLockerOpen && !bHeadSculptMode) UpdateLockerCam();
+
     if (!bHeadSculptMode) return;
 
     // Mantener el resaltado de la hotbar al día con la herramienta equipada (1/2/3/4).
@@ -944,11 +954,104 @@ void APTLobbyPlayerController::ToggleHeadSculptMode()
     else                 EnterHeadSculpt();
 }
 
+// ── Locker ─────────────────────────────────────────────────────────────────────
+void APTLobbyPlayerController::SetupLockerCam()
+{
+    APawn* P = GetPawn();
+    if (!P || !GetWorld()) return;
+    if (!LockerCam)
+    {
+        FActorSpawnParameters SP; SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+        LockerCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator, SP);
+    }
+    UpdateLockerCam(); // ubica siguiendo al personaje, con dirección fija (no atachada → no rota con él)
+}
+
+void APTLobbyPlayerController::UpdateLockerCam()
+{
+    APawn* P = GetPawn();
+    if (!LockerCam || !P) return;
+    // Solo desplaza la cámara con el personaje; el offset y la rotación son FIJOS EN EL MUNDO, así el
+    // personaje puede rotar/moverse sin que la cámara gire (siempre mira al mismo fondo).
+    LockerCam->SetActorLocationAndRotation(P->GetActorLocation() + LockerCamOffset, LockerCamRotation);
+}
+
+void APTLobbyPlayerController::OpenLocker()
+{
+    if (!IsLocalController() || !LockerWidgetClass || bHeadSculptMode) return;
+
+    // Colapsar el menú principal (Play/Settings/etc.) → el Locker ocupa toda la pantalla.
+    if (ActiveOverlay) ActiveOverlay->SetVisibility(ESlateVisibility::Collapsed);
+
+    // Cámara atachada al personaje (te movés con WASD por el nivel y el personaje queda en el encuadre).
+    SetupLockerCam();
+    if (LockerCam) SetViewTargetWithBlend(LockerCam, LockerCamBlend);
+    SetIgnoreMoveInput(false); // poder caminar por el nivel
+
+    // Miniatura del slot "Default" (slot 0): si estás mostrando el look base y aún no tiene foto, capturarla.
+    if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn()))
+        if (UPTLockerSubsystem* L = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLockerSubsystem>() : nullptr)
+        {
+            if (L->GetEquippedHead() == 0 && L->IsHeadSlotDefault(0) && L->GetHeadThumb(0).Num() == 0)
+            { TArray<uint8> T; if (Char->CaptureLookThumbnailPNG(T, 256)) L->SetHeadThumb(0, T); }
+            if (L->GetEquippedBody() == 0 && L->IsBodySlotDefault(0) && L->GetBodyThumb(0).Num() == 0)
+            { TArray<uint8> T; if (Char->CaptureLookThumbnailPNG(T, 256)) L->SetBodyThumb(0, T); }
+        }
+
+    // Widget a pantalla completa + foco de teclado (navegar/atajos).
+    if (!LockerWidget) LockerWidget = CreateWidget<UPTLockerWidget>(this, LockerWidgetClass);
+    if (!LockerWidget) return;
+    if (!LockerWidget->IsInViewport()) LockerWidget->AddToViewport(50);
+    LockerWidget->SetVisibility(ESlateVisibility::Visible);
+    LockerWidget->RefreshSlots();
+    LockerWidget->SetKeyboardFocus();
+
+    bLockerOpen = true;
+}
+
+void APTLobbyPlayerController::CloseLocker()
+{
+    if (LockerWidget) { LockerWidget->RemoveFromParent(); LockerWidget = nullptr; }
+    if (LockerCam) { LockerCam->Destroy(); LockerCam = nullptr; }
+    bLockerOpen = false;
+    if (ActiveOverlay) ActiveOverlay->SetVisibility(ESlateVisibility::Visible); // vuelve el menú
+    SetupDioramaView(); // cámara fija del lobby (con blend a 0)
+}
+
+void APTLobbyPlayerController::EquipHeadSlot(int32 Idx)
+{
+    if (UPTLockerSubsystem* L = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLockerSubsystem>() : nullptr)
+        L->EquipHead(Idx);
+    if (APTLobbyCharacter* C = Cast<APTLobbyCharacter>(GetPawn())) C->LoadHead(); // aplica + replica lo equipado
+}
+void APTLobbyPlayerController::EquipBodySlot(int32 Idx)
+{
+    if (UPTLockerSubsystem* L = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLockerSubsystem>() : nullptr)
+        L->EquipBody(Idx);
+    if (APTLobbyCharacter* C = Cast<APTLobbyCharacter>(GetPawn())) C->LoadHead();
+}
+
+void APTLobbyPlayerController::EnterHeadSculptForSlot(int32 Idx)
+{
+    EditingHeadSlot = Idx; EditingBodySlot = -1; bHeadSculptBodyOnly = false;
+    bReturnToLockerAfterEdit = bLockerOpen;
+    if (LockerWidget) LockerWidget->SetVisibility(ESlateVisibility::Collapsed); // ocultar Locker al editar
+    EnterHeadSculpt();
+}
+void APTLobbyPlayerController::EnterBodyPaintForSlot(int32 Idx)
+{
+    EditingBodySlot = Idx; EditingHeadSlot = -1; bHeadSculptBodyOnly = true;
+    bReturnToLockerAfterEdit = bLockerOpen;
+    if (LockerWidget) LockerWidget->SetVisibility(ESlateVisibility::Collapsed);
+    EnterHeadSculpt(); // adentro respeta bHeadSculptBodyOnly (foco cuerpo, sin volumen de cabeza)
+}
+
 void APTLobbyPlayerController::EnterHeadSculpt()
 {
     APawn* P = GetPawn();
     if (bHeadSculptMode || !HeadVolumeClass || !P || !GetWorld()) return;
     bHeadSculptMode = true;
+    bDiscardPopupOpen = false;
 
     APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(P);
 
@@ -956,7 +1059,8 @@ void APTLobbyPlayerController::EnterHeadSculpt()
     // SetSculptPose evalúa la pose YA (RefreshBoneTransforms) → el socket queda recto ANTES de leerlo.
     if (Char) Char->SetSculptPose(true, HeadSculptPoseAnim);
     // Borrar la cabeza que ya tenía asignada: molesta para modelar una nueva desde cero.
-    if (Char) Char->ClearHeadMesh();
+    // Editando un slot de CUERPO: NO borrar la cabeza equipada (la seguís viendo mientras pintás).
+    if (Char && !bHeadSculptBodyOnly) Char->ClearHeadMesh();
     // Flecha "hacia dónde mira" visible mientras esculpís.
     if (Char) Char->SetFacingArrowVisible(true);
     // Colapsar la UI del lobby para que el mouse llegue al esculpido (no lo agarre la UI).
@@ -974,6 +1078,10 @@ void APTLobbyPlayerController::EnterHeadSculpt()
         SpawnRot = ST.Rotator();
     }
 
+  // Todo el volumen de cabeza + su pintura + ojos SOLO se crean si editás una CABEZA. Para un slot de
+  // CUERPO no hace falta (pintás la piel del personaje directamente).
+  if (!bHeadSculptBodyOnly)
+  {
     // Spawn DIFERIDO: la cabeza es chica (radio ~40), así que con el ColorVoxel por defecto (3) el
     // atlas de color queda a ~27 vóxeles de ancho → pixelado. Lo bajamos ANTES de que el volumen
     // inicialice el campo de color (BeginPlay) para tener color de alta resolución en la cabeza.
@@ -1019,6 +1127,25 @@ void APTLobbyPlayerController::EnterHeadSculpt()
         HeadEyesLiveMesh->SetupAttachment(HeadVolume->GetRootComponent());
         HeadEyesLiveMesh->RegisterComponent();
     }
+  } // fin if(!bHeadSculptBodyOnly)
+  else
+  {
+    // Modo edición de un slot de CUERPO: foco en el cuerpo, cargar la textura del slot (si existe).
+    bBodyPaintMode = true;
+    HeadEditMode   = EPTEditMode::Paint;
+    bHeadEyesTool  = false;
+    if (Char)
+    {
+        Char->InitCharacterPaint();
+        if (UPTLockerSubsystem* L = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLockerSubsystem>() : nullptr)
+        {
+            const TArray<uint8>& PNG = L->GetBodyPNG(EditingBodySlot);
+            if (PNG.Num() > 0) Char->ApplyBodyPaintFromPNG(PNG); // editar sobre lo que ya tenías
+            else               Char->ClearBodyPaint();           // slot nuevo → lienzo limpio
+        }
+        Char->RecomputeBodyPaintBytes();
+    }
+  }
 
     // Actor de preview de la brocha (fantasma que sigue al cursor, como el gameplay).
     FActorSpawnParameters SP;
@@ -1073,7 +1200,31 @@ void APTLobbyPlayerController::EnterHeadSculpt()
     UE_LOG(LogTemp, Log, TEXT("[Lobby] Modo esculpir-cabeza: ON."));
 }
 
-void APTLobbyPlayerController::ExitHeadSculpt()
+// Flujo por TECLAS (en edición el cursor no sirve):
+//   ENTER  → si el popup está abierto = Sí (guardar); si no = confirmar directo (guardar + equipar).
+//   ESCAPE → si el popup está cerrado = abrirlo; si ya está abierto = No (descartar y salir).
+void APTLobbyPlayerController::ConfirmHeadEdit()
+{
+    if (!bHeadSculptMode) return;
+    if (bDiscardPopupOpen) ResolveHeadBack(true); // Enter en el popup = Sí (guardar)
+    else                   ExitHeadSculpt(true);  // Enter directo = confirmar
+}
+void APTLobbyPlayerController::RequestHeadBack()
+{
+    if (!bHeadSculptMode) return;
+    if (bDiscardPopupOpen) { ResolveHeadBack(false); return; } // Escape con popup abierto = No (descartar)
+    bDiscardPopupOpen = true;
+    if (HeadHUD) HeadHUD->ShowDiscardPopup(true);
+}
+void APTLobbyPlayerController::ResolveHeadBack(bool bSave)
+{
+    if (!bHeadSculptMode) return;
+    bDiscardPopupOpen = false;
+    if (HeadHUD) HeadHUD->ShowDiscardPopup(false);
+    ExitHeadSculpt(bSave);
+}
+
+void APTLobbyPlayerController::ExitHeadSculpt(bool bSaveChanges)
 {
     if (!bHeadSculptMode) return;
     bHeadSculptMode = false;
@@ -1085,16 +1236,49 @@ void APTLobbyPlayerController::ExitHeadSculpt()
     HeadUndoKinds.Reset();
     if (APTLobbyCharacter* C = Cast<APTLobbyCharacter>(GetPawn())) C->ClearPaintUndo();
 
-    // Hornear: copiar la escultura (malla local del volumen) a la cabeza del personaje, pegada
-    // al HeadSocket. La arcilla se esculpió centrada en el origen del volumen → queda centrada
-    // en el socket. Ajustá el tamaño con el RelativeScale3D del HeadMesh en BP_LobbyCharacter.
+    // Guardar en el Locker (local) el slot que estabas editando, equiparlo, y replicar el look equipado.
     if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn()))
     {
-        // Hornear arcilla + pintura + ojos, aplicar, guardar y REPLICAR (para que todos la vean).
-        if (HeadVolume) Char->BakeAndReplicateHead(HeadVolume->GetMeshComponent(), HeadVolume, HeadEyes);
+        UPTLockerSubsystem* L = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLockerSubsystem>() : nullptr;
+
         Char->SetSculptPose(false);         // restaura el baile + jiggle
-        Char->SetFacingArrowVisible(false); // ocultar la flecha
+        Char->SetFacingArrowVisible(false); // ocultar la flecha (que no salga en la miniatura)
+
+        if (!bSaveChanges)
+        {
+            // DESCARTAR: no guardar ni equipar el slot editado; restaurar el look que tenías equipado.
+            Char->LoadHead();
+        }
+        else if (bHeadSculptBodyOnly)
+        {
+            // Slot de CUERPO: el cuerpo ya está pintado sobre el personaje → capturar miniatura y guardar.
+            TArray<uint8> Thumb; Char->CaptureLookThumbnailPNG(Thumb, 256);
+            TArray<uint8> PNG;
+            if (L && EditingBodySlot >= 0 && Char->GetBodyPaintPNG(PNG))
+            {
+                L->SaveBodySlot(EditingBodySlot, PNG, Thumb);
+                L->EquipBody(EditingBodySlot);
+            }
+            Char->LoadHead(); // aplica + replica (cabeza equipada + este cuerpo)
+        }
+        else if (HeadVolume)
+        {
+            // Slot de CABEZA: hornear (aplica la cabeza al personaje) → recién ahí capturar la miniatura.
+            TArray<uint8> Blob;
+            Char->BakeAndReplicateHead(HeadVolume->GetMeshComponent(), HeadVolume, HeadEyes, Blob);
+            TArray<uint8> Thumb; Char->CaptureLookThumbnailPNG(Thumb, 256);
+            const int32 Slot = (EditingHeadSlot >= 0) ? EditingHeadSlot : 0; // fallback slot 0
+            if (L && Blob.Num() > 0)
+            {
+                L->SaveHeadSlot(Slot, Blob, TArray<uint8>(), Thumb); // RawState (crudo) → Fase 2
+                L->EquipHead(Slot);
+            }
+            // Subir el blob horneado (ya incluye el cuerpo pintado en esta sesión).
+            if (Blob.Num() > 0)
+                if (APTPlayerState* PS = Char->GetPlayerState<APTPlayerState>()) PS->UploadHead(Blob);
+        }
     }
+    EditingHeadSlot = -1; EditingBodySlot = -1; bHeadSculptBodyOnly = false;
 
     // Cerrar el color picker si quedó abierto.
     if (HeadColorPicker) { HeadColorPicker->RemoveFromParent(); HeadColorPicker = nullptr; }
@@ -1110,12 +1294,29 @@ void APTLobbyPlayerController::ExitHeadSculpt()
     // Sacar la hotbar del modo G.
     if (HeadHUD) { HeadHUD->RemoveFromParent(); HeadHUD = nullptr; }
 
-    // Restaurar la UI del lobby.
-    if (ActiveOverlay) ActiveOverlay->SetVisibility(ESlateVisibility::Visible);
-
     SetIgnoreMoveInput(false);
-    SetupDioramaView();      // vuelve la cámara fija del lobby
     ApplyDioramaInputMode(); // restaura cursor/input del lobby
+
+    if (bReturnToLockerAfterEdit)
+    {
+        // Volver a la vista del Locker (cámara atachada) y re-mostrar el widget con el slot ya lleno.
+        // La pose normal (animada) ya se restauró arriba con SetSculptPose(false).
+        bReturnToLockerAfterEdit = false;
+        SetupLockerCam(); // re-atar por las dudas (el pawn pudo recrearse)
+        if (LockerCam) SetViewTargetWithBlend(LockerCam, LockerCamBlend);
+        if (LockerWidget)
+        {
+            LockerWidget->SetVisibility(ESlateVisibility::Visible);
+            LockerWidget->RefreshSlots();
+            LockerWidget->SetKeyboardFocus();
+        }
+    }
+    else
+    {
+        // Restaurar la UI del lobby y la cámara fija (flujo legacy, sin Locker).
+        if (ActiveOverlay) ActiveOverlay->SetVisibility(ESlateVisibility::Visible);
+        SetupDioramaView();
+    }
 
     UE_LOG(LogTemp, Log, TEXT("[Lobby] Modo esculpir-cabeza: OFF."));
 }
@@ -1128,6 +1329,8 @@ void APTLobbyPlayerController::OnPressedStartGame()
 void APTLobbyPlayerController::ToggleEscapeMenu(const FInputActionValue& Value)
 {
     if (!IsLocalController() || !EscapeMenuWidgetClass) return;
+    if (bHeadSculptMode) return; // en edición, Escape abre el popup de guardar/descartar, no el menú
+    if (bLockerOpen)     return; // en el Locker, Escape es "Back" (lo maneja el widget)
 
     if (!EscapeMenuWidget)
     {

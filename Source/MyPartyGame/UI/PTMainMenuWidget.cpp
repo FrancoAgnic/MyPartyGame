@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "PTMainMenuWidget.h"
+#include "../Lobby/PTLobbyPlayerController.h"
 #include "MultiplayerSessionsSubsystem.h"
 #include "../PTTextTable.h"
 #include "PTCreateSessionWidget.h"
@@ -31,6 +32,7 @@ bool UPTMainMenuWidget::Initialize()
     if (EnterCodeButton) EnterCodeButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnEnterCodeClicked);
     if (QuitButton)      QuitButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnQuitClicked);
     if (SettingsButton)  SettingsButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnSettingsClicked);
+    if (LockerButton)    LockerButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnLockerClicked);
 
     // Si hay un PlayButton, arrancar en la pantalla principal (submenú Host/Find/EnterCode oculto).
     // Si el WBP todavía no tiene PlayButton, no se toca nada (comportamiento previo, todo visible).
@@ -179,6 +181,13 @@ void UPTMainMenuWidget::OnQuitClicked()
 void UPTMainMenuWidget::OnSettingsClicked()
 {
     if (SettingsPanel) SettingsPanel->ShowPanel();
+}
+
+void UPTMainMenuWidget::OnLockerClicked()
+{
+    // El Locker vive en el PlayerController del lobby (donde está el modo esculpir/pintar).
+    if (APTLobbyPlayerController* PC = Cast<APTLobbyPlayerController>(GetOwningPlayer()))
+        PC->OpenLocker();
 }
 
 // ==========================================================================

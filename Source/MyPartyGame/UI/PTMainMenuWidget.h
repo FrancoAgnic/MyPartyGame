@@ -45,6 +45,8 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UButton* PlayButton;
     UPROPERTY(meta = (BindWidgetOptional)) UButton* SettingsButton;
     UPROPERTY(meta = (BindWidget))         UButton* QuitButton;
+    // Locker (casillero): abre el widget de personalización (reemplaza la vieja tecla G).
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* LockerButton;
 
     // Agrupa título+subtítulo de la pantalla principal (se oculta junto con Play/Settings/Exit).
     UPROPERTY(meta = (BindWidgetOptional)) UWidget* MainMenuHeaderPanel;
@@ -84,6 +86,7 @@ protected:
     UFUNCTION() void OnEnterCodeClicked();
     UFUNCTION() void OnQuitClicked();
     UFUNCTION() void OnSettingsClicked();
+    UFUNCTION() void OnLockerClicked();
 
     void SetPlaySubmenuVisible(bool bVisible);
 

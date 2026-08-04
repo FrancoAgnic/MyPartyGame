@@ -101,11 +101,25 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head")
     float HeadCollisionRefSize = 50.f;
 
-    // Hornea la cabeza final: arcilla del volumen ClaySrc (con la pintura del atlas de PaintSource)
-    // + los OJOS (esferas en posiciones locales LocalEyes: XYZ=centro, W=radio). La aplica al
-    // HeadMesh, la guarda localmente y la REPLICA (via PlayerState) para que todos la vean.
+    // Hornea la cabeza: arcilla del volumen + ojos + pintura. La APLICA al HeadMesh y devuelve el blob
+    // combinado en OutBlob (geometría + centro + PNG cabeza + PNG cuerpo). NO guarda ni replica: de eso
+    // se encarga el que llama (el Locker guarda en el slot + equipa + sube).
     void BakeAndReplicateHead(UProceduralMeshComponent* ClaySrc, APTSculptVolume* PaintSource,
-                              const TArray<FVector4>& LocalEyes);
+                              const TArray<FVector4>& LocalEyes, TArray<uint8>& OutBlob);
+
+    // Encodea la textura de pintura del cuerpo a PNG (para guardarla en un slot de cuerpo).
+    bool GetBodyPaintPNG(TArray<uint8>& OutPNG);
+
+    // Renderiza una MINIATURA del personaje (SceneCapture, solo el personaje sobre fondo) a PNG.
+    bool CaptureLookThumbnailPNG(TArray<uint8>& OutPNG, int32 Size = 256);
+    // Crea una UTexture2D desde un PNG (para mostrar la miniatura en el Locker). Outer = dueño (GC).
+    static UTexture2D* MakeTextureFromPNG(UObject* Outer, const TArray<uint8>& PNG);
+    // Parámetros de encuadre de la miniatura (frente al personaje).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Locker") float ThumbDistance = 220.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Locker") float ThumbHeight   = 70.f;
+    // Re-arma un blob combinado tomando la CABEZA de HeadBlob pero con OTRO cuerpo (BodyPNG). Sirve
+    // para equipar cabeza y cuerpo de slots distintos. Si BodyPNG está vacío, conserva el del HeadBlob.
+    void AssembleReplicatedBlob(const TArray<uint8>& HeadBlob, const TArray<uint8>& BodyPNG, TArray<uint8>& Out);
 
     // Aplica al HeadMesh la cabeza replicada guardada en el PlayerState (para los demás jugadores
     // y al viajar a Lvl-01). No hace nada si el PlayerState no tiene cabeza.
