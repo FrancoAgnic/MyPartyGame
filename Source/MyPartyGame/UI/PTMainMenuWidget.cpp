@@ -140,10 +140,11 @@ void UPTMainMenuWidget::SetPlaySubmenuVisible(bool bVisible)
     if (PlayBackButton)         PlayBackButton->SetVisibility(bVisible ? Shown : Hidden);
     if (PlaySubmenuHeaderPanel) PlaySubmenuHeaderPanel->SetVisibility(bVisible ? Shown : Hidden);
 
-    // Pantalla principal: Play/Settings/Exit + título — se ocultan mientras está abierto "PLAY".
+    // Pantalla principal: Play/Settings/Exit/Locker + título — se ocultan mientras está abierto "PLAY".
     if (PlayButton)          PlayButton->SetVisibility(bVisible ? Hidden : Shown);
     if (SettingsButton)      SettingsButton->SetVisibility(bVisible ? Hidden : Shown);
     if (QuitButton)          QuitButton->SetVisibility(bVisible ? Hidden : Shown);
+    if (LockerButton)        LockerButton->SetVisibility(bVisible ? Hidden : Shown); // no solapar en el submenú Play
     if (MainMenuHeaderPanel) MainMenuHeaderPanel->SetVisibility(bVisible ? Hidden : Shown);
 }
 

@@ -30,6 +30,7 @@ bool UPTLobbyHUDWidget::Initialize()
     if (LeaveGameButton) LeaveGameButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnLeaveGameClicked);
     if (StartGameButton) StartGameButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnStartGameClicked);
     if (ReadyButton)      ReadyButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnReadyClicked);
+    if (LockerButton)     LockerButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnLockerClicked);
 
     // Config de partida (host).
     if (TurnTimeMinus) TurnTimeMinus->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnTurnTimeMinus);
@@ -232,6 +233,11 @@ void UPTLobbyHUDWidget::OnReadyClicked()
     {
         PC->Server_SetReady(!LocalPS->bIsReady);
     }
+}
+
+void UPTLobbyHUDWidget::OnLockerClicked()
+{
+    if (APTLobbyPlayerController* PC = Cast<APTLobbyPlayerController>(GetOwningPlayer())) PC->OpenLocker();
 }
 
 // ── Config de partida (host) ─────────────────────────────────────────────────

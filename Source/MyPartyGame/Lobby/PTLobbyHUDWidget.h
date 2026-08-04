@@ -47,6 +47,8 @@ protected:
     // botón de Start manual en el flujo normal (StartGameButton queda como override de debug).
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      ReadyButton;
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   ReadyButtonText;
+    // Casillero: abre el Locker desde el lobby en sesión (al lado de Listo / Game Settings).
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*      LockerButton;
     // Visible solo mientras APTGameState::CountdownSecondsRemaining >= 0.
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   CountdownText;
 
@@ -54,6 +56,7 @@ protected:
     UFUNCTION() void OnLeaveGameClicked();
     UFUNCTION() void OnStartGameClicked();
     UFUNCTION() void OnReadyClicked();
+    UFUNCTION() void OnLockerClicked();
 
     void RefreshPlayerList();
 

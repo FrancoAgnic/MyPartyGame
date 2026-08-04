@@ -50,6 +50,9 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Locker") TSubclassOf<UPTLockerSlotWidget> SlotWidgetClass;
     // Columnas por fila cuando el contenedor es un Uniform Grid Panel (para acomodar los 6 slots en grilla).
     UPROPERTY(EditAnywhere, Category = "Locker") int32 SlotsPerRow = 3;
+    // Color de la pestaña ACTIVA vs. inactiva (se aplica al fondo del botón de la pestaña).
+    UPROPERTY(EditAnywhere, Category = "Locker") FLinearColor TabActiveColor   = FLinearColor(0.95f, 0.25f, 0.55f, 1.f); // rosa
+    UPROPERTY(EditAnywhere, Category = "Locker") FLinearColor TabInactiveColor = FLinearColor(0.20f, 0.45f, 0.75f, 1.f); // azul
 
     UFUNCTION() void OnHeadTabClicked();
     UFUNCTION() void OnBodyTabClicked();
@@ -60,6 +63,7 @@ protected:
 private:
     void BuildSlots();
     void SwitchTab(int32 Tab);          // 0 = Cabeza, 1 = Cuerpo
+    void ApplyTabVisual();              // tiñe el botón de la pestaña activa
     void MoveSelection(int32 DX, int32 DY); // navegar en grilla (direccional, con wrap al borde opuesto)
     void ApplySelectionVisual();        // resaltar el slot seleccionado + refrescar botones
     void ActivateSelected();            // Asignar/Crear (Enter)

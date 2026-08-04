@@ -97,7 +97,15 @@ void UPTLockerWidget::SwitchTab(int32 Tab)
     // Mostrar el panel activo, ocultar el otro.
     if (HeadSlotsBox) HeadSlotsBox->SetVisibility(ActiveTab == 0 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
     if (BodySlotsBox) BodySlotsBox->SetVisibility(ActiveTab == 1 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+    ApplyTabVisual();
     RefreshSlots();
+}
+
+void UPTLockerWidget::ApplyTabVisual()
+{
+    // Tiñe el fondo del botón de la pestaña activa (la otra queda en el color inactivo).
+    if (HeadTabButton) HeadTabButton->SetBackgroundColor(ActiveTab == 0 ? TabActiveColor : TabInactiveColor);
+    if (BodyTabButton) BodyTabButton->SetBackgroundColor(ActiveTab == 1 ? TabActiveColor : TabInactiveColor);
 }
 
 void UPTLockerWidget::SelectSlot(int32 Index, bool bHead)
