@@ -7,11 +7,9 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "EnhancedInputComponent.h"
-#include "EnhancedInputSubsystems.h"
-// Definiciones completas de los assets de input: FObjectFinder (5.8) guarda
+// Definición completa del asset de input: FObjectFinder (5.8) guarda
 // TObjectPtr y la conversión a UObject* exige el tipo completo, no el forward.
 #include "InputAction.h"
-#include "InputMappingContext.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "InputActionValue.h"
@@ -53,29 +51,21 @@ ASillasPawnSilla::ASillasPawnSilla()
     Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
     Camera->SetupAttachment(SpringArm);
 
-    // Defaults de input: los assets del template ThirdPerson (el BP puede pisarlos).
-    static ConstructorHelpers::FObjectFinder<UInputMappingContext> IMCDefault(
-        TEXT("/Game/ThirdPerson/Input/IMC_Default.IMC_Default"));
-    if (IMCDefault.Succeeded()) MappingContext = IMCDefault.Object;
-
-    static ConstructorHelpers::FObjectFinder<UInputMappingContext> IMCMouse(
-        TEXT("/Game/ThirdPerson/Input/IMC_MouseLook.IMC_MouseLook"));
-    if (IMCMouse.Succeeded()) MouseLookMappingContext = IMCMouse.Object;
-
+    // Defaults de input: assets del template en /Game/Input (el BP puede pisarlos).
     static ConstructorHelpers::FObjectFinder<UInputAction> IAMove(
-        TEXT("/Game/ThirdPerson/Input/Actions/IA_Move.IA_Move"));
+        TEXT("/Game/Input/Actions/IA_Move.IA_Move"));
     if (IAMove.Succeeded()) MoveAction = IAMove.Object;
 
     static ConstructorHelpers::FObjectFinder<UInputAction> IALook(
-        TEXT("/Game/ThirdPerson/Input/Actions/IA_Look.IA_Look"));
+        TEXT("/Game/Input/Actions/IA_Look.IA_Look"));
     if (IALook.Succeeded()) LookAction = IALook.Object;
 
     static ConstructorHelpers::FObjectFinder<UInputAction> IAMouseLook(
-        TEXT("/Game/ThirdPerson/Input/Actions/IA_MouseLook.IA_MouseLook"));
+        TEXT("/Game/Input/Actions/IA_MouseLook.IA_MouseLook"));
     if (IAMouseLook.Succeeded()) MouseLookAction = IAMouseLook.Object;
 
     static ConstructorHelpers::FObjectFinder<UInputAction> IAJump(
-        TEXT("/Game/ThirdPerson/Input/Actions/IA_Jump.IA_Jump"));
+        TEXT("/Game/Input/Actions/IA_Jump.IA_Jump"));
     if (IAJump.Succeeded()) JumpAction = IAJump.Object;
 }
 
@@ -93,23 +83,6 @@ void ASillasPawnSilla::BeginPlay()
     if (!Balance) Balance = GetDefault<USillasBalanceData>();
 
     GetCharacterMovement()->MaxWalkSpeed = Balance->VelocidadCaminataSilla;
-}
-
-void ASillasPawnSilla::PawnClientRestart()
-{
-    Super::PawnClientRestart();
-
-    // Punto recomendado para (re)aplicar los mapping contexts del pawn local.
-    if (const APlayerController* PC = Cast<APlayerController>(GetController()))
-    {
-        if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
-                ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
-        {
-            Subsystem->ClearAllMappings();
-            if (MappingContext)          Subsystem->AddMappingContext(MappingContext, 0);
-            if (MouseLookMappingContext) Subsystem->AddMappingContext(MouseLookMappingContext, 1);
-        }
-    }
 }
 
 void ASillasPawnSilla::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)

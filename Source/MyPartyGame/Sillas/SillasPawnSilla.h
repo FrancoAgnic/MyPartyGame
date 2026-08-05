@@ -12,7 +12,6 @@
 class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
-class UInputMappingContext;
 struct FInputActionValue;
 
 UCLASS()
@@ -24,7 +23,6 @@ public:
     ASillasPawnSilla();
 
     virtual void BeginPlay() override;
-    virtual void PawnClientRestart() override;
 
 protected:
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
@@ -39,13 +37,8 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera")
     TObjectPtr<UCameraComponent> Camera;
 
-    // Input (defaults: los assets del template ThirdPerson; reemplazables en BP).
-    UPROPERTY(EditDefaultsOnly, Category="Input")
-    TObjectPtr<UInputMappingContext> MappingContext;
-
-    UPROPERTY(EditDefaultsOnly, Category="Input")
-    TObjectPtr<UInputMappingContext> MouseLookMappingContext;
-
+    // Acciones de input (defaults: assets de /Game/Input del template). Los
+    // mapping contexts los agrega ASillasPlayerController, no el pawn.
     UPROPERTY(EditDefaultsOnly, Category="Input")
     TObjectPtr<UInputAction> MoveAction;
 
