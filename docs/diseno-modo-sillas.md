@@ -32,6 +32,9 @@ Combinación de **las sillas musicales + el escondite (prop hunt)**:
 | D7b | Puntaje del match | **Sistema de puntos: sobrevivir por fase + capturas como cazador + bonus al último vivo.** Todos los roles puntúan en todo momento — el eliminado sigue compitiendo por el match desde el rol de cazador. | 04-ago-2026 |
 | D9 | Densidad de señuelos | **Media: 15–25 sillas reales por mapa.** Equilibrio entre memoria del cazador y búsqueda activa. | 04-ago-2026 |
 | D17 | Herramientas del cazador | **Solo oído fino: escucha respiración/crujidos cerca de sillas-jugador.** Sin sprint ni marcadores visuales — caza con oído y memoria pura. El sound design pasa a ser mecánica central. | 04-ago-2026 |
+| D10b | Habilidad especial inicial | **Taunt/burla**: sonido burlón audible por todos, puro generador de clips. El resto del pool (sonido señuelo, intercambio con señuelo, modo rígido) queda en backlog para después del playtest — el framework acepta habilidades nuevas como DataAssets sin código nuevo. | 05-ago-2026 |
+| D15 | Estética | **Ragdoll cómico confirmado**: todo el humor del juego es físico (caminata de cola, empujón, rotura). Guía las animaciones y VFX de Fase 6. | 05-ago-2026 |
+| D18 | Aguantar la respiración | **Sí, como recurso TRANSITORIO — implementado APAGADO** (switch en BalanceData para comparar en playtest). Reglas anti-campeo: (1) el jadeo delator solo ocurre si la barra se agota por completo — soltar antes = recuperación silenciosa pero la respiración vuelve YA; (2) recarga lenta y solo mientras se respira audible (no se encadenan aguantes); (3) el escape del campeo lo garantiza la estructura: en cada fase de Música el cazador baila obligado (D13) y la silla asediada se reubica. Disuasivo extra: campear una silla = no puntuar capturas (D7b). | 05-ago-2026 |
 
 ### Implicaciones de diseño de D1+D2+D3 (derivadas, a validar en prototipo)
 - D1 (infección) + D2 (último vivo) crean una curva de tensión natural: el final de ronda es 1 silla vs N cazadores — el clímax está garantizado por estructura.
@@ -62,14 +65,11 @@ Combinación de **las sillas musicales + el escondite (prop hunt)**:
 
 ## 3. Preguntas abiertas
 
-### ⏳ Ronda 6 — Habilidades finales, tema y respiración (en curso)
-- P10b. Lista de habilidades especiales de las sillas (candidatas: sonido señuelo, intercambio de posición, modo rígido anti-empujón, burla/taunt).
-- P14. Ambientación (propuesta sobre la mesa: casamiento / el abuelo cansado — abierta a alternativas).
-- P18. ¿Las sillas pueden aguantar la respiración? (derivada de D17)
-
-### ⏳ Ronda 7 — Cierre
-- P15. Estética ragdoll cómica (heredada de conversaciones previas, a confirmar para ESTE juego).
+### ⏳ Ronda 7 — Cierre (lo único que queda)
+- P14. Ambientación (propuestas sobre la mesa: casamiento / el abuelo cansado — abierta a alternativas). Se decide con el hermano; no bloquea Fases 4-5.
 - P16. Nombre del juego/modo (brainstorm una vez elegido el tema).
+
+_Resueltas el 05-ago-2026: P10b → D10b (taunt; resto en backlog) · P15 → D15 (ragdoll cómico) · P18 → D18 (aguantar transitorio, implementado apagado)._
 
 ## 4. Riesgos identificados (a testear en prototipo)
 - Que ser cazador al inicio (bailar sin poder actuar) se sienta como pérdida de control → mitigar con agencia durante el baile (posicionarse, espiar, memorizar).
