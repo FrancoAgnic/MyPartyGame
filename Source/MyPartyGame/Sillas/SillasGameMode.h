@@ -1,13 +1,28 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-// FASE 0 — Esqueleto del GameMode del modo Sillas (mapa de juego, no el lobby).
-// Hereda de AGameMode (igual que PTLobbyGameMode) por InactivePlayerArray/reconexión.
-// Asignación de roles, spawn de señuelos y flujo de ronda llegan en Fase 1.
-// Gameplay server-authoritative siempre: este GameMode solo existe en el servidor.
+// FASE 0/1 — GameMode de la arena (L_TestArena). Solo existe en el servidor.
+//
+// Integración con el flujo multiplayer del template (Fase 0):
+//  - Llega gente por seamless travel desde el lobby (ASillasLobbyGameMode dispara
+//    el viaje): HandleSeamlessTravelPlayer restaura DisplayName/bIsHost, que se
+//    pierden al cambiar la clase de PlayerState en el viaje.
+//  - Join-in-progress (conexión directa a mitad de partida): PreLogin valida la
+//    contraseña igual que el lobby y PostLogin asigna nombre/host igual que el lobby.
+//  - Se vacía el server → se destruye la sesión Steam (sin salas fantasma).
+//
+// Máquina de rondas (Fase 1, D3/D11/D12): timers server-authoritative que
+// alternan Musica ↔ Silencio y escriben el estado replicado en ASillasGameState.
+// Los números salen SIEMPRE de USillasBalanceData (convención 2 del plan).
 
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/GameMode.h"
+#include "SillasPlayerState.h"
 #include "SillasGameMode.generated.h"
+
+class USillasBalanceData;
+class ASillasGameState;
+class ASillasSenuelo;
+enum class ESillasFase : uint8;
 
 UCLASS()
 class MYPARTYGAME_API ASillasGameMode : public AGameMode
@@ -16,4 +31,72 @@ class MYPARTYGAME_API ASillasGameMode : public AGameMode
 
 public:
     ASillasGameMode();
+
+    virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
+    virtual void BeginPlay() override;
+    virtual void PreLogin(const FString& Options, const FString& Address,
+                          const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
+    virtual void PostLogin(APlayerController* NewPlayer) override;
+    virtual void HandleSeamlessTravelPlayer(AController*& C) override;
+    virtual void Logout(AController* Exiting) override;
+
+    // Integración con el flujo nativo de spawn (RestartPlayer): la clase de pawn
+    // sale del rol y las sillas nacen en los puntos "SillaSpawn" del mapa,
+    // mezcladas entre los señuelos.
+    virtual UClass* GetDefaultPawnClassForController_Implementation(AController* InController) override;
+    virtual AActor* FindPlayerStart_Implementation(AController* Player, const FString& IncomingName) override;
+
+    // API para la Fase 2 (captura): el server reporta una silla-jugador rota.
+    // Descuenta SillasVivas, convierte al eliminado en cazador (D1) y cierra la
+    // ronda si queda una sola silla (D2).
+    void NotificarSillaEliminada(ASillasPlayerState* Eliminado);
+
+protected:
+    // Config de balance. Se intenta cargar el asset DA_SillasBalance; si no
+    // existe todavía, se usa un objeto con los defaults de C++.
+    UPROPERTY(EditDefaultsOnly, Category="Sillas")
+    TSoftObjectPtr<USillasBalanceData> BalanceAsset;
+
+    UPROPERTY(Transient, BlueprintReadOnly, Category="Sillas")
+    TObjectPtr<USillasBalanceData> Balance;
+
+    // Pawn de la silla-jugador (v0: ASillasPawnSilla).
+    UPROPERTY(EditDefaultsOnly, Category="Sillas")
+    TSubclassOf<APawn> PawnSillaClass;
+
+    // Pawn del cazador (v0: el mannequin BP_ThirdPersonCharacter del template;
+    // el cazador C++ con baile y caminata de cola llega en Fase 2/3).
+    UPROPERTY(EditDefaultsOnly, Category="Sillas")
+    TSubclassOf<APawn> PawnCazadorClass;
+
+private:
+    // --- Flujo de ronda (todo servidor) ---
+    void IniciarRonda();
+    void EmpezarMusica();
+    void EmpezarSilencio();
+    void TerminarRonda();
+    void TerminarMatch();
+
+    void AsignarRoles();
+    void SetFase(ESillasFase NuevaFase, float DuracionSeg);
+
+    // Limpia los señuelos viejos, reparte puntos de spawn entre sillas-jugador y
+    // señuelos (D9), y respawnea el pawn de cada jugador según su rol.
+    void RepartirPawnsYSenuelos();
+
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<ASillasSenuelo>> Senuelos;
+
+    // Punto de spawn reservado por controller para la ronda (lo consume FindPlayerStart).
+    UPROPERTY(Transient)
+    TMap<TObjectPtr<AController>, TObjectPtr<AActor>> PuntoAsignado;
+
+    // D12: duraciones intensificadas según sillas eliminadas en la ronda.
+    float DuracionMusicaActual() const;
+    float DuracionSilencioActual() const;
+
+    ASillasGameState* SillasGS() const;
+
+    FTimerHandle FaseTimer;
+    int32 PlayersJoined = 0;
 };
