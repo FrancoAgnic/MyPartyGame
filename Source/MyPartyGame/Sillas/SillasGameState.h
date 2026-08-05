@@ -31,6 +31,8 @@ class MYPARTYGAME_API ASillasGameState : public APTGameState
     GENERATED_BODY()
 
 public:
+    ASillasGameState();
+
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
     // Config de balance compartida con los clientes: los pawns leen velocidades
@@ -67,5 +69,21 @@ public:
     UFUNCTION(NetMulticast, Unreliable)
     void Multicast_EfectoRoturaSilla(FVector Epicentro);
 
+    // FASE 4 — Sonido posicional one-shot en todos los clientes (taunt, jadeo).
+    // El asset viaja como referencia (todos lo tienen); la atenuación se arma
+    // inline con el radio pedido.
+    UFUNCTION(NetMulticast, Unreliable)
+    void Multicast_SonidoEnPosicion(FVector Posicion, USoundBase* Sonido, float RadioAudible);
+
+    // FASE 4 — Música por fases (D3/D12): loop 2D que suena en cada cliente
+    // durante la fase Musica, con pitch intensificado al caer sillas.
+    // Editable en BP_SillasGameState.
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Sillas|Audio")
+    TObjectPtr<USoundBase> MusicaSound;
+
     UFUNCTION() void OnRep_Fase();
+
+private:
+    UPROPERTY(Transient)
+    TObjectPtr<class UAudioComponent> MusicaComp;
 };

@@ -1,10 +1,38 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "SillasGameState.h"
+#include "SillasBalanceData.h"
+#include "Components/AudioComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
+#include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
+#include "Sound/SoundBase.h"
+#include "UObject/ConstructorHelpers.h"
+
+namespace
+{
+    // Atenuación esférica simple armada inline (los assets de atenuación llegan
+    // con el sound design real de Fase 6).
+    FSoundAttenuationSettings AtenuacionEsferica(float Radio)
+    {
+        FSoundAttenuationSettings S;
+        S.bAttenuate = true;
+        S.AttenuationShape = EAttenuationShape::Sphere;
+        S.AttenuationShapeExtents = FVector(Radio * 0.3f, 0.f, 0.f);
+        S.FalloffDistance = Radio * 0.7f;
+        return S;
+    }
+}
+
+ASillasGameState::ASillasGameState()
+{
+    // Placeholder generado por Tools (ver Fase 4); reemplazable en BP_SillasGameState.
+    static ConstructorHelpers::FObjectFinder<USoundBase> Musica(
+        TEXT("/Game/Sillas/Audio/A_Musica_Loop.A_Musica_Loop"));
+    if (Musica.Succeeded()) MusicaSound = Musica.Object;
+}
 
 void ASillasGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -24,8 +52,44 @@ float ASillasGameState::GetSegundosRestantesDeFase() const
 
 void ASillasGameState::OnRep_Fase()
 {
-    // Hook para clientes: acá va a reaccionar el audio (Fase 4: música/silencio)
-    // y el HUD (Fase 5). En Fase 1 no hay nada que hacer todavía.
+    // FASE 4 — la música ES gameplay (D3): suena exactamente durante la fase
+    // Musica en cada cliente. El HUD (Fase 5) también va a colgarse de acá.
+    if (IsNetMode(NM_DedicatedServer)) return;
+
+    if (Fase == ESillasFase::Musica && MusicaSound)
+    {
+        if (!MusicaComp)
+        {
+            MusicaComp = UGameplayStatics::SpawnSound2D(
+                this, MusicaSound, 1.f, 1.f, 0.f, nullptr,
+                /*bPersistAcrossLevelTransition=*/false, /*bAutoDestroy=*/false);
+        }
+        if (MusicaComp)
+        {
+            // D12 sonoro: al caer sillas la música se acelera (pitch).
+            const USillasBalanceData* B = Balance ? Balance.Get() : GetDefault<USillasBalanceData>();
+            const float f = SillasAlInicioDeRonda > 0
+                ? 1.f - (float)SillasVivas / (float)SillasAlInicioDeRonda : 0.f;
+            MusicaComp->SetPitchMultiplier(FMath::Lerp(1.f, B->MusicaPitchIntensificacionMax, f));
+            MusicaComp->Play();
+        }
+    }
+    else if (MusicaComp && MusicaComp->IsPlaying())
+    {
+        MusicaComp->FadeOut(0.25f, 0.f); // el corte seco lo decide el sound design real (Fase 6)
+    }
+}
+
+void ASillasGameState::Multicast_SonidoEnPosicion_Implementation(
+    FVector Posicion, USoundBase* Sonido, float RadioAudible)
+{
+    if (IsNetMode(NM_DedicatedServer) || !Sonido) return;
+
+    if (UAudioComponent* C = UGameplayStatics::SpawnSoundAtLocation(this, Sonido, Posicion))
+    {
+        C->bOverrideAttenuation  = true;
+        C->AttenuationOverrides  = AtenuacionEsferica(RadioAudible);
+    }
 }
 
 void ASillasGameState::Multicast_EfectoRoturaSilla_Implementation(FVector Epicentro)

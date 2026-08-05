@@ -12,11 +12,13 @@
 #include "GameFramework/Character.h"
 #include "SillasPawnSilla.generated.h"
 
+class UAudioComponent;
 class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
 class USillasAbilityComponent;
+class USoundBase;
 struct FInputActionValue;
 
 UCLASS()
@@ -49,6 +51,20 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Sillas")
     TObjectPtr<USillasAbilityComponent> Habilidad;
 
+    // FASE 4 (D17) — la respiración delatora: loop atenuado corto que SOLO los
+    // cazadores oyen (el gating por rol es local, en ActualizarAudio).
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Sillas|Audio")
+    TObjectPtr<UAudioComponent> RespiracionAudio;
+
+    // FASE 4 (D17) — crujido de movimiento: lo oyen todos, volumen por velocidad
+    // (el sprint es ruidoso por diseño).
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Sillas|Audio")
+    TObjectPtr<UAudioComponent> CrujidoAudio;
+
+    // Jadeo delator al agotar el aguante (D18). Editable en BP.
+    UPROPERTY(EditDefaultsOnly, Category="Sillas|Audio")
+    TObjectPtr<USoundBase> JadeoSound;
+
     // Acciones de input (defaults: assets de /Game/Input del template). Los
     // mapping contexts base los agrega ASillasPlayerController; el pawn solo
     // agrega su contexto runtime de kit (sprint/empujón/habilidad).
@@ -75,6 +91,10 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category="Input")
     TObjectPtr<UInputAction> HabilidadAction;
 
+    // D18 (apagado por defecto): aguantar la respiración (Ctrl izquierdo).
+    UPROPERTY(EditDefaultsOnly, Category="Input")
+    TObjectPtr<UInputAction> AguantarAction;
+
 private:
     UPROPERTY(Transient)
     TObjectPtr<UInputMappingContext> KitIMC;
@@ -88,7 +108,16 @@ private:
     UPROPERTY(Replicated)
     float StaminaActual = 0.f;
 
+    // D18 — aguantando la respiración (server-auth con predicción local).
+    UPROPERTY(Replicated)
+    bool bAguantando = false;
+
+    // Segundos de aguante restantes (replicado para el HUD de Fase 5).
+    UPROPERTY(Replicated)
+    float AguanteActual = 0.f;
+
     float UltimoEmpujonServerTime = -1000.f;
+    float JadeoBloqueoHastaServerTime = -1000.f;
 
     void Move(const FInputActionValue& Value);
     void Look(const FInputActionValue& Value);
@@ -96,9 +125,16 @@ private:
     void OnSprintReleased();
     void OnEmpujon();
     void OnHabilidad();
+    void OnAguantarPressed();
+    void OnAguantarReleased();
 
     UFUNCTION(Server, Reliable) void Server_SetSprint(bool bNuevo);
     UFUNCTION(Server, Reliable) void Server_Empujar();
+    UFUNCTION(Server, Reliable) void Server_SetAguantar(bool bNuevo);
+
+    // Volúmenes locales por frame: crujido según velocidad; respiración solo
+    // audible si el jugador LOCAL es cazador (D17) y la silla no está aguantando.
+    void ActualizarAudio();
 
     UFUNCTION() void OnRep_Sprint();
     void AplicarVelocidad();

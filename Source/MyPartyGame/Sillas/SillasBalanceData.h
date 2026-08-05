@@ -125,6 +125,39 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Senuelos", meta=(ClampMin="0.0"))
     float JitterSpawnSenuelo = 150.0f;
 
+    // ---------- Audio como mecánica (Fase 4 — D17: el cazador caza con el oído) ----------
+
+    // Radio en que un CAZADOR oye la respiración de una silla-jugador (D17).
+    // Atenuación corta y sin indicador visual: quedarse cerca es jugar con fuego.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Audio", meta=(ClampMin="0.0"))
+    float RespiracionRadio = 700.0f;
+
+    // Radio del crujido de movimiento (lo oyen TODOS; a más velocidad más
+    // volumen — el sprint es ruidoso por diseño).
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Audio", meta=(ClampMin="0.0"))
+    float CrujidoRadio = 1600.0f;
+
+    // D12 sonoro: pitch de la música cuando quedan pocas sillas (1.0 = sin cambio).
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Audio", meta=(ClampMin="1.0", ClampMax="2.0"))
+    float MusicaPitchIntensificacionMax = 1.25f;
+
+    // ---------- Aguantar la respiración (D18 — APAGADO por defecto, switch de playtest) ----------
+    // Recurso transitorio anti-barrido: jadeo delator SOLO si la barra se agota;
+    // soltar antes = recuperación silenciosa. El anti-campeo real es la Música (D13).
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Aguante (D18)")
+    bool bAguantarRespiracionActivo = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Aguante (D18)", meta=(ClampMin="0.5"))
+    float AguanteSeg = 4.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Aguante (D18)", meta=(ClampMin="0.0"))
+    float AguanteRegenPorSeg = 0.4f;
+
+    // Tras el jadeo no se puede volver a aguantar por este tiempo.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Aguante (D18)", meta=(ClampMin="0.0"))
+    float JadeoBloqueoSeg = 2.0f;
+
     // ---------- Roles y match (D7, D8) ----------
 
     // D8: default de cazadores iniciales — 1 para 2–5 jugadores, 2 desde este umbral.

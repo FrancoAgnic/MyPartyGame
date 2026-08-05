@@ -4,7 +4,9 @@
 #include "SillasAbilityComponent.h"
 #include "SillasBalanceData.h"
 #include "SillasGameState.h"
+#include "SillasPlayerState.h"
 #include "Camera/CameraComponent.h"
+#include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "EngineUtils.h"
@@ -60,6 +62,26 @@ ASillasPawnSilla::ASillasPawnSilla()
 
     Habilidad = CreateDefaultSubobject<USillasAbilityComponent>(TEXT("Habilidad"));
 
+    // FASE 4 — audio como mecánica (D17). Los assets placeholder los genera
+    // Tools/generar_audio_sillas (via editor); el BP puede reemplazarlos.
+    RespiracionAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("RespiracionAudio"));
+    RespiracionAudio->SetupAttachment(GetCapsuleComponent());
+    RespiracionAudio->bAutoActivate = false;
+    static ConstructorHelpers::FObjectFinder<USoundBase> Resp(
+        TEXT("/Game/Sillas/Audio/A_Respiracion_Loop.A_Respiracion_Loop"));
+    if (Resp.Succeeded()) RespiracionAudio->SetSound(Resp.Object);
+
+    CrujidoAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("CrujidoAudio"));
+    CrujidoAudio->SetupAttachment(GetCapsuleComponent());
+    CrujidoAudio->bAutoActivate = false;
+    static ConstructorHelpers::FObjectFinder<USoundBase> Cruj(
+        TEXT("/Game/Sillas/Audio/A_Crujido_Loop.A_Crujido_Loop"));
+    if (Cruj.Succeeded()) CrujidoAudio->SetSound(Cruj.Object);
+
+    static ConstructorHelpers::FObjectFinder<USoundBase> Jadeo(
+        TEXT("/Game/Sillas/Audio/A_Jadeo.A_Jadeo"));
+    if (Jadeo.Succeeded()) JadeoSound = Jadeo.Object;
+
     // Defaults de input: assets del template en /Game/Input (el BP puede pisarlos).
     static ConstructorHelpers::FObjectFinder<UInputAction> IAMove(
         TEXT("/Game/Input/Actions/IA_Move.IA_Move"));
@@ -78,23 +100,61 @@ ASillasPawnSilla::ASillasPawnSilla()
     if (IAJump.Succeeded()) JumpAction = IAJump.Object;
 }
 
+namespace
+{
+    FSoundAttenuationSettings AtenuacionEsfericaSilla(float Radio)
+    {
+        FSoundAttenuationSettings S;
+        S.bAttenuate = true;
+        S.AttenuationShape = EAttenuationShape::Sphere;
+        S.AttenuationShapeExtents = FVector(Radio * 0.3f, 0.f, 0.f);
+        S.FalloffDistance = Radio * 0.7f;
+        return S;
+    }
+}
+
 void ASillasPawnSilla::BeginPlay()
 {
     Super::BeginPlay();
 
-    StaminaActual = GetBalance()->StaminaSprintSeg;
+    const USillasBalanceData* B = GetBalance();
+    StaminaActual = B->StaminaSprintSeg;
+    AguanteActual = B->AguanteSeg;
     AplicarVelocidad();
+
+    // Arrancar los loops de audio con su atenuación (mudos; ActualizarAudio
+    // decide volumen por frame en cada cliente).
+    if (!IsNetMode(NM_DedicatedServer))
+    {
+        if (RespiracionAudio && RespiracionAudio->Sound)
+        {
+            RespiracionAudio->bOverrideAttenuation = true;
+            RespiracionAudio->AttenuationOverrides = AtenuacionEsfericaSilla(B->RespiracionRadio);
+            RespiracionAudio->SetVolumeMultiplier(0.f);
+            RespiracionAudio->Play();
+        }
+        if (CrujidoAudio && CrujidoAudio->Sound)
+        {
+            CrujidoAudio->bOverrideAttenuation = true;
+            CrujidoAudio->AttenuationOverrides = AtenuacionEsfericaSilla(B->CrujidoRadio);
+            CrujidoAudio->SetVolumeMultiplier(0.f);
+            CrujidoAudio->Play();
+        }
+    }
 }
 
 void ASillasPawnSilla::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
 
+    // Volúmenes locales (cada cliente decide qué oye — el gating por rol de D17).
+    ActualizarAudio();
+
     if (!HasAuthority()) return;
 
     // D10: drenar stamina solo si sprintea Y se mueve; regenerar si no sprintea.
-    // (El sprint parado no gasta pero tampoco sirve — y el sonido de Fase 4 va
-    // a delatar el movimiento real, no la tecla.)
+    // (El sprint parado no gasta pero tampoco sirve — y el crujido delata el
+    // movimiento real, no la tecla.)
     const bool bMoviendose = GetVelocity().SizeSquared2D() > 25.f;
     const USillasBalanceData* B = GetBalance();
 
@@ -112,6 +172,32 @@ void ASillasPawnSilla::Tick(float DeltaSeconds)
     {
         StaminaActual = FMath::Min(StaminaActual + B->StaminaRegenPorSeg * DeltaSeconds,
                                    B->StaminaSprintSeg);
+    }
+
+    // D18 — aguante: drena mientras aguanta; si se AGOTA, jadeo delator para
+    // todos y bloqueo temporal. Soltar antes = recuperación silenciosa (sin
+    // jadeo). Regen solo cuando respira normal (no se encadenan aguantes).
+    if (bAguantando)
+    {
+        AguanteActual -= DeltaSeconds;
+        if (AguanteActual <= 0.f)
+        {
+            AguanteActual = 0.f;
+            bAguantando = false;
+
+            ASillasGameState* GS = GetWorld()->GetGameState<ASillasGameState>();
+            JadeoBloqueoHastaServerTime =
+                (GS ? GS->GetServerWorldTimeSeconds() : 0.f) + B->JadeoBloqueoSeg;
+            if (GS && JadeoSound)
+            {
+                GS->Multicast_SonidoEnPosicion(GetActorLocation(), JadeoSound, B->CrujidoRadio);
+            }
+        }
+    }
+    else
+    {
+        AguanteActual = FMath::Min(AguanteActual + B->AguanteRegenPorSeg * DeltaSeconds,
+                                   B->AguanteSeg);
     }
 }
 
@@ -136,6 +222,8 @@ void ASillasPawnSilla::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ASillasPawnSilla, bSprint);
     DOREPLIFETIME(ASillasPawnSilla, StaminaActual);
+    DOREPLIFETIME(ASillasPawnSilla, bAguantando);
+    DOREPLIFETIME(ASillasPawnSilla, AguanteActual);
 }
 
 void ASillasPawnSilla::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -161,12 +249,19 @@ void ASillasPawnSilla::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
         IA->ValueType = EInputActionValueType::Boolean;
         HabilidadAction = IA;
     }
+    if (!AguantarAction)
+    {
+        UInputAction* IA = NewObject<UInputAction>(this, TEXT("IA_Aguantar_Runtime"));
+        IA->ValueType = EInputActionValueType::Boolean;
+        AguantarAction = IA;
+    }
     if (!KitIMC)
     {
         KitIMC = NewObject<UInputMappingContext>(this, TEXT("IMC_KitSilla_Runtime"));
         KitIMC->MapKey(SprintAction,    EKeys::LeftShift);
         KitIMC->MapKey(EmpujonAction,   EKeys::LeftMouseButton);
         KitIMC->MapKey(HabilidadAction, EKeys::Q);
+        KitIMC->MapKey(AguantarAction,  EKeys::LeftControl);
     }
     if (const APlayerController* PC = Cast<APlayerController>(GetController()))
     {
@@ -200,6 +295,12 @@ void ASillasPawnSilla::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
             Input->BindAction(EmpujonAction, ETriggerEvent::Started, this, &ASillasPawnSilla::OnEmpujon);
         if (HabilidadAction)
             Input->BindAction(HabilidadAction, ETriggerEvent::Started, this, &ASillasPawnSilla::OnHabilidad);
+        if (AguantarAction)
+        {
+            Input->BindAction(AguantarAction, ETriggerEvent::Started,   this, &ASillasPawnSilla::OnAguantarPressed);
+            Input->BindAction(AguantarAction, ETriggerEvent::Completed, this, &ASillasPawnSilla::OnAguantarReleased);
+            Input->BindAction(AguantarAction, ETriggerEvent::Canceled,  this, &ASillasPawnSilla::OnAguantarReleased);
+        }
     }
 }
 
@@ -296,6 +397,70 @@ void ASillasPawnSilla::OnHabilidad()
     if (Habilidad)
     {
         Habilidad->IntentarActivar();
+    }
+}
+
+void ASillasPawnSilla::OnAguantarPressed()
+{
+    if (!GetBalance()->bAguantarRespiracionActivo) return; // D18: apagado por defecto
+    if (!HasAuthority()) { bAguantando = true; }           // predicción local (solo audio propio)
+    Server_SetAguantar(true);
+}
+
+void ASillasPawnSilla::OnAguantarReleased()
+{
+    if (!GetBalance()->bAguantarRespiracionActivo) return;
+    if (!HasAuthority()) { bAguantando = false; }
+    Server_SetAguantar(false);
+}
+
+void ASillasPawnSilla::Server_SetAguantar_Implementation(bool bNuevo)
+{
+    const USillasBalanceData* B = GetBalance();
+    const ASillasGameState* GS = GetWorld()->GetGameState<ASillasGameState>();
+
+    if (bNuevo)
+    {
+        const float Ahora = GS ? GS->GetServerWorldTimeSeconds() : 0.f;
+        if (!B->bAguantarRespiracionActivo ||       // switch de playtest apagado
+            AguanteActual <= 0.f ||                 // sin aire
+            Ahora < JadeoBloqueoHastaServerTime)    // castigo post-jadeo
+        {
+            bNuevo = false;
+        }
+    }
+
+    bAguantando = bNuevo;
+}
+
+void ASillasPawnSilla::ActualizarAudio()
+{
+    if (IsNetMode(NM_DedicatedServer)) return;
+
+    const USillasBalanceData* B = GetBalance();
+
+    // Crujido: volumen proporcional a la velocidad real — el sprint es ruidoso
+    // por diseño (D17); lo oyen todos, incluida la propia silla.
+    if (CrujidoAudio)
+    {
+        const float Vel = GetVelocity().Size2D();
+        CrujidoAudio->SetVolumeMultiplier(
+            FMath::Clamp(Vel / FMath::Max(1.f, B->VelocidadSprintSilla), 0.f, 1.f));
+    }
+
+    // Respiración: SOLO la oyen los cazadores (D17) — el gating es local, cada
+    // cliente mira el rol de SU jugador. Aguantando (D18), se silencia.
+    if (RespiracionAudio)
+    {
+        bool bOyenteEsCazador = false;
+        if (const APlayerController* PC = GetWorld()->GetFirstPlayerController())
+        {
+            if (const ASillasPlayerState* PS = PC->GetPlayerState<ASillasPlayerState>())
+            {
+                bOyenteEsCazador = (PS->Rol == ESillasRole::Cazador);
+            }
+        }
+        RespiracionAudio->SetVolumeMultiplier((bOyenteEsCazador && !bAguantando) ? 1.f : 0.f);
     }
 }
 
