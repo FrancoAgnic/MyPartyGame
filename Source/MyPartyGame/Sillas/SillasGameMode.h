@@ -51,6 +51,10 @@ public:
     // ronda si queda una sola silla (D2).
     void NotificarSillaEliminada(ASillasPlayerState* Eliminado);
 
+    // FASE 2 — Resolución server-authoritative del sentado de la caminata de
+    // cola (D5/D6): señuelo → dolor 1.8s · silla-jugador → rotura + infección.
+    void ResolverSentado(class ASillasPawnCazador* Cazador, AActor* Objetivo);
+
 protected:
     // Config de balance. Se intenta cargar el asset DA_SillasBalance; si no
     // existe todavía, se usa un objeto con los defaults de C++.
@@ -83,6 +87,10 @@ private:
     // Limpia los señuelos viejos, reparte puntos de spawn entre sillas-jugador y
     // señuelos (D9), y respawnea el pawn de cada jugador según su rol.
     void RepartirPawnsYSenuelos();
+
+    // Rompe una silla-jugador: escombros, eliminación y re-posesión como cazador
+    // en el lugar de la rotura (D1: la infección no corta el flujo de la ronda).
+    void RomperSilla(class ASillasPawnSilla* Silla, class ASillasPawnCazador* Cazador);
 
     UPROPERTY(Transient)
     TArray<TObjectPtr<ASillasSenuelo>> Senuelos;

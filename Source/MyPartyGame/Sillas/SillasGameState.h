@@ -62,5 +62,10 @@ public:
     UFUNCTION(BlueprintPure, Category="Sillas")
     float GetSegundosRestantesDeFase() const;
 
+    // FASE 2 — VFX greybox de rotura: pedazos con física en cada cliente
+    // (cosmético local, no replicado; el server solo manda el epicentro).
+    UFUNCTION(NetMulticast, Unreliable)
+    void Multicast_EfectoRoturaSilla(FVector Epicentro);
+
     UFUNCTION() void OnRep_Fase();
 };

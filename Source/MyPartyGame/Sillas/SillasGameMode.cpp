@@ -3,10 +3,12 @@
 #include "SillasGameMode.h"
 #include "SillasBalanceData.h"
 #include "SillasGameState.h"
+#include "SillasPawnCazador.h"
 #include "SillasPawnSilla.h"
 #include "SillasPlayerController.h"
 #include "SillasPlayerState.h"
 #include "SillasSenuelo.h"
+#include "EngineUtils.h"
 #include "MultiplayerSessionsSubsystem.h"
 #include "Engine/TargetPoint.h"
 #include "Kismet/GameplayStatics.h"
@@ -28,14 +30,14 @@ ASillasGameMode::ASillasGameMode()
     BalanceAsset = TSoftObjectPtr<USillasBalanceData>(
         FSoftObjectPath(TEXT("/Game/Sillas/Data/DA_SillasBalance.DA_SillasBalance")));
 
-    // Pawns por rol (Fase 1). El mannequin del template hace de cazador v0 y
-    // también de pawn de la fase Esperando (llegada del lobby, antes de la ronda).
-    PawnSillaClass = ASillasPawnSilla::StaticClass();
+    // Pawns por rol. El mannequin del template queda solo como pawn de la fase
+    // Esperando (llegada del lobby, antes de la primera ronda).
+    PawnSillaClass   = ASillasPawnSilla::StaticClass();
+    PawnCazadorClass = ASillasPawnCazador::StaticClass();
     static ConstructorHelpers::FClassFinder<APawn> Mannequin(
         TEXT("/Game/ThirdPerson/Blueprints/BP_ThirdPersonCharacter"));
     if (Mannequin.Succeeded())
     {
-        PawnCazadorClass = Mannequin.Class;
         DefaultPawnClass = Mannequin.Class;
     }
 }
@@ -106,6 +108,12 @@ void ASillasGameMode::IniciarRonda()
 
 void ASillasGameMode::EmpezarMusica()
 {
+    // D5+D11: la música corta cualquier caminata de cola en curso.
+    for (TActorIterator<ASillasPawnCazador> It(GetWorld()); It; ++It)
+    {
+        It->CancelarCapturaServer();
+    }
+
     const float Dur = DuracionMusicaActual();
     SetFase(ESillasFase::Musica, Dur);
     GetWorldTimerManager().SetTimer(
@@ -145,6 +153,66 @@ void ASillasGameMode::TerminarMatch()
     // Fase 5: podio y vuelta al lobby. Por ahora el match queda en FinMatch.
     SetFase(ESillasFase::FinMatch, 0.f);
     UE_LOG(LogTemp, Log, TEXT("[Sillas] Match terminado."));
+}
+
+void ASillasGameMode::ResolverSentado(ASillasPawnCazador* Cazador, AActor* Objetivo)
+{
+    if (!HasAuthority() || !Cazador || !Objetivo) return;
+
+    if (Cast<ASillasSenuelo>(Objetivo))
+    {
+        // D6: señuelo sólido — cazador adolorido, el señuelo ni se inmuta.
+        Cazador->AplicarDolorServer();
+        UE_LOG(LogTemp, Log, TEXT("[Sillas] %s se sentó en un señuelo: %.1fs de dolor."),
+               *GetNameSafe(Cazador->GetPlayerState()), Balance->DuracionDolorSeg);
+        return;
+    }
+
+    if (ASillasPawnSilla* Silla = Cast<ASillasPawnSilla>(Objetivo))
+    {
+        RomperSilla(Silla, Cazador);
+    }
+}
+
+void ASillasGameMode::RomperSilla(ASillasPawnSilla* Silla, ASillasPawnCazador* Cazador)
+{
+    ASillasGameState* GS = SillasGS();
+    if (!GS || !Silla) return;
+
+    const FVector Lugar = Silla->GetActorLocation();
+    AController* Victima = Silla->GetController();
+    ASillasPlayerState* PS = Victima ? Victima->GetPlayerState<ASillasPlayerState>() : nullptr;
+
+    UE_LOG(LogTemp, Log, TEXT("[Sillas] ¡Silla rota! %s cazó a %s."),
+           *GetNameSafe(Cazador ? Cazador->GetPlayerState() : nullptr), *GetNameSafe(PS));
+
+    // Teatro en todos los clientes + la silla desaparece.
+    GS->Multicast_EfectoRoturaSilla(Lugar);
+    Silla->Destroy();
+
+    // El sentado termina la caminata del cazador (los puntos por captura llegan en Fase 5).
+    if (Cazador)
+    {
+        Cazador->CancelarCapturaServer();
+    }
+
+    // D1 (infección): el eliminado se re-posee como cazador EN EL LUGAR de la
+    // rotura, sin cortar el flujo de la ronda.
+    if (Victima && PawnCazadorClass)
+    {
+        FActorSpawnParameters Params;
+        Params.SpawnCollisionHandlingOverride =
+            ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+        if (APawn* Nuevo = GetWorld()->SpawnActor<APawn>(
+                PawnCazadorClass, Lugar + FVector(0.f, 0.f, 40.f),
+                FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f), Params))
+        {
+            Victima->Possess(Nuevo);
+        }
+    }
+
+    // Al final: puede disparar FinRonda (D2) si quedó una sola silla viva.
+    NotificarSillaEliminada(PS);
 }
 
 void ASillasGameMode::NotificarSillaEliminada(ASillasPlayerState* Eliminado)
