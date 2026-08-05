@@ -696,9 +696,22 @@ void APTLobbyCharacter::SetSculptPose(bool bEnable, UAnimationAsset* PoseAnim)
     }
     else
     {
-        // Restaurar la animación normal (el AnimBP vuelve a manejar baile + jiggle).
+        // Restaurar la animación normal: volver al AnimBP y RE-INICIALIZARLO para que el grafo
+        // (idle/caminar + el jiggle por AnimDynamics) vuelva a correr desde cero. Sin el InitAnim,
+        // a veces quedaba congelado en la última pose del SingleNode (bug: "no vuelve la animación").
+        //
         M->bPauseAnims = false;
         M->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+        M->InitAnim(true);
+
+        // Restaurar el JIGGLE del physics asset EXACTAMENTE como estaba. Al entrar a esculpir se
+        // apagó todo con SetAllBodiesSimulatePhysics(false) + PutAllRigidBodiesToSleep(), y los
+        // huesos de jiggle son de tipo "Simulated" (simulan solos, no dependen del flag del
+        // componente), así que ni SetSimulatePhysics(true) ni SetAllBodiesSimulatePhysics(true)
+        // los devuelven bien (el segundo además ragdollea todo). La forma correcta es RECREAR el
+        // estado físico desde el physics asset: cada cuerpo vuelve a su tipo original
+        // (Kinematic sigue la animación, Simulated hace el jiggle) → queda igual que al inicio.
+        M->RecreatePhysicsState();
     }
 }
 
@@ -842,7 +855,12 @@ void APTLobbyCharacter::ApplyGameplayMovementMode()
 {
     bForceFlying = true;
     if (UCharacterMovementComponent* M = GetCharacterMovement())
-        M->bOrientRotationToMovement = false; // en el gameplay molesta; en el lobby queda lindo
+        M->bOrientRotationToMovement = false; // en el gameplay no orientamos al movimiento...
+    // ...sino que el personaje mira hacia donde apunta la cámara (controller yaw). Así los demás
+    // ven a dónde estás mirando en el Lvl-01. La rotación del actor se replica a los otros clientes.
+    // (En el lobby queda al revés: el constructor deja bUseControllerRotationYaw=false y
+    //  bOrientRotationToMovement=true, para que el personaje mire hacia donde camina.)
+    bUseControllerRotationYaw = true;
     SetFlyingMode(true);
 }
 
@@ -1277,12 +1295,17 @@ void APTLobbyCharacter::ClearHeadPaint()
     RecomputeHeadPaintBytes();
 }
 
+static void PT_UploadWholeTex(UTexture2D* Tex, const TArray<FColor>& Px); // definido más abajo
+
 void APTLobbyCharacter::ClearBodyPaint()
 {
     if (!PaintTex || PaintPixels.Num() == 0) return;
     for (FColor& C : PaintPixels) C = FColor(0, 0, 0, 0);
-    DirtyMinX = DirtyMinY = 0; DirtyMaxX = PaintTexN - 1; DirtyMaxY = PaintTexN - 1;
-    FlushBodyPaint();
+    // Subir la textura COMPLETA (igual que UndoBodyPaint, que anda seguro), en vez del flush parcial:
+    // así el reset se ve siempre, sin depender de la región sucia.
+    PT_UploadWholeTex(PaintTex, PaintPixels);
+    // Descartar cualquier región sucia pendiente (ya subimos todo). Sentinel "vacío" del código.
+    DirtyMinX = DirtyMinY = 0; DirtyMaxX = DirtyMaxY = -1;
     RecomputeBodyPaintBytes();
 }
 

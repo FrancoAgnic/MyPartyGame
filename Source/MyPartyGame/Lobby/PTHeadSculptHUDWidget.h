@@ -24,6 +24,7 @@ class UImage;
 class UProgressBar;
 class UMaterialInterface;
 class UTexture2D;
+class UButton;
 class UPTToolSlotWidget;
 class APTLobbyPlayerController;
 
@@ -71,9 +72,19 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* ConfirmSlot;  // Enter: guarda y equipa
     UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* BackSlot;     // Escape: abre el popup
     UPROPERTY(meta = (BindWidgetOptional)) UWidget*           DiscardPopup; // panel del popup (oculto por defecto)
-    UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* PopupYesSlot; // Enter = Sí (guardar)
-    UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* PopupNoSlot;  // Escape = No (descartar)
+    UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* PopupYesSlot; // Enter = Sí (guardar) — visual
+    UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* PopupNoSlot;  // Escape = No (descartar) — visual
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*        PopupText;    // texto del popup
+    // Botones CLICKEABLES del popup (opción con mouse; conviven con Enter/Esc). Nombralos EXACTO en
+    // el WBP: "PopupApplyButton" / "PopupDiscardButton". Sus textos se setean desde acá (localizados),
+    // pero si preferís poner el texto a mano en el WBP, dejá los TextBlock sin nombrar.
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*    PopupApplyButton;   // "Aplicar y equipar" (guarda)
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*    PopupDiscardButton; // "No guardar" (descarta)
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* PopupApplyText;     // texto dentro del botón aplicar
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* PopupDiscardText;   // texto dentro del botón descartar
+
+    UFUNCTION() void OnPopupApplyClicked();   // → ResolveHeadBack(true)  (guardar y equipar)
+    UFUNCTION() void OnPopupDiscardClicked(); // → ResolveHeadBack(false) (descartar)
     // Iconos de las teclas (asignar en Details): Enter para confirmar/Sí, Esc para back/No.
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconEnter = nullptr;
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconEsc   = nullptr;

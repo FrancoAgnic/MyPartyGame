@@ -7,6 +7,8 @@
 #include "Net/UnrealNetwork.h"
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
+#include "Serialization/MemoryWriter.h"
+#include "Serialization/MemoryReader.h"
 #include "../Lobby/PTLobbyCharacter.h" // BuildEyesSection (esferas/mesh de ojos)
 
 // ─── Marching Cubes lookup tables (Bourke / Lorensen & Cline) ──────────────
@@ -1343,6 +1345,35 @@ void APTSculptVolume::ClearAll()
     bPageDirty  = true;  // fuerza subida COMPLETA de la page table vacía
     bPaintDirty = false;
     UploadColorField();
+}
+
+void APTSculptVolume::SaveFieldState(TArray<uint8>& Out)
+{
+    Out.Reset();
+    FMemoryWriter Ar(Out, /*bIsPersistent=*/true);
+    Field.SerializeState(Ar);
+}
+
+bool APTSculptVolume::LoadFieldState(const TArray<uint8>& In)
+{
+    if (In.Num() == 0) return false;
+
+    // Cargar el campo (SerializeState limpia lo previo y marca todos los bricks dirty).
+    FMemoryReader Ar(In, /*bIsPersistent=*/true);
+    Field.SerializeState(Ar);
+    Field.VoxelSize        = VoxelSize;         // asegurar los parámetros del volumen actual
+    Field.DisplaySmoothing = DisplaySmoothing;
+
+    // Undo del volumen (pintura/ojos) también en blanco: los respaldos apuntarían a un campo viejo.
+    VolumeUndoStack.Reset();
+    CurrentVolumeUndo = FPTVolumeUndo();
+    bRecordingStroke  = false;
+
+    // Re-mallar YA todos los bricks cargados. El material (ClayMaterialOverride) lo aplica
+    // RebuildDirty al crear cada sección.
+    if (Mesh) Mesh->ClearAllMeshSections();
+    RebuildDirty();
+    return true;
 }
 
 void APTSculptVolume::Multicast_ClearAll_Implementation()

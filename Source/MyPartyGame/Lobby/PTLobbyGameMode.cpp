@@ -35,7 +35,8 @@ void APTLobbyGameMode::BeginPlay()
         {
             PTGS->SessionDisplayName = Sessions->GetPendingSessionName();
             PTGS->SessionCode        = Sessions->GetGeneratedSessionCode();
-            PTGS->MaxPlayers         = Sessions->GetPendingMaxPlayers();
+            const int32 M = Sessions->GetPendingMaxPlayers();
+            PTGS->MaxPlayers         = (M > 0) ? M : 10; // sin sesión (PIE/local) → mostrar /10 igual
         }
     }
 }

@@ -313,6 +313,24 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         SetIgnoreMoveInput(bMenuOpen);
     }
 
+    // ── Fases con UI que necesita el foco: elección de palabra (solo el escultor) y scoreboard
+    //    de fin de partida (todos). Antes se podía mover la cámara/volar sobre esos paneles y el
+    //    movimiento le robaba el foco a la UI. Igual que el menú de pausa: frená look+move por
+    //    transición mientras dura la fase (contador balanceado con su propio flag).
+    bool bPhaseWantsUILock = false;
+    if (const APTSculptGameState* G = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr)
+    {
+        bPhaseWantsUILock =
+            (G->TurnPhase == EPTTurnPhase::GameOver) ||
+            (G->TurnPhase == EPTTurnPhase::ChoosingWord && G->IsLocalPlayerSculptor());
+    }
+    if (bPhaseWantsUILock != bGamePhaseInputLocked)
+    {
+        bGamePhaseInputLocked = bPhaseWantsUILock;
+        SetIgnoreLookInput(bPhaseWantsUILock);
+        SetIgnoreMoveInput(bPhaseWantsUILock);
+    }
+
     // (La lista de controles con H ahora vive en la UI del HUD: ver UPTGameplayHUDWidget::SetControlsVisible.)
 
     // Rueda de color abierta (mantener RMB): seguir el cursor para elegir matiz/saturación.

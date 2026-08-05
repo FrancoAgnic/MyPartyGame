@@ -52,31 +52,19 @@ int32 UPTGameInstance::LoadCustomWordsFromCSVFile(const FString& Path)
 
     TArray<FPTWordEntry> Parsed;
 
-    // Formato NUEVO (multi-idioma): si la primera línea es un encabezado con columnas conocidas
-    // ("Category"/"Difficulty" o códigos de idioma), lo parsea el mismo lector que el banco default,
-    // así un CSV propio también puede traer varios idiomas.
-    if (Lines.Num() > 1)
+    // Formato del BANCO DEFAULT (Name,Category,Difficulty,ES,EN,... o con WordEs/WordEn): se intenta
+    // SIEMPRE primero el mismo lector que el banco default, que mapea las columnas POR NOMBRE del
+    // encabezado (así toma bien todos los idiomas). Si no reconoce columnas de palabra, devuelve 0 y
+    // se cae al parser simple de abajo.
+    if (Lines.Num() > 1 && PTWordBank::ParseWordCsv(Lines, Parsed) && Parsed.Num() > 0)
     {
-        TArray<FString> Header;
-        PTText::SplitCsvLine(Lines[0], Header);
-        bool bLooksLikeHeader = false;
-        for (const FString& H : Header)
-        {
-            const FString T = H.TrimStartAndEnd();
-            if (T.Equals(TEXT("Category"), ESearchCase::IgnoreCase) ||
-                T.Equals(TEXT("Difficulty"), ESearchCase::IgnoreCase) ||
-                PTText::IsLanguageAvailable(T))
-            { bLooksLikeHeader = true; break; }
-        }
-        if (bLooksLikeHeader && PTWordBank::ParseWordCsv(Lines, Parsed))
-        {
-            PendingMatchSettings.CustomWords     = MoveTemp(Parsed);
-            PendingMatchSettings.bUseCustomWords = true;
-            UE_LOG(LogTemp, Log, TEXT("[GameInstance] CSV multi-idioma: %d palabras desde %s"),
-                   PendingMatchSettings.CustomWords.Num(), *Path);
-            return PendingMatchSettings.CustomWords.Num();
-        }
+        PendingMatchSettings.CustomWords     = MoveTemp(Parsed);
+        PendingMatchSettings.bUseCustomWords = true;
+        UE_LOG(LogTemp, Log, TEXT("[GameInstance] CSV (formato banco): %d palabras desde %s"),
+               PendingMatchSettings.CustomWords.Num(), *Path);
+        return PendingMatchSettings.CustomWords.Num();
     }
+    Parsed.Reset();
 
     // Formato SIMPLE de siempre: "Palabra,Categoria,Dificultad" (un solo idioma). Se sigue
     // aceptando para no romper los CSV que la gente ya tenga armados.

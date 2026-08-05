@@ -78,7 +78,27 @@ void UPTHeadSculptHUDWidget::BuildOnce()
     if (PopupYesSlot) PopupYesSlot->SetSlot(IconEnter, FText::FromString(TEXT("Enter")), PTText::Get(TEXT("LOCKER_SAVE")));
     if (PopupNoSlot)  PopupNoSlot->SetSlot(IconEsc,    FText::FromString(TEXT("Esc")),   PTText::Get(TEXT("LOCKER_DISCARD")));
     if (PopupText)    PopupText->SetText(PTText::Get(TEXT("LOCKER_SAVE_CHANGES")));
+
+    // Botones CLICKEABLES del popup: texto localizado + wire del OnClicked (una sola vez).
+    if (PopupApplyText)   PopupApplyText->SetText(PTText::Get(TEXT("LOCKER_APPLY_EQUIP")));
+    if (PopupDiscardText) PopupDiscardText->SetText(PTText::Get(TEXT("LOCKER_DONT_SAVE")));
+    if (PopupApplyButton && !PopupApplyButton->OnClicked.IsAlreadyBound(this, &UPTHeadSculptHUDWidget::OnPopupApplyClicked))
+        PopupApplyButton->OnClicked.AddDynamic(this, &UPTHeadSculptHUDWidget::OnPopupApplyClicked);
+    if (PopupDiscardButton && !PopupDiscardButton->OnClicked.IsAlreadyBound(this, &UPTHeadSculptHUDWidget::OnPopupDiscardClicked))
+        PopupDiscardButton->OnClicked.AddDynamic(this, &UPTHeadSculptHUDWidget::OnPopupDiscardClicked);
+
     ShowDiscardPopup(false); // arranca oculto
+}
+
+void UPTHeadSculptHUDWidget::OnPopupApplyClicked()
+{
+    if (APTLobbyPlayerController* PC = Cast<APTLobbyPlayerController>(GetOwningPlayer()))
+        PC->ResolveHeadBack(true); // guardar y equipar
+}
+void UPTHeadSculptHUDWidget::OnPopupDiscardClicked()
+{
+    if (APTLobbyPlayerController* PC = Cast<APTLobbyPlayerController>(GetOwningPlayer()))
+        PC->ResolveHeadBack(false); // descartar
 }
 
 void UPTHeadSculptHUDWidget::ShowDiscardPopup(bool bShow)
@@ -109,8 +129,16 @@ void UPTHeadSculptHUDWidget::Refresh(APTLobbyPlayerController* PC)
         : (PC->GetHeadEditMode() == EPTEditMode::Add   ? 0
         :  PC->GetHeadEditMode() == EPTEditMode::Erase ? 1
         :  PC->GetHeadEditMode() == EPTEditMode::Paint ? 2 : -1);
+    // Editando un slot de CUERPO solo se puede PINTAR: mostrar únicamente el slot de Paint (índice 2)
+    // y colapsar las demás herramientas (Agregar/Borrar/Ojos), que no aplican sin volumen de cabeza.
+    const bool bBodyOnly = PC->IsHeadBodyOnlyEdit();
     for (int32 i = 0; i < ToolSlots.Num(); ++i)
-        if (ToolSlots[i]) ToolSlots[i]->SetSelected(i == Equipped);
+        if (ToolSlots[i])
+        {
+            ToolSlots[i]->SetVisibility(
+                (bBodyOnly && i != 2) ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+            ToolSlots[i]->SetSelected(i == Equipped);
+        }
 
     // ── Formas: solo se muestran con Add/Erase/Paint (no con Ojos); se resalta la equipada ──
     const bool bShowShapes = PC->HeadToolUsesShapes();
@@ -128,9 +156,10 @@ void UPTHeadSculptHUDWidget::Refresh(APTLobbyPlayerController* PC)
     if (ColorSlot) ColorSlot->SetSelected(PC->IsHeadColorPickerOpen());
 
     // ── SHIFT (pintar cuerpo): solo visible con Paint; resaltado si estás en modo cuerpo ──
+    // En body-only NO se muestra: no hay cabeza a la que alternar, el foco ya está fijo en el cuerpo.
     if (PaintBodySlot)
     {
-        const bool bPaintTool = !PC->IsHeadEyesToolActive() && PC->GetHeadEditMode() == EPTEditMode::Paint;
+        const bool bPaintTool = !bBodyOnly && !PC->IsHeadEyesToolActive() && PC->GetHeadEditMode() == EPTEditMode::Paint;
         PaintBodySlot->SetVisibility(bPaintTool ? ESlateVisibility::HitTestInvisible
                                                 : ESlateVisibility::Collapsed);
         if (bPaintTool) PaintBodySlot->SetSelected(PC->IsBodyPaintMode());

@@ -107,6 +107,8 @@ LOCKER_CONFIRM,Confirmar,Confirm,Confirmar,Bestätigen,Confirmer,Conferma
 LOCKER_BACK,Salir,Exit,Sair,Zurück,Quitter,Esci
 LOCKER_SAVE,Guardar,Save,Salvar,Speichern,Enregistrer,Salva
 LOCKER_DISCARD,Descartar,Discard,Descartar,Verwerfen,Abandonner,Scarta
+LOCKER_APPLY_EQUIP,Aplicar y equipar,Apply & equip,Aplicar e equipar,Übernehmen & ausrüsten,Appliquer et équiper,Applica ed equipaggia
+LOCKER_DONT_SAVE,No guardar,Don't save,Não salvar,Nicht speichern,Ne pas enregistrer,Non salvare
 HEAD_PAINT_BUDGET,Pintura,Paint,Tinta,Farbe,Peinture,Vernice
 HEAD_PAINT_BUDGET_FULL,¡Sin pintura!,Out of paint!,Sem tinta!,Keine Farbe mehr!,Plus de peinture!,Vernice esaurita!
 KEY_MOVE,Mover,Move,Mover,Bewegen,Se déplacer,Muovi

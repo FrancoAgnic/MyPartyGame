@@ -4,6 +4,7 @@
 #include "PTGameState.h"
 #include "PTPlayerState.h"
 #include "PTLobbyPlayerController.h"
+#include "PTPlayerRowWidget.h"
 #include "../PTTextTable.h"
 #include "Components/VerticalBox.h"
 #include "Components/TextBlock.h"
@@ -105,17 +106,38 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
     {
         PlayersBox->ClearChildren();
 
+        // Ordenar: el ANFITRIÓN (corona) siempre primero; el resto en su orden original. Así todos
+        // (host y clientes) ven al host arriba de la lista.
+        TArray<APTPlayerState*> Ordered;
         for (APlayerState* PS : PTGS->PlayerArray)
+            if (APTPlayerState* PTPS = Cast<APTPlayerState>(PS)) Ordered.Add(PTPS);
+        Ordered.StableSort([](const APTPlayerState& A, const APTPlayerState& B)
+            { return A.bIsHost && !B.bIsHost; }); // true si A (host) debe ir antes que B
+
+        for (APTPlayerState* PTPS : Ordered)
         {
-            APTPlayerState* PTPS = Cast<APTPlayerState>(PS);
             if (!PTPS) continue;
 
-            UTextBlock* Row = NewObject<UTextBlock>(this);
-            FString Label = PTPS->GetDisplayNameSafe();
-            if (PTPS->bIsHost) Label += TEXT(" (") + PTText::GetStr(TEXT("LOBBY_HOST")) + TEXT(")");
-            Label += TEXT(" — ") + PTText::GetStr(PTPS->bIsReady ? TEXT("LOBBY_READY") : TEXT("LOBBY_WAITING"));
-            Row->SetText(FText::FromString(Label));
-            PlayersBox->AddChildToVerticalBox(Row);
+            if (PlayerRowClass)
+            {
+                // Fila = widget propio (nombre + corona si es host + check listo/no-listo teñido).
+                if (UPTPlayerRowWidget* Row = CreateWidget<UPTPlayerRowWidget>(this, PlayerRowClass))
+                {
+                    Row->SetRow(PTPS->GetDisplayNameSafe(), PTPS->bIsHost, PTPS->bIsReady,
+                                ReadyColor, NotReadyColor, MaxNameChars);
+                    PlayersBox->AddChildToVerticalBox(Row);
+                }
+            }
+            else
+            {
+                // Fallback (sin WBP de fila asignado): texto plano como antes.
+                UTextBlock* Row = NewObject<UTextBlock>(this);
+                FString Label = PTPS->GetDisplayNameSafe();
+                if (PTPS->bIsHost) Label += TEXT(" (") + PTText::GetStr(TEXT("LOBBY_HOST")) + TEXT(")");
+                Label += TEXT(" — ") + PTText::GetStr(PTPS->bIsReady ? TEXT("LOBBY_READY") : TEXT("LOBBY_WAITING"));
+                Row->SetText(FText::FromString(Label));
+                PlayersBox->AddChildToVerticalBox(Row);
+            }
         }
     }
 
@@ -127,14 +149,26 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
 
     if (LobbyStatusText)
     {
-        FString Status;
-        switch (PTGS->LobbyState)
+        // UN solo texto: normalmente "Esperando jugadores..."; durante la cuenta regresiva (todos listos)
+        // muestra "Empezando en X...". Si alguien saca el listo, CountdownSecondsRemaining vuelve a -1 y
+        // el texto vuelve solo al de esperando.
+        const int32 Seconds = PTGS->CountdownSecondsRemaining;
+        if (Seconds >= 0)
         {
-        case EPTLobbyState::Starting: Status = PTText::GetStr(TEXT("LOBBY_STARTING")); break;
-        case EPTLobbyState::InGame:   Status = PTText::GetStr(TEXT("LOBBY_IN_GAME"));  break;
-        default:                      Status = PTText::GetStr(TEXT("LOBBY_WAITING_PLAYERS"));
+            FFormatOrderedArguments Args; Args.Add(FText::AsNumber(Seconds));
+            LobbyStatusText->SetText(PTText::Format(TEXT("LOBBY_STARTS_IN"), Args));
         }
-        LobbyStatusText->SetText(FText::FromString(Status));
+        else
+        {
+            FString Status;
+            switch (PTGS->LobbyState)
+            {
+            case EPTLobbyState::Starting: Status = PTText::GetStr(TEXT("LOBBY_STARTING")); break;
+            case EPTLobbyState::InGame:   Status = PTText::GetStr(TEXT("LOBBY_IN_GAME"));  break;
+            default:                      Status = PTText::GetStr(TEXT("LOBBY_WAITING_PLAYERS"));
+            }
+            LobbyStatusText->SetText(FText::FromString(Status));
+        }
     }
 
     CachedRoomCode = PTGS->SessionCode;
@@ -172,26 +206,11 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
         if (ReadyButtonText)
             ReadyButtonText->SetText(PTText::Get(bReady ? TEXT("LOBBY_BTN_READY") : TEXT("LOBBY_BTN_NOT_READY")));
         if (ReadyButton)
-            ReadyButton->SetBackgroundColor(bReady
-                ? FLinearColor(0.47f, 0.87f, 0.50f)    // verde pastel (+50% saturación)
-                : FLinearColor(0.94f, 0.36f, 0.36f));  // rojo pastel (+50% saturación)
+            ReadyButton->SetBackgroundColor(bReady ? ReadyColor : NotReadyColor); // mismos colores que los checks
     }
 
-    if (CountdownText)
-    {
-        const int32 Seconds = PTGS->CountdownSecondsRemaining;
-        if (Seconds >= 0)
-        {
-            CountdownText->SetVisibility(ESlateVisibility::Visible);
-            FFormatOrderedArguments Args;
-            Args.Add(FText::AsNumber(Seconds));
-            CountdownText->SetText(PTText::Format(TEXT("LOBBY_STARTS_IN"), Args));
-        }
-        else
-        {
-            CountdownText->SetVisibility(ESlateVisibility::Collapsed);
-        }
-    }
+    // (El texto de cuenta regresiva se unificó en LobbyStatusText; ya no se usa un CountdownText aparte.)
+    if (CountdownText) CountdownText->SetVisibility(ESlateVisibility::Collapsed);
 
     // ── Diagnóstico de red (ping + packet loss) ──
     // On-screen (visible en build Development). Ya en el lobby ves tu ping antes de arrancar.

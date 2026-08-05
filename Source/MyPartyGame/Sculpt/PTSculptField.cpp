@@ -93,6 +93,49 @@ void FPTSculptField::ClearUndo()
     bRecording = false;
 }
 
+void FPTSculptField::SerializeState(FArchive& Ar)
+{
+    int32 Version = 1;
+    Ar << Version;
+
+    if (Ar.IsLoading())
+    {
+        // Estado limpio antes de cargar: sin bricks, sin secciones ni undo previos.
+        Bricks.Reset();
+        DirtyBricks.Reset();
+        SectionOf.Reset();
+        Flatness.Reset();
+        NextSection = 0;
+        ClearUndo();
+
+        int32 Count = 0;
+        Ar << Count;
+        for (int32 i = 0; i < Count; ++i)
+        {
+            FPTBrickKey Key;
+            Ar << Key;
+            TSharedPtr<FPTBrick> B = MakeShared<FPTBrick>();
+            Ar << B->SDF;    // TArray<float>
+            Ar << B->Color;  // TArray<FColor>
+            // AddTime queda en su init (-1e9 = "vieja", no brilla).
+            Bricks.Add(Key, B);
+            DirtyBricks.Add(Key); // marcar para re-mallar
+        }
+    }
+    else
+    {
+        int32 Count = Bricks.Num();
+        Ar << Count;
+        for (TPair<FPTBrickKey, TSharedPtr<FPTBrick>>& It : Bricks)
+        {
+            FPTBrickKey Key = It.Key;
+            Ar << Key;
+            Ar << It.Value->SDF;
+            Ar << It.Value->Color;
+        }
+    }
+}
+
 int32 FPTSculptField::SectionIndex(const FPTBrickKey& Key)
 {
     if (int32* Found = SectionOf.Find(Key)) return *Found;

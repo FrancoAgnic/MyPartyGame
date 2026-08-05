@@ -58,6 +58,12 @@ protected:
     UFUNCTION() void OnReadyClicked();
     UFUNCTION() void OnLockerClicked();
 
+    // ── Lista de jugadores (fila = widget propio) + colores de listo/no-listo ──
+    UPROPERTY(EditAnywhere, Category = "Lobby") TSubclassOf<class UPTPlayerRowWidget> PlayerRowClass;
+    UPROPERTY(EditAnywhere, Category = "Lobby") int32 MaxNameChars = 14;
+    UPROPERTY(EditAnywhere, Category = "Lobby") FLinearColor ReadyColor    = FLinearColor(0.10f, 0.80f, 0.12f, 1.f); // verde intenso
+    UPROPERTY(EditAnywhere, Category = "Lobby") FLinearColor NotReadyColor = FLinearColor(0.90f, 0.10f, 0.10f, 1.f); // rojo intenso
+
     void RefreshPlayerList();
 
     // ── Config de partida (SOLO host) ──────────────────────────────────────────

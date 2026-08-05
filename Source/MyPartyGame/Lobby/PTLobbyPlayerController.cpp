@@ -30,6 +30,12 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "../UI/PTColorPickerWidget.h"
+#include "Serialization/MemoryWriter.h"
+#include "Serialization/MemoryReader.h"
+
+// Magic del blob de estado CRUDO de la cabeza (RawState del Locker, para re-editar): campo SDF del
+// volumen + ojos locales. 'PTR2' = PT Raw v2 (distinto del blob COCINADO 'PTH2').
+static const uint32 PT_HEADRAW_MAGIC = 0x50545232; // 'PTR2'
 
 void APTLobbyPlayerController::Server_RequestStartGame_Implementation()
 {
@@ -266,7 +272,8 @@ void APTLobbyPlayerController::SetupInputComponent()
     }
 
     // Tecla P: el host arranca la partida (temporal hasta que exista el botón en el HUD).
-    InputComponent->BindKey(EKeys::P, IE_Pressed, this, &APTLobbyPlayerController::OnPressedStartGame);
+    // (La tecla P para forzar inicio se sacó: creaba una sesión "fantasma". Solo se juega desde
+    //  Crear/Unirse partida + el arranque automático cuando todos están listos.)
 
     // Tecla G: entrar/salir del modo esculpir tu cabeza custom.
     // (La tecla G quedó reemplazada por el botón "Locker" del menú principal.)
@@ -289,7 +296,8 @@ void APTLobbyPlayerController::SetupInputComponent()
     // Rueda del mouse mantenida = rotar el shape (doble click = reset). Igual que el gameplay.
     InputComponent->BindKey(EKeys::MiddleMouseButton, IE_Pressed,  this, &APTLobbyPlayerController::OnHeadRotatePressed);
     InputComponent->BindKey(EKeys::MiddleMouseButton, IE_Released, this, &APTLobbyPlayerController::OnHeadRotateReleased);
-    // Backspace: toque = undo; mantenido = borrar todo (cabeza + pintura del cuerpo).
+    // Backspace: toque = undo; mantenido = resetear. Por EVENTOS (IsInputKeyDown no sirve con Backspace
+    // en este modo). El acumulado y la confirmación de soltada (con debounce anti auto-repeat) van en PlayerTick.
     InputComponent->BindKey(EKeys::BackSpace, IE_Pressed,  this, &APTLobbyPlayerController::OnHeadClearPressed);
     InputComponent->BindKey(EKeys::BackSpace, IE_Released, this, &APTLobbyPlayerController::OnHeadClearReleased);
     // SHIFT = (solo en Paint) alternar entre pintar la cabeza (arcilla) y el cuerpo (piel).
@@ -330,6 +338,39 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
         HeadOrbitYaw   += dYaw   * HeadOrbitSpeed * DeltaTime;
         HeadOrbitPitch  = FMath::Clamp(HeadOrbitPitch + dPitch * HeadOrbitSpeed * DeltaTime, -85.f, 85.f);
         UpdateHeadCam();
+    }
+
+    // Mantener BACKSPACE HeadClearHoldDuration s = RESET del contexto actual (cuerpo o cabeza).
+    // IMPORTANTE: va ACÁ, ANTES de los returns de color-picker y body-paint. Antes estaba después del
+    // `return` del bloque bBodyPaintMode, así que en modo cuerpo NUNCA se ejecutaba (el contador no
+    // subía y la soltada no se procesaba). No hay auto-repetición de Backspace (verificado por log):
+    // un solo Pressed/Released por pulsación, así que basta acumular DeltaTime mientras está apretado.
+    if (bHeadClearHeld && !bHeadClearFired)
+    {
+        HeadClearHoldTime += DeltaTime;
+        if (HeadClearHoldTime >= HeadClearHoldDuration)
+        {
+            bHeadClearFired = true; // ya reseteó: no repetir mientras se sigue manteniendo
+            APTLobbyCharacter* C = Cast<APTLobbyCharacter>(GetPawn());
+            if (bBodyPaintMode || bHeadSculptBodyOnly)
+            {
+                if (C) C->ClearBodyPaint(); // solo la pintura del cuerpo
+            }
+            else
+            {
+                // Cabeza: el "default" es la bolita inicial (color piel) en el centro, no vacío.
+                if (HeadVolume)
+                {
+                    HeadVolume->Multicast_ClearAll_Implementation();
+                    HeadVolume->ApplyStamp(HeadVolume->GetActorLocation(), EPTStampShape::Sphere, 40.f,
+                                           EPTEditMode::Add, FLinearColor(0.95f, 0.78f, 0.66f));
+                }
+                HeadStampRotation = FRotator::ZeroRotator;
+                HeadEyes.Reset(); RebuildEyesLiveMesh();
+                HeadUndoKinds.Reset();
+                if (C) C->ClearHeadPaint();
+            }
+        }
     }
 
     // Color picker abierto (RMB): tickearlo con el cursor y tomar el color en vivo. No se esculpe.
@@ -417,29 +458,8 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
         SetMouseLocation((int32)HeadRotateCursorX, (int32)HeadRotateCursorY); // fijar el cursor
     }
 
-    // Borrar TODO: mantener BACKSPACE HeadClearHoldDuration segundos → limpia cabeza + pintura del cuerpo.
-    if (bHeadClearHeld)
-    {
-        HeadClearHoldTime += DeltaTime;
-        if (HeadClearHoldTime >= HeadClearHoldDuration)
-        {
-            bHeadClearHeld = false; HeadClearHoldTime = 0.f;
-            APTLobbyCharacter* C = Cast<APTLobbyCharacter>(GetPawn());
-            // Reset INDIVIDUAL: solo lo del contexto en el que estás.
-            if (bBodyPaintMode)
-            {
-                if (C) C->ClearBodyPaint(); // solo la pintura del cuerpo
-            }
-            else
-            {
-                if (HeadVolume) HeadVolume->Multicast_ClearAll_Implementation(); // geometría de la cabeza
-                HeadStampRotation = FRotator::ZeroRotator;
-                HeadEyes.Reset(); RebuildEyesLiveMesh();     // ojos
-                HeadUndoKinds.Reset();
-                if (C) C->ClearHeadPaint();                  // pintura de la cabeza
-            }
-        }
-    }
+    // (El mantener-Backspace se procesa ARRIBA, antes de los returns de color-picker/body, en
+    //  UpdateHeadClearHoldTick — si no, en modo cuerpo nunca se ejecutaba.)
 
     // Punto de la brocha (cursor) — sirve para el preview y para esculpir. Normal para el preview.
     FVector Pt, Nrm = FVector::UpVector;
@@ -660,6 +680,7 @@ bool APTLobbyPlayerController::IsPaintBudgetFull() const
 void APTLobbyPlayerController::OnHeadStampPressed()
 {
     if (!bHeadSculptMode) return;
+    if (bDiscardPopupOpen) return; // popup abierto: los clicks son para sus botones, no para esculpir
     if (bHeadEyesTool) { PlaceEyeAtCursor(); return; } // ojos: un ojo por click (no continuo)
 
     APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn());
@@ -735,18 +756,19 @@ void APTLobbyPlayerController::OnHeadClearPressed()
     if (!bHeadSculptMode) return;
     bHeadClearHeld    = true;
     HeadClearHoldTime = 0.f;
+    bHeadClearFired   = false;
 }
 void APTLobbyPlayerController::OnHeadClearReleased()
 {
-    // Toque corto = UNDO, INDIVIDUAL por contexto:
-    //  - En modo cuerpo: deshace el último trazo del CUERPO.
-    //  - En modo cabeza: deshace lo último de la cabeza (geometría / pintura / ojos), en orden.
-    if (bHeadClearHeld && HeadClearHoldTime < HeadUndoTapMaxTime)
+    if (!bHeadSculptMode) return;
+    // Toque corto (soltó antes del umbral y NO llegó a resetear) = UNDO individual por contexto.
+    // Backspace no tiene auto-repetición acá (verificado por log), así que Released es confiable.
+    if (bHeadClearHeld && !bHeadClearFired && HeadClearHoldTime < HeadUndoTapMaxTime)
     {
         APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn());
-        if (bBodyPaintMode)
+        if (bBodyPaintMode || bHeadSculptBodyOnly)
         {
-            if (Char) Char->UndoBodyPaint(); // ya recalcula el peso adentro
+            if (Char) Char->UndoBodyPaint();
         }
         else if (HeadUndoKinds.Num() > 0)
         {
@@ -760,6 +782,7 @@ void APTLobbyPlayerController::OnHeadClearReleased()
     }
     bHeadClearHeld    = false;
     HeadClearHoldTime = 0.f;
+    bHeadClearFired   = false;
 }
 void APTLobbyPlayerController::OnHeadColorSave()
 {
@@ -790,6 +813,8 @@ void APTLobbyPlayerController::OnHeadScrollDown()
 }
 void APTLobbyPlayerController::OnHeadToggleBodyPaint()
 {
+    // En modo edición de un SLOT DE CUERPO no se puede salir del foco del cuerpo (no hay cabeza que editar).
+    if (bHeadSculptBodyOnly) return;
     // Solo tiene sentido con la herramienta Paint (no Ojos): alterna cabeza ↔ cuerpo.
     if (!bHeadSculptMode || bHeadEyesTool || HeadEditMode != EPTEditMode::Paint) return;
     bBodyPaintMode = !bBodyPaintMode;
@@ -797,10 +822,12 @@ void APTLobbyPlayerController::OnHeadToggleBodyPaint()
     UpdateHeadCam();        // reencuadra al cuerpo o a la cabeza
 }
 
-void APTLobbyPlayerController::OnHeadModeAdd()   { if (bHeadSculptMode) { if (bBodyPaintMode) { bBodyPaintMode = false; UpdateHeadCam(); } HeadEditMode = EPTEditMode::Add;   bHeadEyesTool = false; } }
+// En modo edición de un slot de CUERPO (bHeadSculptBodyOnly) SOLO se puede pintar: no hay volumen de
+// cabeza, así que Agregar/Borrar/Ojos dejarían el modo trabado. Se ignoran las otras herramientas.
+void APTLobbyPlayerController::OnHeadModeAdd()   { if (bHeadSculptMode && !bHeadSculptBodyOnly) { if (bBodyPaintMode) { bBodyPaintMode = false; UpdateHeadCam(); } HeadEditMode = EPTEditMode::Add;   bHeadEyesTool = false; } }
 void APTLobbyPlayerController::OnHeadModeErase()
 {
-    if (!bHeadSculptMode) return;
+    if (!bHeadSculptMode || bHeadSculptBodyOnly) return;
     // Entrar en Borrar arranca siempre en Esfera (igual que el gameplay): es la forma esperada
     // para corregir, y una forma rara heredada de Agregar haría el primer borrado confuso.
     if (bBodyPaintMode) { bBodyPaintMode = false; UpdateHeadCam(); } // Borrar es siempre en la cabeza
@@ -808,10 +835,10 @@ void APTLobbyPlayerController::OnHeadModeErase()
     HeadEditMode = EPTEditMode::Erase; bHeadEyesTool = false;
 }
 void APTLobbyPlayerController::OnHeadModePaint() { if (bHeadSculptMode) { HeadEditMode = EPTEditMode::Paint; bHeadEyesTool = false; } } // Paint arranca en la cabeza; SHIFT lleva al cuerpo
-void APTLobbyPlayerController::OnHeadModeEyes()  { if (bHeadSculptMode) { if (bBodyPaintMode) { bBodyPaintMode = false; UpdateHeadCam(); } bHeadEyesTool = true; } }
+void APTLobbyPlayerController::OnHeadModeEyes()  { if (bHeadSculptMode && !bHeadSculptBodyOnly) { if (bBodyPaintMode) { bBodyPaintMode = false; UpdateHeadCam(); } bHeadEyesTool = true; } }
 void APTLobbyPlayerController::OnHeadCycleShape()
 {
-    if (!bHeadSculptMode || bHeadEyesTool) return; // los ojos siempre son esferas
+    if (!bHeadSculptMode || bHeadEyesTool || bHeadSculptBodyOnly) return; // ojos = esfera; en body-only no hay formas
     switch (HeadStampShape)
     {
     case EPTStampShape::Sphere:   HeadStampShape = EPTStampShape::Cube;     break;
@@ -1095,8 +1122,30 @@ void APTLobbyPlayerController::EnterHeadSculpt()
         UGameplayStatics::FinishSpawningActor(HeadVolume, HeadXform);
     }
 
-    // Bolita inicial de arcilla para que haya algo que esculpir (color piel neutro).
-    if (HeadVolume)
+    // ¿RE-editar un slot que ya tiene estado CRUDO guardado? (Fase 2) Si sí, cargamos su geometría
+    // y sus ojos en vez de empezar de cero. La pintura 2D se restaura del BakedBlob más abajo.
+    UPTLockerSubsystem* Lk = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLockerSubsystem>() : nullptr;
+    bool bReEdit = false;
+    TArray<FVector4> LoadedEyes;
+    if (HeadVolume && Lk && EditingHeadSlot >= 0)
+    {
+        const TArray<uint8>& RawState = Lk->GetHeadRawState(EditingHeadSlot);
+        if (RawState.Num() > 0)
+        {
+            FMemoryReader Ar(RawState, /*bIsPersistent=*/true);
+            uint32 Magic = 0; Ar << Magic;
+            if (Magic == PT_HEADRAW_MAGIC)
+            {
+                TArray<uint8> FieldBytes;
+                Ar << FieldBytes;
+                Ar << LoadedEyes;
+                if (HeadVolume->LoadFieldState(FieldBytes)) bReEdit = true;
+            }
+        }
+    }
+
+    // Slot nuevo (sin crudo): bolita inicial de arcilla para tener algo que esculpir (color piel).
+    if (HeadVolume && !bReEdit)
         HeadVolume->ApplyStamp(Center, EPTStampShape::Sphere, 40.f, EPTEditMode::Add, FLinearColor(0.95f, 0.78f, 0.66f));
 
     // Pintado 2D de la cabeza (igual al cuerpo): centro FIJO de proyección esférica = centro del volumen
@@ -1105,7 +1154,25 @@ void APTLobbyPlayerController::EnterHeadSculpt()
         if (APTLobbyCharacter* PaintChar = Cast<APTLobbyCharacter>(GetPawn()))
         {
             const FVector CenterLocal = HeadVolume->GetActorTransform().InverseTransformPosition(Center);
-            PaintChar->InitHeadPaint(CenterLocal);
+
+            // Re-editar: restaurar la textura de pintura desde el BakedBlob del slot (headPNG + centro).
+            bool bPaintRestored = false;
+            if (bReEdit && Lk)
+            {
+                const TArray<uint8>& Baked = Lk->GetHeadBaked(EditingHeadSlot);
+                if (Baked.Num() > 0)
+                {
+                    TArray<FPTHeadSection> Secs; FVector BCenter; TArray<uint8> HeadPNG, BodyPNG;
+                    if (PaintChar->ParseHeadBlob(Baked, Secs, BCenter, HeadPNG, BodyPNG) && HeadPNG.Num() > 0)
+                    {
+                        PaintChar->ApplyHeadPaintFromPNG(HeadPNG, BCenter);
+                        bPaintRestored = true;
+                    }
+                }
+            }
+            if (!bPaintRestored)
+                PaintChar->InitHeadPaint(CenterLocal); // slot nuevo → textura en blanco
+
             HeadPaintMID = PaintChar->CreateHeadPaintMID();
             PaintChar->RecomputeHeadPaintBytes(); // peso inicial (para la barra de presupuesto)
             PaintChar->RecomputeBodyPaintBytes();
@@ -1116,9 +1183,10 @@ void APTLobbyPlayerController::EnterHeadSculpt()
                     for (int32 s = 0; s < CM->GetNumSections(); ++s) CM->SetMaterial(s, HeadPaintMID);
         }
 
-    // Reset de la herramienta de ojos + malla viva de ojos (pegada al volumen para verlos colocados).
+    // Herramienta de ojos + malla viva de ojos (pegada al volumen para verlos colocados). Si estamos
+    // re-editando, arrancamos con los ojos guardados; si es un slot nuevo, vacío.
     bHeadEyesTool = false;
-    HeadEyes.Reset();
+    HeadEyes = LoadedEyes; // vacío si no había crudo
     if (HeadVolume)
     {
         HeadEyesLiveMesh = NewObject<UProceduralMeshComponent>(HeadVolume, TEXT("HeadEyesLiveMesh"));
@@ -1126,6 +1194,7 @@ void APTLobbyPlayerController::EnterHeadSculpt()
         HeadEyesLiveMesh->SetCastShadow(false);
         HeadEyesLiveMesh->SetupAttachment(HeadVolume->GetRootComponent());
         HeadEyesLiveMesh->RegisterComponent();
+        RebuildEyesLiveMesh(); // dibujar los ojos restaurados (si los hay)
     }
   } // fin if(!bHeadSculptBodyOnly)
   else
@@ -1206,15 +1275,55 @@ void APTLobbyPlayerController::EnterHeadSculpt()
 void APTLobbyPlayerController::ConfirmHeadEdit()
 {
     if (!bHeadSculptMode) return;
-    if (bDiscardPopupOpen) ResolveHeadBack(true); // Enter en el popup = Sí (guardar)
-    else                   ExitHeadSculpt(true);  // Enter directo = confirmar
+    // Con el popup abierto, las TECLAS ya no lo resuelven: solo se resuelve con CLICK en los botones
+    // (evita que un Enter/Escape sin querer guarde o descarte). Enter directo (sin popup) sí confirma.
+    if (bDiscardPopupOpen) return;
+    ExitHeadSculpt(true); // Enter directo = confirmar (guardar + equipar)
 }
 void APTLobbyPlayerController::RequestHeadBack()
 {
     if (!bHeadSculptMode) return;
-    if (bDiscardPopupOpen) { ResolveHeadBack(false); return; } // Escape con popup abierto = No (descartar)
+    // Con el popup YA abierto, Escape lo CIERRA y vuelve a editar (ignora el popup). No descarta ni
+    // aplica: eso solo se hace clickeando los botones (Aplicar y equipar / No guardar). Así un doble
+    // Escape sin querer ya no borra la creación.
+    if (bDiscardPopupOpen)
+    {
+        bDiscardPopupOpen = false;
+        if (HeadHUD)
+        {
+            HeadHUD->ShowDiscardPopup(false);
+            HeadHUD->SetVisibility(ESlateVisibility::HitTestInvisible); // volver a click-through para esculpir
+        }
+        ApplyHeadSculptInputMode(); // restaurar el input de esculpido (cursor + captura al click)
+        return;
+    }
     bDiscardPopupOpen = true;
-    if (HeadHUD) HeadHUD->ShowDiscardPopup(true);
+    bHeadStamping     = false; // cortar cualquier trazo en curso al abrir el popup
+    if (HeadHUD)
+    {
+        HeadHUD->ShowDiscardPopup(true);
+        // El HUD se agregó como HitTestInvisible (para no robarle el mouse al esculpido): así NINGÚN
+        // hijo, ni los botones, recibía clicks/hover. Al abrir el popup lo pasamos a
+        // SelfHitTestInvisible → el root sigue sin bloquear, pero los HIJOS (los botones del popup)
+        // SÍ reciben mouse. Al cerrar se sale de la edición (ExitHeadSculpt destruye el HUD).
+        HeadHUD->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+    }
+
+    // Foco en el popup: cursor visible y clicks que llegan a los BOTONES (NoCapture: el viewport no
+    // captura el click durante el mouse-down). El esculpido queda bloqueado por bDiscardPopupOpen
+    // (ver OnHeadStampPressed), así clickear "afuera" no hace nada y no se pierde el foco del popup.
+    // GameAndUI (no UIOnly) para que Enter/Esc sigan funcionando como alternativa a los botones.
+    FInputModeGameAndUI Mode;
+    Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+    Mode.SetHideCursorDuringCapture(false);
+    SetInputMode(Mode);
+    SetShowMouseCursor(true);
+    if (ULocalPlayer* LP = GetLocalPlayer())
+        if (UGameViewportClient* VC = LP->ViewportClient)
+        {
+            VC->SetMouseCaptureMode(EMouseCaptureMode::NoCapture);
+            VC->SetMouseLockMode(EMouseLockMode::DoNotLock);
+        }
 }
 void APTLobbyPlayerController::ResolveHeadBack(bool bSave)
 {
@@ -1267,10 +1376,22 @@ void APTLobbyPlayerController::ExitHeadSculpt(bool bSaveChanges)
             TArray<uint8> Blob;
             Char->BakeAndReplicateHead(HeadVolume->GetMeshComponent(), HeadVolume, HeadEyes, Blob);
             TArray<uint8> Thumb; Char->CaptureLookThumbnailPNG(Thumb, 256);
+
+            // Estado CRUDO (Fase 2): campo SDF del volumen + ojos (locales). Permite volver a este
+            // slot y SEGUIR esculpiendo desde donde lo dejaste (la pintura 2D se restaura del BakedBlob).
+            TArray<uint8> Raw;
+            {
+                TArray<uint8> FieldBytes; HeadVolume->SaveFieldState(FieldBytes);
+                FMemoryWriter Ar(Raw, /*bIsPersistent=*/true);
+                uint32 Magic = PT_HEADRAW_MAGIC; Ar << Magic;
+                Ar << FieldBytes;
+                Ar << HeadEyes;
+            }
+
             const int32 Slot = (EditingHeadSlot >= 0) ? EditingHeadSlot : 0; // fallback slot 0
             if (L && Blob.Num() > 0)
             {
-                L->SaveHeadSlot(Slot, Blob, TArray<uint8>(), Thumb); // RawState (crudo) → Fase 2
+                L->SaveHeadSlot(Slot, Blob, Raw, Thumb); // ahora SÍ guardamos el crudo (Fase 2)
                 L->EquipHead(Slot);
             }
             // Subir el blob horneado (ya incluye el cuerpo pintado en esta sesión).

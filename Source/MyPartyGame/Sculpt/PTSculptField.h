@@ -123,6 +123,12 @@ public:
     bool CanUndo() const { return UndoStack.Num() > 0; }
     void ClearUndo();              // se llama al limpiar todo (ya no hay a qué volver)
 
+    // ── Serialización del estado CRUDO (para re-editar) ─────────────────────
+    // Guarda/carga todos los bricks (SDF + Color). El AddTime NO se guarda (es solo para el brillo
+    // de arcilla nueva). Bidireccional (usa Ar.IsLoading()). Al CARGAR: limpia lo previo, deja el
+    // undo vacío y marca todos los bricks dirty para que el volumen los vuelva a mallar.
+    void SerializeState(FArchive& Ar);
+
     // ── Surface Nets (estático, corre en ThreadPool) ───────────────────────
     static void MeshBrick(const FBrickSnapshot& Snap, FPTBrickMesh& Out);
 

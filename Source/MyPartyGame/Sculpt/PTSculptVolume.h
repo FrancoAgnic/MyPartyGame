@@ -172,6 +172,13 @@ public:
     // Reusa las texturas de color existentes (solo re-sube la page table vacía).
     void ClearAll();
 
+    // ── Estado CRUDO (para re-editar la cabeza del Locker) ──────────────────
+    // Serializa SOLO la geometría (campo SDF + color por celda). NO incluye ojos ni la textura de
+    // pintura 2D de la cabeza (de eso se encarga el controller del modo G). LoadFieldState fuerza
+    // el re-mallado; el material correcto lo pone RebuildDirty al crear cada sección.
+    void SaveFieldState(TArray<uint8>& Out);
+    bool LoadFieldState(const TArray<uint8>& In);
+
     // Reset sincronizado en todos: el GameMode (servidor) lo llama al empezar cada turno.
     UFUNCTION(NetMulticast, Reliable)
     void Multicast_ClearAll();

@@ -319,6 +319,10 @@ private:
     bool bPreviewDirty      = true;
     bool bMovementCtxReady  = false; // mapping context de movimiento ya agregado
     bool bMenuInputLocked   = false; // look/move pausados por el menú de pausa (transición)
+    // look/move pausados mientras hay una UI de partida que necesita el foco (elección de palabra
+    // del escultor / scoreboard de fin de partida). Sin esto, mover la cámara le sacaba el foco a
+    // esos paneles. Transición aparte para no desbalancear el contador de IgnoreLook/MoveInput.
+    bool bGamePhaseInputLocked = false;
 
     // Interpolación de trazo (sellos continuos entre frames).
     bool    bStrokeActive = false;

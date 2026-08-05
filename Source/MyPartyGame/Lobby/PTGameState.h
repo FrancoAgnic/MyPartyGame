@@ -33,9 +33,9 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")
     FString SessionCode;
 
-    // Tope de jugadores elegido al crear la sesión (para el "4/8" del HUD del lobby).
+    // Tope de jugadores elegido al crear la sesión (para el "4/10" del HUD del lobby). Default 10.
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")
-    int32 MaxPlayers = 0;
+    int32 MaxPlayers = 10;
 
     // Segundos restantes del countdown automático (todos listos → arranca). -1 = sin countdown.
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")

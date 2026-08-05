@@ -61,7 +61,7 @@ struct FPTMatchSettings
     // Tuneables numéricos.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Match") float TurnDuration   = 90.f; // seg de dibujo
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Match") int32 NumRounds      = 3;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Match") float RevealFraction = 0.7f; // 0..0.95
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Match") float RevealFraction = 0.3f; // 0..0.95 (default 30%, igual que el game mode)
 
     // Filtros de palabras. Array vacío = sin filtrar (entran todas).
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Match") TArray<FName> ActiveCategories;

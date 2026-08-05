@@ -382,8 +382,15 @@ void APTSculptGameMode::RequestReturnToLobby(APTPlayerState* Requester)
 {
     if (!Requester || !Requester->bIsHost) return; // solo el anfitrión decide
     GetWorldTimerManager().ClearTimer(PhaseTimer);
-    UE_LOG(LogTemp, Log, TEXT("[SculptGM] Volviendo al lobby: %s"), *LobbyMapPath);
-    GetWorld()->ServerTravel(LobbyMapPath + TEXT("?listen"), /*bAbsolute=*/true);
+
+    // ANTES: GetWorld()->ServerTravel(LobbyMapPath + "?listen") — un ServerTravel directo desde el
+    // scoreboard cerraba/reemplazaba el mundo del servidor con los clientes todavía conectados y se
+    // les caía el juego. Usamos el MISMO camino grácil que el botón "Salir" del menú de pausa y el
+    // alt-f4 (HostLeaveGame): primero avisa a cada cliente por RPC confiable para que se vayan al
+    // menú por su cuenta, y recién después destruye la sesión y se va el host. Así los clientes
+    // vuelven al lobby/menú en vez de crashear.
+    UE_LOG(LogTemp, Log, TEXT("[SculptGM] Salir desde scoreboard: usando el camino grácil (HostLeaveGame)."));
+    HostLeaveGame();
 }
 
 void APTSculptGameMode::HandlePlayerGuessedCorrectly(APTPlayerState* Guesser)

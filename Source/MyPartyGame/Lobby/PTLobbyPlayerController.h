@@ -51,6 +51,9 @@ public:
     // Sub-modo "pintar el CUERPO" (solo con la herramienta Paint; se alterna con SHIFT). false =
     // foco en la cabeza (pinta la arcilla); true = foco en el cuerpo (pinta la piel del personaje).
     bool          IsBodyPaintMode()       const { return bBodyPaintMode; }
+    /** true si estás editando un SLOT DE CUERPO (solo pintar; sin volumen de cabeza). Para que el
+     *  HUD muestre únicamente la herramienta de pintar y colapse las demás. */
+    bool          IsHeadBodyOnlyEdit()    const { return bHeadSculptBodyOnly; }
     /** true si la herramienta actual pinta (Paint en cabeza, o pintar el cuerpo). Para la barra de presupuesto. */
     bool          IsHeadPaintingTool()    const { return bHeadSculptMode && !bHeadEyesTool && (bBodyPaintMode || HeadEditMode == EPTEditMode::Paint); }
     /** Presupuesto de pintura 0..1 (peso PNG replicable / máximo permitido). */
@@ -125,7 +128,7 @@ protected:
     FString SelfMapPath = TEXT("/Game/Template/levels/MainMenu");
 
     UPROPERTY(EditAnywhere, Category="UI")
-    int32 DefaultMaxPlayers = 8;
+    int32 DefaultMaxPlayers = 10;
 
     // ── Esculpir cabeza custom (tecla G) ────────────────────────────────────
     // BP con el ClayMaterial asignado y un BoundsBox chico (tamaño cabeza). Se spawnea al entrar.
@@ -329,10 +332,14 @@ protected:
     FVector  HeadRotateFrozenPt = FVector::ZeroVector, HeadRotateFrozenNrm = FVector::UpVector;
     bool     bHeadRotateHasFrozen = false;
     UPROPERTY(EditAnywhere, Category="Head") float HeadShapeRotateSpeed = 0.5f;
-    // Undo (BACKSPACE toque) / borrar todo (BACKSPACE mantenido), igual que el gameplay.
+    // Undo (BACKSPACE toque corto) / resetear (BACKSPACE mantenido HeadClearHoldDuration s). Por EVENTOS
+    // (IsInputKeyDown(BackSpace) da false en este modo porque Slate consume Backspace). El contador se
+    // acumula en PlayerTick — y va ANTES de los returns de color-picker/body-paint, si no, en modo
+    // cuerpo nunca se ejecutaba. Backspace no tiene auto-repetición acá (verificado por log).
     void OnHeadClearPressed();  void OnHeadClearReleased();
-    bool  bHeadClearHeld   = false;
+    bool  bHeadClearHeld    = false; // true mientras se mantiene la tecla (para el HUD)
     float HeadClearHoldTime = 0.f;
+    bool  bHeadClearFired   = false; // ya se disparó el reset en este mantener (evita un undo al soltar)
     UPROPERTY(EditAnywhere, Category="Head") float HeadClearHoldDuration = 3.f;   // mantener → borrar todo
     UPROPERTY(EditAnywhere, Category="Head") float HeadUndoTapMaxTime    = 0.35f; // toque → undo
     bool bHeadStrokeActive = false; // hay un trazo de geometría abierto (para el undo)
