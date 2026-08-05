@@ -73,6 +73,10 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category="Sillas")
     TSubclassOf<APawn> PawnCazadorClass;
 
+    // Clase del señuelo (los BPs pueden pisarla — debe verse IDÉNTICA al pawn silla).
+    UPROPERTY(EditDefaultsOnly, Category="Sillas")
+    TSubclassOf<class ASillasSenuelo> SenueloClass;
+
 private:
     // --- Flujo de ronda (todo servidor) ---
     void IniciarRonda();

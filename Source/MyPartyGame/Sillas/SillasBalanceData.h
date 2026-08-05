@@ -90,10 +90,28 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Sillas", meta=(ClampMin="0.0"))
     float ImpulsoEmpujon = 600.0f;
 
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Sillas", meta=(ClampMin="0.0"))
+    float ImpulsoEmpujonVertical = 250.0f;
+
+    // Alcance del empujón (frente a la silla que empuja).
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Sillas", meta=(ClampMin="0.0"))
+    float EmpujonDistancia = 160.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Sillas", meta=(ClampMin="0.0"))
+    float EmpujonCooldownSeg = 1.5f;
+
     // ---------- Cazador (D17: caza con oído; sin sprint propio por ahora) ----------
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Cazador", meta=(ClampMin="0.0"))
     float VelocidadCazador = 400.0f;
+
+    // Baile (D13, placeholder Fase 3): la cámara barre un patrón fijo y
+    // aprendible durante la Música. Amplitud del barrido y período completo.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Cazador", meta=(ClampMin="0.0", ClampMax="180.0"))
+    float BaileAmplitudGrados = 100.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Cazador", meta=(ClampMin="0.5"))
+    float BailePeriodoSeg = 4.0f;
 
     // ---------- Señuelos (D9: densidad media) ----------
 

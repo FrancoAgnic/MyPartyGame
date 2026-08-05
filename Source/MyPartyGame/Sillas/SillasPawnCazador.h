@@ -42,6 +42,12 @@ public:
     // Solo servidor. Castigo D6 por sentarse en un señuelo: 1.8s lento y sin poder capturar.
     void AplicarDolorServer();
 
+    // Solo servidor. FASE 3 (D13): durante la Música el cazador baila — control
+    // bloqueado y la cámara barre un patrón fijo y aprendible. Las sillas leen
+    // el baile como los corredores leen al vigilante en luz roja/luz verde.
+    void EmpezarBaileServer();
+    void TerminarBaileServer();
+
 protected:
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
@@ -81,6 +87,14 @@ private:
     UPROPERTY(ReplicatedUsing=OnRep_Estado)
     bool bAdolorido = false;
 
+    // D13: bailando durante la Música. El patrón se computa en cada máquina a
+    // partir del tiempo de servidor sincronizado — todos ven el mismo barrido.
+    UPROPERTY(ReplicatedUsing=OnRep_Estado)
+    bool bBailando = false;
+
+    UPROPERTY(Replicated)
+    float BaileYawBase = 0.f;
+
     FTimerHandle DolorTimer;
 
     void Move(const FInputActionValue& Value);
@@ -99,6 +113,9 @@ private:
 
     // Solo servidor, cada Tick mientras captura: ¿hay silla válida detrás?
     void ChequearSentado();
+
+    // Cada Tick mientras baila (todas las máquinas): rotación de la coreografía.
+    void TickBaile();
 
     const class USillasBalanceData* GetBalance() const;
 };

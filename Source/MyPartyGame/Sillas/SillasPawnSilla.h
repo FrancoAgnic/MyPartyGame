@@ -1,8 +1,11 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-// FASE 1 — Pawn de la silla-jugador (v0: caminar y saltar; sprint/stamina/empujón
-// llegan en Fase 3). A la vista debe ser IDÉNTICO a ASillasSenuelo — el camuflaje
-// es la mecánica central (D9). La cámara es tercera persona con spring arm.
-// El "mind game" de D4: moverse está siempre permitido, ser visto es sentencia.
+// FASE 1/3 — Pawn de la silla-jugador.
+// A la vista debe ser IDÉNTICO a ASillasSenuelo — el camuflaje es la mecánica
+// central (D9). El "mind game" de D4: moverse está siempre permitido, ser visto
+// es sentencia. Kit D10 (Fase 3): sprint con stamina (Shift), salto (Espacio),
+// empujón silla→silla (clic izquierdo — la traición física) y slot de habilidad
+// con cooldown (Q; contenido pendiente de P10b). Cada habilidad delata: usarlas
+// frente al cazador es suicidio, a sus espaldas es jugar bien.
 
 #pragma once
 #include "CoreMinimal.h"
@@ -12,6 +15,8 @@
 class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
+class UInputMappingContext;
+class USillasAbilityComponent;
 struct FInputActionValue;
 
 UCLASS()
@@ -23,6 +28,9 @@ public:
     ASillasPawnSilla();
 
     virtual void BeginPlay() override;
+    virtual void Tick(float DeltaSeconds) override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 protected:
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
@@ -37,8 +45,13 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera")
     TObjectPtr<UCameraComponent> Camera;
 
+    // Slot de habilidad (D10/P10b): asignar el DataAsset en el BP cuando exista contenido.
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Sillas")
+    TObjectPtr<USillasAbilityComponent> Habilidad;
+
     // Acciones de input (defaults: assets de /Game/Input del template). Los
-    // mapping contexts los agrega ASillasPlayerController, no el pawn.
+    // mapping contexts base los agrega ASillasPlayerController; el pawn solo
+    // agrega su contexto runtime de kit (sprint/empujón/habilidad).
     UPROPERTY(EditDefaultsOnly, Category="Input")
     TObjectPtr<UInputAction> MoveAction;
 
@@ -51,7 +64,44 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category="Input")
     TObjectPtr<UInputAction> JumpAction;
 
+    // Kit D10 — sin assets todavía: si quedan null se crean en runtime
+    // (Shift=sprint, clic izquierdo=empujón, Q=habilidad). Fase 6: assets.
+    UPROPERTY(EditDefaultsOnly, Category="Input")
+    TObjectPtr<UInputAction> SprintAction;
+
+    UPROPERTY(EditDefaultsOnly, Category="Input")
+    TObjectPtr<UInputAction> EmpujonAction;
+
+    UPROPERTY(EditDefaultsOnly, Category="Input")
+    TObjectPtr<UInputAction> HabilidadAction;
+
 private:
+    UPROPERTY(Transient)
+    TObjectPtr<UInputMappingContext> KitIMC;
+
+    // D10: sprint gastando stamina. La stamina la lleva el server; la velocidad
+    // se aplica en ambos lados vía OnRep para que la predicción no divague.
+    UPROPERTY(ReplicatedUsing=OnRep_Sprint)
+    bool bSprint = false;
+
+    // Segundos de sprint restantes (replicado para el HUD de Fase 5).
+    UPROPERTY(Replicated)
+    float StaminaActual = 0.f;
+
+    float UltimoEmpujonServerTime = -1000.f;
+
     void Move(const FInputActionValue& Value);
     void Look(const FInputActionValue& Value);
+    void OnSprintPressed();
+    void OnSprintReleased();
+    void OnEmpujon();
+    void OnHabilidad();
+
+    UFUNCTION(Server, Reliable) void Server_SetSprint(bool bNuevo);
+    UFUNCTION(Server, Reliable) void Server_Empujar();
+
+    UFUNCTION() void OnRep_Sprint();
+    void AplicarVelocidad();
+
+    const class USillasBalanceData* GetBalance() const;
 };

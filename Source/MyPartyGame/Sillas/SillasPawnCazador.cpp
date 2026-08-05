@@ -82,6 +82,11 @@ void ASillasPawnCazador::Tick(float DeltaSeconds)
     {
         ChequearSentado();
     }
+
+    if (bBailando)
+    {
+        TickBaile();
+    }
 }
 
 void ASillasPawnCazador::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -107,6 +112,8 @@ void ASillasPawnCazador::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ASillasPawnCazador, bCapturando);
     DOREPLIFETIME(ASillasPawnCazador, bAdolorido);
+    DOREPLIFETIME(ASillasPawnCazador, bBailando);
+    DOREPLIFETIME(ASillasPawnCazador, BaileYawBase);
 }
 
 void ASillasPawnCazador::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -154,7 +161,7 @@ void ASillasPawnCazador::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 void ASillasPawnCazador::Move(const FInputActionValue& Value)
 {
     const FVector2D Axis = Value.Get<FVector2D>();
-    if (!Controller) return;
+    if (!Controller || bBailando) return; // D13: bailando no se camina
 
     const FRotator YawRot(0.f, Controller->GetControlRotation().Yaw, 0.f);
     const FVector Fwd   = FRotationMatrix(YawRot).GetUnitAxis(EAxis::X);
@@ -177,6 +184,8 @@ void ASillasPawnCazador::Move(const FInputActionValue& Value)
 
 void ASillasPawnCazador::Look(const FInputActionValue& Value)
 {
+    if (bBailando) return; // D13: la coreografía es dueña de la cámara
+
     const FVector2D Axis = Value.Get<FVector2D>();
     AddControllerYawInput(Axis.X);
     AddControllerPitchInput(Axis.Y);
@@ -248,6 +257,53 @@ void ASillasPawnCazador::AplicarDolorServer()
     }), GetBalance()->DuracionDolorSeg, /*bLoop=*/false);
 }
 
+void ASillasPawnCazador::EmpezarBaileServer()
+{
+    if (!HasAuthority()) return;
+
+    CancelarCapturaServer();
+    if (!bBailando)
+    {
+        BaileYawBase = GetActorRotation().Yaw;
+        bBailando = true;
+        OnRep_Estado();
+    }
+}
+
+void ASillasPawnCazador::TerminarBaileServer()
+{
+    if (!HasAuthority()) return;
+    if (bBailando)
+    {
+        bBailando = false;
+        OnRep_Estado();
+    }
+}
+
+void ASillasPawnCazador::TickBaile()
+{
+    // Patrón fijo y aprendible (D3+D13): barrido sinusoidal de yaw computado
+    // del tiempo de servidor sincronizado — idéntico en todas las máquinas, así
+    // las sillas leen los puntos ciegos mirando hacia dónde apunta el cazador.
+    // Placeholder de Fase 3: la coreografía real con animación llega en Fase 6.
+    const ASillasGameState* GS = GetWorld()->GetGameState<ASillasGameState>();
+    const USillasBalanceData* B = GetBalance();
+    if (!GS) return;
+
+    const float T = GS->GetServerWorldTimeSeconds();
+    const float Yaw = BaileYawBase +
+        B->BaileAmplitudGrados * FMath::Sin(2.f * PI * T / FMath::Max(0.5f, B->BailePeriodoSeg));
+
+    SetActorRotation(FRotator(0.f, Yaw, 0.f));
+    if (IsLocallyControlled())
+    {
+        if (AController* C = GetController())
+        {
+            C->SetControlRotation(FRotator(0.f, Yaw, 0.f)); // la cámara baila con él
+        }
+    }
+}
+
 void ASillasPawnCazador::OnRep_Estado()
 {
     AplicarEstadoAMovimiento();
@@ -258,7 +314,11 @@ void ASillasPawnCazador::AplicarEstadoAMovimiento()
     const USillasBalanceData* B = GetBalance();
     UCharacterMovementComponent* Mv = GetCharacterMovement();
 
-    if (bAdolorido)
+    if (bBailando)
+    {
+        Mv->MaxWalkSpeed = 0.f; // D13: clavado en el lugar, solo la coreografía
+    }
+    else if (bAdolorido)
     {
         Mv->MaxWalkSpeed = B->VelocidadCazador * B->MultiplicadorVelocidadDolor;
     }
@@ -271,9 +331,9 @@ void ASillasPawnCazador::AplicarEstadoAMovimiento()
         Mv->MaxWalkSpeed = B->VelocidadCazador;
     }
 
-    // Capturando: la rotación la maneja Move() (de espaldas); normal: mirar
-    // hacia donde camina.
-    Mv->bOrientRotationToMovement = !bCapturando;
+    // Capturando: la rotación la maneja Move() (de espaldas); bailando: la
+    // maneja TickBaile(); normal: mirar hacia donde camina.
+    Mv->bOrientRotationToMovement = !bCapturando && !bBailando;
 }
 
 void ASillasPawnCazador::ChequearSentado()

@@ -34,6 +34,7 @@ ASillasGameMode::ASillasGameMode()
     // Esperando (llegada del lobby, antes de la primera ronda).
     PawnSillaClass   = ASillasPawnSilla::StaticClass();
     PawnCazadorClass = ASillasPawnCazador::StaticClass();
+    SenueloClass     = ASillasSenuelo::StaticClass();
     static ConstructorHelpers::FClassFinder<APawn> Mannequin(
         TEXT("/Game/ThirdPerson/Blueprints/BP_ThirdPersonCharacter"));
     if (Mannequin.Succeeded())
@@ -108,10 +109,11 @@ void ASillasGameMode::IniciarRonda()
 
 void ASillasGameMode::EmpezarMusica()
 {
-    // D5+D11: la música corta cualquier caminata de cola en curso.
+    // D13: suena la música → los cazadores bailan (corta cualquier caminata de
+    // cola en curso). La ventana SEGURA de las sillas para reposicionarse.
     for (TActorIterator<ASillasPawnCazador> It(GetWorld()); It; ++It)
     {
-        It->CancelarCapturaServer();
+        It->EmpezarBaileServer();
     }
 
     const float Dur = DuracionMusicaActual();
@@ -122,6 +124,12 @@ void ASillasGameMode::EmpezarMusica()
 
 void ASillasGameMode::EmpezarSilencio()
 {
+    // Se corta la música: fin del baile, empieza la caza.
+    for (TActorIterator<ASillasPawnCazador> It(GetWorld()); It; ++It)
+    {
+        It->TerminarBaileServer();
+    }
+
     const float Dur = DuracionSilencioActual();
     SetFase(ESillasFase::Silencio, Dur);
     GetWorldTimerManager().SetTimer(
@@ -326,7 +334,8 @@ void ASillasGameMode::RepartirPawnsYSenuelos()
         const FVector Loc = Punto->GetActorLocation() + FVector(Jitter.X, Jitter.Y, 60.f);
         const FRotator Rot(0.f, FMath::FRandRange(0.f, 360.f), 0.f);
 
-        if (ASillasSenuelo* S = GetWorld()->SpawnActor<ASillasSenuelo>(Loc, Rot, Params))
+        if (ASillasSenuelo* S = GetWorld()->SpawnActor<ASillasSenuelo>(
+                SenueloClass ? *SenueloClass : ASillasSenuelo::StaticClass(), Loc, Rot, Params))
         {
             Senuelos.Add(S);
         }
