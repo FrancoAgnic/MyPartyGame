@@ -254,6 +254,12 @@ private:
     void RebuildDirty();
     void MarkStampDirty(int32 x0, int32 y0, int32 z0, int32 x1, int32 y1, int32 z1);
 
+    // Bloqueo del ÁREA (BoundsBox): solo el escultor del turno entra al cubo; los demás rebotan. Solo
+    // se activa en gameplay (si hay APTSculptGameState); en el lobby el cubo nunca bloquea.
+    void  UpdateSculptBoundaryCollision();
+    float BoundaryAccum = 0.f;
+    bool  bBoundaryOn   = false;
+
     // ── Pintura por campo de color 3D DISPERSO (bricks + page table + atlas) ──
     // El color vive en un campo 3D real (sin bleed), pero solo se allocan bricks
     // donde se pinta (disperso → memoria ∝ superficie). El material hace 2 lecturas:

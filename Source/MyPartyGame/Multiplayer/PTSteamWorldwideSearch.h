@@ -15,6 +15,7 @@ struct FPTLobbyEntry
 	FString Name;
 	int32   NumPublicConnections = 0;
 	int32   NumOpenPublic        = 0;
+	int32   CurPlayers           = 0; // jugadores actuales (clave propia CUR_PLAYERS que el host actualiza)
 	bool    bHasPassword         = false;
 	FString CodeHash;
 	FString P2PAddr;   // Steam64 ID del host como string, ej. "76561198XXXXXXXX"

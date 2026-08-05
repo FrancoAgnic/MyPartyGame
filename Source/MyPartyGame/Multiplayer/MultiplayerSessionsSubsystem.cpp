@@ -16,6 +16,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogPTSessions, Log, All);
 // --- Claves de settings de sesión ---
 const FName UMultiplayerSessionsSubsystem::KEY_SERVER_NAME  = FName("SERVER_NAME");
 const FName UMultiplayerSessionsSubsystem::KEY_HAS_PASSWORD = FName("HAS_PASSWORD");
+const FName UMultiplayerSessionsSubsystem::KEY_CUR_PLAYERS  = FName("CUR_PLAYERS");
 const FName UMultiplayerSessionsSubsystem::KEY_MATCH_TYPE   = FName("MATCH_TYPE");
 const FName UMultiplayerSessionsSubsystem::KEY_CODE_HASH    = FName("CODE_HASH");
 const FName UMultiplayerSessionsSubsystem::KEY_LOBBY_ID     = FName("PT_LOBBY_ID");
@@ -289,6 +290,11 @@ void UMultiplayerSessionsSubsystem::InternalCreateSession()
     LastSessionSettings->Set(KEY_MATCH_TYPE, FString("PartyLobby"),
         EOnlineDataAdvertisementType::ViaOnlineService);
 
+    // Jugadores actuales: arranca en 1 (el host). El lobby GameMode la va actualizando al entrar/salir
+    // gente (UpdateAdvertisedPlayerCount), así la lista de "buscar partidas" muestra el número real.
+    LastSessionSettings->Set(KEY_CUR_PLAYERS, 1,
+        EOnlineDataAdvertisementType::ViaOnlineService);
+
     CreateSessionCompleteHandle = GetSessions()->AddOnCreateSessionCompleteDelegate_Handle(
         FOnCreateSessionCompleteDelegate::CreateUObject(
             this, &UMultiplayerSessionsSubsystem::HandleCreateSessionComplete));
@@ -419,6 +425,7 @@ void UMultiplayerSessionsSubsystem::InternalFindSessions(int32 MaxSearchResults)
                     R.Session.SessionSettings.Set(KEY_SERVER_NAME,  E.Name,         EOnlineDataAdvertisementType::DontAdvertise);
                     R.Session.SessionSettings.Set(KEY_HAS_PASSWORD, E.bHasPassword, EOnlineDataAdvertisementType::DontAdvertise);
                     R.Session.SessionSettings.Set(KEY_CODE_HASH,    E.CodeHash,     EOnlineDataAdvertisementType::DontAdvertise);
+                    R.Session.SessionSettings.Set(KEY_CUR_PLAYERS,  E.CurPlayers,   EOnlineDataAdvertisementType::DontAdvertise);
                     // Guardar lobby ID como string para que InternalJoinByLobbyId lo lea.
                     R.Session.SessionSettings.Set(KEY_LOBBY_ID,
                         FString::Printf(TEXT("%llu"), E.LobbyId),
@@ -783,6 +790,27 @@ bool UMultiplayerSessionsSubsystem::GetHasPasswordFromResult(const FOnlineSessio
     bool bHas = false;
     Result.Session.SessionSettings.Get(KEY_HAS_PASSWORD, bHas);
     return bHas;
+}
+
+int32 UMultiplayerSessionsSubsystem::GetCurrentPlayersFromResult(const FOnlineSessionSearchResult& Result)
+{
+    int32 Cur = 0;
+    if (Result.Session.SessionSettings.Get(KEY_CUR_PLAYERS, Cur) && Cur > 0)
+        return Cur;
+    return -1; // no vino la clave → el que llama usa el fallback (Max - Open)
+}
+
+void UMultiplayerSessionsSubsystem::UpdateAdvertisedPlayerCount(int32 CurrentPlayers)
+{
+    if (!LastSessionSettings.IsValid()) return; // solo el host tiene los settings de la sesión creada
+    IOnlineSessionPtr S = GetSessions();
+    if (!S.IsValid()) return;
+
+    LastSessionSettings->Set(KEY_CUR_PLAYERS, FMath::Max(0, CurrentPlayers),
+        EOnlineDataAdvertisementType::ViaOnlineService);
+    // Re-publica la sesión con el nuevo valor (Steam actualiza el lobby data → la lista lo ve al refrescar).
+    S->UpdateSession(NAME_GameSession, *LastSessionSettings, /*bShouldRefreshOnlineData=*/true);
+    UE_LOG(LogPTSessions, Log, TEXT("UpdateAdvertisedPlayerCount: %d jugadores anunciados."), CurrentPlayers);
 }
 
 FString UMultiplayerSessionsSubsystem::SanitizeNameForTravelURL(const FString& Name)

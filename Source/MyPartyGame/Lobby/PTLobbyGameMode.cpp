@@ -83,6 +83,11 @@ void APTLobbyGameMode::PostLogin(APlayerController* NewPlayer)
     ++PlayersJoined;
     UE_LOG(LogTemp, Log, TEXT("[Lobby] PostLogin. Jugadores conectados: %d"), PlayersJoined);
 
+    // Anunciar el nuevo nº de jugadores en la sesión (para el "X/Y" de la lista de buscar partidas).
+    if (UMultiplayerSessionsSubsystem* Sessions =
+            GetGameInstance() ? GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>() : nullptr)
+        Sessions->UpdateAdvertisedPlayerCount(PlayersJoined);
+
     // bDelayedStart evita que AGameMode arranque el "Match" solo (ver comentario en el
     // constructor), pero como efecto secundario también le impide a HandleStartingNewPlayer
     // llamar a RestartPlayer — sin esto el jugador nunca posee a su Pawn (DefaultPawnClass).
@@ -119,6 +124,12 @@ void APTLobbyGameMode::Logout(AController* Exiting)
     // Recién ahora Exiting ya no figura en GameState->PlayerArray (Super::Logout dispara su
     // remoción); si quedaba un countdown en curso puede haber que cancelarlo (bajó del mínimo).
     CheckReadyState();
+
+    // Actualizar el nº de jugadores anunciado (si todavía queda la sesión viva).
+    if (PlayersJoined > 0)
+        if (UMultiplayerSessionsSubsystem* Sessions =
+                GetGameInstance() ? GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>() : nullptr)
+            Sessions->UpdateAdvertisedPlayerCount(PlayersJoined);
 }
 
 void APTLobbyGameMode::HostLeaveGame()

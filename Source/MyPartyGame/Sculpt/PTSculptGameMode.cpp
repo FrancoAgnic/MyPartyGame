@@ -217,7 +217,9 @@ void APTSculptGameMode::StartChoosingPhase()
     G->TurnPhase         = EPTTurnPhase::ChoosingWord;
     G->MaskedWords.Reset();
     G->RefreshLocalMasked();
-    G->TurnEndServerTime = 0.0;
+    // Deadline de la elección: para que el HUD muestre la cuenta regresiva de "cuánto te queda para
+    // elegir palabra" (mismo campo replicado que usa el reloj de Drawing).
+    G->TurnEndServerTime = G->GetServerWorldTimeSeconds() + ChooseDuration;
     G->OnTurnPhaseChanged.Broadcast();
 
     // Mandarle las opciones SOLO al escultor, EN SU IDIOMA (fallback si falta la traducción).

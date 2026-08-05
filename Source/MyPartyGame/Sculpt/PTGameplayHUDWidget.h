@@ -52,6 +52,7 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      TxtWord;       // "_ _ _ _" o la palabra
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      TxtTimer;      // segundos restantes
     UPROPERTY(meta=(BindWidgetOptional)) UWidget*         WordPickPanel; // panel de las 3 palabras
+    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      TxtChooseTimer;// cuenta regresiva DENTRO del panel de elección (opcional)
     UPROPERTY(meta=(BindWidgetOptional)) UButton*         BtnWord0;
     UPROPERTY(meta=(BindWidgetOptional)) UButton*         BtnWord1;
     UPROPERTY(meta=(BindWidgetOptional)) UButton*         BtnWord2;

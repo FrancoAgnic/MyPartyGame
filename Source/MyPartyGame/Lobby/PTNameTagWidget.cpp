@@ -1,11 +1,19 @@
 #include "PTNameTagWidget.h"
 #include "Components/TextBlock.h"
+#include "Components/Image.h"
 
 bool UPTNameTagWidget::Initialize()
 {
     if (!Super::Initialize()) return false;
     if (NameText) DefaultColor = NameText->GetColorAndOpacity().GetSpecifiedColor();
+    if (HostCrown) HostCrown->SetVisibility(ESlateVisibility::Collapsed); // arranca oculta
     return true;
+}
+
+void UPTNameTagWidget::SetHost(bool bIsHost)
+{
+    if (HostCrown)
+        HostCrown->SetVisibility(bIsHost ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 }
 
 void UPTNameTagWidget::SetPlayerName(const FString& InName)

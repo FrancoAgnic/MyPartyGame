@@ -76,6 +76,15 @@ public:
     UFUNCTION(BlueprintPure, Category="Game")
     float GetTurnSecondsRemaining() const;
 
+    // Segundos que faltan hasta el deadline de la FASE actual (sirve p/ ChoosingWord, sin el filtro
+    // de Drawing). Para el contador de "elegir palabra". 0 si no hay deadline seteado.
+    UFUNCTION(BlueprintPure, Category="Game")
+    float GetPhaseSecondsRemaining() const
+    {
+        if (TurnEndServerTime <= 0.0) return 0.f;
+        return FMath::Max(0.f, (float)(TurnEndServerTime - GetServerWorldTimeSeconds()));
+    }
+
     // ¿El jugador local es el escultor de este turno?
     UFUNCTION(BlueprintPure, Category="Game")
     bool IsLocalPlayerSculptor() const;

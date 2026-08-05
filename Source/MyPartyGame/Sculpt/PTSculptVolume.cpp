@@ -9,6 +9,12 @@
 #include "NiagaraSystem.h"
 #include "Serialization/MemoryWriter.h"
 #include "Serialization/MemoryReader.h"
+#include "PTSculptGameState.h"          // CurrentSculptor / TurnPhase para el bloqueo del área
+#include "../Lobby/PTPlayerState.h"     // tipo completo de CurrentSculptor (APTPlayerState)
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerState.h"
+#include "Components/PrimitiveComponent.h"
 #include "../Lobby/PTLobbyCharacter.h" // BuildEyesSection (esferas/mesh de ojos)
 
 // ─── Marching Cubes lookup tables (Bourke / Lorensen & Cline) ──────────────
@@ -395,12 +401,58 @@ void APTSculptVolume::Tick(float DeltaTime)
         }
     }
 
+    // Bloqueo del ÁREA de esculpido: solo el escultor del turno puede entrar al cubo; los demás rebotan.
+    // (Solo aplica en gameplay: en el lobby no hay APTSculptGameState y el cubo nunca bloquea.)
+    BoundaryAccum += DeltaTime;
+    if (BoundaryAccum >= 0.2f) { BoundaryAccum = 0.f; UpdateSculptBoundaryCollision(); }
+
     if (!Field.HasDirty() || bRebuildInProgress) return;
     TimeSinceRebuild += DeltaTime;
     if (TimeSinceRebuild >= RebuildInterval)
     {
         TimeSinceRebuild = 0.f;
         RebuildDirty();
+    }
+}
+
+void APTSculptVolume::UpdateSculptBoundaryCollision()
+{
+    UWorld* W = GetWorld();
+    if (!W || !BoundsBox) return;
+
+    const APTSculptGameState* GS = W->GetGameState<APTSculptGameState>();
+    if (!GS)
+    {
+        // No es el mundo de gameplay (ej: la cabeza en el lobby): el cubo NUNCA bloquea.
+        if (bBoundaryOn) { BoundsBox->SetCollisionEnabled(ECollisionEnabled::NoCollision); bBoundaryOn = false; }
+        return;
+    }
+
+    // Encender el bloqueo del cubo (una vez): bloquea Pawns; el escultor lo IGNORA (abajo, por pawn).
+    if (!bBoundaryOn)
+    {
+        BoundsBox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+        BoundsBox->SetCollisionObjectType(ECC_WorldStatic);
+        BoundsBox->SetCollisionResponseToAllChannels(ECR_Ignore);
+        BoundsBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+        bBoundaryOn = true;
+    }
+
+    const APlayerState* Sculptor = GS->CurrentSculptor;
+    const bool bTurnActive = (GS->TurnPhase == EPTTurnPhase::Drawing || GS->TurnPhase == EPTTurnPhase::ChoosingWord);
+
+    // Recorrer TODOS los jugadores (por PlayerArray, no por PlayerControllers): así en CADA máquina
+    // —server y todos los clientes— la copia del escultor (aunque sea un proxy simulado que no controlás)
+    // ignora el cubo. Antes solo se lo sacaba al pawn LOCAL, así que en los demás clientes el proxy del
+    // escultor chocaba con el cubo y saltaba (jitter/"teletransporte") cuando entraba al área.
+    for (APlayerState* PS : GS->PlayerArray)
+    {
+        APawn* P = PS ? PS->GetPawn() : nullptr;
+        if (!P) continue;
+        UPrimitiveComponent* Root = Cast<UPrimitiveComponent>(P->GetRootComponent()); // capsule del Character
+        if (!Root) continue;
+        const bool bCanEnter = (!bTurnActive) || (PS == Sculptor);
+        Root->IgnoreActorWhenMoving(this, bCanEnter);
     }
 }
 
@@ -1183,9 +1235,10 @@ void APTSculptVolume::RebuildDirty()
         {
             for (FPTBrickMesh& M : *Results)
             {
-                // Colisión ON con cocinado asíncrono (barato). Con VoxelSize alto
-                // la malla ya es de baja densidad, así que la colisión es liviana.
-                MeshPtr->CreateMeshSection(M.Section, M.Verts, M.Tris, M.Normals, M.UV0, M.Colors, {}, /*collision=*/true);
+                // Colisión OFF: la arcilla no frena a nadie (el escultor la atraviesa; el esculpido
+                // usa raymarch del SDF, no colisión física, así que no se rompe). Quien no debe entrar
+                // al área lo bloquea el BoundsBox (solo a los que no esculpen), no la arcilla.
+                MeshPtr->CreateMeshSection(M.Section, M.Verts, M.Tris, M.Normals, M.UV0, M.Colors, {}, /*collision=*/false);
                 if (Mat) MeshPtr->SetMaterial(M.Section, Mat);
             }
             bRebuildInProgress = false;

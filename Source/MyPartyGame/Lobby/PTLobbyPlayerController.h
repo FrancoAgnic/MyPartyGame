@@ -148,8 +148,8 @@ protected:
     UPROPERTY(EditAnywhere, Category="Head") float HeadOrbitSpeed    = 100.f;
     // Tamaño del pincel (se ajusta con la rueda del mouse).
     UPROPERTY(EditAnywhere, Category="Head") float HeadBrushSize     = 22.f;
-    // Color de pintura actual (por ahora fijo/piel; el selector de color va después).
-    UPROPERTY(EditAnywhere, Category="Head") FLinearColor HeadPaintColor = FLinearColor(0.95f, 0.78f, 0.66f);
+    // Color de pintura actual (default BLANCO; se cambia con el color picker).
+    UPROPERTY(EditAnywhere, Category="Head") FLinearColor HeadPaintColor = FLinearColor::White;
 
     // Materiales de preview de la brocha (como el gameplay): el fantasma que sigue al cursor.
     // Asignar los mismos del sculpt de gameplay (Add = arcilla, Erase = rojo/hueco).

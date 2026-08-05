@@ -137,6 +137,11 @@ public:
     // Borra la cabeza custom (vuelve a sin cabeza).
     void ClearHeadMesh();
 
+    // Look BASE por defecto: una ESFERA blanca en el HeadSocket (para cuando no hay cabeza custom
+    // equipada). Así el personaje default no queda sin cabeza. Radio ajustable en BP_LobbyCharacter.
+    void ApplyDefaultSphereHead();
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head") float DefaultHeadRadius = 20.f;
+
     // Persistencia local: guardar/cargar la cabeza (blob completo: geometría + texturas de pintura).
     void SaveHeadBlob(const TArray<uint8>& Blob);
     void LoadHead();
@@ -296,6 +301,12 @@ public:
     void PaintBodyWorldSphere(const FVector& P, float R, FLinearColor Color);
     /** Sube al GPU lo pintado desde el último flush (una sola actualización por frame). */
     void FlushBodyPaint();
+
+    // Color BASE del cuerpo (lo que se ve donde NO hay pintura). Se aplica al material dinámico del
+    // cuerpo por este parámetro Vector. Default BLANCO. Requiere que M_SculperCharacter tenga un
+    // parámetro Vector con este nombre enchufado al Base Color (tinte). Si no existe, es un no-op.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Paint") FName BodyBaseColorParam = TEXT("BaseColor");
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Paint") FLinearColor BodyBaseColor = FLinearColor::White;
 
     // ── Pintado de la CABEZA con textura 2D (igual que el cuerpo, NO el atlas de vóxeles) ──
     // La cabeza se pinta en una textura 2D de 1024, mapeada por proyección ESFÉRICA desde un centro

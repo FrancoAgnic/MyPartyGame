@@ -87,6 +87,13 @@ public:
     // Helpers estáticos para leer settings de un resultado de búsqueda
     static FString GetServerNameFromResult(const FOnlineSessionSearchResult& Result);
     static bool    GetHasPasswordFromResult(const FOnlineSessionSearchResult& Result);
+    // Jugadores actuales anunciados por el host (clave propia CUR_PLAYERS). Devuelve -1 si el resultado
+    // no la trae (ahí el que llama cae al fallback NumPublicConnections - NumOpenPublicConnections).
+    static int32   GetCurrentPlayersFromResult(const FOnlineSessionSearchResult& Result);
+
+    // El HOST actualiza el nº de jugadores anunciado (lo llama el lobby GameMode al entrar/salir alguien).
+    // Re-publica la sesión (UpdateSession) para que la lista de "buscar partidas" muestre el número real.
+    void UpdateAdvertisedPlayerCount(int32 CurrentPlayers);
 
     // AGameModeBase::CanServerTravel rechaza cualquier URL de travel que contenga '%', ':' o '\'
     // (ver GameModeBase.cpp) — por eso NO se puede URL-encodear el nombre de Steam (UrlEncode
@@ -154,6 +161,7 @@ private:
     static const FName KEY_MATCH_TYPE;
     static const FName KEY_CODE_HASH;    // Fase 5 — hash del código; nunca se anuncia en claro
     static const FName KEY_LOBBY_ID;     // ID interno de lobby Steam para join directo worldwide
+    static const FName KEY_CUR_PLAYERS;  // jugadores actuales (el host la actualiza al entrar/salir)
 
     // URL de SteamSockets calculada por FPTSteamDirectJoin tras join directo worldwide.
     FString WorldwideConnectURL;

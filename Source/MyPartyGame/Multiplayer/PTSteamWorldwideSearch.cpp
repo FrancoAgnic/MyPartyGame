@@ -16,6 +16,7 @@
 #define PT_STEAMKEY_HAS_PASSWORD       "HAS_PASSWORD_b"
 #define PT_STEAMKEY_SERVER_NAME        "SERVER_NAME_s"
 #define PT_STEAMKEY_CODE_HASH          "CODE_HASH_s"
+#define PT_STEAMKEY_CUR_PLAYERS        "CUR_PLAYERS_i"
 
 // ===== FPTSteamWorldwideSearch ===============================================================
 
@@ -130,6 +131,7 @@ void FPTSteamWorldwideSearch::OnLobbyDataUpdateInternal(LobbyDataUpdate_t* pPara
 		Entry.NumOpenPublic       = FCString::Atoi(*ReadKey(PT_STEAMKEY_NUMOPENPUBCONN));
 		Entry.bHasPassword        = ReadKey(PT_STEAMKEY_HAS_PASSWORD) == TEXT("true");
 		Entry.CodeHash            = ReadKey(PT_STEAMKEY_CODE_HASH);
+		Entry.CurPlayers          = FCString::Atoi(*ReadKey(PT_STEAMKEY_CUR_PLAYERS)); // jugadores actuales
 
 		// P2PADDR almacena el Steam64 del host como string (ej. "76561198XXXXXXXX").
 		// El engine a veces lo guarda con prefijo "steam." — lo quitamos por si acaso.

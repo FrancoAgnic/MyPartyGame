@@ -295,6 +295,7 @@ void UPTGameplayHUDWidget::RefreshTick()
             if (TxtWord2) TxtWord2->SetText(FText::FromString(Ch.IsValidIndex(2) ? Ch[2] : FString()));
         }
         break;
+    // (el contador de elección lo maneja el bloque del reloj de abajo)
     case EPTTurnPhase::Drawing:
         WordText = bSculptor && PC ? PC->CurrentSecretWord : G->MaskedWord;
         break;
@@ -317,15 +318,25 @@ void UPTGameplayHUDWidget::RefreshTick()
     if (ChatInput)
         ChatInput->SetVisibility(bChatOpen ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 
-    // ── Reloj (solo en Drawing) ──
+    const int32 SecsLeft = FMath::Max(0, FMath::CeilToInt(G->GetTurnSecondsRemaining()));
+    const FString TimerStr = FString::Printf(TEXT("%d %s"), SecsLeft, *PTText::GetStr(TEXT("HUD_SECONDS_SHORT")));
+
+    // ── Reloj de arriba: SOLO en Drawing (tiempo del turno). ──
     if (TxtTimer)
+        TxtTimer->SetText(G->TurnPhase == EPTTurnPhase::Drawing ? FText::FromString(TimerStr) : FText::GetEmpty());
+
+    // ── Contador de ELEGIR PALABRA: su propio texto DENTRO del WordPickPanel. Solo al escultor mientras elige. ──
+    // Usa GetPhaseSecondsRemaining (no GetTurnSecondsRemaining, que da 0 fuera de Drawing).
+    if (TxtChooseTimer)
     {
-        if (G->TurnPhase == EPTTurnPhase::Drawing)
-            TxtTimer->SetText(FText::FromString(FString::Printf(TEXT("%d %s"),
-                              FMath::CeilToInt(G->GetTurnSecondsRemaining()),
-                              *PTText::GetStr(TEXT("HUD_SECONDS_SHORT")))));
-        else
-            TxtTimer->SetText(FText::GetEmpty());
+        const bool bChoosing = (G->TurnPhase == EPTTurnPhase::ChoosingWord) && bSculptor;
+        TxtChooseTimer->SetVisibility(bChoosing ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+        if (bChoosing)
+        {
+            const int32 ChooseLeft = FMath::Max(0, FMath::CeilToInt(G->GetPhaseSecondsRemaining()));
+            TxtChooseTimer->SetText(FText::FromString(FString::Printf(TEXT("%d %s"),
+                ChooseLeft, *PTText::GetStr(TEXT("HUD_SECONDS_SHORT")))));
+        }
     }
 
     // ── Ronda + marcador en vivo ──

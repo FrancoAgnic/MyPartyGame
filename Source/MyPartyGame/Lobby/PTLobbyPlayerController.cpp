@@ -358,12 +358,12 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
             }
             else
             {
-                // Cabeza: el "default" es la bolita inicial (color piel) en el centro, no vacío.
+                // Cabeza: el "default" es la bolita inicial BLANCA en el centro, no vacío.
                 if (HeadVolume)
                 {
                     HeadVolume->Multicast_ClearAll_Implementation();
                     HeadVolume->ApplyStamp(HeadVolume->GetActorLocation(), EPTStampShape::Sphere, 40.f,
-                                           EPTEditMode::Add, FLinearColor(0.95f, 0.78f, 0.66f));
+                                           EPTEditMode::Add, FLinearColor::White);
                 }
                 HeadStampRotation = FRotator::ZeroRotator;
                 HeadEyes.Reset(); RebuildEyesLiveMesh();
@@ -1146,7 +1146,7 @@ void APTLobbyPlayerController::EnterHeadSculpt()
 
     // Slot nuevo (sin crudo): bolita inicial de arcilla para tener algo que esculpir (color piel).
     if (HeadVolume && !bReEdit)
-        HeadVolume->ApplyStamp(Center, EPTStampShape::Sphere, 40.f, EPTEditMode::Add, FLinearColor(0.95f, 0.78f, 0.66f));
+        HeadVolume->ApplyStamp(Center, EPTStampShape::Sphere, 40.f, EPTEditMode::Add, FLinearColor::White); // bolita inicial BLANCA
 
     // Pintado 2D de la cabeza (igual al cuerpo): centro FIJO de proyección esférica = centro del volumen
     // en espacio LOCAL. La malla viva usa el material que muestrea esa textura, así ves la pintura al toque.

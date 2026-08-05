@@ -24,6 +24,7 @@
 #include "Modules/ModuleManager.h"
 #include "Engine/Engine.h" // GEngine->AddOnScreenDebugMessage (debug de tamaño del blob)
 #include "PTLockerSubsystem.h"
+#include "../Multiplayer/MultiplayerSessionsSubsystem.h" // nick local de Steam (fallback del nametag propio)
 #include "Engine/GameInstance.h"
 #include "Engine/SceneCapture2D.h"
 #include "Components/SceneCaptureComponent2D.h"
@@ -441,6 +442,20 @@ void APTLobbyCharacter::ClearHeadMesh()
     if (HeadMesh) HeadMesh->ClearAllMeshSections();
 }
 
+void APTLobbyCharacter::ApplyDefaultSphereHead()
+{
+    if (!HeadMesh) return;
+    HeadMesh->ClearAllMeshSections();
+    // Una sola "esfera" (reusa el generador de ojos: esfera UV blanca) centrada en el socket.
+    TArray<FVector4> One;
+    One.Add(FVector4(0.f, 0.f, 0.f, FMath::Max(1.f, DefaultHeadRadius)));
+    FPTHeadSection S = BuildEyesSection(One, nullptr, 50.f, 24);
+    const TArray<FProcMeshTangent> NoTangents;
+    HeadMesh->CreateMeshSection(0, S.Verts, S.Tris, S.Normals, S.UVs, S.Colors, NoTangents, /*collision=*/false);
+    if (HeadMaterial) HeadMesh->SetMaterial(0, HeadMaterial); // material plano (vertex color blanco)
+    UpdateHeadCollision();
+}
+
 void APTLobbyCharacter::SaveHeadBlob(const TArray<uint8>& Blob)
 {
     UPTHeadSaveGame* Save = Cast<UPTHeadSaveGame>(
@@ -460,8 +475,8 @@ void APTLobbyCharacter::LoadHead()
     const TArray<uint8>& Body = L->GetEquippedBodyPNG();
     if (Head.Num() == 0)
     {
-        // Slot "Default" (o nada equipado): look base → sacar la cabeza custom y aplicar el cuerpo equipado.
-        ClearHeadMesh();
+        // Slot "Default" (o nada equipado): look base → cabeza ESFERA blanca por defecto + cuerpo equipado.
+        ApplyDefaultSphereHead();
         if (Body.Num() > 0) ApplyBodyPaintFromPNG(Body); else ClearBodyPaint();
         bLocallyBakedHead = true; // no re-aplicar un blob replicado viejo encima del default
         return;
@@ -731,8 +746,9 @@ void APTLobbyCharacter::UpdateNameTag()
         return;
     }
 
-    // Sin burbuja: no mostrar tu propio nombre (solo ves los de los demás).
-    if (IsLocallyControlled())
+    // Tu PROPIO tag: se ve en el LOBBY y en el MENÚ principal, pero NO en gameplay (Lvl-01).
+    // bForceFlying solo se activa en gameplay (ApplyGameplayMovementMode), así que sirve de "estoy jugando".
+    if (IsLocallyControlled() && bForceFlying)
     {
         NameTag->SetVisibility(false);
         return;
@@ -740,15 +756,25 @@ void APTLobbyCharacter::UpdateNameTag()
     NameTag->SetVisibility(true);
 
     if (UPTNameTagWidget* W = Cast<UPTNameTagWidget>(NameTag->GetUserWidgetObject()))
+    {
+        // DisplayName lo setea el GameMode y se replica; a veces (sobre todo tras el seamless travel)
+        // puede llegar vacío. Caer al nombre nativo del PlayerState (el "?Name=" de Steam).
+        FString N;
+        bool bHost = false;
         if (const APTPlayerState* PS = GetPlayerState<APTPlayerState>())
         {
-            // DisplayName lo setea el GameMode y se replica; a veces (sobre todo tras el seamless
-            // travel) puede llegar vacío. Caer al nombre nativo del PlayerState (el "?Name=" de
-            // Steam) evita el cartel en blanco.
-            FString N = PS->GetDisplayNameSafe();
+            N = PS->GetDisplayNameSafe();
             if (N.IsEmpty()) N = PS->GetPlayerName();
-            W->SetPlayerName(N);
+            bHost = PS->bIsHost;
         }
+        // Fallback para el menú principal (sin sesión / sin DisplayName): usar el nick local de Steam.
+        if (N.IsEmpty() && IsLocallyControlled())
+            if (UMultiplayerSessionsSubsystem* S = GetGameInstance()
+                    ? GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>() : nullptr)
+                N = S->GetLocalPlayerDisplayName();
+        W->SetPlayerName(N);
+        W->SetHost(bHost); // corona del host, igual que en la lista de jugadores
+    }
 }
 
 void APTLobbyCharacter::Multicast_ShowChatBubble_Implementation(const FString& Text, bool bGuess)
@@ -953,7 +979,13 @@ void APTLobbyCharacter::InitCharacterPaint()
     if (UMaterialInterface* Base = GetMesh()->GetMaterial(0))
     {
         CharPaintMID = GetMesh()->CreateDynamicMaterialInstance(0, Base);
-        if (CharPaintMID) CharPaintMID->SetTextureParameterValue(PaintTexParam, PaintTex);
+        if (CharPaintMID)
+        {
+            CharPaintMID->SetTextureParameterValue(PaintTexParam, PaintTex);
+            // Color base del cuerpo (donde no hay pintura) = blanco por defecto. No-op si el material
+            // no tiene ese parámetro Vector.
+            CharPaintMID->SetVectorParameterValue(BodyBaseColorParam, BodyBaseColor);
+        }
     }
 }
 

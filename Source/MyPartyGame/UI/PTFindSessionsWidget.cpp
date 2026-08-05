@@ -51,8 +51,12 @@ void UPTFindSessionsWidget::PopulateResults(
         const FString Name = UMultiplayerSessionsSubsystem::GetServerNameFromResult(Result);
         const int32 Open   = Result.Session.NumOpenPublicConnections;
         const int32 Max    = Result.Session.SessionSettings.NumPublicConnections;
+        // Jugadores actuales: preferir el nº anunciado por el host (clave CUR_PLAYERS, se actualiza al
+        // entrar/salir). Si el resultado no lo trae, caer al cálculo por conexiones abiertas.
+        const int32 Advertised = UMultiplayerSessionsSubsystem::GetCurrentPlayersFromResult(Result);
+        const int32 Current    = (Advertised >= 0) ? Advertised : (Max - Open);
 
-        Row->Init(Result, Name, Max - Open, Max);
+        Row->Init(Result, Name, Current, Max);
         ResultsBox->AddChild(Row);
     }
 }
