@@ -58,6 +58,20 @@ La primera versión del flujo (todos los humanos arrancan cazadores; el que sobr
 - Números de balance: velocidades (silla rápida / cazador lento en música; cazador +5-10% en silencio), duración de ronda, curva de retiro de bots, economía de puntos.
 - Nombre del modo (esperar a P14/P16 del Modo 1 — probablemente compartan tema).
 
+## 4b. Variante C — Inversión directa del Modo 1 (idea de Deivor, 06-ago-2026)
+
+Sin bots y sobre el casting del Modo 1, invirtiendo la infección:
+
+- Arranca **1 SILLA vs. N−1 CAZADORES** (el espejo exacto del 1 cazador vs. N−1 sillas).
+- **El primer cazador que logra sentarse** (capturar a la silla) **asciende: pasa a ser silla** la ronda siguiente. Las sillas se ACUMULAN en vez de los cazadores: 1→2→3… sillas mientras los cazadores se achican.
+- Con varias sillas vivas, los cazadores compiten entre sí por ser el primero en sentarse cada ronda (solo asciende uno por ronda — o uno por silla capturada, a decidir).
+- **Pierde el único cazador que nunca consiguió sentarse** en todo el match (el perdedor único, al revés del ganador único del Modo 1).
+- **Las sillas puntúan por sobrevivir**: si en alguna ronda nadie logró sentarse, ganan las sillas con más puntos — el mismo D7b reciclado con la polaridad opuesta.
+- Nadie especta: cazador que asciende sigue jugando como silla; sillas juegan hasta el final.
+- Atractivo extra: se puede ofrecer como **opción del lobby del mismo Modo 1** (mismo mapa, mismas mecánicas de captura/baile/audio — solo cambia la dirección de la conversión y el casting inicial). Candidato a implementarse como variante del GameMode actual, no como juego aparte.
+
+Preguntas abiertas de la variante: ¿la silla capturada vuelve a cazador (rotación) o las sillas nunca bajan? ¿el baile aplica a todos los cazadores a la vez (mucha ceguera simultánea)? ¿cómo escala la intensificación D12 cuando las sillas CRECEN en vez de caer?
+
 ## 5. Nota técnica (para cuando se prototipe)
 
 - GameMode hermano (`ASillasInversasGameMode` o similar) sobre el mismo esqueleto: roles, fases, sentado server-authoritative, BalanceData propio.
