@@ -53,7 +53,8 @@ public:
 
     // FASE 2 — Resolución server-authoritative del sentado de la caminata de
     // cola (D5/D6): señuelo → dolor 1.8s · silla-jugador → rotura + infección.
-    void ResolverSentado(class ASillasPawnCazador* Cazador, AActor* Objetivo);
+    // Virtual: el modo inverso (M1) resuelve montura en vez de rotura.
+    virtual void ResolverSentado(class ASillasPawnCazador* Cazador, AActor* Objetivo);
 
 protected:
     // Config de balance. Se intenta cargar el asset DA_SillasBalance; si no
@@ -77,21 +78,21 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category="Sillas")
     TSubclassOf<class ASillasSenuelo> SenueloClass;
 
-private:
-    // --- Flujo de ronda (todo servidor) ---
+protected:
+    // --- Flujo de ronda (todo servidor; protected para el modo inverso) ---
     void IniciarRonda();
     void EmpezarMusica();
     void EmpezarSilencio();
     void TerminarRondaPorTiempo(); // D2b: expiró el reloj — las sillas vivas ganan
     void TerminarRonda();
-    void TerminarMatch();
+    virtual void TerminarMatch();
     void VolverAlLobby();
 
     // D7b: puntos por fase COMPLETA sobrevivida (se otorga en cada transición
     // de fase a las sillas que siguen vivas).
-    void OtorgarPuntosSupervivencia();
+    virtual void OtorgarPuntosSupervivencia();
 
-    void AsignarRoles();
+    virtual void AsignarRoles();
     void SetFase(ESillasFase NuevaFase, float DuracionSeg);
 
     // Limpia los señuelos viejos, reparte puntos de spawn entre sillas-jugador y

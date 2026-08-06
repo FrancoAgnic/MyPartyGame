@@ -27,8 +27,13 @@ void ASillasLobbyGameMode::CheckStartRequested()
     // servidor sin reconectar, la sesión Steam sigue viva. Sin "?listen": eso
     // solo hace falta en el primer viaje que LEVANTA el listen server (menú→lobby).
     // D8: la config del host viaja como opciones (ASillasGameMode las lee en InitGame).
-    const FString URL = FString::Printf(TEXT("%s?Rondas=%d?Cazadores=%d"),
-                                        *ArenaMapPath, RondasPorMatch, CazadoresIniciales);
+    FString URL = FString::Printf(TEXT("%s?Rondas=%d?Cazadores=%d"),
+                                  *ArenaMapPath, RondasPorMatch, CazadoresIniciales);
+    // Modo inverso: la opción "game" del engine pisa el GameMode del mapa.
+    if (bModoInverso && !ModoInversoGameModePath.IsEmpty())
+    {
+        URL += TEXT("?game=") + ModoInversoGameModePath;
+    }
     UE_LOG(LogTemp, Log, TEXT("[SillasLobby] Start del host: viajando a %s"), *URL);
     GetWorld()->ServerTravel(URL);
 }

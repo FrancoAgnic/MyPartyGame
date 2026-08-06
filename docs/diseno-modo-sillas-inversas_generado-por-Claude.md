@@ -72,6 +72,8 @@ Sin bots y sobre el casting del Modo 1, invirtiendo la infección:
 
 Preguntas abiertas de la variante: ¿la silla capturada vuelve a cazador (rotación) o las sillas nunca bajan? ¿el baile aplica a todos los cazadores a la vez (mucha ceguera simultánea)? ¿cómo escala la intensificación D12 cuando las sillas CRECEN en vez de caer?
 
+**M1 — LA MONTURA (decidido por Deivor, 06-ago-2026, EN PROTOTIPO):** el cazador que se sienta en una silla-jugador NO la rompe: **queda montado en ella** hasta que los demás se sienten o expire el reloj. La pareja se mueve EN CONJUNTO, a los saltitos: **la silla controla los ejes (XY)** y **el jinete impulsa en Z con la barra espaciadora** — juntos pueden estorbar caminos y bloquear a los cazadores que aún no se sentaron para negarles puntos (fusión de la Variante C con la idea "Silla Siamesa" del Modo 3B). El primer sentado de cada ronda asciende a silla la ronda siguiente; el cazador que nunca logra sentarse en el match es el perdedor único. Prototipo implementado como `ASillasInversasGameMode` sobre el esqueleto del Modo 1 (mismo mapa, misma caminata de cola; el sentado resuelve montura en vez de rotura).
+
 ## 5. Nota técnica (para cuando se prototipe)
 
 - GameMode hermano (`ASillasInversasGameMode` o similar) sobre el mismo esqueleto: roles, fases, sentado server-authoritative, BalanceData propio.

@@ -40,8 +40,19 @@ public:
     bool  EstaAguantando() const { return bAguantando; }
     USillasAbilityComponent* GetHabilidad() const { return Habilidad; }
 
+    // --- Montura (M1, modo inverso) ---
+    // Solo servidor: el jinete quedó sentado encima; la pareja pasa a moverse
+    // a los saltitos (esta silla maneja XY; el jinete impulsa Z con Espacio).
+    void MontarServer(class ASillasPawnCazador* Jinete);
+    // Solo servidor: el jinete pide un saltito (si la silla está en el piso).
+    void SaltoMonturaServer();
+    bool EstaMontada() const { return bMontada; }
+
 protected:
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
+
+    // M1: montada, el salto propio (D10) queda anulado — el impulso Z es del jinete.
+    virtual bool CanJumpInternal_Implementation() const override;
 
     // Caja idéntica al señuelo, colgada de la cápsula.
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Sillas")
@@ -110,6 +121,12 @@ private:
     // Segundos de sprint restantes (replicado para el HUD de Fase 5).
     UPROPERTY(Replicated)
     float StaminaActual = 0.f;
+
+    // M1 — montada por un jinete (modo inverso).
+    UPROPERTY(ReplicatedUsing=OnRep_Montada)
+    bool bMontada = false;
+
+    UFUNCTION() void OnRep_Montada();
 
     // D18 — aguantando la respiración (server-auth con predicción local).
     UPROPERTY(Replicated)

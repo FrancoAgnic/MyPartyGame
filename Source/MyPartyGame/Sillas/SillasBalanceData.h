@@ -176,6 +176,23 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Match", meta=(ClampMin="1.0"))
     float FinMatchSeg = 12.0f;
 
+    // ---------- Modo Inverso: la montura (M1) ----------
+    // El cazador sentado queda montado; la pareja se mueve a los saltitos:
+    // la silla maneja XY, el jinete impulsa en Z con Espacio.
+
+    // Velocidad de la silla en el piso mientras carga jinete (casi nada:
+    // el desplazamiento real es el saltito).
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Montura (Inverso)", meta=(ClampMin="0.0"))
+    float VelocidadSillaMontada = 80.0f;
+
+    // Impulso vertical del saltito del jinete.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Montura (Inverso)", meta=(ClampMin="0.0"))
+    float ImpulsoSaltoMontura = 520.0f;
+
+    // Control aéreo de la silla montada (alto: el saltito se dirige en el aire).
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Montura (Inverso)", meta=(ClampMin="0.0", ClampMax="1.0"))
+    float AirControlMontada = 0.85f;
+
     // ---------- Accesibilidad (Fase 7 — D17 depende del oído) ----------
 
     // Subtítulos de sonido: el cazador ve un aviso en el HUD cuando hay una

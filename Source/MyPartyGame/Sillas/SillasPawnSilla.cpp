@@ -4,6 +4,7 @@
 #include "SillasAbilityComponent.h"
 #include "SillasBalanceData.h"
 #include "SillasGameState.h"
+#include "SillasPawnCazador.h"
 #include "SillasPlayerController.h"
 #include "SillasPlayerState.h"
 #include "Camera/CameraComponent.h"
@@ -216,6 +217,44 @@ void ASillasPawnSilla::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
     DOREPLIFETIME(ASillasPawnSilla, StaminaActual);
     DOREPLIFETIME(ASillasPawnSilla, bAguantando);
     DOREPLIFETIME(ASillasPawnSilla, AguanteActual);
+    DOREPLIFETIME(ASillasPawnSilla, bMontada);
+}
+
+void ASillasPawnSilla::MontarServer(ASillasPawnCazador* Jinete)
+{
+    if (!HasAuthority() || bMontada || !Jinete) return;
+
+    bMontada = true;
+    OnRep_Montada(); // el listen host no recibe su propio OnRep
+
+    // El acople físico lo hace el jinete (attach a esta silla).
+    Jinete->MontarEnServer(this);
+}
+
+void ASillasPawnSilla::SaltoMonturaServer()
+{
+    if (!HasAuthority() || !bMontada) return;
+    if (GetCharacterMovement()->IsFalling()) return; // un saltito por contacto
+
+    LaunchCharacter(FVector(0.f, 0.f, GetBalance()->ImpulsoSaltoMontura),
+                    /*bXYOverride=*/false, /*bZOverride=*/true);
+}
+
+bool ASillasPawnSilla::CanJumpInternal_Implementation() const
+{
+    return !bMontada && Super::CanJumpInternal_Implementation();
+}
+
+void ASillasPawnSilla::OnRep_Montada()
+{
+    AplicarVelocidad();
+
+    // Montada: casi no camina, pero dirige el saltito en el aire.
+    GetCharacterMovement()->AirControl = bMontada ? GetBalance()->AirControlMontada : 0.35f;
+    if (bMontada)
+    {
+        StopJumping(); // el salto propio (D10) queda anulado; el Z es del jinete
+    }
 }
 
 void ASillasPawnSilla::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -433,6 +472,12 @@ void ASillasPawnSilla::OnRep_Sprint()
 void ASillasPawnSilla::AplicarVelocidad()
 {
     const USillasBalanceData* B = GetBalance();
+    if (bMontada)
+    {
+        // M1: con jinete encima el piso casi no existe — se avanza a saltitos.
+        GetCharacterMovement()->MaxWalkSpeed = B->VelocidadSillaMontada;
+        return;
+    }
     GetCharacterMovement()->MaxWalkSpeed =
         bSprint ? B->VelocidadSprintSilla : B->VelocidadCaminataSilla;
 }

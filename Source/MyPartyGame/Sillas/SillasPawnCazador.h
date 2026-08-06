@@ -50,6 +50,13 @@ public:
     void EmpezarBaileServer();
     void TerminarBaileServer();
 
+    // --- Montura (M1, modo inverso) ---
+    // Solo servidor: este cazador se sentó en una silla-jugador y queda montado
+    // (acoplado físicamente; su movimiento propio se apaga). Desde ahí, la barra
+    // espaciadora impulsa el saltito de la pareja.
+    void MontarEnServer(class ASillasPawnSilla* Silla);
+    bool EstaMontado() const { return bMontado; }
+
 protected:
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
@@ -78,7 +85,21 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category="Input")
     TObjectPtr<UInputAction> CaptureAction;
 
+    // Espacio: el saltito de la montura (solo hace algo estando montado, M1).
+    UPROPERTY(EditDefaultsOnly, Category="Input")
+    TObjectPtr<UInputAction> SaltoMonturaAction;
+
 private:
+    // M1 — montado sobre una silla-jugador (modo inverso).
+    UPROPERTY(ReplicatedUsing=OnRep_Montado)
+    bool bMontado = false;
+
+    UPROPERTY(Replicated)
+    TObjectPtr<ASillasPawnSilla> MontadoEn;
+
+    UFUNCTION() void OnRep_Montado();
+    void OnSaltoMontura();
+    UFUNCTION(Server, Reliable) void Server_SaltoMontura();
 
     UPROPERTY(ReplicatedUsing=OnRep_Estado)
     bool bCapturando = false;

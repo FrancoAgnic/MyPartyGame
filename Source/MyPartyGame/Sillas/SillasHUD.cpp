@@ -119,6 +119,13 @@ void ASillasHUD::DibujarEstadoLocal(const ASillasGameState* GS)
 
     if (const ASillasPawnSilla* Silla = Cast<ASillasPawnSilla>(PC->GetPawn()))
     {
+        if (Silla->EstaMontada())
+        {
+            // M1 (modo inverso): sos la mitad de abajo del tándem.
+            TextoCentrado(TEXT("¡TE MONTARON! Manejá los ejes — tu jinete salta con Espacio. ¡Estorben juntos!"),
+                          CX, YBase - 26.f, FLinearColor(1.f, 0.7f, 0.2f), Medio, 1.15f);
+            return;
+        }
         TextoCentrado(TEXT("SOS UNA SILLA — camuflate (Shift sprint · clic empujon · Q burla)"),
                       CX, YBase - 26.f, FLinearColor(0.5f, 1.f, 0.5f), Medio, 1.1f);
 
@@ -149,7 +156,8 @@ void ASillasHUD::DibujarEstadoLocal(const ASillasGameState* GS)
     {
         FString Estado;
         FLinearColor Color = FLinearColor(1.f, 0.55f, 0.3f);
-        if (Caz->EstaBailando())        { Estado = TEXT("BAILANDO — no podes cazar"); }
+        if (Caz->EstaMontado())         { Estado = TEXT("¡SENTADO! Espacio: saltito — tu silla maneja los ejes"); Color = FLinearColor(1.f, 0.7f, 0.2f); }
+        else if (Caz->EstaBailando())   { Estado = TEXT("BAILANDO — no podes cazar"); }
         else if (Caz->EstaAdolorido())  { Estado = TEXT("¡AY! Era un señuelo..."); Color = FLinearColor::Red; }
         else if (Caz->EstaCapturando()) { Estado = TEXT("CAMINATA DE COLA — solta el clic para cancelar"); }
         else                            { Estado = TEXT("SOS EL CAZADOR — escucha la respiracion (clic: caminata de cola)"); }

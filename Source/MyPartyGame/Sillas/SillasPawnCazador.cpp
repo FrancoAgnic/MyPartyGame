@@ -67,6 +67,11 @@ ASillasPawnCazador::ASillasPawnCazador()
     static ConstructorHelpers::FObjectFinder<UInputAction> IAMouseLook(
         TEXT("/Game/Input/Actions/IA_MouseLook.IA_MouseLook"));
     if (IAMouseLook.Succeeded()) MouseLookAction = IAMouseLook.Object;
+
+    // Espacio (mismo asset de salto del template) — solo actúa montado (M1).
+    static ConstructorHelpers::FObjectFinder<UInputAction> IAJump(
+        TEXT("/Game/Input/Actions/IA_Jump.IA_Jump"));
+    if (IAJump.Succeeded()) SaltoMonturaAction = IAJump.Object;
 }
 
 void ASillasPawnCazador::BeginPlay()
@@ -104,6 +109,51 @@ void ASillasPawnCazador::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
     DOREPLIFETIME(ASillasPawnCazador, bAdolorido);
     DOREPLIFETIME(ASillasPawnCazador, bBailando);
     DOREPLIFETIME(ASillasPawnCazador, BaileYawBase);
+    DOREPLIFETIME(ASillasPawnCazador, bMontado);
+    DOREPLIFETIME(ASillasPawnCazador, MontadoEn);
+}
+
+void ASillasPawnCazador::MontarEnServer(ASillasPawnSilla* Silla)
+{
+    if (!HasAuthority() || bMontado || !Silla) return;
+
+    CancelarCapturaServer();
+    bMontado  = true;
+    MontadoEn = Silla;
+
+    // Acople físico: el jinete viaja pegado arriba de la silla. El attach y el
+    // estado replican; OnRep apaga movimiento/colisión también en clientes.
+    AttachToComponent(Silla->GetCapsuleComponent(),
+                      FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+    SetActorRelativeLocation(FVector(0.f, 0.f, 130.f));
+    SetActorRelativeRotation(FRotator::ZeroRotator);
+    OnRep_Montado();
+}
+
+void ASillasPawnCazador::OnRep_Montado()
+{
+    if (bMontado)
+    {
+        GetCharacterMovement()->DisableMovement();
+        GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    }
+    AplicarEstadoAMovimiento();
+}
+
+void ASillasPawnCazador::OnSaltoMontura()
+{
+    if (bMontado)
+    {
+        Server_SaltoMontura();
+    }
+}
+
+void ASillasPawnCazador::Server_SaltoMontura_Implementation()
+{
+    if (bMontado && MontadoEn)
+    {
+        MontadoEn->SaltoMonturaServer();
+    }
 }
 
 void ASillasPawnCazador::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -131,6 +181,10 @@ void ASillasPawnCazador::SetupPlayerInputComponent(UInputComponent* PlayerInputC
             Input->BindAction(CaptureAction, ETriggerEvent::Started,   this, &ASillasPawnCazador::OnCapturaPressed);
             Input->BindAction(CaptureAction, ETriggerEvent::Completed, this, &ASillasPawnCazador::OnCapturaReleased);
             Input->BindAction(CaptureAction, ETriggerEvent::Canceled,  this, &ASillasPawnCazador::OnCapturaReleased);
+        }
+        if (SaltoMonturaAction)
+        {
+            Input->BindAction(SaltoMonturaAction, ETriggerEvent::Started, this, &ASillasPawnCazador::OnSaltoMontura);
         }
     }
 }
@@ -194,9 +248,10 @@ void ASillasPawnCazador::Server_SetCapturando_Implementation(bool bNueva)
 {
     if (bNueva)
     {
-        // D5+D11: capturar solo se puede en el Silencio; jamás adolorido.
+        // D5+D11: capturar solo se puede en el Silencio; jamás adolorido ni
+        // montado (M1: el que ya se sentó, se queda sentado).
         const ASillasGameState* GS = GetWorld()->GetGameState<ASillasGameState>();
-        if (!GS || GS->Fase != ESillasFase::Silencio || bAdolorido)
+        if (!GS || GS->Fase != ESillasFase::Silencio || bAdolorido || bMontado)
         {
             bNueva = false;
         }
@@ -236,7 +291,7 @@ void ASillasPawnCazador::AplicarDolorServer()
 
 void ASillasPawnCazador::EmpezarBaileServer()
 {
-    if (!HasAuthority()) return;
+    if (!HasAuthority() || bMontado) return; // el jinete montado no baila (M1)
 
     CancelarCapturaServer();
     if (!bBailando)
@@ -325,6 +380,11 @@ void ASillasPawnCazador::ChequearSentado()
 
     auto Considerar = [&](AActor* Candidato)
     {
+        // M1: una silla que ya carga jinete no admite otro sentado.
+        if (const ASillasPawnSilla* S = Cast<ASillasPawnSilla>(Candidato))
+        {
+            if (S->EstaMontada()) return;
+        }
         const FVector Delta = Candidato->GetActorLocation() - MiPos;
         if (FMath::Abs(Delta.Z) > 150.f) return;          // misma planta
         const float Dist = Delta.Size2D();

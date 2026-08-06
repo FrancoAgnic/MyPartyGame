@@ -35,6 +35,17 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category="Sillas", meta=(ClampMin="0", ClampMax="4"))
     int32 CazadoresIniciales = 0;
 
+    // MODO INVERSO (Variante C + M1): 1 silla vs. todos los cazadores, el
+    // sentado monta en vez de romper. Editable en BP_LobbyGameMode; la UI de
+    // lobby en runtime queda pendiente junto con la de rondas/cazadores.
+    UPROPERTY(EditDefaultsOnly, Category="Sillas")
+    bool bModoInverso = false;
+
+    // Clase de GameMode que se usa cuando bModoInverso está activo.
+    UPROPERTY(EditDefaultsOnly, Category="Sillas")
+    FString ModoInversoGameModePath =
+        TEXT("/Game/Sillas/Blueprints/BP_SillasInversasGameMode.BP_SillasInversasGameMode_C");
+
 private:
     // El template no expone evento/virtual al flippear LobbyState (RPC no-virtual
     // en PTLobbyPlayerController), así que se sondea con un timer corto en el
