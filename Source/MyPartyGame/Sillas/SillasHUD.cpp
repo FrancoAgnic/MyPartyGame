@@ -10,6 +10,7 @@
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
+#include "EngineUtils.h"
 
 namespace
 {
@@ -144,6 +145,29 @@ void ASillasHUD::DibujarEstadoLocal(const ASillasGameState* GS)
         else                            { Estado = TEXT("SOS EL CAZADOR — escucha la respiracion (clic: caminata de cola)"); }
 
         TextoCentrado(Estado, CX, YBase, Color, Medio, 1.2f);
+
+        // Accesibilidad (Fase 7): subtítulo de sonido — solo texto, sin
+        // dirección ni distancia (no es un radar; D17 sigue mandando).
+        if (GS->Balance && GS->Balance->bSubtitulosDeSonido)
+        {
+            bool bRespiracionCerca = false;
+            const float RadioSq = FMath::Square(GS->Balance->RespiracionRadio);
+            for (TActorIterator<ASillasPawnSilla> It(GetWorld()); It; ++It)
+            {
+                if (It->EstaAguantando()) continue;
+                if (FVector::DistSquared(It->GetActorLocation(), Caz->GetActorLocation()) <= RadioSq)
+                {
+                    bRespiracionCerca = true;
+                    break;
+                }
+            }
+            if (bRespiracionCerca)
+            {
+                const float Pulso = 0.55f + 0.45f * FMath::Sin(GetWorld()->GetRealTimeSeconds() * 6.f);
+                TextoCentrado(TEXT("~ se oye una respiracion cerca ~"), CX, YBase + 24.f,
+                              FLinearColor(1.f, 1.f, 1.f, Pulso), Medio, 1.f);
+            }
+        }
     }
 }
 

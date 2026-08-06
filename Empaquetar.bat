@@ -5,11 +5,11 @@ set PROJECT_DIR=%~dp0
 set PROJECT_FILE=%PROJECT_DIR%MyPartyGame.uproject
 set PACKAGED_DIR=%PROJECT_DIR%Packaged
 set UAT=D:\UnrealEngineVeersions\UE_5.8\Engine\Build\BatchFiles\RunUAT.bat
-set ONEDRIVE_DEST=%ONEDRIVE%\Sculpturillo
+set ONEDRIVE_DEST=%ONEDRIVE%\SillasBeta
 
 echo.
 echo ========================================
-echo   Empaquetando Sculpturillo...
+echo   Empaquetando Sillas (beta)...
 echo ========================================
 echo.
 
@@ -40,7 +40,7 @@ robocopy "%PACKAGED_DIR%\Windows" "%ONEDRIVE_DEST%" /MIR /NFL /NDL /NJH /NJS /NC
 
 echo.
 echo ========================================
-echo   Listo! Build disponible en OneDrive:
+echo   Listo! Build de Sillas disponible en OneDrive:
 echo   %ONEDRIVE_DEST%
 echo ========================================
 echo.

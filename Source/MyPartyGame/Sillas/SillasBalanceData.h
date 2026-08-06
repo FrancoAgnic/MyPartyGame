@@ -171,6 +171,14 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Match", meta=(ClampMin="1.0"))
     float FinMatchSeg = 12.0f;
 
+    // ---------- Accesibilidad (Fase 7 — D17 depende del oído) ----------
+
+    // Subtítulos de sonido: el cazador ve un aviso en el HUD cuando hay una
+    // respiración audible en rango. Apagado por defecto (D17: sin indicador
+    // visual); es una opción de accesibilidad, no un radar.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Accesibilidad")
+    bool bSubtitulosDeSonido = false;
+
     // ---------- Puntos (D7b) — los consume la Fase 5 ----------
     // Regla de referencia: ganar la ronda vivo ≥ mejor puntaje posible como
     // cazador de esa ronda (anti dejarse-atrapar).

@@ -12,7 +12,10 @@
 #include "EngineUtils.h"
 #include "MultiplayerSessionsSubsystem.h"
 #include "Engine/TargetPoint.h"
+#include "HAL/FileManager.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -103,6 +106,12 @@ void ASillasGameMode::IniciarRonda()
     GS->AgregarFeed(FString::Printf(TEXT("— Ronda %d de %d —"),
                                     GS->RondaActual, GS->RondasTotales));
 
+    // Métricas (Fase 7): arranca el registro de la ronda.
+    MetricasRonda = FMetricasRonda();
+    MetricasRonda.Ronda             = GS->RondaActual;
+    MetricasRonda.JugadoresAlInicio = GS->PlayerArray.Num();
+    InicioRondaSeg                  = GetWorld()->GetTimeSeconds();
+
     // Todos vuelven a ser sillas; se eligen los cazadores iniciales (D7/D8).
     AsignarRoles();
 
@@ -160,6 +169,8 @@ void ASillasGameMode::OtorgarPuntosSupervivencia()
     // Solo cuenta una fase de juego real completada (Musica o Silencio).
     if (GS->Fase != ESillasFase::Musica && GS->Fase != ESillasFase::Silencio) return;
 
+    MetricasRonda.FasesCompletadas++;
+
     for (APlayerState* PS : GS->PlayerArray)
     {
         if (ASillasPlayerState* SPS = Cast<ASillasPlayerState>(PS))
@@ -189,6 +200,10 @@ void ASillasGameMode::TerminarRonda()
                             *SPS->DisplayName, Balance->BonusUltimoVivo));
         }
     }
+
+    // Métricas: cerrar la ronda.
+    MetricasRonda.DuracionSeg = (float)(GetWorld()->GetTimeSeconds() - InicioRondaSeg);
+    MetricasMatch.Add(MetricasRonda);
 
     SetFase(ESillasFase::FinRonda, Balance->FinRondaSeg);
 
@@ -229,6 +244,43 @@ void ASillasGameMode::TerminarMatch()
     GetWorldTimerManager().SetTimer(
         FaseTimer, this, &ASillasGameMode::VolverAlLobby, Balance->FinMatchSeg, false);
     UE_LOG(LogTemp, Log, TEXT("[Sillas] Match terminado."));
+
+    VolcarMetricasCSV();
+}
+
+void ASillasGameMode::VolcarMetricasCSV()
+{
+    if (MetricasMatch.Num() == 0) return;
+
+    FString CSV = TEXT("ronda,jugadores,duracion_seg,capturas,sentadas_erradas,fases_completadas,pct_erradas\n");
+    float DuracionTotal = 0.f;
+    int32 TotalCapturas = 0, TotalErradas = 0;
+
+    for (const FMetricasRonda& M : MetricasMatch)
+    {
+        const int32 Intentos = M.Capturas + M.SentadasErradas;
+        const float PctErradas = Intentos > 0 ? 100.f * M.SentadasErradas / Intentos : 0.f;
+        CSV += FString::Printf(TEXT("%d,%d,%.1f,%d,%d,%d,%.0f\n"),
+                               M.Ronda, M.JugadoresAlInicio, M.DuracionSeg,
+                               M.Capturas, M.SentadasErradas, M.FasesCompletadas, PctErradas);
+        DuracionTotal += M.DuracionSeg;
+        TotalCapturas += M.Capturas;
+        TotalErradas  += M.SentadasErradas;
+    }
+
+    const FString Dir = FPaths::ProjectSavedDir() / TEXT("SillasMetrics");
+    IFileManager::Get().MakeDirectory(*Dir, /*Tree=*/true);
+    const FString Archivo = Dir / FString::Printf(TEXT("match_%s.csv"),
+                            *FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S")));
+    FFileHelper::SaveStringToFile(CSV, *Archivo);
+
+    const int32 Intentos = TotalCapturas + TotalErradas;
+    UE_LOG(LogTemp, Log,
+           TEXT("[Sillas] Métricas del match: %d rondas, %.0fs promedio/ronda, %d capturas, %.0f%% sentadas erradas → %s"),
+           MetricasMatch.Num(), DuracionTotal / MetricasMatch.Num(), TotalCapturas,
+           Intentos > 0 ? 100.f * TotalErradas / Intentos : 0.f, *Archivo);
+
+    MetricasMatch.Reset();
 }
 
 void ASillasGameMode::VolverAlLobby()
@@ -246,6 +298,7 @@ void ASillasGameMode::ResolverSentado(ASillasPawnCazador* Cazador, AActor* Objet
     if (Cast<ASillasSenuelo>(Objetivo))
     {
         // D6: señuelo sólido — cazador adolorido, el señuelo ni se inmuta.
+        MetricasRonda.SentadasErradas++;
         Cazador->AplicarDolorServer();
         UE_LOG(LogTemp, Log, TEXT("[Sillas] %s se sentó en un señuelo: %.1fs de dolor."),
                *GetNameSafe(Cazador->GetPlayerState()), Balance->DuracionDolorSeg);
@@ -269,6 +322,8 @@ void ASillasGameMode::RomperSilla(ASillasPawnSilla* Silla, ASillasPawnCazador* C
 
     UE_LOG(LogTemp, Log, TEXT("[Sillas] ¡Silla rota! %s cazó a %s."),
            *GetNameSafe(Cazador ? Cazador->GetPlayerState() : nullptr), *GetNameSafe(PS));
+
+    MetricasRonda.Capturas++;
 
     // D7b: la captura puntúa + línea en el feed.
     ASillasPlayerState* PSCazador =

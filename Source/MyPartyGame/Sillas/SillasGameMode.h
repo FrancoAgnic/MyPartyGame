@@ -117,6 +117,24 @@ private:
     FTimerHandle FaseTimer;
     int32 PlayersJoined = 0;
 
+    // FASE 7 — métricas de playtest (solo server; CSV en Saved/SillasMetrics/).
+    // Los tres números que el plan pide medir: duración de ronda real,
+    // % de capturas erradas y supervivencia por fase.
+    struct FMetricasRonda
+    {
+        int32 Ronda = 0;
+        int32 JugadoresAlInicio = 0;
+        float DuracionSeg = 0.f;
+        int32 Capturas = 0;
+        int32 SentadasErradas = 0;
+        int32 FasesCompletadas = 0;
+    };
+    TArray<FMetricasRonda> MetricasMatch;
+    FMetricasRonda MetricasRonda;
+    double InicioRondaSeg = 0.0;
+
+    void VolcarMetricasCSV();
+
     // D7: cazadores iniciales sin repetir hasta agotar la lista.
     TSet<TWeakObjectPtr<ASillasPlayerState>> YaFueronCazadorInicial;
 
