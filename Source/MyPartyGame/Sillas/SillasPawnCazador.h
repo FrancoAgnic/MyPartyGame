@@ -35,6 +35,8 @@ public:
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
     bool EstaCapturando() const { return bCapturando; }
+    bool EstaBailando() const   { return bBailando; }
+    bool EstaAdolorido() const  { return bAdolorido; }
 
     // Solo servidor. Cancela el modo captura (fin de Silencio, o tras resolver un sentado).
     void CancelarCapturaServer();

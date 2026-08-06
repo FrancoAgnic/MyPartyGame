@@ -476,6 +476,18 @@ void ASillasPawnSilla::AplicarVelocidad()
         bSprint ? B->VelocidadSprintSilla : B->VelocidadCaminataSilla;
 }
 
+float ASillasPawnSilla::GetStamina01() const
+{
+    const float Max = GetBalance()->StaminaSprintSeg;
+    return Max > 0.f ? FMath::Clamp(StaminaActual / Max, 0.f, 1.f) : 0.f;
+}
+
+float ASillasPawnSilla::GetAguante01() const
+{
+    const float Max = GetBalance()->AguanteSeg;
+    return Max > 0.f ? FMath::Clamp(AguanteActual / Max, 0.f, 1.f) : 0.f;
+}
+
 const USillasBalanceData* ASillasPawnSilla::GetBalance() const
 {
     if (const ASillasGameState* GS = GetWorld()->GetGameState<ASillasGameState>())

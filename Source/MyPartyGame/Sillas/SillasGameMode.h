@@ -84,6 +84,11 @@ private:
     void EmpezarSilencio();
     void TerminarRonda();
     void TerminarMatch();
+    void VolverAlLobby();
+
+    // D7b: puntos por fase COMPLETA sobrevivida (se otorga en cada transición
+    // de fase a las sillas que siguen vivas).
+    void OtorgarPuntosSupervivencia();
 
     void AsignarRoles();
     void SetFase(ESillasFase NuevaFase, float DuracionSeg);
@@ -111,4 +116,17 @@ private:
 
     FTimerHandle FaseTimer;
     int32 PlayersJoined = 0;
+
+    // D7: cazadores iniciales sin repetir hasta agotar la lista.
+    TSet<TWeakObjectPtr<ASillasPlayerState>> YaFueronCazadorInicial;
+
+    // D8 — llegan como opciones de la URL de travel desde el lobby
+    // (?Rondas= y ?Cazadores=; 0 = automático). Fallback: BalanceData.
+    int32 RondasOverride = 0;
+    int32 CazadoresOverride = 0;
+
+protected:
+    // Mapa del lobby al que se vuelve al terminar el match (seamless).
+    UPROPERTY(EditDefaultsOnly, Category="Sillas")
+    FString LobbyMapPath = TEXT("/Game/Template/levels/Lobby");
 };

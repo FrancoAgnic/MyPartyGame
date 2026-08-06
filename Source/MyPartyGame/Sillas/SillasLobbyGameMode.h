@@ -25,6 +25,16 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category="Sillas")
     FString ArenaMapPath = TEXT("/Game/Sillas/Maps/L_TestArena");
 
+    // D8 — config del host que viaja a la arena como opciones de URL.
+    // (La UI de lobby para tocarlos en runtime queda pendiente; por ahora se
+    // editan en BP_LobbyGameMode.)
+    UPROPERTY(EditDefaultsOnly, Category="Sillas", meta=(ClampMin="1", ClampMax="20"))
+    int32 RondasPorMatch = 5;
+
+    // 0 = automático (1 cazador para 2-5 jugadores, 2 para 6+, según BalanceData).
+    UPROPERTY(EditDefaultsOnly, Category="Sillas", meta=(ClampMin="0", ClampMax="4"))
+    int32 CazadoresIniciales = 0;
+
 private:
     // El template no expone evento/virtual al flippear LobbyState (RPC no-virtual
     // en PTLobbyPlayerController), así que se sondea con un timer corto en el

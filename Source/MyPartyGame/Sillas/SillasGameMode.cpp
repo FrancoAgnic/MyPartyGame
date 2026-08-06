@@ -7,6 +7,7 @@
 #include "SillasPawnSilla.h"
 #include "SillasPlayerController.h"
 #include "SillasPlayerState.h"
+#include "SillasHUD.h"
 #include "SillasSenuelo.h"
 #include "EngineUtils.h"
 #include "MultiplayerSessionsSubsystem.h"
@@ -20,6 +21,7 @@ ASillasGameMode::ASillasGameMode()
     GameStateClass        = ASillasGameState::StaticClass();
     PlayerControllerClass = ASillasPlayerController::StaticClass();
     PlayerStateClass      = ASillasPlayerState::StaticClass();
+    HUDClass              = ASillasHUD::StaticClass();
 
     // Simétrico con PTLobbyGameMode: el viaje arena → lobby al terminar el match
     // también tiene que ser seamless para no tirar la sesión Steam.
@@ -56,6 +58,11 @@ void ASillasGameMode::InitGame(const FString& MapName, const FString& Options, F
         UE_LOG(LogTemp, Warning,
                TEXT("[Sillas] DA_SillasBalance no encontrado; usando defaults de C++."));
     }
+
+    // D8 — config del host, viaja como opciones en la URL desde el lobby
+    // (ASillasLobbyGameMode las agrega al ServerTravel). 0 = usar defaults.
+    RondasOverride    = UGameplayStatics::GetIntOption(Options, TEXT("Rondas"), 0);
+    CazadoresOverride = UGameplayStatics::GetIntOption(Options, TEXT("Cazadores"), 0);
 }
 
 void ASillasGameMode::BeginPlay()
@@ -92,6 +99,9 @@ void ASillasGameMode::IniciarRonda()
     if (!GS) return;
 
     GS->RondaActual++;
+    GS->RondasTotales = RondasOverride > 0 ? RondasOverride : Balance->RondasPorMatch;
+    GS->AgregarFeed(FString::Printf(TEXT("— Ronda %d de %d —"),
+                                    GS->RondaActual, GS->RondasTotales));
 
     // Todos vuelven a ser sillas; se eligen los cazadores iniciales (D7/D8).
     AsignarRoles();
@@ -109,6 +119,9 @@ void ASillasGameMode::IniciarRonda()
 
 void ASillasGameMode::EmpezarMusica()
 {
+    // D7b: las sillas que completaron el Silencio anterior puntúan.
+    OtorgarPuntosSupervivencia();
+
     // D13: suena la música → los cazadores bailan (corta cualquier caminata de
     // cola en curso). La ventana SEGURA de las sillas para reposicionarse.
     for (TActorIterator<ASillasPawnCazador> It(GetWorld()); It; ++It)
@@ -124,6 +137,9 @@ void ASillasGameMode::EmpezarMusica()
 
 void ASillasGameMode::EmpezarSilencio()
 {
+    // D7b: las sillas que completaron la Música puntúan.
+    OtorgarPuntosSupervivencia();
+
     // Se corta la música: fin del baile, empieza la caza.
     for (TActorIterator<ASillasPawnCazador> It(GetWorld()); It; ++It)
     {
@@ -136,15 +152,47 @@ void ASillasGameMode::EmpezarSilencio()
         FaseTimer, this, &ASillasGameMode::EmpezarMusica, Dur, false);
 }
 
+void ASillasGameMode::OtorgarPuntosSupervivencia()
+{
+    ASillasGameState* GS = SillasGS();
+    if (!GS) return;
+
+    // Solo cuenta una fase de juego real completada (Musica o Silencio).
+    if (GS->Fase != ESillasFase::Musica && GS->Fase != ESillasFase::Silencio) return;
+
+    for (APlayerState* PS : GS->PlayerArray)
+    {
+        if (ASillasPlayerState* SPS = Cast<ASillasPlayerState>(PS))
+        {
+            if (SPS->Rol == ESillasRole::Silla && !SPS->bEliminadoEstaRonda)
+            {
+                SPS->Server_SumarPuntos(Balance->PuntosPorFaseSobrevivida);
+            }
+        }
+    }
+}
+
 void ASillasGameMode::TerminarRonda()
 {
     ASillasGameState* GS = SillasGS();
     if (!GS) return;
 
-    // El bonus al último vivo y el scoreboard llegan con la Fase 5 (D7b).
+    // D7b: bonus a la última silla viva (la ganadora de la ronda). La regla de
+    // balance de referencia — ganar vivo ≥ mejor cazador — se tunea en el asset.
+    for (APlayerState* PS : GS->PlayerArray)
+    {
+        ASillasPlayerState* SPS = Cast<ASillasPlayerState>(PS);
+        if (SPS && SPS->Rol == ESillasRole::Silla && !SPS->bEliminadoEstaRonda)
+        {
+            SPS->Server_SumarPuntos(Balance->BonusUltimoVivo);
+            GS->AgregarFeed(FString::Printf(TEXT("%s gana la ronda (+%d)"),
+                            *SPS->DisplayName, Balance->BonusUltimoVivo));
+        }
+    }
+
     SetFase(ESillasFase::FinRonda, Balance->FinRondaSeg);
 
-    if (GS->RondaActual >= Balance->RondasPorMatch)
+    if (GS->RondaActual >= GS->RondasTotales)
     {
         GetWorldTimerManager().SetTimer(
             FaseTimer, this, &ASillasGameMode::TerminarMatch, Balance->FinRondaSeg, false);
@@ -158,9 +206,37 @@ void ASillasGameMode::TerminarRonda()
 
 void ASillasGameMode::TerminarMatch()
 {
-    // Fase 5: podio y vuelta al lobby. Por ahora el match queda en FinMatch.
-    SetFase(ESillasFase::FinMatch, 0.f);
+    ASillasGameState* GS = SillasGS();
+    if (!GS) return;
+
+    // Podio: el HUD lo dibuja leyendo PuntosMatch; acá solo el anuncio.
+    ASillasPlayerState* Campeon = nullptr;
+    for (APlayerState* PS : GS->PlayerArray)
+    {
+        ASillasPlayerState* SPS = Cast<ASillasPlayerState>(PS);
+        if (SPS && (!Campeon || SPS->PuntosMatch > Campeon->PuntosMatch))
+        {
+            Campeon = SPS;
+        }
+    }
+    if (Campeon)
+    {
+        GS->AgregarFeed(FString::Printf(TEXT("*** %s gana el match con %d puntos ***"),
+                        *Campeon->DisplayName, Campeon->PuntosMatch));
+    }
+
+    SetFase(ESillasFase::FinMatch, Balance->FinMatchSeg);
+    GetWorldTimerManager().SetTimer(
+        FaseTimer, this, &ASillasGameMode::VolverAlLobby, Balance->FinMatchSeg, false);
     UE_LOG(LogTemp, Log, TEXT("[Sillas] Match terminado."));
+}
+
+void ASillasGameMode::VolverAlLobby()
+{
+    // Seamless: la sesión Steam sigue viva y el lobby queda listo para otro
+    // Start del host (los PlayerStates vuelven a las clases PT del template).
+    UE_LOG(LogTemp, Log, TEXT("[Sillas] Volviendo al lobby: %s"), *LobbyMapPath);
+    GetWorld()->ServerTravel(LobbyMapPath);
 }
 
 void ASillasGameMode::ResolverSentado(ASillasPawnCazador* Cazador, AActor* Objetivo)
@@ -193,6 +269,18 @@ void ASillasGameMode::RomperSilla(ASillasPawnSilla* Silla, ASillasPawnCazador* C
 
     UE_LOG(LogTemp, Log, TEXT("[Sillas] ¡Silla rota! %s cazó a %s."),
            *GetNameSafe(Cazador ? Cazador->GetPlayerState() : nullptr), *GetNameSafe(PS));
+
+    // D7b: la captura puntúa + línea en el feed.
+    ASillasPlayerState* PSCazador =
+        Cazador ? Cazador->GetPlayerState<ASillasPlayerState>() : nullptr;
+    if (PSCazador)
+    {
+        PSCazador->Server_SumarPuntos(Balance->PuntosPorCaptura);
+    }
+    GS->AgregarFeed(FString::Printf(TEXT("%s cazó a %s (+%d)"),
+                    PSCazador ? *PSCazador->DisplayName : TEXT("¿?"),
+                    PS ? *PS->DisplayName : TEXT("¿?"),
+                    Balance->PuntosPorCaptura));
 
     // Teatro en todos los clientes + la silla desaparece.
     GS->Multicast_EfectoRoturaSilla(Lugar);
@@ -256,17 +344,35 @@ void ASillasGameMode::AsignarRoles()
         }
     }
 
-    // D8 (default; el config de lobby llega en Fase 5): 1 cazador para pocos
-    // jugadores, 2 a partir del umbral. D7 "sin repetir hasta agotar": Fase 5.
+    // D8: cazadores iniciales — configurado por el host desde el lobby
+    // (?Cazadores=) o el default por cantidad de jugadores (1, o 2 desde el umbral).
     const int32 NumCazadores = FMath::Clamp(
-        Jugadores.Num() >= Balance->UmbralJugadoresParaDosCazadores ? 2 : 1,
+        CazadoresOverride > 0
+            ? CazadoresOverride
+            : (Jugadores.Num() >= Balance->UmbralJugadoresParaDosCazadores ? 2 : 1),
         1, FMath::Max(1, Jugadores.Num() - 1));
 
-    for (int32 i = 0; i < NumCazadores && Jugadores.Num() > 0; ++i)
+    // D7: elegir cazadores al azar SIN repetir hasta agotar la lista.
+    TArray<ASillasPlayerState*> Candidatos;
+    for (ASillasPlayerState* J : Jugadores)
     {
-        const int32 Idx = FMath::RandRange(0, Jugadores.Num() - 1);
-        Jugadores[Idx]->Server_SetRol(ESillasRole::Cazador);
-        Jugadores.RemoveAtSwap(Idx);
+        if (!YaFueronCazadorInicial.Contains(J)) Candidatos.Add(J);
+    }
+    if (Candidatos.Num() < NumCazadores)
+    {
+        // Se agotó la rotación: arranca de nuevo.
+        YaFueronCazadorInicial.Reset();
+        Candidatos = Jugadores;
+    }
+
+    for (int32 i = 0; i < NumCazadores && Candidatos.Num() > 0; ++i)
+    {
+        const int32 Idx = FMath::RandRange(0, Candidatos.Num() - 1);
+        ASillasPlayerState* Elegido = Candidatos[Idx];
+        Elegido->Server_SetRol(ESillasRole::Cazador);
+        YaFueronCazadorInicial.Add(Elegido);
+        Candidatos.RemoveAtSwap(Idx);
+        Jugadores.Remove(Elegido);
     }
 
     GS->SillasVivas          = Jugadores.Num(); // los que quedaron como silla
@@ -509,6 +615,14 @@ void ASillasGameMode::Logout(AController* Exiting)
 {
     --PlayersJoined;
     UE_LOG(LogTemp, Log, TEXT("[Sillas] Logout. Jugadores conectados: %d"), PlayersJoined);
+
+    if (ASillasGameState* GS = SillasGS())
+    {
+        if (const APlayerState* PSExiting = Exiting ? Exiting->PlayerState : nullptr)
+        {
+            GS->AgregarFeed(FString::Printf(TEXT("%s se desconectó"), *PSExiting->GetPlayerName()));
+        }
+    }
 
     // Una silla que se desconecta a mitad de ronda cuenta como eliminada — si
     // no, la ronda puede quedar esperando a un fantasma.

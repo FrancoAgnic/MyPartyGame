@@ -26,6 +26,9 @@ void ASillasLobbyGameMode::CheckStartRequested()
     // Seamless (bUseSeamlessTravel viene del padre): los clientes viajan con el
     // servidor sin reconectar, la sesión Steam sigue viva. Sin "?listen": eso
     // solo hace falta en el primer viaje que LEVANTA el listen server (menú→lobby).
-    UE_LOG(LogTemp, Log, TEXT("[SillasLobby] Start del host: viajando a %s"), *ArenaMapPath);
-    GetWorld()->ServerTravel(ArenaMapPath);
+    // D8: la config del host viaja como opciones (ASillasGameMode las lee en InitGame).
+    const FString URL = FString::Printf(TEXT("%s?Rondas=%d?Cazadores=%d"),
+                                        *ArenaMapPath, RondasPorMatch, CazadoresIniciales);
+    UE_LOG(LogTemp, Log, TEXT("[SillasLobby] Start del host: viajando a %s"), *URL);
+    GetWorld()->ServerTravel(URL);
 }

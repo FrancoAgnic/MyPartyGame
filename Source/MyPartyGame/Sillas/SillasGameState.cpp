@@ -41,8 +41,26 @@ void ASillasGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
     DOREPLIFETIME(ASillasGameState, Fase);
     DOREPLIFETIME(ASillasGameState, FaseTerminaEnServerTime);
     DOREPLIFETIME(ASillasGameState, RondaActual);
+    DOREPLIFETIME(ASillasGameState, RondasTotales);
     DOREPLIFETIME(ASillasGameState, SillasVivas);
     DOREPLIFETIME(ASillasGameState, SillasAlInicioDeRonda);
+    DOREPLIFETIME(ASillasGameState, Feed);
+}
+
+void ASillasGameState::AgregarFeed(const FString& Texto)
+{
+    if (!HasAuthority()) return;
+
+    FSillasFeedEntry Entrada;
+    Entrada.Texto      = Texto;
+    Entrada.ServerTime = GetServerWorldTimeSeconds();
+    Feed.Add(Entrada);
+
+    // Solo las últimas 6 líneas viajan por la red.
+    while (Feed.Num() > 6)
+    {
+        Feed.RemoveAt(0);
+    }
 }
 
 float ASillasGameState::GetSegundosRestantesDeFase() const

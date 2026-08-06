@@ -13,6 +13,20 @@
 
 class USillasBalanceData;
 
+// FASE 5 — Línea del feed de eventos (capturas, eliminaciones, rondas).
+USTRUCT(BlueprintType)
+struct FSillasFeedEntry
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly)
+    FString Texto;
+
+    // Momento del evento en tiempo de servidor (el HUD descarta las viejas).
+    UPROPERTY(BlueprintReadOnly)
+    float ServerTime = 0.f;
+};
+
 // D3/D11: patrón fijo Musica (corta, cazador baila) ↔ Silencio (largo, caza).
 UENUM(BlueprintType)
 enum class ESillasFase : uint8
@@ -54,6 +68,10 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Sillas")
     int32 RondaActual = 0;
 
+    // Total de rondas del match (D7; configurable desde el lobby, D8).
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Sillas")
+    int32 RondasTotales = 5;
+
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Sillas")
     int32 SillasVivas = 0;
 
@@ -63,6 +81,13 @@ public:
 
     UFUNCTION(BlueprintPure, Category="Sillas")
     float GetSegundosRestantesDeFase() const;
+
+    // FASE 5 — feed de eventos (últimas ~6 líneas). Escribir solo en el server.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Sillas")
+    TArray<FSillasFeedEntry> Feed;
+
+    // Solo servidor: agrega una línea al feed y recorta las viejas.
+    void AgregarFeed(const FString& Texto);
 
     // FASE 2 — VFX greybox de rotura: pedazos con física en cada cliente
     // (cosmético local, no replicado; el server solo manda el epicentro).

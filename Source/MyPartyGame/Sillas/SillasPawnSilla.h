@@ -34,6 +34,12 @@ public:
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+    // --- Lecturas para el HUD (Fase 5) ---
+    float GetStamina01() const;
+    float GetAguante01() const;
+    bool  EstaAguantando() const { return bAguantando; }
+    USillasAbilityComponent* GetHabilidad() const { return Habilidad; }
+
 protected:
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 

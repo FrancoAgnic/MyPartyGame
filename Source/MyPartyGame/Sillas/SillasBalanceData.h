@@ -167,6 +167,10 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Match", meta=(ClampMin="1"))
     int32 RondasPorMatch = 5;
 
+    // Pantalla de podio al terminar el match, antes de volver al lobby.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Match", meta=(ClampMin="1.0"))
+    float FinMatchSeg = 12.0f;
+
     // ---------- Puntos (D7b) — los consume la Fase 5 ----------
     // Regla de referencia: ganar la ronda vivo ≥ mejor puntaje posible como
     // cazador de esa ronda (anti dejarse-atrapar).
