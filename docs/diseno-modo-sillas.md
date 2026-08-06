@@ -1,6 +1,7 @@
-# Diseño de Modo de Juego — "Sillas + Escondite" (título pendiente)
+# Diseño de Modo de Juego — **SEAT HAPPENS** (antes "Sillas + Escondite")
 ### Documento vivo de decisiones · v0.1 · Agosto 2026
 **Regla del documento:** las decisiones las toma el equipo (Deivor + hermano). Cada decisión cerrada queda numerada con la fecha. Lo abierto está marcado como ⏳ PENDIENTE.
+_(Documento del equipo con ediciones asistidas por Claude — se conserva el nombre de archivo original porque el plan de producción lo referencia por ruta exacta.)_
 
 ---
 
@@ -36,6 +37,7 @@ Combinación de **las sillas musicales + el escondite (prop hunt)**:
 | D15 | Estética | **Ragdoll cómico confirmado**: todo el humor del juego es físico (caminata de cola, empujón, rotura). Guía las animaciones y VFX de Fase 6. | 05-ago-2026 |
 | D2b | Fin de ronda con RELOJ (revisión de D2) | **La ronda tiene tiempo límite** (config en BalanceData): los cazadores deben cazar a TODAS las sillas antes de que expire. Si el reloj llega a cero, **todas las sillas vivas ganan la ronda** (bonus para cada una); si cazan a todas, la ronda es de los cazadores. La última silla ya no gana al instante: juega perseguida 1 vs N — el "clímax garantizado" del diseño por fin existe y la métrica de supervivencia de la última silla se puede medir. | 06-ago-2026 |
 | D14 | Ambientación | **CASAMIENTO**: fiesta de boda — sillas de ceremonia, pista de baile, la música-mecánica es la banda que toca y para. Producción de Fase 6: arte MIXTO (packs de Fab para entorno/props + la silla-personaje y su caminata de cola a medida, donde vive la identidad) y música de bibliotecas/generada con edición (el patrón debe ser musicalmente legible, D3). | 06-ago-2026 |
+| D16 | Nombre del juego | **SEAT HAPPENS** — elegido por Deivor de la lista de candidatos (tema casamiento). Verificado el 06-ago-2026: sin colisiones en Steam (lo más cercano es "Is This Seat Taken?", un puzzle cozy sin relación) ni marcas visibles en búsqueda web. Pendiente formal: chequeo USPTO/EUIPO antes del lanzamiento en Steam. | 06-ago-2026 |
 | D18 | Aguantar la respiración | **Sí, como recurso TRANSITORIO — implementado APAGADO** (switch en BalanceData para comparar en playtest). Reglas anti-campeo: (1) el jadeo delator solo ocurre si la barra se agota por completo — soltar antes = recuperación silenciosa pero la respiración vuelve YA; (2) recarga lenta y solo mientras se respira audible (no se encadenan aguantes); (3) el escape del campeo lo garantiza la estructura: en cada fase de Música el cazador baila obligado (D13) y la silla asediada se reubica. Disuasivo extra: campear una silla = no puntuar capturas (D7b). | 05-ago-2026 |
 
 ### Implicaciones de diseño de D1+D2+D3 (derivadas, a validar en prototipo)
@@ -67,11 +69,10 @@ Combinación de **las sillas musicales + el escondite (prop hunt)**:
 
 ## 3. Preguntas abiertas
 
-### ⏳ Ronda 7 — Cierre (lo único que queda)
-- P16. Nombre del juego (tema cerrado: casamiento; lista de candidatos en evaluación — verificar colisiones en Steam antes de fijar).
+### ✅ No quedan preguntas abiertas — el diseño está completo
 
 _Resueltas el 05-ago-2026: P10b → D10b (taunt; resto en backlog) · P15 → D15 (ragdoll cómico) · P18 → D18 (aguantar transitorio, implementado apagado)._
-_Resueltas el 06-ago-2026: P14 → D14 (casamiento) · revisión D2 → D2b (ronda con reloj, clímax 1 vs N)._
+_Resueltas el 06-ago-2026: P14 → D14 (casamiento) · revisión D2 → D2b (ronda con reloj, clímax 1 vs N) · P16 → D16 (**Seat Happens**)._
 
 ## 4. Riesgos identificados (a testear en prototipo)
 - Que ser cazador al inicio (bailar sin poder actuar) se sienta como pérdida de control → mitigar con agencia durante el baile (posicionarse, espiar, memorizar).
