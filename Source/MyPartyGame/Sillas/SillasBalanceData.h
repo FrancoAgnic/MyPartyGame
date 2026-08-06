@@ -30,6 +30,11 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Fases", meta=(ClampMin="0.0"))
     float FinRondaSeg = 5.0f;
 
+    // D2b — reloj de ronda: los cazadores tienen este tiempo para cazar a TODAS
+    // las sillas; al expirar, las sillas vivas ganan la ronda.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Fases", meta=(ClampMin="30.0"))
+    float RondaDuracionSeg = 150.0f;
+
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Fases", meta=(ClampMin="1.0"))
     float MusicaSegBase = 10.0f;
 

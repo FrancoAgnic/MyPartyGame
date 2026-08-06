@@ -79,8 +79,15 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Sillas")
     int32 SillasAlInicioDeRonda = 0;
 
+    // D2b — momento (tiempo de servidor) en que expira el reloj de la ronda.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Sillas")
+    float RondaTerminaEnServerTime = 0.f;
+
     UFUNCTION(BlueprintPure, Category="Sillas")
     float GetSegundosRestantesDeFase() const;
+
+    UFUNCTION(BlueprintPure, Category="Sillas")
+    float GetSegundosRestantesDeRonda() const;
 
     // FASE 5 — feed de eventos (últimas ~6 líneas). Escribir solo en el server.
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Sillas")

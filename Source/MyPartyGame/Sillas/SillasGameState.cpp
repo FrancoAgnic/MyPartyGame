@@ -42,6 +42,7 @@ void ASillasGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
     DOREPLIFETIME(ASillasGameState, FaseTerminaEnServerTime);
     DOREPLIFETIME(ASillasGameState, RondaActual);
     DOREPLIFETIME(ASillasGameState, RondasTotales);
+    DOREPLIFETIME(ASillasGameState, RondaTerminaEnServerTime);
     DOREPLIFETIME(ASillasGameState, SillasVivas);
     DOREPLIFETIME(ASillasGameState, SillasAlInicioDeRonda);
     DOREPLIFETIME(ASillasGameState, Feed);
@@ -66,6 +67,11 @@ void ASillasGameState::AgregarFeed(const FString& Texto)
 float ASillasGameState::GetSegundosRestantesDeFase() const
 {
     return FMath::Max(0.f, FaseTerminaEnServerTime - GetServerWorldTimeSeconds());
+}
+
+float ASillasGameState::GetSegundosRestantesDeRonda() const
+{
+    return FMath::Max(0.f, RondaTerminaEnServerTime - GetServerWorldTimeSeconds());
 }
 
 void ASillasGameState::OnRep_Fase()

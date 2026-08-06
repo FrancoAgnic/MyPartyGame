@@ -111,6 +111,14 @@ void ASillasGameMode::IniciarRonda()
     MetricasRonda.Ronda             = GS->RondaActual;
     MetricasRonda.JugadoresAlInicio = GS->PlayerArray.Num();
     InicioRondaSeg                  = GetWorld()->GetTimeSeconds();
+    UltimaSillaDesdeSeg             = -1.0;
+
+    // D2b — el reloj de la ronda: al expirar, las sillas vivas ganan.
+    GS->RondaTerminaEnServerTime =
+        GS->GetServerWorldTimeSeconds() + Balance->RondaDuracionSeg;
+    GetWorldTimerManager().SetTimer(
+        RondaLimiteTimer, this, &ASillasGameMode::TerminarRondaPorTiempo,
+        Balance->RondaDuracionSeg, /*bLoop=*/false);
 
     // Todos vuelven a ser sillas; se eligen los cazadores iniciales (D7/D8).
     AsignarRoles();
@@ -183,26 +191,47 @@ void ASillasGameMode::OtorgarPuntosSupervivencia()
     }
 }
 
+void ASillasGameMode::TerminarRondaPorTiempo()
+{
+    // D2b: expiró el reloj — las sillas que siguen vivas ganan la ronda.
+    if (ASillasGameState* GS = SillasGS())
+    {
+        GS->AgregarFeed(TEXT("¡Se acabó el tiempo! Las sillas sobreviven"));
+    }
+    MetricasRonda.bGanaronSillas = true;
+    TerminarRonda();
+}
+
 void ASillasGameMode::TerminarRonda()
 {
     ASillasGameState* GS = SillasGS();
     if (!GS) return;
 
-    // D7b: bonus a la última silla viva (la ganadora de la ronda). La regla de
-    // balance de referencia — ganar vivo ≥ mejor cazador — se tunea en el asset.
+    // Frenar los dos relojes (la ronda pudo cerrar por reloj o por caza total).
+    GetWorldTimerManager().ClearTimer(FaseTimer);
+    GetWorldTimerManager().ClearTimer(RondaLimiteTimer);
+
+    // D7b/D2b: bonus a CADA silla que llegó viva al final (si las cazaron a
+    // todas, no hay vivas y nadie cobra). Regla de referencia: ganar vivo ≥
+    // mejor cazador — se tunea en el asset.
     for (APlayerState* PS : GS->PlayerArray)
     {
         ASillasPlayerState* SPS = Cast<ASillasPlayerState>(PS);
         if (SPS && SPS->Rol == ESillasRole::Silla && !SPS->bEliminadoEstaRonda)
         {
             SPS->Server_SumarPuntos(Balance->BonusUltimoVivo);
-            GS->AgregarFeed(FString::Printf(TEXT("%s gana la ronda (+%d)"),
+            GS->AgregarFeed(FString::Printf(TEXT("%s sobrevive la ronda (+%d)"),
                             *SPS->DisplayName, Balance->BonusUltimoVivo));
         }
     }
 
-    // Métricas: cerrar la ronda.
+    // Métricas: cerrar la ronda (incluida la supervivencia del clímax 1 vs N).
     MetricasRonda.DuracionSeg = (float)(GetWorld()->GetTimeSeconds() - InicioRondaSeg);
+    if (UltimaSillaDesdeSeg > 0.0)
+    {
+        MetricasRonda.SupervivenciaUltimaSeg =
+            (float)(GetWorld()->GetTimeSeconds() - UltimaSillaDesdeSeg);
+    }
     MetricasMatch.Add(MetricasRonda);
 
     SetFase(ESillasFase::FinRonda, Balance->FinRondaSeg);
@@ -252,7 +281,7 @@ void ASillasGameMode::VolcarMetricasCSV()
 {
     if (MetricasMatch.Num() == 0) return;
 
-    FString CSV = TEXT("ronda,jugadores,duracion_seg,capturas,sentadas_erradas,fases_completadas,pct_erradas\n");
+    FString CSV = TEXT("ronda,jugadores,duracion_seg,capturas,sentadas_erradas,fases_completadas,pct_erradas,supervivencia_ultima_seg,ganaron_sillas\n");
     float DuracionTotal = 0.f;
     int32 TotalCapturas = 0, TotalErradas = 0;
 
@@ -260,9 +289,10 @@ void ASillasGameMode::VolcarMetricasCSV()
     {
         const int32 Intentos = M.Capturas + M.SentadasErradas;
         const float PctErradas = Intentos > 0 ? 100.f * M.SentadasErradas / Intentos : 0.f;
-        CSV += FString::Printf(TEXT("%d,%d,%.1f,%d,%d,%d,%.0f\n"),
+        CSV += FString::Printf(TEXT("%d,%d,%.1f,%d,%d,%d,%.0f,%.1f,%d\n"),
                                M.Ronda, M.JugadoresAlInicio, M.DuracionSeg,
-                               M.Capturas, M.SentadasErradas, M.FasesCompletadas, PctErradas);
+                               M.Capturas, M.SentadasErradas, M.FasesCompletadas, PctErradas,
+                               M.SupervivenciaUltimaSeg, M.bGanaronSillas ? 1 : 0);
         DuracionTotal += M.DuracionSeg;
         TotalCapturas += M.Capturas;
         TotalErradas  += M.SentadasErradas;
@@ -375,10 +405,17 @@ void ASillasGameMode::NotificarSillaEliminada(ASillasPlayerState* Eliminado)
     Eliminado->Server_SetRol(ESillasRole::Cazador); // D1: infección
     GS->SillasVivas = FMath::Max(0, GS->SillasVivas - 1);
 
-    // D2: queda una sola silla viva → gana la ronda.
-    if (GS->SillasVivas <= 1)
+    // D2b: la ronda sigue mientras quede alguna silla y corra el reloj.
+    if (GS->SillasVivas == 1)
     {
-        GetWorldTimerManager().ClearTimer(FaseTimer);
+        // Arranca el clímax 1 vs N — medimos cuánto sobrevive (métrica del plan).
+        UltimaSillaDesdeSeg = GetWorld()->GetTimeSeconds();
+        GS->AgregarFeed(TEXT("¡Queda UNA silla! Aguanta hasta que se acabe el tiempo..."));
+    }
+    else if (GS->SillasVivas <= 0)
+    {
+        // Cazaron a todas antes del reloj: la ronda es de los cazadores.
+        GS->AgregarFeed(TEXT("Los cazadores cazaron a todas las sillas"));
         TerminarRonda();
     }
 }

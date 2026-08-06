@@ -70,13 +70,23 @@ void ASillasHUD::DibujarFaseYRonda(const ASillasGameState* GS)
                       CX, 58.f, FLinearColor::White, Grande, 1.3f);
     }
 
-    // Esquina superior izquierda: ronda + sillas vivas.
+    // Esquina superior izquierda: ronda + sillas vivas + reloj de ronda (D2b).
     if (GS->RondaActual > 0)
     {
         DrawText(FString::Printf(TEXT("Ronda %d/%d"), GS->RondaActual, GS->RondasTotales),
                  FLinearColor::White, 20.f, 20.f, Medio, 1.2f);
         DrawText(FString::Printf(TEXT("Sillas vivas: %d"), GS->SillasVivas),
                  FLinearColor(1.f, 0.85f, 0.4f), 20.f, 44.f, Medio, 1.2f);
+
+        if (GS->Fase == ESillasFase::Musica || GS->Fase == ESillasFase::Silencio ||
+            GS->Fase == ESillasFase::IntroRonda)
+        {
+            const float Restante = GS->GetSegundosRestantesDeRonda();
+            const bool bUrgente = Restante <= 20.f;
+            DrawText(FString::Printf(TEXT("Ronda termina en: %.0fs"), Restante),
+                     bUrgente ? FLinearColor::Red : FLinearColor(0.85f, 0.85f, 0.85f),
+                     20.f, 68.f, Medio, 1.1f);
+        }
     }
 }
 

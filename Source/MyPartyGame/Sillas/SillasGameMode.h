@@ -82,6 +82,7 @@ private:
     void IniciarRonda();
     void EmpezarMusica();
     void EmpezarSilencio();
+    void TerminarRondaPorTiempo(); // D2b: expiró el reloj — las sillas vivas ganan
     void TerminarRonda();
     void TerminarMatch();
     void VolverAlLobby();
@@ -115,6 +116,7 @@ private:
     ASillasGameState* SillasGS() const;
 
     FTimerHandle FaseTimer;
+    FTimerHandle RondaLimiteTimer; // D2b: el reloj de la ronda
     int32 PlayersJoined = 0;
 
     // FASE 7 — métricas de playtest (solo server; CSV en Saved/SillasMetrics/).
@@ -128,10 +130,13 @@ private:
         int32 Capturas = 0;
         int32 SentadasErradas = 0;
         int32 FasesCompletadas = 0;
+        float SupervivenciaUltimaSeg = -1.f; // -1: nunca quedó una sola silla
+        bool  bGanaronSillas = false;        // true: expiró el reloj (D2b)
     };
     TArray<FMetricasRonda> MetricasMatch;
     FMetricasRonda MetricasRonda;
     double InicioRondaSeg = 0.0;
+    double UltimaSillaDesdeSeg = -1.0;
 
     void VolcarMetricasCSV();
 
