@@ -223,7 +223,11 @@ public:
      *  clientes: el Volume no tiene owner por jugador, así que su Server RPC se descartaba). */
     UFUNCTION(Server, Reliable)
     void Server_ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
-                           EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot);
+                           EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot, bool bDetail);
+
+    /** ALT: arranca una nueva CAPA de detalle (malla aparte) en el volumen. Solo el escultor. */
+    UFUNCTION(Server, Reliable)
+    void Server_BeginDetailLayer();
 
     /** Coloca un ojo (tecla 4). Igual que el stamp: el cliente lo pide al server (que sí tiene
      *  owner), y el server lo agrega al volumen (se replica a todos via la propiedad Eyes). */
@@ -422,6 +426,9 @@ private:
     bool bSurfaceSnap = false;
     void OnSurfaceSnapPressed()  { bSurfaceSnap = true;  }
     void OnSurfaceSnapReleased() { bSurfaceSnap = false; }
+    // Latcheado al iniciar el trazo (= Add + Alt en ese momento): mientras dura el trazo, sus sellos
+    // van a la capa de detalle y usan el plano congelado, aunque sueltes Alt a mitad de camino.
+    bool bStrokeIsDetail = false;
 
     // ── Rotar shapes (mantener la RUEDA del mouse + arrastrar) ──────────────
     // Mientras se mantiene, la cámara NO se mueve: el mouse rota el sello. Doble click de

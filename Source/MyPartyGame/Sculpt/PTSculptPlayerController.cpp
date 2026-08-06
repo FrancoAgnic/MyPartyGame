@@ -626,16 +626,16 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
             for (int32 i = 1; i <= N; ++i)
             {
                 const FVector P = FMath::Lerp(LastStampPos, StampPos, (float)i / N);
-                Server_ApplyStamp(P, Sh, StampSize, EditMode, CurrentPaintColor, StampRotation);
+                Server_ApplyStamp(P, Sh, StampSize, EditMode, CurrentPaintColor, StampRotation, bStrokeIsDetail);
             }
         }
         else
         {
-            Server_ApplyStamp(StampPos, Sh, StampSize, EditMode, CurrentPaintColor, StampRotation);
+            Server_ApplyStamp(StampPos, Sh, StampSize, EditMode, CurrentPaintColor, StampRotation, bStrokeIsDetail);
             bStrokeActive = true;
             // ALT+Add: congelar el plano en el 1er sello (perpendicular a la vista) para que el resto
             // del trazo vaya a profundidad constante y no trepe hacia la cámara.
-            if (EditMode == EPTEditMode::Add && bSurfaceSnap)
+            if (bStrokeIsDetail)
             {
                 FVector S, D;
                 if (GetCameraRay(S, D))
@@ -703,7 +703,7 @@ FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
     // ALT+Add DURANTE un trazo: NO re-raymarchear (la arcilla nueva quedaría más cerca y el trazo
     // treparía hacia la cámara). Se dibuja sobre el plano congelado en el 1er sello (perpendicular a
     // la vista) → trazos laterales/verticales a profundidad constante.
-    if (EditMode == EPTEditMode::Add && bSurfaceSnap && bStrokeActive && bStrokePlaneLocked)
+    if (EditMode == EPTEditMode::Add && bStrokeIsDetail && bStrokeActive && bStrokePlaneLocked)
     {
         const float denom = FVector::DotProduct(Dir, SculptPlaneNormal);
         FVector Pf = SculptPlaneOrigin;
@@ -911,17 +911,27 @@ void APTSculptPlayerController::OnStampPressed()
     if (bEyesTool) { PlaceEyeAtCursor(); return; }
 
     bIsStamping = true;
-    // Undo: un trazo = desde que apretás hasta que soltás. Avisar para que todos empiecen a grabar.
-    if (CanLocalPlayerSculpt()) Server_BeginStroke();
+    // ¿Este trazo es de DETALLE? (Add + Alt al apretar). Se latchea para todo el trazo.
+    bStrokeIsDetail = (EditMode == EPTEditMode::Add && bSurfaceSnap);
+    if (CanLocalPlayerSculpt())
+    {
+        if (bStrokeIsDetail)
+            Server_BeginDetailLayer(); // nueva capa aparte (no fusiona con la base ni otras capas)
+        else
+            Server_BeginStroke();      // trazo normal sobre la base (undo por trazo)
+    }
     // NOTA: el plano del modo eje NO se recalcula al apretar (se fijó al activar el modo con
     // Z/X). Así soltar y re-presionar el esculpido sigue en el MISMO plano.
 }
 
 void APTSculptPlayerController::OnStampReleased()
 {
-    if (bIsStamping && CanLocalPlayerSculpt()) Server_EndStroke(); // cerrar el trazo (undo)
-    bIsStamping = false;
-    AxisChosen  = -1;
+    // Los trazos de la BASE se cierran con EndStroke (para el undo por trazo); las capas de detalle
+    // ya quedaron committeadas al crearse, así que no necesitan cierre.
+    if (bIsStamping && !bStrokeIsDetail && CanLocalPlayerSculpt()) Server_EndStroke();
+    bIsStamping     = false;
+    bStrokeIsDetail = false;
+    AxisChosen      = -1;
 }
 
 void APTSculptPlayerController::OnClearAllPressed()
@@ -1337,7 +1347,7 @@ bool APTSculptPlayerController::CanLocalPlayerSculpt() const
 }
 
 void APTSculptPlayerController::Server_ApplyStamp_Implementation(FVector WorldPos, EPTStampShape Shape,
-    float Size, EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot)
+    float Size, EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot, bool bDetail)
 {
     // Gating de autoridad: solo el escultor del turno en curso modifica la escultura.
     if (const APTSculptGameState* G = GetWorld()->GetGameState<APTSculptGameState>())
@@ -1350,6 +1360,21 @@ void APTSculptPlayerController::Server_ApplyStamp_Implementation(FVector WorldPo
         Volume = Cast<APTSculptVolume>(
             UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
     if (Volume)
-        Volume->Multicast_ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot);
+        Volume->Multicast_ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot, bDetail);
+}
+
+void APTSculptPlayerController::Server_BeginDetailLayer_Implementation()
+{
+    // Mismo gating que el stamp: solo el escultor del turno arranca una capa de detalle.
+    if (const APTSculptGameState* G = GetWorld()->GetGameState<APTSculptGameState>())
+    {
+        if (G->TurnPhase != EPTTurnPhase::Drawing ||
+            G->CurrentSculptor != GetPlayerState<APTPlayerState>())
+            return;
+    }
+    if (!Volume)
+        Volume = Cast<APTSculptVolume>(
+            UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
+    if (Volume) Volume->Multicast_BeginDetailLayer();
 }
 

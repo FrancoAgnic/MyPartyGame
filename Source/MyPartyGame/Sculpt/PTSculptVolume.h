@@ -152,9 +152,11 @@ public:
     void Server_ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
                            EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot);
 
+    // bDetail=true → el sello cae en la CAPA de detalle activa (la última creada con Multicast_BeginDetailLayer),
+    // no en la base. Solo se usa con Add (ALT). false = base (comportamiento normal).
     UFUNCTION(NetMulticast, Reliable)
     void Multicast_ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
-                              EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot);
+                              EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot, bool bDetail);
 
     // Aplica el sello Y dispara el feedback (partículas de Borrar/Pintar, brillo de Agregar).
     // Lo llama el Multicast (gameplay, en todos los clientes) y también el modo G del lobby
@@ -195,6 +197,12 @@ public:
     UFUNCTION(NetMulticast, Reliable) void Multicast_BeginStroke();
     UFUNCTION(NetMulticast, Reliable) void Multicast_EndStroke();
     UFUNCTION(NetMulticast, Reliable) void Multicast_Undo();
+
+    // ── Capas de DETALLE (ALT) ──────────────────────────────────────────────
+    // Cada período de Alt = una capa aparte: su propio campo SDF + su propio ProceduralMesh. Fusiona
+    // consigo misma pero NO con la base ni con otras capas. Replicada (este multicast la crea en todos).
+    // Mientras la capa está activa, los sellos de detalle caen en ella (ver Multicast_ApplyStamp bDetail).
+    UFUNCTION(NetMulticast, Reliable) void Multicast_BeginDetailLayer();
 
     bool CanUndo() const { return VolumeUndoStack.Num() > 0; }
 
@@ -251,13 +259,24 @@ private:
     /** Guarda el color previo de un texel del atlas (solo la 1ra vez en el trazo). */
     void BackupAtlas(int32 AIdx, int32 Slot);
 
-    FPTSculptField Field;
+    FPTSculptField Field; // campo BASE (la arcilla principal)
+
+    // ── Capas de detalle (ALT): campos + meshes aparte ──────────────────────
+    // Cada capa fusiona consigo misma pero no con la base ni con otras. ActiveField apunta a dónde
+    // caen los sellos (base por defecto; la última capa mientras se dibuja detalle).
+    FPTSculptField* ActiveField = &Field;
+    TArray<TSharedPtr<FPTSculptField>>            DetailFields;   // 1 campo por capa
+    UPROPERTY() TArray<UProceduralMeshComponent*> DetailMeshes;   // 1 mesh por capa (paralelo a DetailFields)
+    // Orden LIFO de operaciones para el undo: 0 = trazo de la BASE, 1 = capa de DETALLE.
+    TArray<uint8> UndoOrder;
 
     bool  bRebuildInProgress = false;
     float TimeSinceRebuild   = 0.f;
     static constexpr float RebuildInterval = 0.05f;
 
     void RebuildDirty();
+    // Crea el mesh de una capa de detalle (mismo transform/material que la base). Devuelve el componente.
+    UProceduralMeshComponent* CreateDetailLayerMesh();
     void MarkStampDirty(int32 x0, int32 y0, int32 z0, int32 x1, int32 y1, int32 z1);
 
     // Bloqueo del ÁREA (BoundsBox): solo el escultor del turno entra al cubo; los demás rebotan. Solo

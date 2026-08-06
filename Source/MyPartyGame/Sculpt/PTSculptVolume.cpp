@@ -406,7 +406,12 @@ void APTSculptVolume::Tick(float DeltaTime)
     BoundaryAccum += DeltaTime;
     if (BoundaryAccum >= 0.2f) { BoundaryAccum = 0.f; UpdateSculptBoundaryCollision(); }
 
-    if (!Field.HasDirty() || bRebuildInProgress) return;
+    // ¿Hay algo que re-mallar? La base o alguna capa de detalle.
+    bool bAnyDirty = Field.HasDirty();
+    for (const TSharedPtr<FPTSculptField>& L : DetailFields)
+        if (L.IsValid() && L->HasDirty()) { bAnyDirty = true; break; }
+
+    if (!bAnyDirty || bRebuildInProgress) return;
     TimeSinceRebuild += DeltaTime;
     if (TimeSinceRebuild >= RebuildInterval)
     {
@@ -817,7 +822,14 @@ void APTSculptVolume::CellBounds(FIntVector& OutMin, FIntVector& OutMax) const
 float APTSculptVolume::SampleWorldDensity(FVector WorldPos) const
 {
     const FVector C = WorldToCell(WorldPos);
-    return Field.SampleSDF(C.X, C.Y, C.Z);
+    // Unión (máximo) de la base + TODAS las capas de detalle: así el raymarch del cursor (ALT) se pega
+    // a la superficie más externa exista donde exista arcilla, no solo a la base. Convención: SDF
+    // positivo = dentro del material → el máximo es la unión de todas las mallas.
+    float d = Field.SampleSDF(C.X, C.Y, C.Z);
+    for (const TSharedPtr<FPTSculptField>& L : DetailFields)
+        if (L.IsValid())
+            d = FMath::Max(d, L->SampleSDF(C.X, C.Y, C.Z));
+    return d;
 }
 
 FLinearColor APTSculptVolume::SampleWorldColor(FVector WorldPos) const
@@ -939,6 +951,10 @@ bool APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
     // nueva brille y se desvanezca (ver UV0 del mesher + material del clay).
     const float StampNow = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 
+    // Campo DESTINO de la geometría: base por defecto, o la capa de detalle activa (ALT). Así el
+    // detalle no se fusiona con la arcilla base ni con otras capas (cada una es un campo aparte).
+    FPTSculptField& F = *ActiveField;
+
     // ── Smooth: Laplaciano suave de dos pasos con falloff radial y leve empuje
     //    hacia afuera (SmoothBias) para que suavice sin encoger el modelo. ────
     if (Mode == EPTEditMode::Smooth)
@@ -951,16 +967,16 @@ bool APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
         for (int32 y = y0; y <= y1; ++y)
         for (int32 x = x0; x <= x1; ++x)
         {
-            const float prev = Field.GetSDF(x, y, z);
+            const float prev = F.GetSDF(x, y, z);
             FVector LP(x - GC.X, y - GC.Y, z - GC.Z);
             if (bRotated) LP = LocalQ.UnrotateVector(LP);
             const float sdf  = StampSDF(Shape, LP, HalfSize);
             const float fall = FMath::Clamp(sdf / FMath::Max(HalfSize, 1.f), 0.f, 1.f);
             if (fall <= 0.f) { NewV[WI(x,y,z)] = prev; continue; }
 
-            const float avg = (Field.GetSDF(x+1,y,z) + Field.GetSDF(x-1,y,z)
-                             + Field.GetSDF(x,y+1,z) + Field.GetSDF(x,y-1,z)
-                             + Field.GetSDF(x,y,z+1) + Field.GetSDF(x,y,z-1)) / 6.f;
+            const float avg = (F.GetSDF(x+1,y,z) + F.GetSDF(x-1,y,z)
+                             + F.GetSDF(x,y+1,z) + F.GetSDF(x,y-1,z)
+                             + F.GetSDF(x,y,z+1) + F.GetSDF(x,y,z-1)) / 6.f;
             const float target = avg + SmoothBias;
             float nv = FMath::Lerp(prev, target, fall * SmoothStrength);
             // Tope de cambio por celda por aplicación (no se dispara al mantener).
@@ -973,7 +989,7 @@ bool APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
         for (int32 x = x0; x <= x1; ++x)
         {
             const float nv = NewV[WI(x,y,z)];
-            if (nv != Field.GetSDF(x, y, z)) { Field.SetSDF(x, y, z, nv); bAnyChange = true; }
+            if (nv != F.GetSDF(x, y, z)) { F.SetSDF(x, y, z, nv); bAnyChange = true; }
         }
 
         if (!bAnyChange) return false;
@@ -988,18 +1004,18 @@ bool APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
         FVector LP(x - GC.X, y - GC.Y, z - GC.Z);
         if (bRotated) LP = LocalQ.UnrotateVector(LP);
         const float sdf  = StampSDF(Shape, LP, HalfSize);
-        const float prev = Field.GetSDF(x, y, z);
+        const float prev = F.GetSDF(x, y, z);
 
         if (Mode == EPTEditMode::Add)
         {
             const float next = FMath::Max(prev, sdf);
-            if (next != prev) { Field.SetSDF(x, y, z, next); bAnyChange = true; }
+            if (next != prev) { F.SetSDF(x, y, z, next); bAnyChange = true; }
             // Color pleno directo sobre la geometría, ambos lados de la superficie
             // (sdf > -1 = dentro del sello + 1 celda) → toda la malla nueva del color.
             if (sdf > -1.f)
             {
-                Field.SetColor(x, y, z, PaintColor.ToFColor(true));
-                Field.SetAddTime(x, y, z, StampNow); // marca la arcilla nueva como "fresca"
+                F.SetColor(x, y, z, PaintColor.ToFColor(true));
+                F.SetAddTime(x, y, z, StampNow); // marca la arcilla nueva como "fresca"
                 bAnyChange = true;
             }
         }
@@ -1020,11 +1036,11 @@ bool APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
                     if (!bRemovedSolid || prev > BestErasePrev)
                     {
                         BestErasePrev  = prev;
-                        LastErasedColor = FLinearColor::FromSRGBColor(Field.GetColor(x, y, z));
+                        LastErasedColor = FLinearColor::FromSRGBColor(F.GetColor(x, y, z));
                     }
                     bRemovedSolid = true;
                 }
-                Field.SetSDF(x, y, z, next);
+                F.SetSDF(x, y, z, next);
                 bAnyChange = true;
             }
         }
@@ -1048,7 +1064,7 @@ void APTSculptVolume::MarkStampDirty(int32 x0, int32 y0, int32 z0, int32 x1, int
     for (int32 bz = bz0; bz <= bz1; ++bz)
     for (int32 by = by0; by <= by1; ++by)
     for (int32 bx = bx0; bx <= bx1; ++bx)
-        Field.MarkDirty(FPTBrickKey(bx, by, bz));
+        ActiveField->MarkDirty(FPTBrickKey(bx, by, bz)); // marca el campo ACTIVO (base o capa de detalle)
 }
 
 // ─── Marching Cubes ───────────────────────────────────────────────────────────
@@ -1197,49 +1213,61 @@ void APTSculptVolume::RebuildDirty()
 {
     bRebuildInProgress = true;
 
-    // Snapshot de cada brick dirty en el GameThread (sin tocar el mapa desde el thread).
-    TArray<FPTBrickKey> Keys;
-    Field.TakeDirty(Keys);
-
-    TSharedPtr<TArray<FPTSculptField::FBrickSnapshot>, ESPMode::ThreadSafe> Snaps =
-        MakeShared<TArray<FPTSculptField::FBrickSnapshot>, ESPMode::ThreadSafe>();
-    Snaps->Reserve(Keys.Num());
-    for (const FPTBrickKey& K : Keys)
-    {
-        FPTSculptField::FBrickSnapshot S;
-        S.Section = Field.SectionIndex(K);
-        Field.SnapshotBrick(K, S); // actualiza flatness del brick
-        Snaps->Add(MoveTemp(S));
-    }
-    // Decidir el paso con flatness ya actualizada de todos los bricks dirty.
-    for (FPTSculptField::FBrickSnapshot& S : *Snaps)
-        S.Step = Field.DecideStep(S.Key);
-
-    UProceduralMeshComponent* MeshPtr = Mesh;
     UMaterialInterface* Mat = ClayMaterialOverride ? ClayMaterialOverride
                             : (ClayMID ? (UMaterialInterface*)ClayMID : ClayMaterial);
 
-    Async(EAsyncExecution::ThreadPool, [this, MeshPtr, Mat, Snaps]()
+    // Snapshot de cada brick dirty (GameThread), etiquetado con su mesh destino: la base va a `Mesh`,
+    // cada capa de detalle a su propio ProceduralMesh. Cada campo tiene su propio SectionIndex, y como
+    // cada capa tiene su propio mesh, no hay colisión de índices entre capas.
+    struct FSnapJob { FPTSculptField::FBrickSnapshot Snap; UProceduralMeshComponent* Target = nullptr; };
+    TSharedPtr<TArray<FSnapJob>, ESPMode::ThreadSafe> Jobs = MakeShared<TArray<FSnapJob>, ESPMode::ThreadSafe>();
+
+    auto Collect = [&](FPTSculptField& F, UProceduralMeshComponent* MComp)
     {
-        TSharedPtr<TArray<FPTBrickMesh>, ESPMode::ThreadSafe> Results =
-            MakeShared<TArray<FPTBrickMesh>, ESPMode::ThreadSafe>();
-        Results->Reserve(Snaps->Num());
-        for (const FPTSculptField::FBrickSnapshot& S : *Snaps)
+        if (!MComp || !F.HasDirty()) return;
+        TArray<FPTBrickKey> Keys;
+        F.TakeDirty(Keys);
+        const int32 Base = Jobs->Num();
+        for (const FPTBrickKey& K : Keys)
         {
-            FPTBrickMesh M;
-            FPTSculptField::MeshBrick(S, M);
-            Results->Add(MoveTemp(M));
+            FSnapJob J; J.Target = MComp;
+            J.Snap.Section = F.SectionIndex(K);
+            F.SnapshotBrick(K, J.Snap); // actualiza flatness
+            Jobs->Add(MoveTemp(J));
+        }
+        for (int32 i = Base; i < Jobs->Num(); ++i)
+            (*Jobs)[i].Snap.Step = F.DecideStep((*Jobs)[i].Snap.Key);
+    };
+
+    Collect(Field, Mesh);
+    for (int32 i = 0; i < DetailFields.Num(); ++i)
+        if (DetailFields[i].IsValid() && DetailMeshes.IsValidIndex(i))
+            Collect(*DetailFields[i], DetailMeshes[i]);
+
+    if (Jobs->Num() == 0) { bRebuildInProgress = false; return; }
+
+    Async(EAsyncExecution::ThreadPool, [this, Mat, Jobs]()
+    {
+        struct FMeshOut { FPTBrickMesh Mesh; UProceduralMeshComponent* Target = nullptr; };
+        TSharedPtr<TArray<FMeshOut>, ESPMode::ThreadSafe> Results =
+            MakeShared<TArray<FMeshOut>, ESPMode::ThreadSafe>();
+        Results->Reserve(Jobs->Num());
+        for (const FSnapJob& J : *Jobs)
+        {
+            FMeshOut O; O.Target = J.Target;
+            FPTSculptField::MeshBrick(J.Snap, O.Mesh);
+            Results->Add(MoveTemp(O));
         }
 
-        AsyncTask(ENamedThreads::GameThread, [this, MeshPtr, Mat, Results]()
+        AsyncTask(ENamedThreads::GameThread, [this, Mat, Results]()
         {
-            for (FPTBrickMesh& M : *Results)
+            for (FMeshOut& O : *Results)
             {
-                // Colisión OFF: la arcilla no frena a nadie (el escultor la atraviesa; el esculpido
-                // usa raymarch del SDF, no colisión física, así que no se rompe). Quien no debe entrar
-                // al área lo bloquea el BoundsBox (solo a los que no esculpen), no la arcilla.
-                MeshPtr->CreateMeshSection(M.Section, M.Verts, M.Tris, M.Normals, M.UV0, M.Colors, {}, /*collision=*/false);
-                if (Mat) MeshPtr->SetMaterial(M.Section, Mat);
+                if (!O.Target) continue;
+                // Colisión OFF (el esculpido usa raymarch del SDF, no colisión física).
+                O.Target->CreateMeshSection(O.Mesh.Section, O.Mesh.Verts, O.Mesh.Tris, O.Mesh.Normals,
+                                            O.Mesh.UV0, O.Mesh.Colors, {}, /*collision=*/false);
+                if (Mat) O.Target->SetMaterial(O.Mesh.Section, Mat);
             }
             bRebuildInProgress = false;
         });
@@ -1257,15 +1285,43 @@ void APTSculptVolume::Server_ApplyStamp_Implementation(FVector WorldPos, EPTStam
                                                         float Size, EPTEditMode Mode, FLinearColor PaintColor,
                                                         FRotator StampRot)
 {
-    Multicast_ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot);
+    Multicast_ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot, /*bDetail=*/false);
 }
 
 void APTSculptVolume::Multicast_ApplyStamp_Implementation(FVector WorldPos, EPTStampShape Shape,
                                                            float Size, EPTEditMode Mode, FLinearColor PaintColor,
-                                                           FRotator StampRot)
+                                                           FRotator StampRot, bool bDetail)
 {
     // Corre en TODOS los clientes (es un Multicast) → también lo ven los que adivinan.
+    // Elegir el campo destino: la última capa de detalle si bDetail, o la base. Se restaura al final.
+    ActiveField = (bDetail && DetailFields.Num() > 0) ? DetailFields.Last().Get() : &Field;
     ApplyStampAndFX(WorldPos, Shape, Size, Mode, PaintColor, StampRot);
+    ActiveField = &Field;
+}
+
+UProceduralMeshComponent* APTSculptVolume::CreateDetailLayerMesh()
+{
+    UProceduralMeshComponent* M = NewObject<UProceduralMeshComponent>(this);
+    if (!M) return nullptr;
+    M->SetupAttachment(GetRootComponent()); // el root ES el Mesh base
+    M->RegisterComponent();
+    // Transform relativo IDENTIDAD: la malla base guarda sus verts en espacio del root (coords del
+    // campo), sin transform extra. Si le pusiéramos el transform del root (que como root = transform
+    // del actor) se aplicaría DOBLE y el detalle saldría desplazado en Z / fuera del área.
+    M->SetRelativeTransform(FTransform::Identity);
+    M->SetCollisionEnabled(ECollisionEnabled::NoCollision); // igual que la arcilla base
+    return M;
+}
+
+void APTSculptVolume::Multicast_BeginDetailLayer_Implementation()
+{
+    // Nueva capa: su propio campo SDF (con los parámetros del volumen) + su propio mesh.
+    TSharedPtr<FPTSculptField> Layer = MakeShared<FPTSculptField>();
+    Layer->VoxelSize        = VoxelSize;
+    Layer->DisplaySmoothing = DisplaySmoothing;
+    DetailFields.Add(Layer);
+    DetailMeshes.Add(CreateDetailLayerMesh());
+    UndoOrder.Add(1); // 1 = capa de detalle (para el undo LIFO)
 }
 
 void APTSculptVolume::ApplyStampAndFX(FVector WorldPos, EPTStampShape Shape, float Size,
@@ -1373,6 +1429,13 @@ void APTSculptVolume::ClearAll()
     if (Mesh) Mesh->ClearAllMeshSections();
     TimeSinceRebuild = 0.f;
 
+    // Capas de detalle: destruir sus meshes y descartar sus campos (el lienzo queda en blanco).
+    for (UProceduralMeshComponent* M : DetailMeshes) if (M) M->DestroyComponent();
+    DetailMeshes.Reset();
+    DetailFields.Reset();
+    UndoOrder.Reset();
+    ActiveField = &Field;
+
     // Ojos: limpiar visualmente en todos; resetear el array autoritativo sólo en el servidor.
     if (HasAuthority()) Eyes.Reset();
     if (EyesMesh) EyesMesh->ClearAllMeshSections();
@@ -1458,11 +1521,33 @@ void APTSculptVolume::Multicast_EndStroke_Implementation()
     VolumeUndoStack.Add(MoveTemp(CurrentVolumeUndo));
     CurrentVolumeUndo = FPTVolumeUndo();
     bRecordingStroke = false;
-    while (VolumeUndoStack.Num() > MaxUndoSteps) VolumeUndoStack.RemoveAt(0);
+    UndoOrder.Add(0);                            // 0 = trazo de la BASE (para el undo LIFO)
+    while (VolumeUndoStack.Num() > MaxUndoSteps)
+    {
+        VolumeUndoStack.RemoveAt(0);
+        // Sacar el '0' (base) más viejo de UndoOrder para que siga alineado con VolumeUndoStack.
+        const int32 Idx = UndoOrder.IndexOfByKey((uint8)0);
+        if (Idx != INDEX_NONE) UndoOrder.RemoveAt(Idx);
+    }
 }
 
 void APTSculptVolume::Multicast_Undo_Implementation()
 {
+    // El undo es LIFO sobre TODAS las operaciones: si lo último fue una CAPA de detalle, se saca la
+    // capa entera (su campo + su mesh); si fue un trazo de la base, se deshace ese trazo.
+    if (UndoOrder.Num() > 0 && UndoOrder.Last() == 1)
+    {
+        UndoOrder.Pop();
+        if (DetailFields.Num() > 0) DetailFields.Pop();
+        if (DetailMeshes.Num() > 0)
+        {
+            if (UProceduralMeshComponent* M = DetailMeshes.Last()) M->DestroyComponent();
+            DetailMeshes.Pop();
+        }
+        return;
+    }
+    if (UndoOrder.Num() > 0 && UndoOrder.Last() == 0) UndoOrder.Pop();
+
     if (VolumeUndoStack.Num() == 0) return;
 
     // 1) Geometría: el campo restaura los bricks del último trazo y los marca dirty (se remallan).
