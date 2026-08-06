@@ -73,15 +73,12 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category="Input")
     TObjectPtr<UInputAction> MouseLookAction;
 
-    // Clic mantenido de captura. Sin asset todavía: si queda null se crea en
-    // runtime un InputAction + contexto con clic izquierdo (Fase 6 lo vuelve asset).
+    // Clic mantenido de captura. Sin asset asignado (Fase 6): usa la acción
+    // runtime compartida de ASillasPlayerController (kit del modo).
     UPROPERTY(EditDefaultsOnly, Category="Input")
     TObjectPtr<UInputAction> CaptureAction;
 
 private:
-    // Contexto runtime del clic de captura (solo en el cliente que controla).
-    UPROPERTY(Transient)
-    TObjectPtr<UInputMappingContext> CapturaIMC;
 
     UPROPERTY(ReplicatedUsing=OnRep_Estado)
     bool bCapturando = false;

@@ -5,6 +5,7 @@
 #include "SillasGameMode.h"
 #include "SillasGameState.h"
 #include "SillasPawnSilla.h"
+#include "SillasPlayerController.h"
 #include "SillasSenuelo.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -91,19 +92,8 @@ void ASillasPawnCazador::Tick(float DeltaSeconds)
 
 void ASillasPawnCazador::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-    // Sacar el contexto runtime del clic para no acumular contextos huérfanos
-    // al re-poseer pawns (cada instancia crea el suyo).
-    if (CapturaIMC)
-    {
-        if (const APlayerController* PC = Cast<APlayerController>(GetController()))
-        {
-            if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
-                    ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
-            {
-                Subsystem->RemoveMappingContext(CapturaIMC);
-            }
-        }
-    }
+    // El kit de input vive en ASillasPlayerController (persiste entre
+    // posesiones) — el pawn no registra ni limpia contextos.
     Super::EndPlay(EndPlayReason);
 }
 
@@ -120,25 +110,12 @@ void ASillasPawnCazador::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 {
     Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-    // Sin asset de captura: crear acción + contexto en runtime (clic izquierdo).
-    if (!CaptureAction)
+    // Sin asset de captura asignado en BP: usar la acción runtime del
+    // controller (el kit compartido, ya mapeado a clic izquierdo).
+    if (ASillasPlayerController* SPC = Cast<ASillasPlayerController>(GetController()))
     {
-        UInputAction* IA = NewObject<UInputAction>(this, TEXT("IA_Captura_Runtime"));
-        IA->ValueType = EInputActionValueType::Boolean;
-        CaptureAction = IA;
-    }
-    if (!CapturaIMC)
-    {
-        CapturaIMC = NewObject<UInputMappingContext>(this, TEXT("IMC_Captura_Runtime"));
-        CapturaIMC->MapKey(CaptureAction, EKeys::LeftMouseButton);
-    }
-    if (const APlayerController* PC = Cast<APlayerController>(GetController()))
-    {
-        if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
-                ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
-        {
-            Subsystem->AddMappingContext(CapturaIMC, /*Priority=*/10);
-        }
+        SPC->AsegurarKitRuntime();
+        if (!CaptureAction) CaptureAction = SPC->GetIACaptura();
     }
 
     if (UEnhancedInputComponent* Input = Cast<UEnhancedInputComponent>(PlayerInputComponent))

@@ -102,9 +102,6 @@ protected:
     TObjectPtr<UInputAction> AguantarAction;
 
 private:
-    UPROPERTY(Transient)
-    TObjectPtr<UInputMappingContext> KitIMC;
-
     // D10: sprint gastando stamina. La stamina la lleva el server; la velocidad
     // se aplica en ambos lados vía OnRep para que la predicción no divague.
     UPROPERTY(ReplicatedUsing=OnRep_Sprint)

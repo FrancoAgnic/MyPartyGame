@@ -4,6 +4,7 @@
 #include "SillasAbilityComponent.h"
 #include "SillasBalanceData.h"
 #include "SillasGameState.h"
+#include "SillasPlayerController.h"
 #include "SillasPlayerState.h"
 #include "Camera/CameraComponent.h"
 #include "Components/AudioComponent.h"
@@ -203,17 +204,8 @@ void ASillasPawnSilla::Tick(float DeltaSeconds)
 
 void ASillasPawnSilla::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-    if (KitIMC)
-    {
-        if (const APlayerController* PC = Cast<APlayerController>(GetController()))
-        {
-            if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
-                    ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
-            {
-                Subsystem->RemoveMappingContext(KitIMC);
-            }
-        }
-    }
+    // El kit de input vive en ASillasPlayerController (persiste entre
+    // posesiones) — el pawn no registra ni limpia contextos.
     Super::EndPlay(EndPlayReason);
 }
 
@@ -230,46 +222,15 @@ void ASillasPawnSilla::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 {
     Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-    // Kit D10 sin assets: crear acciones + contexto en runtime.
-    if (!SprintAction)
+    // Kit D10 sin assets asignados en BP: usar las acciones runtime del
+    // controller (el kit compartido, ya mapeado: Shift/clic/Q/Ctrl).
+    if (ASillasPlayerController* SPC = Cast<ASillasPlayerController>(GetController()))
     {
-        UInputAction* IA = NewObject<UInputAction>(this, TEXT("IA_Sprint_Runtime"));
-        IA->ValueType = EInputActionValueType::Boolean;
-        SprintAction = IA;
-    }
-    if (!EmpujonAction)
-    {
-        UInputAction* IA = NewObject<UInputAction>(this, TEXT("IA_Empujon_Runtime"));
-        IA->ValueType = EInputActionValueType::Boolean;
-        EmpujonAction = IA;
-    }
-    if (!HabilidadAction)
-    {
-        UInputAction* IA = NewObject<UInputAction>(this, TEXT("IA_Habilidad_Runtime"));
-        IA->ValueType = EInputActionValueType::Boolean;
-        HabilidadAction = IA;
-    }
-    if (!AguantarAction)
-    {
-        UInputAction* IA = NewObject<UInputAction>(this, TEXT("IA_Aguantar_Runtime"));
-        IA->ValueType = EInputActionValueType::Boolean;
-        AguantarAction = IA;
-    }
-    if (!KitIMC)
-    {
-        KitIMC = NewObject<UInputMappingContext>(this, TEXT("IMC_KitSilla_Runtime"));
-        KitIMC->MapKey(SprintAction,    EKeys::LeftShift);
-        KitIMC->MapKey(EmpujonAction,   EKeys::LeftMouseButton);
-        KitIMC->MapKey(HabilidadAction, EKeys::Q);
-        KitIMC->MapKey(AguantarAction,  EKeys::LeftControl);
-    }
-    if (const APlayerController* PC = Cast<APlayerController>(GetController()))
-    {
-        if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
-                ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
-        {
-            Subsystem->AddMappingContext(KitIMC, /*Priority=*/10);
-        }
+        SPC->AsegurarKitRuntime();
+        if (!SprintAction)    SprintAction    = SPC->GetIASprint();
+        if (!EmpujonAction)   EmpujonAction   = SPC->GetIAEmpujon();
+        if (!HabilidadAction) HabilidadAction = SPC->GetIAHabilidad();
+        if (!AguantarAction)  AguantarAction  = SPC->GetIAAguantar();
     }
 
     if (UEnhancedInputComponent* Input = Cast<UEnhancedInputComponent>(PlayerInputComponent))
