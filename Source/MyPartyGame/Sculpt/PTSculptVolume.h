@@ -136,6 +136,12 @@ public:
     UFUNCTION(BlueprintPure, Category="Sculpt")
     bool IsInsideCanvas(FVector WorldPos) const;
 
+    /** Clampea un punto del mundo al INTERIOR del lienzo (BoundsBox), dejando un margen = InsetRadius
+     *  en cada cara. Así la BROCHA (no solo su centro) queda dentro y "choca" con las paredes/piso/
+     *  techo en vez de salirse. Si el área es más chica que la brocha en un eje, cae al centro de ese eje. */
+    UFUNCTION(BlueprintPure, Category="Sculpt")
+    FVector ClampInsideCanvas(FVector WorldPos, float InsetRadius) const;
+
     float        SampleWorldDensity(FVector WorldPos) const;
     FLinearColor SampleWorldColor  (FVector WorldPos) const;
     // Color PINTADO (atlas) en esa posición del mundo. bOutPainted=false si ese punto no fue

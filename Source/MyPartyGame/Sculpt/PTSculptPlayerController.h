@@ -328,9 +328,12 @@ private:
     bool    bStrokeActive = false;
     FVector LastStampPos  = FVector::ZeroVector;
 
-    // Plano de esculpido bloqueado al inicio del trazo (evita que el stamp se acerque a la cámara)
+    // Plano de esculpido bloqueado al inicio del trazo (evita que el stamp se acerque a la cámara).
+    // Se usa en ALT+Add: al primer sello se congela un plano perpendicular a la vista y el resto del
+    // trazo se dibuja sobre él (profundidad constante) → trazos laterales/verticales sin trepar.
     FVector SculptPlaneOrigin = FVector::ZeroVector;
     FVector SculptPlaneNormal = FVector::ForwardVector;
+    bool    bStrokePlaneLocked = false;
 
     EPTStampShape CachedPreviewShape = EPTStampShape::Sphere;
     float         CachedPreviewSize  = 0.f;
@@ -412,6 +415,13 @@ private:
     void OnStampReleased();
     void OnScrollUp();
     void OnScrollDown();
+
+    // ── ALT: pegar el sello a la superficie de la arcilla (solo Add) para detallar de cerca ──
+    // Con Alt mantenido, en Add el sello deja de ir al "brazo extendido" y se pega a la superficie de
+    // la malla existente (raymarch), como Paint/Smooth. Sirve para agregar detalle fino sobre la arcilla.
+    bool bSurfaceSnap = false;
+    void OnSurfaceSnapPressed()  { bSurfaceSnap = true;  }
+    void OnSurfaceSnapReleased() { bSurfaceSnap = false; }
 
     // ── Rotar shapes (mantener la RUEDA del mouse + arrastrar) ──────────────
     // Mientras se mantiene, la cámara NO se mueve: el mouse rota el sello. Doble click de

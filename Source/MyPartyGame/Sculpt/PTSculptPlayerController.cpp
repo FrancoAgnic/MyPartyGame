@@ -256,6 +256,12 @@ void APTSculptPlayerController::SetupInputComponent()
     InputComponent->BindKey(K(TEXT("RotateShape")), IE_Pressed,  this, &APTSculptPlayerController::OnShapeRotatePressed);
     InputComponent->BindKey(K(TEXT("RotateShape")), IE_Released, this, &APTSculptPlayerController::OnShapeRotateReleased);
 
+    // ALT (mantener) en Add: pegar el sello a la superficie de la arcilla ya dibujada (detallar de cerca).
+    InputComponent->BindKey(EKeys::LeftAlt,  IE_Pressed,  this, &APTSculptPlayerController::OnSurfaceSnapPressed);
+    InputComponent->BindKey(EKeys::LeftAlt,  IE_Released, this, &APTSculptPlayerController::OnSurfaceSnapReleased);
+    InputComponent->BindKey(EKeys::RightAlt, IE_Pressed,  this, &APTSculptPlayerController::OnSurfaceSnapPressed);
+    InputComponent->BindKey(EKeys::RightAlt, IE_Released, this, &APTSculptPlayerController::OnSurfaceSnapReleased);
+
     // Borrar TODA la escultura: mantener 3s (solo el escultor).
     InputComponent->BindKey(K(TEXT("ClearAll")), IE_Pressed,  this, &APTSculptPlayerController::OnClearAllPressed);
     InputComponent->BindKey(K(TEXT("ClearAll")), IE_Released, this, &APTSculptPlayerController::OnClearAllReleased);
@@ -627,12 +633,25 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         {
             Server_ApplyStamp(StampPos, Sh, StampSize, EditMode, CurrentPaintColor, StampRotation);
             bStrokeActive = true;
+            // ALT+Add: congelar el plano en el 1er sello (perpendicular a la vista) para que el resto
+            // del trazo vaya a profundidad constante y no trepe hacia la cámara.
+            if (EditMode == EPTEditMode::Add && bSurfaceSnap)
+            {
+                FVector S, D;
+                if (GetCameraRay(S, D))
+                {
+                    SculptPlaneOrigin  = StampPos;
+                    SculptPlaneNormal  = D;      // plano perpendicular a la vista al iniciar el trazo
+                    bStrokePlaneLocked = true;
+                }
+            }
         }
         LastStampPos = StampPos;
     }
     else
     {
-        bStrokeActive = false;
+        bStrokeActive      = false;
+        bStrokePlaneLocked = false; // soltó el click: liberar el plano congelado
     }
 }
 
@@ -664,7 +683,7 @@ FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
     // ── Modo eje: trazo recto sobre el plano CONGELADO (fijado al activar Z/X) ───
     // Solo con la herramienta de esculpir (Add) y fuera de la tool de ojos. El rayo del cursor
     // se interseca con el plano fijo → trazos rectos; soltar/re-presionar mantiene el mismo plano.
-    if (bAxisLock && EditMode == EPTEditMode::Add && !bEyesTool)
+    if (bAxisLock && EditMode == EPTEditMode::Add && !bEyesTool && !bSurfaceSnap)
     {
         const float denom = FVector::DotProduct(Dir, AxisPlaneN);
         FVector Pf = AxisOrigin;
@@ -674,12 +693,34 @@ FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
             if (t > 0.f) Pf = Start + Dir * t;
         }
         OutNormal = AxisPlaneN;
-        return Pf;
+        // Clamp desde el PIVOT (centro) del sello: inset 0 → el centro llega justo a la cara del área
+        // (mitad de la esfera adentro, mitad afuera).
+        return Volume ? Volume->ClampInsideCanvas(Pf, 0.f) : Pf;
     }
 
     // ── Paint, Smooth y OJOS: pegar el cursor a la superficie (raymarch) para trabajar
     // preciso sobre la malla donde apuntás. ────────────────────────────────────
-    if ((EditMode == EPTEditMode::Paint || EditMode == EPTEditMode::Smooth || bEyesTool) && Volume)
+    // ALT+Add DURANTE un trazo: NO re-raymarchear (la arcilla nueva quedaría más cerca y el trazo
+    // treparía hacia la cámara). Se dibuja sobre el plano congelado en el 1er sello (perpendicular a
+    // la vista) → trazos laterales/verticales a profundidad constante.
+    if (EditMode == EPTEditMode::Add && bSurfaceSnap && bStrokeActive && bStrokePlaneLocked)
+    {
+        const float denom = FVector::DotProduct(Dir, SculptPlaneNormal);
+        FVector Pf = SculptPlaneOrigin;
+        if (FMath::Abs(denom) > 1e-4f)
+        {
+            const float t = FVector::DotProduct(SculptPlaneOrigin - Start, SculptPlaneNormal) / denom;
+            if (t > 0.f) Pf = Start + Dir * t;
+        }
+        OutNormal = -Dir;
+        return Volume ? Volume->ClampInsideCanvas(Pf, 0.f) : Pf;
+    }
+
+    // Paint/Smooth/Ojos SIEMPRE se pegan a la superficie; Add lo hace solo con ALT (bSurfaceSnap):
+    // así podés apoyar el sello sobre la arcilla ya dibujada y detallar de cerca en vez de agregar
+    // a distancia fija del brazo.
+    if (((EditMode == EPTEditMode::Paint || EditMode == EPTEditMode::Smooth || bEyesTool)
+         || (EditMode == EPTEditMode::Add && bSurfaceSnap)) && Volume)
     {
         static constexpr float StepSize = 8.f;  // ~1 voxel: preciso
         static constexpr int32 MaxSteps = 700;
@@ -713,7 +754,10 @@ FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
 
     // Cursor tipo SculptrVR: siempre a distancia fija (brazo extendido).
     OutNormal = -Dir;
-    return Start + Dir * AirDepth;
+    const FVector Air = Start + Dir * AirDepth;
+    // Clamp desde el PIVOT (centro) del sello: inset 0 → el centro se frena en la cara interior del
+    // área, con la mitad de la esfera adentro y la otra mitad afuera (podés dibujar sobre las paredes).
+    return Volume ? Volume->ClampInsideCanvas(Air, 0.f) : Air;
 }
 
 // Umbral (en UU) para fijar el eje del trazo: ~medio tamaño de brocha.

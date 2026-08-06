@@ -1504,6 +1504,22 @@ bool APTSculptVolume::IsInsideCanvas(FVector WorldPos) const
     return FMath::Abs(L.X) <= E.X && FMath::Abs(L.Y) <= E.Y && FMath::Abs(L.Z) <= E.Z;
 }
 
+FVector APTSculptVolume::ClampInsideCanvas(FVector WorldPos, float InsetRadius) const
+{
+    if (!BoundsBox) return WorldPos;
+    const FTransform T = BoundsBox->GetComponentTransform();
+    FVector L = T.InverseTransformPosition(WorldPos);         // a espacio local (extent sin escalar)
+    const FVector E = BoundsBox->GetUnscaledBoxExtent();
+    // Margen = radio de la brocha en cada cara, para que la ESFERA del sello no se pase de la pared.
+    const FVector Lim(FMath::Max(0.f, E.X - InsetRadius),
+                      FMath::Max(0.f, E.Y - InsetRadius),
+                      FMath::Max(0.f, E.Z - InsetRadius));
+    L.X = FMath::Clamp(L.X, -Lim.X, Lim.X);
+    L.Y = FMath::Clamp(L.Y, -Lim.Y, Lim.Y);
+    L.Z = FMath::Clamp(L.Z, -Lim.Z, Lim.Z);
+    return T.TransformPosition(L);
+}
+
 // ─── Ojos (replicados) ─────────────────────────────────────────────────────────
 void APTSculptVolume::AddEye(FVector WorldPos, float Radius)
 {
