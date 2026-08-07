@@ -187,18 +187,20 @@ void UPTGameplayHUDWidget::RefreshToolbar()
         }
         else if (!bEyes && PC->EditMode == EPTEditMode::Add)
         {
-            // Con Agregar: los dos planos de trazo recto.
+            // Con Agregar: los dos planos de trazo recto + ALT (detalle en capa aparte).
             AddHint(IconAxisVert,  PTInput::GetKey(TEXT("AxisVertical")),   PTText::Get(TEXT("HINT_PLANE_VERTICAL")));
             AddHint(IconAxisHoriz, PTInput::GetKey(TEXT("AxisHorizontal")), PTText::Get(TEXT("HINT_PLANE_HORIZONTAL")));
+            AddHint(IconDetail,    FKey(EKeys::LeftAlt),                    PTText::Get(TEXT("TOOL_DETAIL")));
         }
     }
 
-    // Resaltar el plano activo (si el modo eje está encendido).
-    if (!bPicker && !bEyes && PC->EditMode == EPTEditMode::Add && HintSlots.Num() >= 2)
+    // Resaltar el plano activo (eje) y el detalle (Alt) si están encendidos.
+    if (!bPicker && !bEyes && PC->EditMode == EPTEditMode::Add && HintSlots.Num() >= 3)
     {
         const bool bAxis = PC->IsAxisLockActive();
         if (HintSlots[0]) HintSlots[0]->SetSelected(bAxis && !PC->IsAxisHorizontal());
         if (HintSlots[1]) HintSlots[1]->SetSelected(bAxis &&  PC->IsAxisHorizontal());
+        if (HintSlots[2]) HintSlots[2]->SetSelected(PC->IsSurfaceSnapActive());
     }
 }
 

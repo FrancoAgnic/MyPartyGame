@@ -174,8 +174,11 @@ void APTLobbyCharacter::BakeAndReplicateHead(UProceduralMeshComponent* ClaySrc, 
     OutBlob.Reset();
     if (!HeadMesh || !ClaySrc) return;
 
-    // Componer: arcilla (con pintura horneada) + una sección de OJOS (esferas).
+    // Componer: arcilla base + CAPAS de detalle (lentes/bigote, mallas aparte) + sección de OJOS.
     TArray<FPTHeadSection> Secs = ExtractSections(ClaySrc, PaintSource);
+    if (PaintSource)
+        for (UProceduralMeshComponent* DM : PaintSource->GetDetailMeshes())
+            if (DM) Secs.Append(ExtractSections(DM, PaintSource));
     if (LocalEyes.Num() > 0)
     {
         FPTHeadSection Eyes = BuildEyesSection(LocalEyes, HeadEyeMesh, HeadEyeBaseSize);

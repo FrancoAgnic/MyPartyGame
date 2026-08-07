@@ -288,6 +288,11 @@ void APTLobbyPlayerController::SetupInputComponent()
     InputComponent->BindKey(EKeys::Two,   IE_Pressed, this, &APTLobbyPlayerController::OnHeadModeErase);
     InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &APTLobbyPlayerController::OnHeadModePaint);
     InputComponent->BindKey(EKeys::Four,  IE_Pressed, this, &APTLobbyPlayerController::OnHeadModeEyes);
+    // ALT (mantener) en Add: pegar el sello a la superficie de la cabeza (detallar de cerca), igual que el gameplay.
+    InputComponent->BindKey(EKeys::LeftAlt,  IE_Pressed,  this, &APTLobbyPlayerController::OnHeadSurfaceSnapPressed);
+    InputComponent->BindKey(EKeys::LeftAlt,  IE_Released, this, &APTLobbyPlayerController::OnHeadSurfaceSnapReleased);
+    InputComponent->BindKey(EKeys::RightAlt, IE_Pressed,  this, &APTLobbyPlayerController::OnHeadSurfaceSnapPressed);
+    InputComponent->BindKey(EKeys::RightAlt, IE_Released, this, &APTLobbyPlayerController::OnHeadSurfaceSnapReleased);
     // Enter = confirmar la edición (guarda + equipa + vuelve al Locker). Escape = popup guardar/descartar.
     InputComponent->BindKey(EKeys::Enter,  IE_Pressed, this, &APTLobbyPlayerController::ConfirmHeadEdit);
     InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &APTLobbyPlayerController::RequestHeadBack);
@@ -485,26 +490,41 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
     if (HeadPaintMID && GetWorld())
         HeadPaintMID->SetScalarParameterValue(TEXT("NowTime"), GetWorld()->GetTimeSeconds());
 
+    // ALT + Add: congelar el plano de esculpido en el 1er sello del trazo (a la profundidad de la
+    // superficie donde apoyaste), para que el resto del trazo vaya a profundidad constante (no trepa).
+    if (HeadVolume && bHeadStamping && bHavePt && bHeadStrokeIsDetail && !bHeadStrokePlaneLocked)
+    {
+        HeadStrokePlaneOrigin  = Pt;
+        HeadStrokePlaneNormal  = HeadCam ? HeadCam->GetActorForwardVector() : FVector::ForwardVector;
+        bHeadStrokePlaneLocked = true;
+    }
+
     // Stamp continuo mientras se mantiene el LMB.
     if (HeadVolume && bHeadStamping && bHavePt)
     {
         // Paint (no ojos): pintar la TEXTURA 2D de la cabeza (world-space, sin costuras, igual al cuerpo),
-        // NO el atlas. Se permite pintar aunque la cara esté PEGADA AL LÍMITE del área (no agrega
-        // geometría, solo colorea). Add/Erase sí respetan el límite (geometría) como en el gameplay.
+        // NO el atlas.
         if (HeadChar && !bHeadEyesTool && HeadEditMode == EPTEditMode::Paint)
         {
             if (!IsPaintBudgetFull()) // límite de pintura: no pintar más allá del peso replicable
             {
                 HeadChar->PaintHeadWorldSphere(HeadVolume->GetMeshComponent(), Pt, HeadBrushSize * 0.5f, HeadPaintColor);
+                // También las capas de detalle (lentes/bigote): pintan la MISMA textura 2D por posición.
+                for (UProceduralMeshComponent* DM : HeadVolume->GetDetailMeshes())
+                    if (DM) HeadChar->PaintHeadWorldSphere(DM, Pt, HeadBrushSize * 0.5f, HeadPaintColor);
                 HeadChar->FlushHeadPaint();
                 HeadVolume->PlayPaintFXAt(Pt, HeadPaintColor, HeadBrushSize); // gotitas de pintura
                 PaintBudgetAccum += DeltaTime;
                 if (PaintBudgetAccum >= 0.3f) { PaintBudgetAccum = 0.f; HeadChar->RecomputeHeadPaintBytes(); }
             }
         }
-        else if (!bHeadStampOutside)
+        else
         {
-            HeadVolume->ApplyStampAndFX(Pt, EffectiveHeadShape(), HeadBrushSize, HeadEditMode, HeadPaintColor, HeadStampRotation);
+            // Add/Erase: el punto ya viene CLAMPEADO al interior del área (desde el pivot), así que
+            // siempre se sella. Si el trazo es de DETALLE (Alt), va a la capa aparte (bDetail=true);
+            // si no, a la base. (Multicast_..._Implementation elige el campo y dispara las partículas.)
+            HeadVolume->Multicast_ApplyStamp_Implementation(Pt, EffectiveHeadShape(), HeadBrushSize,
+                HeadEditMode, HeadPaintColor, HeadStampRotation, bHeadStrokeIsDetail);
         }
     }
 }
@@ -710,9 +730,19 @@ void APTLobbyPlayerController::OnHeadStampPressed()
     }
     else if (HeadVolume && (HeadEditMode == EPTEditMode::Add || HeadEditMode == EPTEditMode::Erase))
     {
-        // Trazo de GEOMETRÍA: lo maneja el volumen (undo de la malla).
-        HeadVolume->Multicast_BeginStroke_Implementation();
-        bHeadStrokeActive = true;
+        // ¿Trazo de DETALLE? (Add + Alt): nueva CAPA aparte que NO se fusiona con la cabeza
+        // (lentes/bigote/etc.). Erase nunca es detalle. Se latchea para todo el trazo.
+        bHeadStrokeIsDetail = (HeadEditMode == EPTEditMode::Add && bHeadSurfaceSnap);
+        if (bHeadStrokeIsDetail)
+        {
+            HeadVolume->Multicast_BeginDetailLayer_Implementation(); // capa nueva (el undo la saca entera)
+        }
+        else
+        {
+            HeadVolume->Multicast_BeginStroke_Implementation(); // trazo normal sobre la base
+            bHeadStrokeActive = true;
+        }
+        // 0 = geometría: el undo de la cabeza delega en el volumen, que decide si deshace base o capa.
         HeadUndoKinds.Add(0);
     }
     while (HeadUndoKinds.Num() > 32) HeadUndoKinds.RemoveAt(0);
@@ -720,6 +750,8 @@ void APTLobbyPlayerController::OnHeadStampPressed()
 void APTLobbyPlayerController::OnHeadStampReleased()
 {
     bHeadStamping = false;
+    bHeadStrokePlaneLocked = false; // soltó: liberar el plano congelado del Alt-detalle
+    bHeadStrokeIsDetail    = false;
     if (bHeadStrokeActive && HeadVolume)
     {
         HeadVolume->Multicast_EndStroke_Implementation(); // cierra el trazo (queda en la pila de undo)
@@ -923,9 +955,26 @@ bool APTLobbyPlayerController::GetHeadStampPoint(FVector& OutWorld, FVector& Out
     FVector Origin, Dir;
     if (!const_cast<APTLobbyPlayerController*>(this)->DeprojectMousePositionToWorld(Origin, Dir)) return false;
 
-    // PAINT y OJOS: pegar el cursor a la SUPERFICIE (raymarch sobre la densidad), como el gameplay,
-    // para trabajar preciso sobre la malla. Devuelve la normal (para apoyar el preview en el mesh).
-    if (HeadEditMode == EPTEditMode::Paint || bHeadEyesTool)
+    // ADD + ALT DURANTE el trazo: dibujar sobre el PLANO CONGELADO (fijado al 1er sello), para hacer
+    // trazos laterales sin que la arcilla trepe hacia la cámara (igual que el gameplay).
+    if (HeadEditMode == EPTEditMode::Add && bHeadStrokeIsDetail && bHeadStrokePlaneLocked)
+    {
+        const float denom = FVector::DotProduct(Dir, HeadStrokePlaneNormal);
+        FVector Pf = HeadStrokePlaneOrigin;
+        if (FMath::Abs(denom) > 1e-4f)
+        {
+            const float t = FVector::DotProduct(HeadStrokePlaneOrigin - Origin, HeadStrokePlaneNormal) / denom;
+            if (t > 0.f) Pf = Origin + Dir * t;
+        }
+        OutNormal = -Dir;
+        OutWorld  = HeadVolume->ClampInsideCanvas(Pf, 0.f);
+        return true;
+    }
+
+    // PAINT y OJOS: pegar el cursor a la SUPERFICIE (raymarch). ADD lo hace SOLO con ALT (detallar de
+    // cerca sobre la cabeza). Devuelve la normal (para apoyar el preview en el mesh).
+    if (HeadEditMode == EPTEditMode::Paint || bHeadEyesTool
+        || (HeadEditMode == EPTEditMode::Add && bHeadSurfaceSnap))
     {
         constexpr float StepSize = 6.f;
         constexpr int32 MaxSteps = 500;
@@ -955,19 +1004,20 @@ bool APTLobbyPlayerController::GetHeadStampPoint(FVector& OutWorld, FVector& Out
             }
             prevD = d;
         }
-        return false; // sin superficie bajo el cursor → no pinta ni muestra preview
+        // Sin superficie: Paint/Ojos no muestran nada; Add+Alt cae al plano de abajo (primer blob).
+        if (HeadEditMode != EPTEditMode::Add) return false;
     }
 
-    // ADD/ERASE — IGUAL QUE EL GAMEPLAY (estilo SculptrVR): el sello NO cae sobre la superficie
-    // —eso la haría crecer hacia la cámara y no dejaría hacer trazos laterales—, sino sobre un
-    // PLANO a la profundidad de la cabeza, perpendicular a la cámara. Arrastrar desliza el sello.
+    // ADD/ERASE normal (estilo SculptrVR): el sello cae sobre un PLANO a la profundidad de la cabeza,
+    // perpendicular a la cámara (no trepa). Se CLAMPEA al interior del área desde el pivot (mitad de
+    // la esfera adentro), así la brocha choca con las paredes/piso/techo y no se sale.
     const FVector C = HeadVolume->GetActorLocation();      // centro de la cabeza (punto del plano)
     const FVector N = HeadCam->GetActorForwardVector();    // normal del plano = mirada de la cámara
     const float denom = FVector::DotProduct(Dir, N);
     if (FMath::Abs(denom) < 1e-4f) return false;           // rayo casi paralelo al plano
     const float t = FVector::DotProduct(C - Origin, N) / denom;
     if (t <= 0.f) return false;                            // el plano está detrás del cursor
-    OutWorld  = Origin + Dir * t;
+    OutWorld  = HeadVolume->ClampInsideCanvas(Origin + Dir * t, 0.f);
     OutNormal = -N;                                        // hacia la cámara
     return true;
 }
@@ -1130,10 +1180,11 @@ void APTLobbyPlayerController::EnterHeadSculpt()
     if (HeadVolume && Lk && EditingHeadSlot >= 0)
     {
         const TArray<uint8>& RawState = Lk->GetHeadRawState(EditingHeadSlot);
+        uint32 Magic = 0;
         if (RawState.Num() > 0)
         {
             FMemoryReader Ar(RawState, /*bIsPersistent=*/true);
-            uint32 Magic = 0; Ar << Magic;
+            Ar << Magic;
             if (Magic == PT_HEADRAW_MAGIC)
             {
                 TArray<uint8> FieldBytes;
@@ -1142,6 +1193,8 @@ void APTLobbyPlayerController::EnterHeadSculpt()
                 if (HeadVolume->LoadFieldState(FieldBytes)) bReEdit = true;
             }
         }
+        UE_LOG(LogTemp, Warning, TEXT("[HeadReEdit] slot=%d rawBytes=%d magicOK=%d reEdit=%d"),
+               EditingHeadSlot, RawState.Num(), (Magic == PT_HEADRAW_MAGIC) ? 1 : 0, bReEdit ? 1 : 0);
     }
 
     // Slot nuevo (sin crudo): bolita inicial de arcilla para tener algo que esculpir (color piel).

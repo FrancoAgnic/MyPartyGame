@@ -289,6 +289,8 @@ public:
 
     // ── Estado de las tools, para la barra de herramientas del HUD ───────────
     UFUNCTION(BlueprintPure, Category="Sculpt") bool IsEyesToolActive() const   { return bEyesTool; }
+    /** true mientras se mantiene ALT (detalle en capa aparte pegado a la superficie). Para el HUD. */
+    UFUNCTION(BlueprintPure, Category="Sculpt") bool IsSurfaceSnapActive() const { return bSurfaceSnap; }
     UFUNCTION(BlueprintPure, Category="Sculpt") bool IsAxisLockActive() const   { return bAxisLock; }
     UFUNCTION(BlueprintPure, Category="Sculpt") bool IsAxisHorizontal() const   { return bAxisHorizontal; }
 

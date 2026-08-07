@@ -124,11 +124,14 @@ const TArray<uint8>& UPTLockerSubsystem::GetEquippedBodyPNG() const
 }
 const TArray<uint8>& UPTLockerSubsystem::GetHeadRawState(int32 Idx) const
 {
+    const_cast<UPTLockerSubsystem*>(this)->EnsureLoaded(); // garantizar el save cargado (bug: re-editar
+    // una cabeza mostraba el default porque el getter leía antes de cargar; recién Equip lo forzaba).
     if (Save && Save->HeadSlots.IsValidIndex(Idx)) return Save->HeadSlots[Idx].RawState;
     return Empty;
 }
 const TArray<uint8>& UPTLockerSubsystem::GetHeadBaked(int32 Idx) const
 {
+    const_cast<UPTLockerSubsystem*>(this)->EnsureLoaded();
     if (Save && Save->HeadSlots.IsValidIndex(Idx)) return Save->HeadSlots[Idx].BakedBlob;
     return Empty;
 }

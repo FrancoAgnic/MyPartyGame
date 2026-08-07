@@ -61,6 +61,7 @@ void UPTHeadSculptHUDWidget::BuildOnce()
     if (ColorSlot) ColorSlot->SetSlot(IconColor, FText::FromString(TEXT("RMB")), PTText::Get(TEXT("KEY_COLOR_PICK")));
     if (ExitSlot)  ExitSlot->SetSlot(IconExit,   FText::FromString(TEXT("G")),   PTText::Get(TEXT("HEAD_APPLY")));
     if (PaintBodySlot) PaintBodySlot->SetSlot(IconPaintBody, FText::FromString(TEXT("Shift")), PTText::Get(TEXT("HEAD_PAINT_BODY")));
+    if (DetailSlot)    DetailSlot->SetSlot(IconDetail, FText::FromString(TEXT("Alt")), PTText::Get(TEXT("TOOL_DETAIL")));
     if (ClearSlot)     ClearSlot->SetSlot(IconClear, FText::FromString(TEXT("Backspace")), PTText::Get(TEXT("SCULPT_CLEAR")));
 
     // La cruz WASD: cada tecla en su lugar (W arriba, S abajo, A izq, D der). El "glow" es el
@@ -163,6 +164,13 @@ void UPTHeadSculptHUDWidget::Refresh(APTLobbyPlayerController* PC)
         PaintBodySlot->SetVisibility(bPaintTool ? ESlateVisibility::HitTestInvisible
                                                 : ESlateVisibility::Collapsed);
         if (bPaintTool) PaintBodySlot->SetSelected(PC->IsBodyPaintMode());
+    }
+
+    // ALT (detalle en capa aparte): no aplica en la edición de un slot de CUERPO. Se resalta al mantener Alt.
+    if (DetailSlot)
+    {
+        DetailSlot->SetVisibility(bBodyOnly ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+        if (!bBodyOnly) DetailSlot->SetSelected(PC->IsHeadSurfaceSnapActive());
     }
 
     const bool  bPaintTool = PC->IsHeadPaintingTool();

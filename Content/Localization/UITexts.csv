@@ -83,6 +83,7 @@ TOOL_ADD,Agregar,Add,Adicionar,Hinzufügen,Ajouter,Aggiungi
 TOOL_ERASE,Borrar,Erase,Apagar,Löschen,Effacer,Cancella
 TOOL_PAINT,Pintar,Paint,Pintar,Malen,Peindre,Dipingi
 TOOL_EYES,Ojos,Eyes,Olhos,Augen,Yeux,Occhi
+TOOL_DETAIL,Detalle,Detail,Detalhe,Detail,Détail,Dettaglio
 TOOL_CLEAR_ALL,Borrar todo,Clear All,Apagar tudo,Alles löschen,Tout effacer,Cancella tutto
 SHAPE_SPHERE,Esfera,Sphere,Esfera,Kugel,Sphère,Sfera
 SHAPE_CUBE,Cubo,Cube,Cubo,Würfel,Cube,Cubo

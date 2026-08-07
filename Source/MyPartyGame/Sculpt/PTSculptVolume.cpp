@@ -672,9 +672,15 @@ bool APTSculptVolume::WritePaintStamp(FVector WorldPos, EPTStampShape Shape, flo
         for (float n = -ShellUU; n <= ShellUU; n += CV)
         {
             const FVector P = Local + u * T + v * B + n * LocalN;
-            // Solo pintar si hay geometría cerca (evita pintar el aire → sin fantasmas).
+            // Solo pintar si hay geometría cerca (evita pintar el aire → sin fantasmas). Se considera
+            // la superficie de CUALQUIER campo: base O alguna capa de detalle (si no, no se podrían
+            // pintar los lentes/bigote de una capa).
             const FVector Cell = P / VoxelSize;
-            if (FMath::Abs(Field.SampleSDF(Cell.X, Cell.Y, Cell.Z)) >= SurfBand) continue;
+            bool bNearSurface = FMath::Abs(Field.SampleSDF(Cell.X, Cell.Y, Cell.Z)) < SurfBand;
+            if (!bNearSurface)
+                for (const TSharedPtr<FPTSculptField>& L : DetailFields)
+                    if (L.IsValid() && FMath::Abs(L->SampleSDF(Cell.X, Cell.Y, Cell.Z)) < SurfBand) { bNearSurface = true; break; }
+            if (!bNearSurface) continue;
             const int32 vx = FMath::FloorToInt((P.X - CanvasMinLocal.X) / CV);
             const int32 vy = FMath::FloorToInt((P.Y - CanvasMinLocal.Y) / CV);
             const int32 vz = FMath::FloorToInt((P.Z - CanvasMinLocal.Z) / CV);
@@ -1292,8 +1298,23 @@ void APTSculptVolume::Multicast_ApplyStamp_Implementation(FVector WorldPos, EPTS
                                                            float Size, EPTEditMode Mode, FLinearColor PaintColor,
                                                            FRotator StampRot, bool bDetail)
 {
-    // Corre en TODOS los clientes (es un Multicast) → también lo ven los que adivinan.
-    // Elegir el campo destino: la última capa de detalle si bDetail, o la base. Se restaura al final.
+    // BORRAR afecta la BASE y TODAS las capas de detalle: saca arcilla de todo lo que haya bajo la
+    // brocha (si no, no se podrían borrar los lentes/bigote de una capa). La FX sale una sola vez.
+    if (Mode == EPTEditMode::Erase)
+    {
+        ActiveField = &Field;
+        ApplyStampAndFX(WorldPos, Shape, Size, Mode, PaintColor, StampRot); // base + partículas
+        for (const TSharedPtr<FPTSculptField>& L : DetailFields)
+            if (L.IsValid())
+            {
+                ActiveField = L.Get();
+                ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot); // capa (sin FX repetida)
+            }
+        ActiveField = &Field;
+        return;
+    }
+
+    // Add/Paint/Smooth: campo destino = la última capa si bDetail, o la base. Se restaura al final.
     ActiveField = (bDetail && DetailFields.Num() > 0) ? DetailFields.Last().Get() : &Field;
     ApplyStampAndFX(WorldPos, Shape, Size, Mode, PaintColor, StampRot);
     ActiveField = &Field;
@@ -1468,6 +1489,13 @@ void APTSculptVolume::SaveFieldState(TArray<uint8>& Out)
     Out.Reset();
     FMemoryWriter Ar(Out, /*bIsPersistent=*/true);
     Field.SerializeState(Ar);
+
+    // También las CAPAS de detalle (para re-editar la cabeza con sus lentes/bigote intactos).
+    TArray<FPTSculptField*> Valid;
+    for (const TSharedPtr<FPTSculptField>& L : DetailFields) if (L.IsValid()) Valid.Add(L.Get());
+    int32 NumLayers = Valid.Num();
+    Ar << NumLayers;
+    for (FPTSculptField* L : Valid) L->SerializeState(Ar);
 }
 
 bool APTSculptVolume::LoadFieldState(const TArray<uint8>& In)
@@ -1480,15 +1508,41 @@ bool APTSculptVolume::LoadFieldState(const TArray<uint8>& In)
     Field.VoxelSize        = VoxelSize;         // asegurar los parámetros del volumen actual
     Field.DisplaySmoothing = DisplaySmoothing;
 
+    // Limpiar capas actuales antes de cargar las guardadas.
+    for (UProceduralMeshComponent* M : DetailMeshes) if (M) M->DestroyComponent();
+    DetailMeshes.Reset();
+    DetailFields.Reset();
+    UndoOrder.Reset();
+    ActiveField = &Field;
+
+    // Capas de detalle guardadas (si el blob es viejo y no las trae, AtEnd() corta acá → 0 capas).
+    if (!Ar.AtEnd())
+    {
+        int32 NumLayers = 0;
+        Ar << NumLayers;
+        for (int32 i = 0; i < NumLayers && !Ar.AtEnd(); ++i)
+        {
+            TSharedPtr<FPTSculptField> L = MakeShared<FPTSculptField>();
+            L->SerializeState(Ar);
+            L->VoxelSize        = VoxelSize;
+            L->DisplaySmoothing = DisplaySmoothing;
+            DetailFields.Add(L);
+            DetailMeshes.Add(CreateDetailLayerMesh());
+            UndoOrder.Add(1);
+        }
+    }
+
     // Undo del volumen (pintura/ojos) también en blanco: los respaldos apuntarían a un campo viejo.
     VolumeUndoStack.Reset();
     CurrentVolumeUndo = FPTVolumeUndo();
     bRecordingStroke  = false;
 
-    // Re-mallar YA todos los bricks cargados. El material (ClayMaterialOverride) lo aplica
-    // RebuildDirty al crear cada sección.
+    // NO re-mallar acá: el que llama (EnterHeadSculpt) setea el material (ClayMaterialOverride =
+    // HeadPaintMID) DESPUÉS de LoadFieldState. Si remalláramos ya, las secciones tomarían el material
+    // equivocado. Solo limpiamos y dejamos los bricks dirty → el próximo Tick remalla con el material
+    // correcto (base + capas).
     if (Mesh) Mesh->ClearAllMeshSections();
-    RebuildDirty();
+    TimeSinceRebuild = RebuildInterval; // forzar el remallado en el próximo tick
     return true;
 }
 

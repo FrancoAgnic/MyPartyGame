@@ -98,6 +98,7 @@ protected:
     UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconAxisHoriz = nullptr;
     UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconSaveColor = nullptr;
     UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconClearAll  = nullptr;
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconDetail    = nullptr; // ALT (detalle)
 
     // Cuadritos creados (para actualizar el equipado sin reconstruir).
     UPROPERTY() TArray<class UPTToolSlotWidget*> ToolSlots;   // orden: Add, Erase, Paint, Ojos

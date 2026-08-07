@@ -54,6 +54,8 @@ public:
     /** true si estás editando un SLOT DE CUERPO (solo pintar; sin volumen de cabeza). Para que el
      *  HUD muestre únicamente la herramienta de pintar y colapse las demás. */
     bool          IsHeadBodyOnlyEdit()    const { return bHeadSculptBodyOnly; }
+    /** true mientras se mantiene ALT en la cabeza (detalle en capa aparte). Para resaltar el hotbar. */
+    bool          IsHeadSurfaceSnapActive() const { return bHeadSurfaceSnap; }
     /** true si la herramienta actual pinta (Paint en cabeza, o pintar el cuerpo). Para la barra de presupuesto. */
     bool          IsHeadPaintingTool()    const { return bHeadSculptMode && !bHeadEyesTool && (bBodyPaintMode || HeadEditMode == EPTEditMode::Paint); }
     /** Presupuesto de pintura 0..1 (peso PNG replicable / máximo permitido). */
@@ -345,6 +347,19 @@ protected:
     bool bHeadStrokeActive = false; // hay un trazo de geometría abierto (para el undo)
     // Orden de los trazos para el undo unificado: 0=geometría (volumen), 1=pintura cabeza, 2=pintura cuerpo.
     TArray<uint8> HeadUndoKinds;
+
+    // ── ALT en la cabeza: detallar pegado a la superficie (como el gameplay) ──
+    // Con Alt mantenido en Add, el sello se pega a la superficie de la cabeza (raymarch) para detallar
+    // de cerca. Se congela un plano al 1er sello del trazo para no trepar hacia la cámara.
+    bool    bHeadSurfaceSnap = false;
+    void OnHeadSurfaceSnapPressed()  { bHeadSurfaceSnap = true;  }
+    void OnHeadSurfaceSnapReleased() { bHeadSurfaceSnap = false; }
+    FVector HeadStrokePlaneOrigin = FVector::ZeroVector;
+    FVector HeadStrokePlaneNormal = FVector::ForwardVector;
+    bool    bHeadStrokePlaneLocked = false;
+    // Latcheado al iniciar el trazo (= Add + Alt): el trazo va a una CAPA de detalle aparte (lentes/
+    // bigote/etc. que NO se fusionan con la cabeza), igual que en el gameplay.
+    bool    bHeadStrokeIsDetail = false;
     void OnHeadModeAdd();       void OnHeadModeErase();  void OnHeadModePaint();  void OnHeadModeEyes();
     void OnHeadCycleShape();    // TAB: cicla Esfera→Cubo→Cilindro→Cono
     // SHIFT (solo en Paint): alterna foco cabeza (arcilla) ↔ cuerpo (piel del personaje).

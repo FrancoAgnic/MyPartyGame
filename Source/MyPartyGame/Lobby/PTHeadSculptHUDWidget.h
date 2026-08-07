@@ -47,6 +47,8 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* ExitSlot;
     // SHIFT: alternar pintar cabeza ↔ cuerpo. Solo visible con la herramienta Paint.
     UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* PaintBodySlot;
+    // ALT: detallar en una capa aparte pegado a la superficie. Se resalta mientras mantenés Alt.
+    UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* DetailSlot;
     // BACKSPACE: toque = deshacer; mantener = borrar todo (muestra el círculo de progreso 3s).
     UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* ClearSlot;
     // Barra de presupuesto de pintura: solo visible con la herramienta Paint (cabeza o cuerpo). Se
@@ -107,6 +109,7 @@ protected:
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconExit     = nullptr;
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconPaintBody = nullptr;
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconClear    = nullptr;
+    UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconDetail   = nullptr; // ALT (detalle)
     // Material de "pulse" (MUI_Pulse): se aplica al texto "¡Sin pintura!" para que parpadee y se note.
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UMaterialInterface* PulseMaterial = nullptr;
 

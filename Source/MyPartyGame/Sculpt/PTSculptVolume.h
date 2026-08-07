@@ -130,6 +130,8 @@ public:
 
     // Acceso al ProceduralMesh (para hornear la escultura a otro componente, ej: la cabeza custom).
     UProceduralMeshComponent* GetMeshComponent() const { return Mesh; }
+    // Mallas de las CAPAS de detalle (para hornearlas junto a la base en la cabeza custom).
+    const TArray<UProceduralMeshComponent*>& GetDetailMeshes() const { return DetailMeshes; }
 
     /** ¿Ese punto del mundo cae DENTRO del lienzo (el BoundsBox)? Para no dejar poner cosas
      *  (ej: ojos) fuera de la zona de modelado. */
