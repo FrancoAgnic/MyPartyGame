@@ -7,6 +7,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Interfaces/OnlineSessionInterface.h"
 #include "PTGameInstance.h"
+#include "PTUserWidget.h"
 #include "PTMainMenuWidget.generated.h"
 
 class UTextBlock;
@@ -19,7 +20,7 @@ class UPTEnterCodeWidget;
 class UPTSettingsWidget;
 
 UCLASS()
-class MYPARTYGAME_API UPTMainMenuWidget : public UUserWidget
+class MYPARTYGAME_API UPTMainMenuWidget : public UPTUserWidget
 {
     GENERATED_BODY()
 

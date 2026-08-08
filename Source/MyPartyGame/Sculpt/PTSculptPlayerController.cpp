@@ -1378,3 +1378,46 @@ void APTSculptPlayerController::Server_BeginDetailLayer_Implementation()
     if (Volume) Volume->Multicast_BeginDetailLayer();
 }
 
+// ── Snapshot de la escultura para (re)conexiones tardías ─────────────────────
+void APTSculptPlayerController::SendSculptSnapshot(const TArray<uint8>& Blob)
+{
+    if (Blob.Num() == 0) return;
+    SnapOut  = Blob;
+    SnapSent = 0;
+    GetWorldTimerManager().ClearTimer(SnapTimer);
+    PumpSnapshot();
+}
+
+void APTSculptPlayerController::PumpSnapshot()
+{
+    const int32 ChunkBytes = 8 * 1024;
+    const int32 MaxPerPump = 3; // throttle: evita desbordar el buffer confiable (como las cabezas)
+    for (int32 i = 0; i < MaxPerPump && SnapSent < SnapOut.Num(); ++i)
+    {
+        const int32 Take = FMath::Min(ChunkBytes, SnapOut.Num() - SnapSent);
+        TArray<uint8> Chunk;
+        Chunk.Append(SnapOut.GetData() + SnapSent, Take);
+        const bool bFirst = (SnapSent == 0);
+        SnapSent += Take;
+        const bool bLast  = (SnapSent >= SnapOut.Num());
+        Client_SculptSnapshotChunk(Chunk, bFirst, bLast);
+    }
+    if (SnapSent < SnapOut.Num())
+        GetWorldTimerManager().SetTimer(SnapTimer, this, &APTSculptPlayerController::PumpSnapshot, 0.05f, false);
+    else
+        SnapOut.Reset();
+}
+
+void APTSculptPlayerController::Client_SculptSnapshotChunk_Implementation(const TArray<uint8>& Data, bool bFirst, bool bLast)
+{
+    if (bFirst) SnapIn.Reset();
+    SnapIn.Append(Data);
+    if (!bLast) return;
+
+    if (!Volume)
+        Volume = Cast<APTSculptVolume>(
+            UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
+    if (Volume && SnapIn.Num() > 0) Volume->LoadSnapshot(SnapIn); // geometría base + capas + pintura
+    SnapIn.Reset();
+}
+

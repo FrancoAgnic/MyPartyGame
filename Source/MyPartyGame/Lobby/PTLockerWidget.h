@@ -14,6 +14,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "../UI/PTUserWidget.h"
 #include "PTLockerWidget.generated.h"
 
 class UPanelWidget;
@@ -24,7 +25,7 @@ class UPTLockerSubsystem;
 class APTLobbyPlayerController;
 
 UCLASS()
-class MYPARTYGAME_API UPTLockerWidget : public UUserWidget
+class MYPARTYGAME_API UPTLockerWidget : public UPTUserWidget
 {
     GENERATED_BODY()
 public:

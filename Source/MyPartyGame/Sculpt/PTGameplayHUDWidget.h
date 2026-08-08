@@ -6,6 +6,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "PTSculptGameState.h" // EPTTurnPhase, EPTChatType
+#include "../UI/PTUserWidget.h"
 #include "PTGameplayHUDWidget.generated.h"
 
 class UTextBlock;
@@ -15,7 +16,7 @@ class UScrollBox;
 class APTSculptPlayerController;
 
 UCLASS()
-class MYPARTYGAME_API UPTGameplayHUDWidget : public UUserWidget
+class MYPARTYGAME_API UPTGameplayHUDWidget : public UPTUserWidget
 {
     GENERATED_BODY()
 

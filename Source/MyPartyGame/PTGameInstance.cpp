@@ -10,6 +10,10 @@
 #include "DesktopPlatformModule.h"
 #include "IDesktopPlatform.h"
 #include "Framework/Application/SlateApplication.h"
+#include "Blueprint/UserWidget.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/Button.h"
+#include "Sound/SoundBase.h"
 
 namespace
 {
@@ -105,6 +109,30 @@ void UPTGameInstance::ClearCustomWords()
 {
     PendingMatchSettings.CustomWords.Reset();
     PendingMatchSettings.bUseCustomWords = false;
+}
+
+void UPTGameInstance::ApplyUIButtonSounds(UUserWidget* Root) const
+{
+    if (!Root || (!UIHoverSound && !UIClickSound) || !Root->WidgetTree) return;
+
+    TArray<UWidget*> All;
+    Root->WidgetTree->GetAllWidgets(All);
+    for (UWidget* W : All)
+    {
+        if (UButton* Btn = Cast<UButton>(W))
+        {
+            // Copiar el estilo actual y solo setear los sonidos (Slate los reproduce solo en hover/press).
+            FButtonStyle Style = Btn->GetStyle();
+            if (UIHoverSound) Style.HoveredSlateSound.SetResourceObject(UIHoverSound);
+            if (UIClickSound) Style.PressedSlateSound.SetResourceObject(UIClickSound);
+            Btn->SetStyle(Style);
+        }
+        else if (UUserWidget* Sub = Cast<UUserWidget>(W))
+        {
+            // Sub-widget (WBP anidado): sus botones viven en SU propio árbol → recursión.
+            ApplyUIButtonSounds(Sub);
+        }
+    }
 }
 
 void UPTGameInstance::Init()

@@ -7,6 +7,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "../PTMatchSettings.h"
+#include "../UI/PTUserWidget.h"
 #include "PTLobbyHUDWidget.generated.h"
 
 class UVerticalBox;
@@ -17,7 +18,7 @@ class UCheckBox;
 class UPTGameInstance;
 
 UCLASS()
-class MYPARTYGAME_API UPTLobbyHUDWidget : public UUserWidget
+class MYPARTYGAME_API UPTLobbyHUDWidget : public UPTUserWidget
 {
     GENERATED_BODY()
 

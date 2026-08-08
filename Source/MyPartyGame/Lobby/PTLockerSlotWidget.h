@@ -12,6 +12,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "../UI/PTUserWidget.h"
 #include "PTLockerSlotWidget.generated.h"
 
 class UButton;
@@ -21,7 +22,7 @@ class UWidget;
 class UPTLockerWidget;
 
 UCLASS()
-class MYPARTYGAME_API UPTLockerSlotWidget : public UUserWidget
+class MYPARTYGAME_API UPTLockerSlotWidget : public UPTUserWidget
 {
     GENERATED_BODY()
 public:

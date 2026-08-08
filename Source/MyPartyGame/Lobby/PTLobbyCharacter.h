@@ -323,7 +323,16 @@ public:
     UMaterialInstanceDynamic* CreateHeadPaintMID();
     /** Pinta (world-space, sin costuras) sobre la textura de la cabeza: téxeles cuyo punto 3D cae en la
      *  esfera del pincel (centro world P, radio R). Mesh = la malla de arcilla (misma escala/espacio). */
-    void PaintHeadWorldSphere(UProceduralMeshComponent* ClayMesh, const FVector& P, float R, FLinearColor Color);
+    // bErase=true → pone transparente los téxeles cubiertos (borra la pintura) en vez de pintar. Se usa
+    // al AGREGAR arcilla: la textura es direccional, así hay que limpiar la pintura vieja de esa zona
+    // para que la arcilla nueva muestre su propio color. Borrar por los MISMOS triángulos que pinta
+    // garantiza que la región borrada coincide exacto con dónde pintaría (sin aproximaciones).
+    void PaintHeadWorldSphere(UProceduralMeshComponent* ClayMesh, const FVector& P, float R, FLinearColor Color, bool bErase = false);
+    /** Borra la pintura 2D de la cabeza por DIRECCIÓN (cono desde el centro hacia P). No depende de la
+     *  geometría ni del timing de mallado, así que al AGREGAR arcilla nueva limpia la pintura vieja de esa
+     *  dirección aunque la malla nueva todavía no exista → sin rastros de téxeles. RefMesh solo aporta el
+     *  transform para pasar P a espacio local. */
+    void ClearHeadPaintCone(UProceduralMeshComponent* RefMesh, const FVector& P, float R);
     /** Sube al GPU lo pintado en la cabeza desde el último flush. */
     void FlushHeadPaint();
     UTexture2D* GetHeadPaintTex() const { return HeadPaintTex; }

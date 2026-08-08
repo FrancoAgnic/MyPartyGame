@@ -16,6 +16,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "../UI/PTUserWidget.h"
 #include "PTHeadSculptHUDWidget.generated.h"
 
 class UPanelWidget;
@@ -29,7 +30,7 @@ class UPTToolSlotWidget;
 class APTLobbyPlayerController;
 
 UCLASS()
-class MYPARTYGAME_API UPTHeadSculptHUDWidget : public UUserWidget
+class MYPARTYGAME_API UPTHeadSculptHUDWidget : public UPTUserWidget
 {
     GENERATED_BODY()
 

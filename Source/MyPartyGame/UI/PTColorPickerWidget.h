@@ -1,6 +1,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "PTUserWidget.h"
 #include "PTColorPickerWidget.generated.h"
 
 class UImage;
@@ -23,7 +24,7 @@ class UPTColorRingWidget;
  * Los que son BindWidgetOptional pueden faltar.
  */
 UCLASS()
-class MYPARTYGAME_API UPTColorPickerWidget : public UUserWidget
+class MYPARTYGAME_API UPTColorPickerWidget : public UPTUserWidget
 {
     GENERATED_BODY()
 public:

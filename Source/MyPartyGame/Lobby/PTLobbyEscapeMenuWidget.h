@@ -4,13 +4,14 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "../UI/PTUserWidget.h"
 #include "PTLobbyEscapeMenuWidget.generated.h"
 
 class UButton;
 class UPTSettingsWidget;
 
 UCLASS()
-class MYPARTYGAME_API UPTLobbyEscapeMenuWidget : public UUserWidget
+class MYPARTYGAME_API UPTLobbyEscapeMenuWidget : public UPTUserWidget
 {
     GENERATED_BODY()
 

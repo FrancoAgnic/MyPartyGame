@@ -54,6 +54,27 @@ void APTSculptGameMode::PostLogin(APlayerController* NewPlayer)
     Super::PostLogin(NewPlayer); // el lobby hace RestartPlayer acá → ya hay pawn
     StartPawnFlying(NewPlayer);
     CheckStart();
+
+    // (Re)conexión TARDÍA: los que llegan del lobby vienen por seamless travel (HandleSeamlessTravelPlayer),
+    // así que PostLogin acá = una conexión NUEVA a mitad de partida (reconexión / late join). Le mandamos
+    // el estado actual de la escultura (geometría base + capas) para que vea lo ya esculpido, no solo lo
+    // que se dibuje de ahí en más. Con un delay para que su volumen (actor del nivel) ya exista en el cliente.
+    if (APTSculptPlayerController* SPC = Cast<APTSculptPlayerController>(NewPlayer))
+    {
+        TWeakObjectPtr<APTSculptPlayerController> WeakPC(SPC);
+        FTimerHandle H;
+        GetWorldTimerManager().SetTimer(H, [this, WeakPC]()
+        {
+            APTSculptPlayerController* PC = WeakPC.Get();
+            if (!PC || !GetWorld()) return;
+            if (APTSculptVolume* Vol = Cast<APTSculptVolume>(
+                    UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass())))
+            {
+                TArray<uint8> Blob; Vol->SaveSnapshot(Blob); // geometría + pintura
+                if (Blob.Num() > 0) PC->SendSculptSnapshot(Blob);
+            }
+        }, 1.5f, false);
+    }
 }
 
 void APTSculptGameMode::HandleSeamlessTravelPlayer(AController*& C)

@@ -1099,9 +1099,25 @@ void APTLobbyCharacter::PaintBodyWorldSphere(const FVector& P, float R, FLinearC
         if (Tb.ComputeSquaredDistanceToPoint(P) > R2) continue;
 
         // UV → coordenadas de téxel.
-        const FVector2D TA = FVector2D(UVBuf.GetVertexUV(A, 0)) * N;
-        const FVector2D TB = FVector2D(UVBuf.GetVertexUV(B, 0)) * N;
-        const FVector2D TC = FVector2D(UVBuf.GetVertexUV(C, 0)) * N;
+        FVector2D TA = FVector2D(UVBuf.GetVertexUV(A, 0)) * N;
+        FVector2D TB = FVector2D(UVBuf.GetVertexUV(B, 0)) * N;
+        FVector2D TC = FVector2D(UVBuf.GetVertexUV(C, 0)) * N;
+
+        // RASTERIZACIÓN CONSERVADORA (anti-costura): expandir el triángulo hacia afuera unos téxeles.
+        // Así se pintan los téxeles del "gutter" justo afuera del borde de la isla UV, que es de donde el
+        // filtrado saca el color base y muestra la costura. Es por-triángulo y el pintado real se filtra
+        // más abajo por la distancia 3D al pincel → NO se filtra color a otras islas lejanas del atlas
+        // (nada de espejado). Expandimos desde el centroide del triángulo.
+        {
+            const float SeamPad = 3.0f; // téxeles de sobre-pintado en el borde de cada isla
+            const FVector2D Ctr = (TA + TB + TC) / 3.0;
+            auto Grow = [&](const FVector2D& V) -> FVector2D
+            {
+                const FVector2D d = V - Ctr; const double L = d.Size();
+                return (L > 1e-4) ? V + (d / L) * SeamPad : V;
+            };
+            TA = Grow(TA); TB = Grow(TB); TC = Grow(TC);
+        }
 
         // Denominador baricéntrico 2D (área*2); si es ~0, el triángulo es degenerado en el UV.
         const double Den = (double)(TB.Y - TC.Y) * (TA.X - TC.X) + (double)(TC.X - TB.X) * (TA.Y - TC.Y);
@@ -1232,7 +1248,7 @@ UMaterialInstanceDynamic* APTLobbyCharacter::CreateHeadPaintMID()
     return MID;
 }
 
-void APTLobbyCharacter::PaintHeadWorldSphere(UProceduralMeshComponent* ClayMesh, const FVector& P, float R, FLinearColor Color)
+void APTLobbyCharacter::PaintHeadWorldSphere(UProceduralMeshComponent* ClayMesh, const FVector& P, float R, FLinearColor Color, bool bErase)
 {
     if (!ClayMesh || !HeadPaintTex || HeadPaintPixels.Num() == 0) return;
 
@@ -1271,9 +1287,13 @@ void APTLobbyCharacter::PaintHeadWorldSphere(UProceduralMeshComponent* ClayMesh,
             FVector2D UA = PT_HeadSphUV(LA, HeadPaintCenterLocal);
             FVector2D UB = PT_HeadSphUV(LB, HeadPaintCenterLocal);
             FVector2D UC = PT_HeadSphUV(LC, HeadPaintCenterLocal);
-            // Costura: si el triángulo cruza u=0/1, "desdoblar" sumando 1 a las u chicas (se wrapea al escribir).
+            // Costura del mapa esférico: solo "desdoblar" cuando el triángulo CRUZA de verdad la costura
+            // u=0/1 (tiene vértices cerca de 0 Y cerca de 1). El chequeo viejo (span>0.5) también se
+            // disparaba en triángulos grandes/oblicuos de formas complejas que NO cruzan la costura,
+            // desdoblándolos mal → el trazo saltaba a otro lado / salía sucio. Estricto = menos falsos.
             const float uMin = FMath::Min3(UA.X, UB.X, UC.X), uMax = FMath::Max3(UA.X, UB.X, UC.X);
-            if (uMax - uMin > 0.5f)
+            const bool bCrossesSeam = (uMin < 0.25f) && (uMax > 0.75f);
+            if (bCrossesSeam)
             {
                 if (UA.X < 0.5f) UA.X += 1.f;
                 if (UB.X < 0.5f) UB.X += 1.f;
@@ -1304,12 +1324,20 @@ void APTLobbyCharacter::PaintHeadWorldSphere(UProceduralMeshComponent* ClayMesh,
                 const FVector WP = L1 * WA + L2 * WB + L3 * WC;
                 const float   D2 = (float)(WP - P).SizeSquared();
                 if (D2 > R2) continue;
-                const float t = FMath::Sqrt(D2) / R;
-                const float a = 1.f - FMath::SmoothStep(0.7f, 1.f, t);
-                if (a <= 0.f) continue;
 
                 const int32 px = ((pxu % N) + N) % N;
                 FColor& Dst = HeadPaintPixels[py * N + px];
+                if (bErase)
+                {
+                    // Borrar TODO el footprint del pincel (sin el degradé del borde): si solo borrara donde
+                    // el falloff es >0, quedaría un anillo de rastros de la pintura vieja en el borde.
+                    if (Dst.A != 0) { Dst = FColor(0, 0, 0, 0); MarkH(px, py); }
+                    continue;
+                }
+
+                const float t = FMath::Sqrt(D2) / R;
+                const float a = 1.f - FMath::SmoothStep(0.7f, 1.f, t);
+                if (a <= 0.f) continue;
                 const float inv = 1.f - a;
                 Dst.R = (uint8)FMath::Clamp(FMath::RoundToInt(Src.R * a + Dst.R * inv), 0, 255);
                 Dst.G = (uint8)FMath::Clamp(FMath::RoundToInt(Src.G * a + Dst.G * inv), 0, 255);
@@ -1317,6 +1345,59 @@ void APTLobbyCharacter::PaintHeadWorldSphere(UProceduralMeshComponent* ClayMesh,
                 Dst.A = (uint8)FMath::Clamp(FMath::RoundToInt(255  * a + Dst.A * inv), 0, 255);
                 MarkH(px, py);
             }
+        }
+    }
+}
+
+void APTLobbyCharacter::ClearHeadPaintCone(UProceduralMeshComponent* RefMesh, const FVector& P, float R)
+{
+    if (!RefMesh || !HeadPaintTex || HeadPaintPixels.Num() == 0) return;
+    const int32 N = HeadPaintN;
+    const FTransform Xf = RefMesh->GetComponentTransform();
+    const FVector LocalP = Xf.InverseTransformPosition(P);
+    FVector dir = LocalP - HeadPaintCenterLocal;
+    const float dist = dir.Size();
+    if (dist < 1e-3f) return;
+    dir /= dist;
+
+    // R (mundo) → local → medio ángulo del cono que subtiende la esfera del pincel desde el centro.
+    const float MeshScale = Xf.GetScale3D().GetAbsMax();
+    const float Rlocal    = (MeshScale > 1e-4f) ? R / MeshScale : R;
+    const float Ang       = FMath::Clamp(FMath::Atan2(Rlocal, dist), 0.f, (float)PI);
+    const float CosAng    = FMath::Cos(Ang);
+
+    const FVector2D UV0 = PT_HeadSphUV(LocalP, HeadPaintCenterLocal);
+    const int32 cx   = FMath::RoundToInt(UV0.X * N);
+    const int32 cy   = FMath::RoundToInt(UV0.Y * N);
+    const int32 vRad = FMath::CeilToInt((Ang / PI) * N) + 2;
+    const int32 MinY = FMath::Clamp(cy - vRad, 0, N - 1);
+    const int32 MaxY = FMath::Clamp(cy + vRad, 0, N - 1);
+
+    for (int32 py = MinY; py <= MaxY; ++py)
+    {
+        // Ancho en u para ESTA fila: el cono se ensancha en azimut cerca de los polos (sin(v)→0).
+        const float vv   = (py + 0.5f) / N;
+        const float sinv = FMath::Sin(vv * PI);
+        float uHalf = (sinv > 1e-3f) ? (Ang / (2.f * PI)) / sinv : 1.f;
+        uHalf = FMath::Min(uHalf, 0.5f); // media vuelta como máximo
+        const int32 uRad = FMath::CeilToInt(uHalf * N) + 2;
+
+        for (int32 pxu = cx - uRad; pxu <= cx + uRad; ++pxu)
+        {
+            const int32 px = ((pxu % N) + N) % N; // wrap azimutal (costura u=0/1)
+            const float u  = (px + 0.5f) / N;
+            const float az = (u - 0.5f) * 2.f * PI;
+            const float po = vv * PI;
+            const float sp = FMath::Sin(po);
+            const FVector TexDir(sp * FMath::Cos(az), sp * FMath::Sin(az), FMath::Cos(po));
+            if (FVector::DotProduct(TexDir, dir) < CosAng) continue; // fuera del cono
+
+            FColor& Dst = HeadPaintPixels[py * N + px];
+            if (Dst.A == 0) continue;
+            Dst = FColor(0, 0, 0, 0);
+            if (HDirtyMaxX < HDirtyMinX) { HDirtyMinX = HDirtyMaxX = px; HDirtyMinY = HDirtyMaxY = py; }
+            else { HDirtyMinX = FMath::Min(HDirtyMinX, px); HDirtyMaxX = FMath::Max(HDirtyMaxX, px);
+                   HDirtyMinY = FMath::Min(HDirtyMinY, py); HDirtyMaxY = FMath::Max(HDirtyMaxY, py); }
         }
     }
 }

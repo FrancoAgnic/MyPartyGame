@@ -8,6 +8,9 @@
 #include "PTMatchSettings.h"
 #include "PTGameInstance.generated.h"
 
+class USoundBase;
+class UUserWidget;
+
 UCLASS()
 class MYPARTYGAME_API UPTGameInstance : public UGameInstance
 {
@@ -47,6 +50,18 @@ public:
     // Vuelve al banco default (descarta las palabras del CSV).
     UFUNCTION(BlueprintCallable, Category="Match")
     void ClearCustomWords();
+
+    // ── Sonidos globales de UI ──────────────────────────────────────────────
+    // Se asignan UNA vez (en BP_GameInstance o los class defaults) y se aplican a TODOS los botones
+    // que ya existen, sin tocar cada uno: ApplyUIButtonSounds recorre el árbol del widget y setea el
+    // Hovered/Pressed del estilo de cada UButton (Slate los reproduce solo). Los widgets raíz lo
+    // llaman en su NativeConstruct.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UI Sound") USoundBase* UIHoverSound = nullptr;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UI Sound") USoundBase* UIClickSound = nullptr;
+
+    /** Aplica los sonidos de UI a todos los botones del widget (recursivo, entra a sub-widgets). */
+    UFUNCTION(BlueprintCallable, Category="UI Sound")
+    void ApplyUIButtonSounds(class UUserWidget* Root) const;
 
 private:
     void HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver,

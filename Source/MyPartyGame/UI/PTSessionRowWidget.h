@@ -7,6 +7,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Interfaces/OnlineSessionInterface.h"
 #include "OnlineSessionSettings.h"
+#include "PTUserWidget.h"
 #include "PTSessionRowWidget.generated.h"
 
 class UTextBlock;
@@ -14,7 +15,7 @@ class UButton;
 class UMultiplayerSessionsSubsystem;
 
 UCLASS()
-class MYPARTYGAME_API UPTSessionRowWidget : public UUserWidget
+class MYPARTYGAME_API UPTSessionRowWidget : public UPTUserWidget
 {
     GENERATED_BODY()
 

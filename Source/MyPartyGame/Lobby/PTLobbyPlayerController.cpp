@@ -525,6 +525,20 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
             // si no, a la base. (Multicast_..._Implementation elige el campo y dispara las partículas.)
             HeadVolume->Multicast_ApplyStamp_Implementation(Pt, EffectiveHeadShape(), HeadBrushSize,
                 HeadEditMode, HeadPaintColor, HeadStampRotation, bHeadStrokeIsDetail);
+
+            // AGREGAR limpia la pintura 2D vieja de esa zona (la textura de la cabeza es direccional, así
+            // que sin esto la arcilla nueva mostraría el color pintado antes ahí en vez del color del
+            // picker). Se borra por los MISMOS triángulos que pinta el pincel (base + capas de detalle),
+            // así el borrado coincide exacto con dónde pintaría (sin costuras/aproximaciones).
+            if (HeadChar && !bHeadEyesTool && HeadEditMode == EPTEditMode::Add)
+            {
+                // Borrar la pintura vieja por DIRECCIÓN (cono), no por triángulos: la arcilla recién
+                // agregada aún no está mallada este frame, así que un borrado por geometría no la
+                // alcanzaría y quedarían rastros. El cono limpia esa dirección siempre. Radio un poco
+                // mayor que la arcilla nueva para tapar también el fringe.
+                HeadChar->ClearHeadPaintCone(HeadVolume->GetMeshComponent(), Pt, HeadBrushSize * 0.65f);
+                HeadChar->FlushHeadPaint();
+            }
         }
     }
 }

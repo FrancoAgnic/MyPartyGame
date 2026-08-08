@@ -189,6 +189,14 @@ public:
     void SaveFieldState(TArray<uint8>& Out);
     bool LoadFieldState(const TArray<uint8>& In);
 
+    // ── Snapshot COMPLETO (para el que se (re)conecta tarde) ────────────────
+    // Geometría (base + capas) + PINTURA del atlas 3D → el late-joiner ve la escultura tal cual.
+    void SaveSnapshot(TArray<uint8>& Out);
+    void LoadSnapshot(const TArray<uint8>& In);
+    // Serialización solo de la pintura (voxeles de color del atlas). La usa el snapshot.
+    void SavePaintState(TArray<uint8>& Out) const;
+    void LoadPaintState(const TArray<uint8>& In);
+
     // Reset sincronizado en todos: el GameMode (servidor) lo llama al empezar cada turno.
     UFUNCTION(NetMulticast, Reliable)
     void Multicast_ClearAll();

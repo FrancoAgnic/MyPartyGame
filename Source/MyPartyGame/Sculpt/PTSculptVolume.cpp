@@ -1546,6 +1546,103 @@ bool APTSculptVolume::LoadFieldState(const TArray<uint8>& In)
     return true;
 }
 
+// ─── Snapshot COMPLETO (geometría + pintura) para (re)conexiones tardías ───────
+void APTSculptVolume::SavePaintState(TArray<uint8>& Out) const
+{
+    Out.Reset();
+    FMemoryWriter Ar(Out, /*bIsPersistent=*/true);
+
+    // Recolectar todos los voxeles de color pintados (alpha>0). Bounded por la superficie pintada,
+    // no por el atlas entero → mucho más chico que mandar los 8MB del atlas completo.
+    TArray<FIntVector> Vox;
+    TArray<FColor>     Cols;
+    for (const TPair<FIntVector, int32>& It : BrickSlot)
+    {
+        const FIntVector BC   = It.Key;
+        const int32      Slot = It.Value;
+        const int32 TileX = Slot % AtlasTilesPerRow;
+        const int32 TileY = Slot / AtlasTilesPerRow;
+        for (int32 lz = 0; lz < CB; ++lz)
+        for (int32 ly = 0; ly < CB; ++ly)
+        for (int32 lx = 0; lx < CB; ++lx)
+        {
+            const int32 ax   = TileX * CB + lx;
+            const int32 ay   = TileY * (CB * CB) + lz * CB + ly;
+            const int32 AIdx = ax + ay * AtlasW;
+            if (!AtlasBuf.IsValidIndex(AIdx) || AtlasBuf[AIdx].A == 0) continue;
+            Vox.Add(FIntVector(BC.X * CB + lx, BC.Y * CB + ly, BC.Z * CB + lz));
+            Cols.Add(AtlasBuf[AIdx]);
+        }
+    }
+
+    int32 Count = Vox.Num();
+    Ar << Count;
+    for (int32 i = 0; i < Count; ++i)
+    {
+        Ar << Vox[i];
+        FColor C = Cols[i];
+        Ar << C;
+    }
+}
+
+void APTSculptVolume::LoadPaintState(const TArray<uint8>& In)
+{
+    // Vaciar el color field actual (igual que la sección de color de ClearAll).
+    for (float&  P : PageBuf)  P = 0.f;
+    for (FColor& C : AtlasBuf) C = FColor(0, 0, 0, 0);
+    BrickSlot.Empty();
+    DirtyTiles.Empty();
+    DirtyPageIdx.Reset();
+    FreeSlots.Reset();
+    SlotUsed.Init(0, AtlasCapacity);
+    NextSlot   = 0;
+    bPageDirty = true;
+
+    if (In.Num() > 0)
+    {
+        FMemoryReader Ar(In, /*bIsPersistent=*/true);
+        int32 Count = 0;
+        Ar << Count;
+        for (int32 i = 0; i < Count && !Ar.AtEnd(); ++i)
+        {
+            FIntVector V; FColor C;
+            Ar << V;
+            Ar << C;
+            WriteColorVoxel(V.X, V.Y, V.Z, C); // reasigna slots + page + atlas
+        }
+    }
+
+    // Los respaldos de undo apuntarían a slots viejos → resetear.
+    VolumeUndoStack.Reset();
+    CurrentVolumeUndo = FPTVolumeUndo();
+    UploadColorField();
+}
+
+void APTSculptVolume::SaveSnapshot(TArray<uint8>& Out)
+{
+    Out.Reset();
+    FMemoryWriter Ar(Out, /*bIsPersistent=*/true);
+
+    TArray<uint8> FieldBytes; SaveFieldState(FieldBytes);
+    TArray<uint8> PaintBytes; SavePaintState(PaintBytes);
+    Ar << FieldBytes;
+    Ar << PaintBytes;
+}
+
+void APTSculptVolume::LoadSnapshot(const TArray<uint8>& In)
+{
+    if (In.Num() == 0) return;
+    FMemoryReader Ar(In, /*bIsPersistent=*/true);
+
+    TArray<uint8> FieldBytes; Ar << FieldBytes;
+    LoadFieldState(FieldBytes);                 // geometría base + capas (defiere el remallado)
+    if (!Ar.AtEnd())
+    {
+        TArray<uint8> PaintBytes; Ar << PaintBytes;
+        LoadPaintState(PaintBytes);             // pintura del atlas 3D
+    }
+}
+
 void APTSculptVolume::Multicast_ClearAll_Implementation()
 {
     ClearAll();

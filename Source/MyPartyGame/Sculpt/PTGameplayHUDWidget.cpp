@@ -381,6 +381,12 @@ void UPTGameplayHUDWidget::RefreshTick()
                          (bSculptor && G->TurnPhase == EPTTurnPhase::ChoosingWord);
     ApplyInputMode(!bWantUI);
 
+    // Mientras la RUEDA DE COLOR está abierta (mantener RMB), el scroll del chat NO debe robar el
+    // mouse (bug: se enfocaba/scrolleaba el chat y no se podía elegir color). Lo hacemos click-through
+    // solo en ese caso; el resto del tiempo queda interactivo para leer/scrollear el historial.
+    if (ChatScroll)
+        ChatScroll->SetVisibility(bColorPicker ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Visible);
+
     // ── Diagnóstico de red (ping + packet loss) ──
     // On-screen (visible en build Development). Sirve para ver el lag en el test con un amigo.
     if (GEngine)
