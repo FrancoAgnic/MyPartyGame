@@ -27,6 +27,13 @@ enum class EPTChatType : uint8 { Normal, Correct, System };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FPTOnTurnPhaseChanged);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FPTOnChatLine, const FString&, Name, const FString&, Message, EPTChatType, Type);
+// Feedback al adivinar:
+//  · YouGuessed  → SOLO al que adivina: la palabra (en su idioma) + los puntos que sumó (popup grande).
+//  · SomeoneGuessed → a todos: quién adivinó (PlayerState) + puntos, para un mini-popup junto a su nombre.
+//  · AllGuessed  → SOLO al escultor: aviso de que ya adivinaron todos (el turno está por cerrarse).
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPTOnYouGuessed, const FString&, Word, int32, Points);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPTOnSomeoneGuessed, APTPlayerState*, Guesser, int32, Points);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FPTOnAllGuessed);
 
 UCLASS()
 class MYPARTYGAME_API APTSculptGameState : public APTGameState
@@ -111,6 +118,18 @@ public:
     // La clave usa {0} para Arg0 (nombre/palabra) y {1} para Arg1 (número).
     UFUNCTION(NetMulticast, Reliable)
     void Multicast_SystemLine(FName Key, const FString& Arg0, int32 Arg1);
+
+    // ── Feedback al adivinar (los WBP enganchan estos delegates para mostrar los popups) ──
+    /** Solo el que adivina (via Client RPC del PlayerController): palabra + puntos → popup grande. */
+    UPROPERTY(BlueprintAssignable, Category="Game") FPTOnYouGuessed OnYouGuessed;
+    /** A todos: quién adivinó + puntos → mini-popup junto a su nombre en el marcador. */
+    UPROPERTY(BlueprintAssignable, Category="Game") FPTOnSomeoneGuessed OnSomeoneGuessed;
+    /** Solo el escultor (via Client RPC): ya adivinaron todos, el turno se cierra. */
+    UPROPERTY(BlueprintAssignable, Category="Game") FPTOnAllGuessed OnAllGuessed;
+
+    /** Difunde a todos que 'Guesser' adivinó y cuántos puntos sumó (sin la palabra: anti-spoiler). */
+    UFUNCTION(NetMulticast, Reliable)
+    void Multicast_SomeoneGuessed(APTPlayerState* Guesser, int32 Points);
 
     /** Emite una línea de sistema SOLO en esta instancia (sin red): arma el texto con PTText (en
      *  el idioma local) y lo tira por OnChatLine. Lo usa Multicast_SystemLine y también los Client

@@ -131,7 +131,7 @@ private:
     void EndTurn();             // revela y agenda el próximo turno
     void AdvanceTurn();         // avanza ronda/turno o termina la partida
     void EndGame();             // fase GameOver: anuncia ganador y espera decisión del host
-    void AwardGuessPoints(APTPlayerState* Guesser); // suma puntos al que adivina + al escultor
+    int32 AwardGuessPoints(APTPlayerState* Guesser); // suma puntos al que adivina + al escultor; devuelve los del que adivina
     void GoToWaiting();         // no hay suficientes jugadores
 
     // Máscara de una palabra: sin revelar = todo "_"; con Revealed = esas posiciones en MAYÚSCULA.

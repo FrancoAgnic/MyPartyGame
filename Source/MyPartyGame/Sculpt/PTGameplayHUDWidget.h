@@ -132,6 +132,20 @@ protected:
     UFUNCTION() void OnBtnPlayAgain();
     UFUNCTION() void OnBtnReturnLobby();
 
+    // ── Feedback al adivinar: C++ engancha los delegates del GameState y maneja los popups. Vos solo
+    //    creás los widgets abajo (BindWidgetOptional) en el WBP y les das el look. ──
+    UFUNCTION() void OnYouGuessed(const FString& Word, int32 Points);
+    UFUNCTION() void OnSomeoneGuessed(class APTPlayerState* Guesser, int32 Points);
+    UFUNCTION() void OnAllGuessed();
+
+    // Popup GRANDE "adivinaste" (contenedor + dos textos). C++ los llena y los muestra/oculta.
+    UPROPERTY(meta=(BindWidgetOptional)) UWidget*    GuessPopup;      // contenedor (oculto por defecto)
+    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* TxtGuessWord;    // "La palabra era «X»"
+    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* TxtGuessPoints;  // "+N"
+    // Aviso al escultor "¡Todos adivinaron!" (contenedor + texto). C++ pone el texto localizado y lo muestra.
+    UPROPERTY(meta=(BindWidgetOptional)) UWidget*    AllGuessedPopup;
+    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* TxtAllGuessed; // texto del aviso (multi-idioma, GUESS_ALL)
+
 private:
     FTimerHandle RefreshTimer;
     FDelegateHandle LanguageHandle; // suscripción a PTText::OnLanguageChanged
@@ -151,4 +165,21 @@ private:
     void    RebuildScoreboard();     // rehace las filas del marcador en vivo (solo si cambió)
     FString CachedScoreSig;          // evita reconstruir cada tick si nada cambió
     bool    IsLocalPlayerHost() const;
+
+    // ── Feedback al adivinar ──
+    FTimerHandle GuessPopupTimer;    // oculta el popup grande tras unos segundos
+    FTimerHandle AllGuessedTimer;    // oculta el aviso "todos adivinaron"
+    void HideGuessPopup();
+    void HideAllGuessedPopup();
+    // "+N" junto al nombre: hasta cuándo mostrarlo por jugador (tiempo de mundo) + cuántos puntos.
+    TMap<TWeakObjectPtr<class APTPlayerState>, float> GuessPlusUntil;
+    TMap<TWeakObjectPtr<class APTPlayerState>, int32> GuessPlusPoints;
+    static constexpr float GuessFeedbackSeconds = 3.f; // duración de los popups/flashes
+
+    // Cuando el jugador local adivina: mostrar la palabra COMPLETA (en su idioma) y en verde en vez
+    // de los guiones. Se limpia al terminar el turno.
+    bool    bLocalGuessed = false;
+    FString LocalGuessedWord;
+    FSlateColor DefaultWordColor = FSlateColor(FLinearColor::White); // color original de TxtWord
+    bool    bWordColorCaptured = false;
 };

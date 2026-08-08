@@ -78,6 +78,9 @@ HUD_OUT_OF_BOUNDS,Fuera del área de modelado,Outside the sculpting area,Fora da
 CHAT_WORD_WAS,La palabra era: {0},The word was: {0},A palavra era: {0},Das Wort war: {0},Le mot était : {0},La parola era: {0}
 CHAT_WINNER,¡Ganó {0} con {1} puntos!,{0} wins with {1} points!,{0} venceu com {1} pontos!,{0} gewinnt mit {1} Punkten!,{0} gagne avec {1} points !,{0} vince con {1} punti!
 CHAT_GUESSED_IT,¡adivinó la palabra!,guessed the word!,acertou a palavra!,hat das Wort erraten!,a deviné le mot !,ha indovinato la parola!
+GUESS_YOU_WORD,La palabra era «{0}»,The word was «{0}»,A palavra era «{0}»,Das Wort war «{0}»,Le mot était «{0}»,La parola era «{0}»
+GUESS_POINTS,+{0},+{0},+{0},+{0},+{0},+{0}
+GUESS_ALL,¡Todos adivinaron!,Everyone guessed it!,Todos acertaram!,Alle haben es erraten!,Tout le monde a deviné !,Tutti hanno indovinato!
 BUBBLE_GUESSED_IT,¡Adivinó la palabra!,Guessed the word!,Acertou a palavra!,Wort erraten!,Mot deviné !,Parola indovinata!
 TOOL_ADD,Agregar,Add,Adicionar,Hinzufügen,Ajouter,Aggiungi
 TOOL_ERASE,Borrar,Erase,Apagar,Löschen,Effacer,Cancella

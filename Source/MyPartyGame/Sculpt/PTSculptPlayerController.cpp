@@ -159,12 +159,12 @@ void APTSculptPlayerController::BeginPlay()
         PaintRing->RegisterComponent();
         PaintRing->SetVisibility(false);
 
-        // Overlay X-ray: capa extra encima de cada preview (material base intacto).
+        // Overlay X-ray: capa extra encima del preview de la ARCILLA (material base intacto). El gizmo de
+        // ejes (grilla indicadora) queda FUERA: no debe verse a través de la geometría.
         if (PreviewOverlayMaterial)
         {
             PreviewMesh->SetOverlayMaterial(PreviewOverlayMaterial);
             PreviewStaticMesh->SetOverlayMaterial(PreviewOverlayMaterial);
-            AxisGizmo->SetOverlayMaterial(PreviewOverlayMaterial);
             PaintRing->SetOverlayMaterial(PreviewOverlayMaterial);
         }
 
@@ -249,8 +249,11 @@ void APTSculptPlayerController::SetupInputComponent()
     InputComponent->BindKey(K(TEXT("CycleShape")), IE_Pressed, this, &APTSculptPlayerController::CycleShapes);
 
     // Modo eje (dibujo recto sobre plano congelado): vertical / horizontal.
-    InputComponent->BindKey(K(TEXT("AxisVertical")),   IE_Pressed, this, &APTSculptPlayerController::ToggleAxisVertical);
-    InputComponent->BindKey(K(TEXT("AxisHorizontal")), IE_Pressed, this, &APTSculptPlayerController::ToggleAxisHorizontal);
+    // Ejes = HOLD: Pressed activa el plano, Released vuelve a Add.
+    InputComponent->BindKey(K(TEXT("AxisVertical")),   IE_Pressed,  this, &APTSculptPlayerController::OnAxisVerticalPressed);
+    InputComponent->BindKey(K(TEXT("AxisVertical")),   IE_Released, this, &APTSculptPlayerController::OnAxisVerticalReleased);
+    InputComponent->BindKey(K(TEXT("AxisHorizontal")), IE_Pressed,  this, &APTSculptPlayerController::OnAxisHorizontalPressed);
+    InputComponent->BindKey(K(TEXT("AxisHorizontal")), IE_Released, this, &APTSculptPlayerController::OnAxisHorizontalReleased);
 
     // Rotar el shape: mantener + arrastrar (doble click = reset).
     InputComponent->BindKey(K(TEXT("RotateShape")), IE_Pressed,  this, &APTSculptPlayerController::OnShapeRotatePressed);
@@ -1028,16 +1031,12 @@ void APTSculptPlayerController::OnShapeRotateReleased()
     SetIgnoreLookInput(false);
 }
 
-void APTSculptPlayerController::ToggleAxisVertical()
-{
-    // Si ya está en vertical → apagar; si no → encender vertical (cambia desde horizontal también).
-    SetAxisMode(!(bAxisLock && !bAxisHorizontal), /*bHorizontal=*/false);
-}
-
-void APTSculptPlayerController::ToggleAxisHorizontal()
-{
-    SetAxisMode(!(bAxisLock && bAxisHorizontal), /*bHorizontal=*/true);
-}
+// HOLD: mantener la tecla activa el eje; soltarla vuelve a Add. Al soltar solo apago si el eje activo
+// es el de esta tecla (así si tenés Z apretada y tocás X, soltar X no rompe el vertical, y viceversa).
+void APTSculptPlayerController::OnAxisVerticalPressed()   { SetAxisMode(true, /*bHorizontal=*/false); }
+void APTSculptPlayerController::OnAxisVerticalReleased()  { if (bAxisLock && !bAxisHorizontal) SetAxisMode(false, false); }
+void APTSculptPlayerController::OnAxisHorizontalPressed() { SetAxisMode(true, /*bHorizontal=*/true); }
+void APTSculptPlayerController::OnAxisHorizontalReleased(){ if (bAxisLock && bAxisHorizontal) SetAxisMode(false, true); }
 
 void APTSculptPlayerController::SetAxisMode(bool bEnable, bool bHorizontal)
 {
@@ -1300,6 +1299,18 @@ void APTSculptPlayerController::Client_SystemLine_Implementation(FName Key, cons
 {
     if (APTSculptGameState* GS = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr)
         GS->EmitLocalSystemLine(Key, Arg0, Arg1);
+}
+
+void APTSculptPlayerController::Client_YouGuessed_Implementation(const FString& Word, int32 Points)
+{
+    if (APTSculptGameState* GS = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr)
+        GS->OnYouGuessed.Broadcast(Word, Points);
+}
+
+void APTSculptPlayerController::Client_AllGuessed_Implementation()
+{
+    if (APTSculptGameState* GS = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr)
+        GS->OnAllGuessed.Broadcast();
 }
 
 void APTSculptPlayerController::Server_ChooseWord_Implementation(int32 Index)

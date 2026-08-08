@@ -267,9 +267,15 @@ void UPTGameplayHUDWidget::RefreshTick()
     if (G && !bChatBound)
     {
         G->OnChatLine.AddDynamic(this, &UPTGameplayHUDWidget::OnChatLine);
+        G->OnYouGuessed.AddDynamic(this, &UPTGameplayHUDWidget::OnYouGuessed);
+        G->OnSomeoneGuessed.AddDynamic(this, &UPTGameplayHUDWidget::OnSomeoneGuessed);
+        G->OnAllGuessed.AddDynamic(this, &UPTGameplayHUDWidget::OnAllGuessed);
         bChatBound = true;
     }
     if (!G) return;
+
+    // Fuera del turno de dibujo, olvidar que adivinaste (el próximo turno arranca con guiones de nuevo).
+    if (G->TurnPhase != EPTTurnPhase::Drawing) bLocalGuessed = false;
 
     // Barra de herramientas: qué está equipado / qué barras se ven.
     RefreshToolbar();
@@ -299,7 +305,9 @@ void UPTGameplayHUDWidget::RefreshTick()
         break;
     // (el contador de elección lo maneja el bloque del reloj de abajo)
     case EPTTurnPhase::Drawing:
-        WordText = bSculptor && PC ? PC->CurrentSecretWord : G->MaskedWord;
+        if (bSculptor && PC)      WordText = PC->CurrentSecretWord;
+        else if (bLocalGuessed)   WordText = LocalGuessedWord; // ya adivinaste → palabra completa (verde)
+        else                      WordText = G->MaskedWord;
         break;
     case EPTTurnPhase::TurnEnd:
         WordText = G->MaskedWord; // ya revelada
@@ -312,7 +320,13 @@ void UPTGameplayHUDWidget::RefreshTick()
     if (WordPickPanel)
         WordPickPanel->SetVisibility(bShowPanel ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
     if (TxtWord)
+    {
+        if (!bWordColorCaptured) { DefaultWordColor = TxtWord->GetColorAndOpacity(); bWordColorCaptured = true; }
         TxtWord->SetText(FText::FromString(WordText));
+        // Verde cuando VOS adivinaste (durante el dibujo); color original en el resto de los casos.
+        const bool bGreen = bLocalGuessed && G->TurnPhase == EPTTurnPhase::Drawing;
+        TxtWord->SetColorAndOpacity(bGreen ? FSlateColor(FLinearColor(0.15f, 0.9f, 0.2f)) : DefaultWordColor);
+    }
 
     // La caja de texto SÓLO se muestra mientras el chat está abierto (Enter). Colapsada,
     // Tab no puede darle foco ni congelar el input. Vale para todos, incluido el escultor
@@ -487,6 +501,70 @@ void UPTGameplayHUDWidget::OnChatLine(const FString& Name, const FString& Messag
     if (ChatScroll) ChatScroll->ScrollToEnd();
 }
 
+void UPTGameplayHUDWidget::OnYouGuessed(const FString& Word, int32 Points)
+{
+    // Ya adivinaste: mostrar la palabra COMPLETA en verde en el HUD (en vez de los guiones).
+    bLocalGuessed    = true;
+    LocalGuessedWord = Word;
+
+    // Popup GRANDE: "La palabra era «X»" + "+N". Textos localizados; visibilidad/tiempo desde C++.
+    if (TxtGuessWord)
+    {
+        FFormatOrderedArguments A; A.Add(FText::FromString(Word));
+        TxtGuessWord->SetText(PTText::Format(FName(TEXT("GUESS_YOU_WORD")), A));
+    }
+    if (TxtGuessPoints)
+    {
+        FFormatOrderedArguments A; A.Add(FText::AsNumber(Points));
+        TxtGuessPoints->SetText(PTText::Format(FName(TEXT("GUESS_POINTS")), A));
+    }
+    if (GuessPopup)
+    {
+        GuessPopup->SetVisibility(ESlateVisibility::HitTestInvisible);
+        if (UWorld* W = GetWorld())
+            W->GetTimerManager().SetTimer(GuessPopupTimer, this, &UPTGameplayHUDWidget::HideGuessPopup,
+                                          GuessFeedbackSeconds, false);
+    }
+}
+
+void UPTGameplayHUDWidget::HideGuessPopup()
+{
+    if (GuessPopup) GuessPopup->SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UPTGameplayHUDWidget::OnSomeoneGuessed(APTPlayerState* Guesser, int32 Points)
+{
+    if (!Guesser) return;
+    // El "+N" y el conteo animado se ven en la fila de CUALQUIERA que adivine, incluido uno mismo.
+
+    // Registrar el flash "+N" para ese jugador; RebuildScoreboard lo aplica a su fila (y lo re-aplica
+    // aunque el marcador se reconstruya al cambiar el puntaje). Se apaga solo al vencer el tiempo.
+    const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+    GuessPlusUntil.Add(Guesser, Now + GuessFeedbackSeconds);
+    GuessPlusPoints.Add(Guesser, Points);
+    CachedScoreSig.Reset();  // forzar rebuild para que aparezca ya
+    RebuildScoreboard();
+}
+
+void UPTGameplayHUDWidget::OnAllGuessed()
+{
+    // Aviso al escultor: ya adivinaron todos (el turno se cierra enseguida). Texto multi-idioma.
+    if (TxtAllGuessed)
+        TxtAllGuessed->SetText(PTText::Get(FName(TEXT("GUESS_ALL"))));
+    if (AllGuessedPopup)
+    {
+        AllGuessedPopup->SetVisibility(ESlateVisibility::HitTestInvisible);
+        if (UWorld* W = GetWorld())
+            W->GetTimerManager().SetTimer(AllGuessedTimer, this, &UPTGameplayHUDWidget::HideAllGuessedPopup,
+                                          GuessFeedbackSeconds, false);
+    }
+}
+
+void UPTGameplayHUDWidget::HideAllGuessedPopup()
+{
+    if (AllGuessedPopup) AllGuessedPopup->SetVisibility(ESlateVisibility::Collapsed);
+}
+
 void UPTGameplayHUDWidget::OnBtnPlayAgain()
 {
     if (APTSculptPlayerController* PC = GetSculptPC())
@@ -529,11 +607,19 @@ void UPTGameplayHUDWidget::RebuildScoreboard()
             Players.Add(PT);
     Players.Sort([](const APTPlayerState& A, const APTPlayerState& B){ return A.GameScore > B.GameScore; });
 
-    // Firma del estado visible: solo reconstruimos las filas si algo cambió (no cada tick).
+    const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+    auto IsFlashing = [&](APTPlayerState* PT) -> bool
+    {
+        const float* Until = GuessPlusUntil.Find(PT);
+        return Until && Now < *Until;
+    };
+
+    // Firma del estado visible: solo reconstruimos las filas si algo cambió (no cada tick). Incluye el
+    // flash "+N" para que el marcador se rearme cuando aparece Y cuando se vence (y así ocultarlo).
     FString Sig;
-    for (const APTPlayerState* PT : Players)
-        Sig += FString::Printf(TEXT("%s:%d:%d|"), *PT->GetDisplayNameSafe(),
-                               PT->GameScore, PT == G->CurrentSculptor ? 1 : 0);
+    for (APTPlayerState* PT : Players)
+        Sig += FString::Printf(TEXT("%s:%d:%d:%d|"), *PT->GetDisplayNameSafe(),
+                               PT->GameScore, PT == G->CurrentSculptor ? 1 : 0, IsFlashing(PT) ? 1 : 0);
     if (Sig == CachedScoreSig) return;
     CachedScoreSig = Sig;
 
@@ -543,6 +629,15 @@ void UPTGameplayHUDWidget::RebuildScoreboard()
         UPTScoreRowWidget* Row = CreateWidget<UPTScoreRowWidget>(GetOwningPlayer(), ScoreRowClass);
         if (!Row) continue;
         Row->SetRow(PT->GetDisplayNameSafe(), PT->GameScore, PT == G->CurrentSculptor);
+        // "+N" al lado del nombre + conteo animado del puntaje si este jugador acaba de adivinar.
+        if (IsFlashing(PT))
+        {
+            const int32* Pts = GuessPlusPoints.Find(PT);
+            const int32 Earned = Pts ? *Pts : 0;
+            Row->SetGuessPlus(Earned, true);
+            // Conteo con rebote desde el puntaje anterior (final - ganados) hasta el actual.
+            Row->AnimateScore(PT->GameScore - Earned, PT->GameScore, 1.5f);
+        }
         ScoreboardBox->AddChild(Row);
     }
 }

@@ -66,6 +66,11 @@ void UPTColorPickerWidget::RefreshRing()
 
 void UPTColorPickerWidget::SaveCurrentColor()
 {
+    // Dedupe: si el color ya está (comparando en bytes sRGB, que es como se guarda), quitar la copia
+    // vieja para que no se acumulen repetidos y el color recién usado quede como el más nuevo.
+    const FColor Cur = CurrentColor.ToFColor(true);
+    Palette.RemoveAll([Cur](const FLinearColor& C){ return C.ToFColor(true) == Cur; });
+
     Palette.Add(CurrentColor);
     // Buffer rotativo: si se pasa del máximo, cae el más viejo (el primero).
     while (Palette.Num() > MaxSwatches) Palette.RemoveAt(0);
@@ -181,7 +186,7 @@ void UPTColorPickerWidget::ConfirmQuickPick()
     const FVector2D CursorPos = FSlateApplication::IsInitialized()
         ? FSlateApplication::Get().GetCursorPos() : FVector2D::ZeroVector;
 
-    // ¿Soltó sobre un segmento del anillo? → elegir ese color guardado.
+    // ¿Soltó sobre un segmento del anillo? → elegir ese color guardado (ya está en la paleta: no re-guardar).
     FLinearColor Picked;
     if (SwatchRing && SwatchRing->GetColorAt(CursorPos, Picked))
     {
@@ -190,7 +195,9 @@ void UPTColorPickerWidget::ConfirmQuickPick()
         return;
     }
 
-    Confirm(); // aplica el color actual de la rueda (guardar es con E, no al soltar)
+    // Rueda: elegir un color NUEVO lo auto-guarda en el radial (con dedupe). Antes había que apretar E.
+    SaveCurrentColor();
+    Confirm();
 }
 
 FReply UPTColorPickerWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)

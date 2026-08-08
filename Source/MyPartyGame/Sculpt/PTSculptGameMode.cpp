@@ -377,10 +377,10 @@ void APTSculptGameMode::EndGame()
            Winner ? *Winner->GetPlayerName() : TEXT("(nadie)"));
 }
 
-void APTSculptGameMode::AwardGuessPoints(APTPlayerState* Guesser)
+int32 APTSculptGameMode::AwardGuessPoints(APTPlayerState* Guesser)
 {
     APTSculptGameState* G = GS();
-    if (!G || !Guesser) return;
+    if (!G || !Guesser) return 0;
 
     // Más rápido = más puntos: interpola de Max (todo el tiempo restante) a Min (sin tiempo).
     const float Frac = (TurnDuration > 0.f)
@@ -391,6 +391,8 @@ void APTSculptGameMode::AwardGuessPoints(APTPlayerState* Guesser)
     // El escultor gana por cada acierto (premia una escultura reconocible).
     if (G->CurrentSculptor)
         G->CurrentSculptor->GameScore += SculptorPointsPerGuess;
+
+    return GuesserPts;
 }
 
 void APTSculptGameMode::RequestPlayAgain(APTPlayerState* Requester)
@@ -423,7 +425,14 @@ void APTSculptGameMode::HandlePlayerGuessedCorrectly(APTPlayerState* Guesser)
     if (!Guesser || Guesser == G->CurrentSculptor || Guesser->bHasGuessedThisTurn) return;
 
     Guesser->bHasGuessedThisTurn = true;
-    AwardGuessPoints(Guesser); // puntos al que adivina + al escultor
+    const int32 Pts = AwardGuessPoints(Guesser); // puntos al que adivina + al escultor
+
+    // Popup GRANDE al que adivinó: la palabra en SU idioma + los puntos que sumó.
+    if (APTSculptPlayerController* GPC = Cast<APTSculptPlayerController>(Guesser->GetOwningController()))
+        GPC->Client_YouGuessed(CurrentWord.ForLang(Guesser->GetLanguageIndex()), Pts);
+
+    // Aviso a TODOS (mini-popup junto a su nombre). Sin la palabra: anti-spoiler.
+    G->Multicast_SomeoneGuessed(Guesser, Pts);
 
     // ¿Adivinaron todos los que no esculpen? → cerrar el turno antes de tiempo.
     bool bAllGuessed = true;
@@ -434,6 +443,11 @@ void APTSculptGameMode::HandlePlayerGuessedCorrectly(APTPlayerState* Guesser)
     }
     if (bAllGuessed)
     {
+        // Avisar al ESCULTOR antes de cortar (si no, el turno terminaba de golpe sin explicación).
+        if (G->CurrentSculptor)
+            if (APTSculptPlayerController* SPC = Cast<APTSculptPlayerController>(G->CurrentSculptor->GetOwningController()))
+                SPC->Client_AllGuessed();
+
         GetWorldTimerManager().ClearTimer(PhaseTimer);
         EndTurn();
     }

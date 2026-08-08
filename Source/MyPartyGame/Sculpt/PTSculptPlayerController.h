@@ -210,6 +210,14 @@ public:
     UFUNCTION(Client, Reliable)
     void Client_SystemLine(FName Key, const FString& Arg0, int32 Arg1);
 
+    /** Al que adivina: la palabra (en SU idioma) + los puntos que sumó → popup grande. */
+    UFUNCTION(Client, Reliable)
+    void Client_YouGuessed(const FString& Word, int32 Points);
+
+    /** Al escultor: ya adivinaron todos, el turno se cierra → aviso para que no sea de golpe. */
+    UFUNCTION(Client, Reliable)
+    void Client_AllGuessed();
+
     /** El escultor elige una de las 3 (cliente → servidor). Llamar desde el HUD. */
     UFUNCTION(Server, Reliable, BlueprintCallable, Category="Game")
     void Server_ChooseWord(int32 Index);
@@ -407,8 +415,11 @@ private:
     FVector         AxisU      = FVector::RightVector;
     FVector         AxisV      = FVector::UpVector;
     mutable int32   AxisChosen = -1; // -1 sin definir, 0=U, 1=V
-    void ToggleAxisVertical();   // tecla Z
-    void ToggleAxisHorizontal(); // tecla X
+    // Ejes = HOLD: mantener la tecla activa el plano; soltarla vuelve a Add. (Z = vertical, X = horizontal)
+    void OnAxisVerticalPressed();
+    void OnAxisVerticalReleased();
+    void OnAxisHorizontalPressed();
+    void OnAxisHorizontalReleased();
     void SetAxisMode(bool bEnable, bool bHorizontal); // fija/limpia el plano
 
     // El plano con colisión lo spawnea el SERVIDOR (el movimiento es autoritativo: si viviera solo

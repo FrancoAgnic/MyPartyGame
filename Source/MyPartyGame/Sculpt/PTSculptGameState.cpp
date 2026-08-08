@@ -69,6 +69,11 @@ void APTSculptGameState::Multicast_SystemLine_Implementation(FName Key, const FS
     EmitLocalSystemLine(Key, Arg0, Arg1);
 }
 
+void APTSculptGameState::Multicast_SomeoneGuessed_Implementation(APTPlayerState* Guesser, int32 Points)
+{
+    OnSomeoneGuessed.Broadcast(Guesser, Points); // el HUD muestra el mini-popup junto a su nombre
+}
+
 void APTSculptGameState::EmitLocalSystemLine(FName Key, const FString& Arg0, int32 Arg1)
 {
     // Se arma acá, en el cliente, para que cada uno la lea en SU idioma.
