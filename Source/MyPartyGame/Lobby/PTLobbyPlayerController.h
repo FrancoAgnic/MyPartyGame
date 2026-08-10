@@ -235,6 +235,10 @@ public:
     /** Equipa un slot (aplica al personaje y replica solo lo equipado). */
     void EquipHeadSlot(int32 Idx);
     void EquipBodySlot(int32 Idx);
+
+    // Preview local (hover en el locker): muestra la combinación sin equipar; revert vuelve a lo equipado.
+    void PreviewLookSlot(int32 Index, bool bHead);
+    void RevertLookPreview();
     /** Entra a crear/editar un slot de cabeza o de cuerpo. */
     void EnterHeadSculptForSlot(int32 Idx);
     void EnterBodyPaintForSlot(int32 Idx);

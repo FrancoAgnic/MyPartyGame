@@ -110,13 +110,29 @@ public:
     // Encodea la textura de pintura del cuerpo a PNG (para guardarla en un slot de cuerpo).
     bool GetBodyPaintPNG(TArray<uint8>& OutPNG);
 
-    // Renderiza una MINIATURA del personaje (SceneCapture, solo el personaje sobre fondo) a PNG.
-    bool CaptureLookThumbnailPNG(TArray<uint8>& OutPNG, int32 Size = 256);
+    // Renderiza una MINIATURA del personaje (SceneCapture) a PNG. bHeadFocus=true → encuadra la cabeza y
+    // el cuerpo se ve default/oscurecido; false → cuerpo entero con una cabeza esfera default/oscurecida.
+    bool CaptureLookThumbnailPNG(TArray<uint8>& OutPNG, bool bHeadFocus, int32 Size = 256);
     // Crea una UTexture2D desde un PNG (para mostrar la miniatura en el Locker). Outer = dueño (GC).
     static UTexture2D* MakeTextureFromPNG(UObject* Outer, const TArray<uint8>& PNG);
     // Parámetros de encuadre de la miniatura (frente al personaje).
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Locker") float ThumbDistance = 220.f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Locker") float ThumbHeight   = 70.f;
+    // Distancia de cámara para el encuadre de CABEZA (más cerca que el cuerpo entero).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Locker") float ThumbHeadDistance = 95.f;
+    // Encuadre fino: offset vertical del centro y ángulo (pitch) de la cámara, por separado cabeza/cuerpo.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Locker") float ThumbHeadHeight = 0.f;   // sube/baja el centro (cabeza)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Locker") float ThumbHeadPitch  = 0.f;   // inclina la cámara (cabeza)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Locker") float ThumbBodyPitch  = 0.f;   // inclina la cámara (cuerpo)
+    // Intensidad de la luz frontal limpia de la miniatura (sin sombras). 0 = sin luz extra.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Locker") float ThumbLightIntensity = 6.f;
+    // Color de fondo de la miniatura. Requiere ThumbBackdropMaterial (unlit, con parámetro vector "Color").
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Locker") FLinearColor ThumbBgColor = FLinearColor(0.10f, 0.11f, 0.14f, 1.f);
+    // Material del plano de fondo (unlit con param "Color"). Si es null, no se dibuja fondo (como antes).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Locker") UMaterialInterface* ThumbBackdropMaterial = nullptr;
+    // Material "apagado/oscuro" para la parte que NO es el foco (cuerpo default en thumb de cabeza; cabeza
+    // esfera default en thumb de cuerpo). Si es null, esa parte se muestra con su material normal.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Locker") UMaterialInterface* ThumbDimMaterial = nullptr;
     // Re-arma un blob combinado tomando la CABEZA de HeadBlob pero con OTRO cuerpo (BodyPNG). Sirve
     // para equipar cabeza y cuerpo de slots distintos. Si BodyPNG está vacío, conserva el del HeadBlob.
     void AssembleReplicatedBlob(const TArray<uint8>& HeadBlob, const TArray<uint8>& BodyPNG, TArray<uint8>& Out);
@@ -145,6 +161,11 @@ public:
     // Persistencia local: guardar/cargar la cabeza (blob completo: geometría + texturas de pintura).
     void SaveHeadBlob(const TArray<uint8>& Blob);
     void LoadHead();
+
+    /** Aplica LOCALMENTE (sin commitear el equipado ni replicar a otros) la combinación cabeza/cuerpo
+     *  de los slots dados, para previsualizar al pasar el mouse por un slot del locker. Índice inválido
+     *  o slot vacío en la cabeza → esfera default. Pasá el índice equipado en la parte que no cambia. */
+    void ApplyLookPreview(int32 HeadIdx, int32 BodyIdx);
 
     // Pose de esculpido: true = recto/quieto (bypass del AnimBP → pose fija, sin baile ni jiggle
     // del physics asset) mientras esculpís la cabeza; false = restaura la animación normal.

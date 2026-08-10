@@ -22,6 +22,8 @@ void UPTLockerWidget::NativeConstruct()
     if (AssignButton)     AssignButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnAssignClicked);
     if (EditActionButton) EditActionButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnEditClicked);
     if (BackButton)       BackButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnBackClicked);
+    // Equipar ahora es con click directo sobre el slot → ocultamos el botón Equipar (queda Editar).
+    if (AssignButton)     AssignButton->SetVisibility(ESlateVisibility::Collapsed);
     BuildSlots();
     SwitchTab(0);
 }
@@ -93,7 +95,10 @@ void UPTLockerWidget::RefreshSlots()
 void UPTLockerWidget::SwitchTab(int32 Tab)
 {
     ActiveTab = FMath::Clamp(Tab, 0, 1);
+    // Arrancar seleccionando lo EQUIPADO de esa pestaña (así ves marcado lo que tenés puesto).
     SelectedIndex = 0;
+    if (UPTLockerSubsystem* L = Locker())
+        SelectedIndex = FMath::Max(0, ActiveTab == 0 ? L->GetEquippedHead() : L->GetEquippedBody());
     // Mostrar el panel activo, ocultar el otro.
     if (HeadSlotsBox) HeadSlotsBox->SetVisibility(ActiveTab == 0 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
     if (BodySlotsBox) BodySlotsBox->SetVisibility(ActiveTab == 1 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
@@ -113,6 +118,49 @@ void UPTLockerWidget::SelectSlot(int32 Index, bool bHead)
     if (bHead != (ActiveTab == 0)) SwitchTab(bHead ? 0 : 1);
     SelectedIndex = FMath::Clamp(Index, 0, FMath::Max(0, ActiveCount() - 1));
     ApplySelectionVisual();
+}
+
+void UPTLockerWidget::HoverSlot(int32 Index, bool bHead)
+{
+    // Solo previsualizar slots LLENOS (los vacíos no cambian nada).
+    TArray<UPTLockerSlotWidget*>& List = (bHead ? HeadSlotWidgets : BodySlotWidgets);
+    if (!List.IsValidIndex(Index) || !List[Index] || !List[Index]->IsUsed()) return;
+    SelectSlot(Index, bHead); // que Editar apunte al slot bajo el mouse mientras lo estás mirando
+    if (APTLobbyPlayerController* PC = LobbyPC()) PC->PreviewLookSlot(Index, bHead);
+    bPreviewingHover = true;
+}
+
+void UPTLockerWidget::EndHoverPreview()
+{
+    if (APTLobbyPlayerController* PC = LobbyPC()) PC->RevertLookPreview(); // personaje vuelve a lo equipado
+    // La SELECCIÓN también vuelve al equipado → Editar solo edita el slot que tenés puesto.
+    if (UPTLockerSubsystem* L = Locker())
+        SelectSlot(ActiveTab == 0 ? FMath::Max(0, L->GetEquippedHead()) : FMath::Max(0, L->GetEquippedBody()), ActiveTab == 0);
+    bPreviewingHover = false;
+}
+
+void UPTLockerWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+    Super::NativeTick(MyGeometry, InDeltaTime);
+    // Si estábamos previsualizando por hover y el mouse ya no está sobre NINGÚN slot (te fuiste del
+    // menú o quedaste en un hueco), volver al equipado. Así el preview nunca se queda "pegado".
+    if (!bPreviewingHover) return;
+    bool bAnyHovered = false;
+    for (UPTLockerSlotWidget* S : ActiveList())
+        if (S && S->IsSlotHovered()) { bAnyHovered = true; break; }
+    if (!bAnyHovered) EndHoverPreview();
+}
+
+void UPTLockerWidget::EquipSlotNow(int32 Index, bool bHead)
+{
+    TArray<UPTLockerSlotWidget*>& List = (bHead ? HeadSlotWidgets : BodySlotWidgets);
+    if (!List.IsValidIndex(Index) || !List[Index] || !List[Index]->IsUsed()) return; // vacío: no equipa
+    SelectSlot(Index, bHead);
+    if (APTLobbyPlayerController* PC = LobbyPC())
+    {
+        if (bHead) PC->EquipHeadSlot(Index); else PC->EquipBodySlot(Index);
+    }
+    RefreshSlots();
 }
 
 void UPTLockerWidget::MoveSelection(int32 DX, int32 DY)

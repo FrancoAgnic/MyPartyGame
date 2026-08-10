@@ -12,7 +12,12 @@ void UPTLockerSlotWidget::NativeConstruct()
     Super::NativeConstruct();
     if (!bBound)
     {
-        if (SlotButton) SlotButton->OnClicked.AddDynamic(this, &UPTLockerSlotWidget::OnSlotClicked);
+        if (SlotButton)
+        {
+            SlotButton->OnClicked.AddDynamic(this, &UPTLockerSlotWidget::OnSlotClicked);
+            SlotButton->OnHovered.AddDynamic(this, &UPTLockerSlotWidget::OnSlotHovered);
+            SlotButton->OnUnhovered.AddDynamic(this, &UPTLockerSlotWidget::OnSlotUnhovered);
+        }
         bBound = true;
     }
 }
@@ -48,5 +53,23 @@ void UPTLockerSlotWidget::SetThumbnailTexture(UTexture2D* Tex)
 
 void UPTLockerSlotWidget::OnSlotClicked()
 {
-    if (Owner) Owner->SelectSlot(SlotIndex, bIsHead);
+    if (!Owner) return;
+    if (bUsed) Owner->EquipSlotNow(SlotIndex, bIsHead); // click en slot lleno = equipar directo
+    else       Owner->SelectSlot(SlotIndex, bIsHead);   // vacío: solo seleccionar (Editar = crear)
+}
+
+void UPTLockerSlotWidget::OnSlotHovered()
+{
+    if (Owner && bUsed) Owner->HoverSlot(SlotIndex, bIsHead); // preview de la skin en el personaje
+}
+
+void UPTLockerSlotWidget::OnSlotUnhovered()
+{
+    // No revertimos acá: el tick del locker detecta cuando NO hay ningún slot bajo el mouse y ahí vuelve
+    // a lo equipado. Así al pasar de un slot a otro no parpadea el equipado en el medio.
+}
+
+bool UPTLockerSlotWidget::IsSlotHovered() const
+{
+    return SlotButton && SlotButton->IsHovered();
 }

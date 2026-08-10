@@ -32,6 +32,7 @@ public:
     int32 GetIndex() const { return SlotIndex; }
     bool  IsHeadSlot() const { return bIsHead; }
     bool  IsUsed() const { return bUsed; }
+    bool  IsSlotHovered() const; // true si el mouse está sobre este tile (SlotButton)
 
 protected:
     virtual void NativeConstruct() override;
@@ -43,6 +44,8 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UWidget*    SelectionBorder;
 
     UFUNCTION() void OnSlotClicked();
+    UFUNCTION() void OnSlotHovered();
+    UFUNCTION() void OnSlotUnhovered();
 
 private:
     UPROPERTY() UPTLockerWidget* Owner = nullptr;
