@@ -54,8 +54,8 @@ void UPTLockerSlotWidget::SetThumbnailTexture(UTexture2D* Tex)
 void UPTLockerSlotWidget::OnSlotClicked()
 {
     if (!Owner) return;
-    if (bUsed) Owner->EquipSlotNow(SlotIndex, bIsHead); // click en slot lleno = equipar directo
-    else       Owner->SelectSlot(SlotIndex, bIsHead);   // vacío: solo seleccionar (Editar = crear)
+    if (bUsed) Owner->EquipSlotNow(SlotIndex, bIsHead);  // click en slot lleno = equipar directo
+    else       Owner->CreateSlotNow(SlotIndex, bIsHead); // click en slot vacío = crear directo
 }
 
 void UPTLockerSlotWidget::OnSlotHovered()

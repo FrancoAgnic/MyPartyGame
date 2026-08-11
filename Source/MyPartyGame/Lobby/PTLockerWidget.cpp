@@ -22,7 +22,7 @@ void UPTLockerWidget::NativeConstruct()
     if (AssignButton)     AssignButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnAssignClicked);
     if (EditActionButton) EditActionButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnEditClicked);
     if (BackButton)       BackButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnBackClicked);
-    // Equipar ahora es con click directo sobre el slot → ocultamos el botón Equipar (queda Editar).
+    // Equipar = click en slot lleno; Crear = click en slot vacío. Ya no hay botón "Asignar/Crear".
     if (AssignButton)     AssignButton->SetVisibility(ESlateVisibility::Collapsed);
     BuildSlots();
     SwitchTab(0);
@@ -122,21 +122,28 @@ void UPTLockerWidget::SelectSlot(int32 Index, bool bHead)
 
 void UPTLockerWidget::HoverSlot(int32 Index, bool bHead)
 {
-    // Solo previsualizar slots LLENOS (los vacíos no cambian nada).
+    // Hover sobre slot LLENO: lo selecciona (Editar apunta ahí) y previsualiza la skin en el personaje.
     TArray<UPTLockerSlotWidget*>& List = (bHead ? HeadSlotWidgets : BodySlotWidgets);
     if (!List.IsValidIndex(Index) || !List[Index] || !List[Index]->IsUsed()) return;
-    SelectSlot(Index, bHead); // que Editar apunte al slot bajo el mouse mientras lo estás mirando
+    SelectSlot(Index, bHead);
     if (APTLobbyPlayerController* PC = LobbyPC()) PC->PreviewLookSlot(Index, bHead);
     bPreviewingHover = true;
 }
 
 void UPTLockerWidget::EndHoverPreview()
 {
-    if (APTLobbyPlayerController* PC = LobbyPC()) PC->RevertLookPreview(); // personaje vuelve a lo equipado
-    // La SELECCIÓN también vuelve al equipado → Editar solo edita el slot que tenés puesto.
+    // Al salir de los slots: el personaje y la selección vuelven a lo EQUIPADO (Editar = el equipado).
+    if (APTLobbyPlayerController* PC = LobbyPC()) PC->RevertLookPreview();
     if (UPTLockerSubsystem* L = Locker())
         SelectSlot(ActiveTab == 0 ? FMath::Max(0, L->GetEquippedHead()) : FMath::Max(0, L->GetEquippedBody()), ActiveTab == 0);
     bPreviewingHover = false;
+}
+
+void UPTLockerWidget::CreateSlotNow(int32 Index, bool bHead)
+{
+    // Click en slot VACÍO → entra directo a crearlo (sin pasar por un botón Crear).
+    SelectSlot(Index, bHead);
+    EditSelected(); // EnterHeadSculptForSlot / EnterBodyPaintForSlot: slot vacío = crear
 }
 
 void UPTLockerWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -189,10 +196,8 @@ void UPTLockerWidget::ApplySelectionVisual()
     for (int32 i = 0; i < List.Num(); ++i)
         if (List[i]) List[i]->SetSelected(i == SelectedIndex);
 
-    // Botón Asignar dice "Asignar" si el slot tiene algo, o "Crear" si está vacío.
+    // Editar solo tiene sentido si el slot está lleno (crear/equipar son con click directo en el slot).
     const bool bUsed = List.IsValidIndex(SelectedIndex) && List[SelectedIndex] && List[SelectedIndex]->IsUsed();
-    if (AssignLabel) AssignLabel->SetText(PTText::Get(bUsed ? TEXT("LOCKER_EQUIP") : TEXT("LOCKER_CREATE")));
-    // Editar solo tiene sentido si el slot está lleno.
     if (EditActionButton) EditActionButton->SetVisibility(bUsed ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 }
 
@@ -237,6 +242,14 @@ void UPTLockerWidget::OnBackClicked()
 // ── Teclado ──
 FReply UPTLockerWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
+    // Durante la edición (cabeza/cuerpo) el Locker queda COLAPSADO pero puede conservar el foco de teclado
+    // (sobre todo en la build empaquetada). Si procesara Escape acá, cerraría el Locker y "volvería al
+    // menú" en vez de dejar que el PlayerController abra el popup de guardar/descartar. Colapsado/oculto =
+    // no procesar teclas: que caigan al PlayerController.
+    const ESlateVisibility Vis = GetVisibility();
+    if (Vis == ESlateVisibility::Collapsed || Vis == ESlateVisibility::Hidden)
+        return FReply::Unhandled();
+
     const FKey Key = InKeyEvent.GetKey();
     if (Key == EKeys::Tab)   { SwitchTab(ActiveTab == 0 ? 1 : 0); return FReply::Handled(); }
     if (Key == EKeys::Right) { MoveSelection(+1, 0); return FReply::Handled(); }

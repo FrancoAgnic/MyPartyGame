@@ -40,6 +40,8 @@ public:
     void EndHoverPreview();
     /** Click izquierdo en un slot LLENO: equipa esa skin directamente. */
     void EquipSlotNow(int32 Index, bool bHead);
+    /** Click izquierdo en un slot VACÍO: entra directo a crearlo (sin botón Crear). */
+    void CreateSlotNow(int32 Index, bool bHead);
 
 protected:
     virtual void NativeConstruct() override;
