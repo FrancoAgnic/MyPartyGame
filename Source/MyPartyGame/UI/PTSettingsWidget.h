@@ -29,8 +29,15 @@ public:
 protected:
     virtual bool Initialize() override;
 
-    UPROPERTY(meta = (BindWidget))         USlider*   VolumeSlider;
+    // Volumen general viejo (opcional, master). Se mantiene por compatibilidad; los nuevos son Música/Efectos.
+    UPROPERTY(meta = (BindWidgetOptional)) USlider*   VolumeSlider;
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* VolumeValueText;
+
+    // ── Volúmenes separados: Música y Efectos (crear en el WBP con estos nombres) ──
+    UPROPERTY(meta = (BindWidgetOptional)) USlider*   MusicSlider;
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* MusicValueText;
+    UPROPERTY(meta = (BindWidgetOptional)) USlider*   SFXSlider;
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* SFXValueText;
 
     // ── Idioma: DESPLEGABLE (ComboBox) que se llena SOLO con los idiomas del CSV ──
     // Muestra solo el idioma actual; al tocarlo se abre la lista (popup con scroll). Sumar un
@@ -62,6 +69,8 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UCheckBox* VSyncCheckBox;
 
     UFUNCTION() void OnVolumeChanged(float NewValue);
+    UFUNCTION() void OnMusicChanged(float NewValue);
+    UFUNCTION() void OnSFXChanged(float NewValue);
     UFUNCTION() void OnEnglishClicked();
     UFUNCTION() void OnSpanishClicked();
     UFUNCTION() void OnLowClicked();

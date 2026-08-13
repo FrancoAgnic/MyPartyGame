@@ -34,8 +34,18 @@ public:
     /** Selecciona un slot (lo llama el tile al clickearlo). */
     void SelectSlot(int32 Index, bool bHead);
 
+    /** Hover del mouse sobre un slot LLENO: lo selecciona y previsualiza esa skin en el personaje. */
+    void HoverSlot(int32 Index, bool bHead);
+    /** El mouse salió del slot (sin equipar): vuelve el personaje a lo equipado. */
+    void EndHoverPreview();
+    /** Click izquierdo en un slot LLENO: equipa esa skin directamente. */
+    void EquipSlotNow(int32 Index, bool bHead);
+    /** Click izquierdo en un slot VACÍO: entra directo a crearlo (sin botón Crear). */
+    void CreateSlotNow(int32 Index, bool bHead);
+
 protected:
     virtual void NativeConstruct() override;
+    virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
     virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
     virtual bool NativeSupportsKeyboardFocus() const override { return true; }
 
@@ -80,4 +90,5 @@ private:
     int32 ActiveTab     = 0; // 0 cabeza, 1 cuerpo
     int32 SelectedIndex = 0;
     bool  bBuilt = false;
+    bool  bPreviewingHover = false; // true mientras un slot no-equipado está en preview por hover
 };

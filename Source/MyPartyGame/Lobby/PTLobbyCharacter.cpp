@@ -15,6 +15,10 @@
 #include "../Sculpt/PTSculptVolume.h"
 #include "PTPlayerState.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/StaticMeshActor.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/DirectionalLight.h"
+#include "Components/DirectionalLightComponent.h"
 #include "StaticMeshResources.h"
 #include "Serialization/MemoryWriter.h"
 #include "Serialization/MemoryReader.h"
@@ -201,7 +205,7 @@ bool APTLobbyCharacter::GetBodyPaintPNG(TArray<uint8>& OutPNG)
     return PaintPixels.Num() > 0 && PT_EncodePNG_BGRA(PaintPixels, PaintTexN, OutPNG);
 }
 
-bool APTLobbyCharacter::CaptureLookThumbnailPNG(TArray<uint8>& OutPNG, int32 Size)
+bool APTLobbyCharacter::CaptureLookThumbnailPNG(TArray<uint8>& OutPNG, bool bHeadFocus, int32 Size)
 {
     UWorld* W = GetWorld();
     if (!W || !GetMesh()) return false;
@@ -219,20 +223,130 @@ bool APTLobbyCharacter::CaptureLookThumbnailPNG(TArray<uint8>& OutPNG, int32 Siz
     C->bCaptureOnMovement  = false;
     C->FOVAngle            = 45.f;
     C->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
-    C->ShowOnlyActors.Add(this); // solo el personaje (fondo limpio)
+    C->ShowOnlyActors.Add(this); // solo el personaje (+ lo que agreguemos abajo)
+    C->ShowFlags.SetDynamicShadows(false); // miniatura LIMPIA: sin sombras proyectadas
 
-    // De frente al personaje, a la altura pecho/cabeza.
-    const FVector Center = GetActorLocation() + FVector(0, 0, ThumbHeight);
-    const FVector Loc    = Center + GetActorForwardVector() * ThumbDistance;
+    // Personaje QUIETO (pose recta) para que la miniatura no salga a mitad de una animación. Si ya
+    // estaba en pose de esculpido (editando), no la tocamos; si no (bailando en el lobby), la congelamos.
+    const bool bAlreadyPosed = GetMesh()->GetAnimationMode() == EAnimationMode::AnimationSingleNode;
+    if (!bAlreadyPosed) SetSculptPose(true);
+    else                GetMesh()->RefreshBoneTransforms();
+
+    // Encuadre: cabeza (cerca de HeadMesh) o cuerpo entero. Centro con offset + cámara con pitch.
+    FVector Center = bHeadFocus
+        ? (HeadMesh ? HeadMesh->GetComponentLocation() : GetActorLocation() + FVector(0, 0, ThumbHeight)) + FVector(0, 0, ThumbHeadHeight)
+        : (GetActorLocation() + FVector(0, 0, ThumbHeight));
+    const float Dist  = bHeadFocus ? ThumbHeadDistance : ThumbDistance;
+    const float Pitch = bHeadFocus ? ThumbHeadPitch    : ThumbBodyPitch;
+    FVector Fwd = GetActorForwardVector().RotateAngleAxis(Pitch, GetActorRightVector());
+    const FVector Loc = Center + Fwd * Dist;
     Cap->SetActorLocation(Loc);
     Cap->SetActorRotation((Center - Loc).Rotation());
+
+    // Luz frontal LIMPIA sin sombras (para que no se vea oscuro ni con sombras del lobby).
+    ADirectionalLight* Light = nullptr;
+    if (ThumbLightIntensity > 0.f)
+    {
+        Light = W->SpawnActor<ADirectionalLight>();
+        if (Light)
+        {
+            if (UDirectionalLightComponent* LC = Cast<UDirectionalLightComponent>(Light->GetLightComponent()))
+            {
+                LC->SetMobility(EComponentMobility::Movable);
+                LC->SetIntensity(ThumbLightIntensity);
+                LC->SetCastShadows(false);
+                LC->SetLightColor(FLinearColor::White);
+            }
+            Light->SetActorRotation((Center - Loc).Rotation()); // apunta desde la cámara hacia el personaje
+        }
+    }
+
+    // ── Fondo de color: plano detrás del personaje, de cara a la cámara ──
+    AStaticMeshActor* Backdrop = nullptr;
+    if (ThumbBackdropMaterial)
+    {
+        if (UStaticMesh* Plane = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Plane.Plane")))
+        {
+            Backdrop = W->SpawnActor<AStaticMeshActor>();
+            if (Backdrop)
+            {
+                UStaticMeshComponent* PM = Backdrop->GetStaticMeshComponent();
+                PM->SetMobility(EComponentMobility::Movable);
+                PM->SetStaticMesh(Plane);
+                UMaterialInstanceDynamic* BgMID = UMaterialInstanceDynamic::Create(ThumbBackdropMaterial, this);
+                if (BgMID) { BgMID->SetVectorParameterValue(TEXT("Color"), ThumbBgColor); PM->SetMaterial(0, BgMID); }
+                const FVector BgFwd = (Center - Loc).GetSafeNormal();
+                Backdrop->SetActorLocation(Center + BgFwd * 300.f);       // detrás del personaje
+                Backdrop->SetActorRotation(FRotationMatrix::MakeFromZ(-BgFwd).Rotator()); // normal hacia la cámara
+                Backdrop->SetActorScale3D(FVector(30.f));               // grande para llenar el cuadro
+                C->ShowOnlyActors.Add(Backdrop);
+            }
+        }
+    }
+
+    // ── Aislar el foco: apagar/reemplazar la parte que no es el foco ──
+    TArray<UMaterialInterface*> SavedBodyMats;
+    UStaticMeshComponent* TempHead = nullptr;
+    bool bHeadWasVisible = HeadMesh ? HeadMesh->IsVisible() : false;
+
+    if (bHeadFocus)
+    {
+        // Cuerpo en material apagado/default (sin la pintura editada).
+        if (ThumbDimMaterial)
+        {
+            const int32 NumMats = GetMesh()->GetNumMaterials();
+            SavedBodyMats.SetNum(NumMats);
+            for (int32 i = 0; i < NumMats; ++i)
+            {
+                SavedBodyMats[i] = GetMesh()->GetMaterial(i);
+                GetMesh()->SetMaterial(i, ThumbDimMaterial);
+            }
+        }
+    }
+    else
+    {
+        // Ocultar la cabeza real y poner una ESFERA default apagada en su lugar.
+        if (HeadMesh) HeadMesh->SetVisibility(false);
+        if (UStaticMesh* Sphere = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere")))
+        {
+            TempHead = NewObject<UStaticMeshComponent>(this);
+            if (TempHead)
+            {
+                TempHead->SetupAttachment(GetRootComponent());
+                TempHead->RegisterComponent();
+                TempHead->SetStaticMesh(Sphere);
+                TempHead->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+                if (ThumbDimMaterial) TempHead->SetMaterial(0, ThumbDimMaterial);
+                const FVector HeadLoc = HeadMesh ? HeadMesh->GetComponentLocation()
+                                                 : GetActorLocation() + FVector(0, 0, ThumbHeight);
+                const float R = FMath::Max(1.f, DefaultHeadRadius);
+                TempHead->SetWorldLocation(HeadLoc);
+                TempHead->SetWorldScale3D(FVector(R / 50.f)); // la esfera del engine mide 50 de radio
+            }
+        }
+    }
 
     C->CaptureScene();
 
     FTextureRenderTargetResource* Res = RT->GameThread_GetRenderTargetResource();
     TArray<FColor> Px;
     const bool bOk = Res && Res->ReadPixels(Px) && Px.Num() == Size * Size;
+
+    // ── Restaurar todo ──
+    if (bHeadFocus)
+    {
+        for (int32 i = 0; i < SavedBodyMats.Num(); ++i) GetMesh()->SetMaterial(i, SavedBodyMats[i]);
+    }
+    else
+    {
+        if (TempHead) TempHead->DestroyComponent();
+        if (HeadMesh) HeadMesh->SetVisibility(bHeadWasVisible);
+    }
+    if (Backdrop) Backdrop->Destroy();
+    if (Light)    Light->Destroy();
     Cap->Destroy();
+    if (!bAlreadyPosed) SetSculptPose(false); // devolver la animación normal si la habíamos congelado
+
     if (!bOk) return false;
     for (FColor& P : Px) P.A = 255; // opaco (evita miniaturas "vacías" por alpha 0)
     return PT_EncodePNG_BGRA(Px, Size, OutPNG);
@@ -492,6 +606,28 @@ void APTLobbyCharacter::LoadHead()
     ApplyHeadBlobLocal(Blob);
     bLocallyBakedHead = true; // es MI look equipado; no pisarlo con el blob que vuelve replicado
     if (APTPlayerState* PS = GetPlayerState<APTPlayerState>()) PS->UploadHead(Blob);
+}
+
+void APTLobbyCharacter::ApplyLookPreview(int32 HeadIdx, int32 BodyIdx)
+{
+    UPTLockerSubsystem* L = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLockerSubsystem>() : nullptr;
+    if (!L) return;
+
+    static const TArray<uint8> Empty; // referencia estable para los casos "vacío/default"
+    const TArray<uint8>& Head = (HeadIdx >= 0 && L->IsHeadSlotUsed(HeadIdx)) ? L->GetHeadBaked(HeadIdx) : Empty;
+    const TArray<uint8>& Body = (BodyIdx >= 0 && L->IsBodySlotUsed(BodyIdx)) ? L->GetBodyPNG(BodyIdx)   : Empty;
+
+    if (Head.Num() == 0)
+    {
+        // Sin cabeza en ese slot → esfera default + el cuerpo elegido (o limpio).
+        ApplyDefaultSphereHead();
+        if (Body.Num() > 0) ApplyBodyPaintFromPNG(Body); else ClearBodyPaint();
+        return;
+    }
+
+    TArray<uint8> Blob;
+    AssembleReplicatedBlob(Head, Body, Blob);
+    if (Blob.Num() > 0) ApplyHeadBlobLocal(Blob); // SOLO local: no UploadHead → los demás no ven el preview
 }
 
 // ── PNG helpers (BGRA8 ↔ PNG) ─────────────────────────────────────────────────

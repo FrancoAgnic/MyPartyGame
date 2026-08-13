@@ -12,7 +12,12 @@ void UPTLockerSlotWidget::NativeConstruct()
     Super::NativeConstruct();
     if (!bBound)
     {
-        if (SlotButton) SlotButton->OnClicked.AddDynamic(this, &UPTLockerSlotWidget::OnSlotClicked);
+        if (SlotButton)
+        {
+            SlotButton->OnClicked.AddDynamic(this, &UPTLockerSlotWidget::OnSlotClicked);
+            SlotButton->OnHovered.AddDynamic(this, &UPTLockerSlotWidget::OnSlotHovered);
+            SlotButton->OnUnhovered.AddDynamic(this, &UPTLockerSlotWidget::OnSlotUnhovered);
+        }
         bBound = true;
     }
 }
@@ -35,6 +40,7 @@ void UPTLockerSlotWidget::Setup(UPTLockerWidget* InOwner, int32 InIndex, bool bI
 
 void UPTLockerSlotWidget::SetSelected(bool bSel)
 {
+    bSelected = bSel;
     if (SelectionBorder)
         SelectionBorder->SetVisibility(bSel ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 }
@@ -48,5 +54,27 @@ void UPTLockerSlotWidget::SetThumbnailTexture(UTexture2D* Tex)
 
 void UPTLockerSlotWidget::OnSlotClicked()
 {
-    if (Owner) Owner->SelectSlot(SlotIndex, bIsHead);
+    if (!Owner) return;
+    if (bUsed) Owner->EquipSlotNow(SlotIndex, bIsHead);  // click en slot lleno = equipar directo
+    else       Owner->CreateSlotNow(SlotIndex, bIsHead); // click en slot vacío = crear directo
+}
+
+void UPTLockerSlotWidget::OnSlotHovered()
+{
+    // Mostrar el borde en CUALQUIER slot bajo el mouse (lleno o vacío): feedback visual del hover.
+    if (SelectionBorder) SelectionBorder->SetVisibility(ESlateVisibility::HitTestInvisible);
+    if (Owner && bUsed) Owner->HoverSlot(SlotIndex, bIsHead); // preview de la skin (solo slots llenos)
+}
+
+void UPTLockerSlotWidget::OnSlotUnhovered()
+{
+    // Al salir, el borde queda solo si el slot está SELECCIONADO. (El preview del personaje lo revierte
+    // el tick del locker cuando no hay ningún slot bajo el mouse.)
+    if (SelectionBorder)
+        SelectionBorder->SetVisibility(bSelected ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+}
+
+bool UPTLockerSlotWidget::IsSlotHovered() const
+{
+    return SlotButton && SlotButton->IsHovered();
 }

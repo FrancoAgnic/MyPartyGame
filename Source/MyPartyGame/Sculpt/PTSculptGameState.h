@@ -72,6 +72,11 @@ public:
     // (no recibe OnRep) y el cliente en OnRep_Masked. Refresca el HUD.
     void RefreshLocalMasked();
 
+    // true si el turno terminó porque adivinaron TODOS (vs. se acabó el tiempo). Lo setea el GameMode
+    // antes de pasar a TurnEnd; el HUD lo lee para elegir el sonido de fin de turno.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
+    bool bTurnEndedAllGuessed = false;
+
     // Ronda actual (1-based) y total de rondas de la partida (para el HUD "Ronda 2/3").
     // Una ronda = todos los jugadores esculpen una vez.
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")

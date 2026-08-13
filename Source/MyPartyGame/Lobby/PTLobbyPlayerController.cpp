@@ -1084,9 +1084,9 @@ void APTLobbyPlayerController::OpenLocker()
         if (UPTLockerSubsystem* L = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLockerSubsystem>() : nullptr)
         {
             if (L->GetEquippedHead() == 0 && L->IsHeadSlotDefault(0) && L->GetHeadThumb(0).Num() == 0)
-            { TArray<uint8> T; if (Char->CaptureLookThumbnailPNG(T, 256)) L->SetHeadThumb(0, T); }
+            { TArray<uint8> T; if (Char->CaptureLookThumbnailPNG(T, /*bHeadFocus=*/true,  256)) L->SetHeadThumb(0, T); }
             if (L->GetEquippedBody() == 0 && L->IsBodySlotDefault(0) && L->GetBodyThumb(0).Num() == 0)
-            { TArray<uint8> T; if (Char->CaptureLookThumbnailPNG(T, 256)) L->SetBodyThumb(0, T); }
+            { TArray<uint8> T; if (Char->CaptureLookThumbnailPNG(T, /*bHeadFocus=*/false, 256)) L->SetBodyThumb(0, T); }
         }
 
     // Widget a pantalla completa + foco de teclado (navegar/atajos).
@@ -1120,6 +1120,25 @@ void APTLobbyPlayerController::EquipBodySlot(int32 Idx)
     if (UPTLockerSubsystem* L = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLockerSubsystem>() : nullptr)
         L->EquipBody(Idx);
     if (APTLobbyCharacter* C = Cast<APTLobbyCharacter>(GetPawn())) C->LoadHead();
+}
+
+void APTLobbyPlayerController::PreviewLookSlot(int32 Index, bool bHead)
+{
+    UPTLockerSubsystem* L = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLockerSubsystem>() : nullptr;
+    APTLobbyCharacter* C = Cast<APTLobbyCharacter>(GetPawn());
+    if (!L || !C) return;
+    // La parte que NO se está previsualizando queda en lo equipado.
+    const int32 H = bHead ? Index : L->GetEquippedHead();
+    const int32 B = bHead ? L->GetEquippedBody() : Index;
+    C->ApplyLookPreview(H, B);
+}
+
+void APTLobbyPlayerController::RevertLookPreview()
+{
+    UPTLockerSubsystem* L = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLockerSubsystem>() : nullptr;
+    APTLobbyCharacter* C = Cast<APTLobbyCharacter>(GetPawn());
+    if (!L || !C) return;
+    C->ApplyLookPreview(L->GetEquippedHead(), L->GetEquippedBody()); // volver a lo realmente equipado
 }
 
 void APTLobbyPlayerController::EnterHeadSculptForSlot(int32 Idx)
@@ -1428,7 +1447,7 @@ void APTLobbyPlayerController::ExitHeadSculpt(bool bSaveChanges)
         else if (bHeadSculptBodyOnly)
         {
             // Slot de CUERPO: el cuerpo ya está pintado sobre el personaje → capturar miniatura y guardar.
-            TArray<uint8> Thumb; Char->CaptureLookThumbnailPNG(Thumb, 256);
+            TArray<uint8> Thumb; Char->CaptureLookThumbnailPNG(Thumb, /*bHeadFocus=*/false, 256);
             TArray<uint8> PNG;
             if (L && EditingBodySlot >= 0 && Char->GetBodyPaintPNG(PNG))
             {
@@ -1442,7 +1461,7 @@ void APTLobbyPlayerController::ExitHeadSculpt(bool bSaveChanges)
             // Slot de CABEZA: hornear (aplica la cabeza al personaje) → recién ahí capturar la miniatura.
             TArray<uint8> Blob;
             Char->BakeAndReplicateHead(HeadVolume->GetMeshComponent(), HeadVolume, HeadEyes, Blob);
-            TArray<uint8> Thumb; Char->CaptureLookThumbnailPNG(Thumb, 256);
+            TArray<uint8> Thumb; Char->CaptureLookThumbnailPNG(Thumb, /*bHeadFocus=*/true, 256);
 
             // Estado CRUDO (Fase 2): campo SDF del volumen + ojos (locales). Permite volver a este
             // slot y SEGUIR esculpiendo desde donde lo dejaste (la pintura 2D se restaura del BakedBlob).

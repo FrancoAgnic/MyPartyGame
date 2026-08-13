@@ -11,6 +11,8 @@ void UPTGameUserSettings::SetToDefaults()
 {
     Super::SetToDefaults();
     MasterVolume = 1.0f;
+    MusicVolume  = 1.0f;
+    SFXVolume    = 1.0f;
     LanguageCode = TEXT("en");
 }
 

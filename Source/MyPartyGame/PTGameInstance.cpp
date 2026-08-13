@@ -14,6 +14,9 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
 #include "Sound/SoundBase.h"
+#include "Sound/SoundMix.h"
+#include "Sound/SoundClass.h"
+#include "PTGameUserSettings.h"
 
 namespace
 {
@@ -144,6 +147,51 @@ void UPTGameInstance::Init()
         GEngine->OnNetworkFailure().AddUObject(this, &UPTGameInstance::HandleNetworkFailure);
         GEngine->OnTravelFailure().AddUObject(this, &UPTGameInstance::HandleTravelFailure);
     }
+
+    // Re-aplicar el mix de audio (Música/Efectos) al cargar cada nivel: el SetSoundMixClassOverride se
+    // pierde entre mundos, así que lo reponemos en cada mapa.
+    FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(this, &UPTGameInstance::OnPostLoadMap);
+}
+
+void UPTGameInstance::OnPostLoadMap(UWorld* /*LoadedWorld*/)
+{
+    ApplyAudioMix();
+}
+
+float UPTGameInstance::GetMusicVolume() const
+{
+    const UPTGameUserSettings* S = UPTGameUserSettings::Get();
+    return S ? S->GetMusicVolume() : 1.f;
+}
+
+float UPTGameInstance::GetSFXVolume() const
+{
+    const UPTGameUserSettings* S = UPTGameUserSettings::Get();
+    return S ? S->GetSFXVolume() : 1.f;
+}
+
+void UPTGameInstance::SetMusicVolume(float V)
+{
+    if (UPTGameUserSettings* S = UPTGameUserSettings::Get()) { S->SetMusicVolume(V); S->SaveSettings(); }
+    ApplyAudioMix();
+}
+
+void UPTGameInstance::SetSFXVolume(float V)
+{
+    if (UPTGameUserSettings* S = UPTGameUserSettings::Get()) { S->SetSFXVolume(V); S->SaveSettings(); }
+    ApplyAudioMix();
+}
+
+void UPTGameInstance::ApplyAudioMix()
+{
+    UWorld* W = GetWorld();
+    if (!W || !AudioMix) return; // sin Sound Mix asignado no hay nada que aplicar
+    const float MusicV = GetMusicVolume();
+    const float SFXV   = GetSFXVolume();
+    // Fade 0s = inmediato. bApplyToChildren=true → afecta también las sub-clases de cada Sound Class.
+    if (MusicClass) UGameplayStatics::SetSoundMixClassOverride(W, AudioMix, MusicClass, MusicV, 1.f, 0.f, true);
+    if (SFXClass)   UGameplayStatics::SetSoundMixClassOverride(W, AudioMix, SFXClass,   SFXV,   1.f, 0.f, true);
+    UGameplayStatics::PushSoundMixModifier(W, AudioMix);
 }
 
 void UPTGameInstance::HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver,

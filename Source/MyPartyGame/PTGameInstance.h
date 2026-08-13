@@ -9,6 +9,8 @@
 #include "PTGameInstance.generated.h"
 
 class USoundBase;
+class USoundMix;
+class USoundClass;
 class UUserWidget;
 
 UCLASS()
@@ -63,7 +65,23 @@ public:
     UFUNCTION(BlueprintCallable, Category="UI Sound")
     void ApplyUIButtonSounds(class UUserWidget* Root) const;
 
+    // ── Volumen por Sound Class (Música / Efectos) ──────────────────────────
+    // Asigná estos 3 assets en BP_GameInstance: un Sound Mix base y las dos Sound Classes.
+    // Cada sonido del juego debe tener asignada su Class (los efectos → SFXClass; la música → MusicClass).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Audio") USoundMix*   AudioMix   = nullptr;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Audio") USoundClass* MusicClass = nullptr;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Audio") USoundClass* SFXClass   = nullptr;
+
+    /** Setea y aplica el volumen (0..1) guardándolo en el settings. */
+    UFUNCTION(BlueprintCallable, Category="Audio") void  SetMusicVolume(float V);
+    UFUNCTION(BlueprintCallable, Category="Audio") void  SetSFXVolume(float V);
+    UFUNCTION(BlueprintCallable, Category="Audio") float GetMusicVolume() const;
+    UFUNCTION(BlueprintCallable, Category="Audio") float GetSFXVolume() const;
+    /** Aplica ambos volúmenes al mix (SetSoundMixClassOverride + push). Se llama al arrancar y en cada mapa. */
+    UFUNCTION(BlueprintCallable, Category="Audio") void  ApplyAudioMix();
+
 private:
+    void OnPostLoadMap(UWorld* LoadedWorld); // re-aplica el mix al cargar cada nivel
     void HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver,
                               ENetworkFailure::Type FailureType, const FString& ErrorString);
     void HandleTravelFailure(UWorld* World, ETravelFailure::Type FailureType,

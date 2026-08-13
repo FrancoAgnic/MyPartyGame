@@ -208,6 +208,7 @@ void APTSculptGameMode::StartChoosingPhase()
 
     // Resetear "adivinó" de todos al empezar el turno.
     for (APTPlayerState* PT : Players) PT->bHasGuessedThisTurn = false;
+    if (APTSculptGameState* G0 = GS()) G0->bTurnEndedAllGuessed = false; // razón de fin del turno anterior
 
     // Lienzo en blanco para el nuevo turno (en todos los clientes).
     ResetSculpture();
@@ -443,6 +444,7 @@ void APTSculptGameMode::HandlePlayerGuessedCorrectly(APTPlayerState* Guesser)
     }
     if (bAllGuessed)
     {
+        G->bTurnEndedAllGuessed = true; // el HUD elige el sonido "todos adivinaron" en vez de "se acabó el tiempo"
         // Avisar al ESCULTOR antes de cortar (si no, el turno terminaba de golpe sin explicación).
         if (G->CurrentSculptor)
             if (APTSculptPlayerController* SPC = Cast<APTSculptPlayerController>(G->CurrentSculptor->GetOwningController()))

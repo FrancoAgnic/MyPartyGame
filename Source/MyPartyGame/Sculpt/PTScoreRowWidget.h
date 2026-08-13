@@ -11,6 +11,7 @@
 class UImage;
 class UTextBlock;
 class UWidgetAnimation;
+class USoundBase;
 
 UCLASS()
 class MYPARTYGAME_API UPTScoreRowWidget : public UUserWidget
@@ -48,6 +49,9 @@ protected:
     // "ScorePopAnim"). Si la asignás, se dispara en cada subida del conteo; si no, hay un rebote por
     // código como fallback. Debe llamarse igual que esta variable (regla de BindWidgetAnim de UMG).
     UPROPERTY(Transient, meta=(BindWidgetAnimOptional)) UWidgetAnimation* ScorePopAnim = nullptr;
+
+    // Tick que suena UNA vez por cada punto que sube en el conteo animado (asignalo en el WBP de la fila).
+    UPROPERTY(EditAnywhere, Category="Sound") USoundBase* SndPointTick = nullptr;
 
     // Contorno amarillo del nombre del escultor (editable en el WBP de la fila).
     UPROPERTY(EditAnywhere, Category="Score") FLinearColor SculptorOutlineColor = FLinearColor(1.f, 0.85f, 0.f, 1.f);

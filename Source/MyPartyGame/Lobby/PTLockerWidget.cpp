@@ -22,6 +22,8 @@ void UPTLockerWidget::NativeConstruct()
     if (AssignButton)     AssignButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnAssignClicked);
     if (EditActionButton) EditActionButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnEditClicked);
     if (BackButton)       BackButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnBackClicked);
+    // Equipar = click en slot lleno; Crear = click en slot vacío. Ya no hay botón "Asignar/Crear".
+    if (AssignButton)     AssignButton->SetVisibility(ESlateVisibility::Collapsed);
     BuildSlots();
     SwitchTab(0);
 }
@@ -93,7 +95,10 @@ void UPTLockerWidget::RefreshSlots()
 void UPTLockerWidget::SwitchTab(int32 Tab)
 {
     ActiveTab = FMath::Clamp(Tab, 0, 1);
+    // Arrancar seleccionando lo EQUIPADO de esa pestaña (así ves marcado lo que tenés puesto).
     SelectedIndex = 0;
+    if (UPTLockerSubsystem* L = Locker())
+        SelectedIndex = FMath::Max(0, ActiveTab == 0 ? L->GetEquippedHead() : L->GetEquippedBody());
     // Mostrar el panel activo, ocultar el otro.
     if (HeadSlotsBox) HeadSlotsBox->SetVisibility(ActiveTab == 0 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
     if (BodySlotsBox) BodySlotsBox->SetVisibility(ActiveTab == 1 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
@@ -113,6 +118,56 @@ void UPTLockerWidget::SelectSlot(int32 Index, bool bHead)
     if (bHead != (ActiveTab == 0)) SwitchTab(bHead ? 0 : 1);
     SelectedIndex = FMath::Clamp(Index, 0, FMath::Max(0, ActiveCount() - 1));
     ApplySelectionVisual();
+}
+
+void UPTLockerWidget::HoverSlot(int32 Index, bool bHead)
+{
+    // Hover sobre slot LLENO: lo selecciona (Editar apunta ahí) y previsualiza la skin en el personaje.
+    TArray<UPTLockerSlotWidget*>& List = (bHead ? HeadSlotWidgets : BodySlotWidgets);
+    if (!List.IsValidIndex(Index) || !List[Index] || !List[Index]->IsUsed()) return;
+    SelectSlot(Index, bHead);
+    if (APTLobbyPlayerController* PC = LobbyPC()) PC->PreviewLookSlot(Index, bHead);
+    bPreviewingHover = true;
+}
+
+void UPTLockerWidget::EndHoverPreview()
+{
+    // Al salir de los slots: el personaje y la selección vuelven a lo EQUIPADO (Editar = el equipado).
+    if (APTLobbyPlayerController* PC = LobbyPC()) PC->RevertLookPreview();
+    if (UPTLockerSubsystem* L = Locker())
+        SelectSlot(ActiveTab == 0 ? FMath::Max(0, L->GetEquippedHead()) : FMath::Max(0, L->GetEquippedBody()), ActiveTab == 0);
+    bPreviewingHover = false;
+}
+
+void UPTLockerWidget::CreateSlotNow(int32 Index, bool bHead)
+{
+    // Click en slot VACÍO → entra directo a crearlo (sin pasar por un botón Crear).
+    SelectSlot(Index, bHead);
+    EditSelected(); // EnterHeadSculptForSlot / EnterBodyPaintForSlot: slot vacío = crear
+}
+
+void UPTLockerWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+    Super::NativeTick(MyGeometry, InDeltaTime);
+    // Si estábamos previsualizando por hover y el mouse ya no está sobre NINGÚN slot (te fuiste del
+    // menú o quedaste en un hueco), volver al equipado. Así el preview nunca se queda "pegado".
+    if (!bPreviewingHover) return;
+    bool bAnyHovered = false;
+    for (UPTLockerSlotWidget* S : ActiveList())
+        if (S && S->IsSlotHovered()) { bAnyHovered = true; break; }
+    if (!bAnyHovered) EndHoverPreview();
+}
+
+void UPTLockerWidget::EquipSlotNow(int32 Index, bool bHead)
+{
+    TArray<UPTLockerSlotWidget*>& List = (bHead ? HeadSlotWidgets : BodySlotWidgets);
+    if (!List.IsValidIndex(Index) || !List[Index] || !List[Index]->IsUsed()) return; // vacío: no equipa
+    SelectSlot(Index, bHead);
+    if (APTLobbyPlayerController* PC = LobbyPC())
+    {
+        if (bHead) PC->EquipHeadSlot(Index); else PC->EquipBodySlot(Index);
+    }
+    RefreshSlots();
 }
 
 void UPTLockerWidget::MoveSelection(int32 DX, int32 DY)
@@ -141,10 +196,8 @@ void UPTLockerWidget::ApplySelectionVisual()
     for (int32 i = 0; i < List.Num(); ++i)
         if (List[i]) List[i]->SetSelected(i == SelectedIndex);
 
-    // Botón Asignar dice "Asignar" si el slot tiene algo, o "Crear" si está vacío.
+    // Editar solo tiene sentido si el slot está lleno (crear/equipar son con click directo en el slot).
     const bool bUsed = List.IsValidIndex(SelectedIndex) && List[SelectedIndex] && List[SelectedIndex]->IsUsed();
-    if (AssignLabel) AssignLabel->SetText(PTText::Get(bUsed ? TEXT("LOCKER_EQUIP") : TEXT("LOCKER_CREATE")));
-    // Editar solo tiene sentido si el slot está lleno.
     if (EditActionButton) EditActionButton->SetVisibility(bUsed ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 }
 
@@ -189,6 +242,14 @@ void UPTLockerWidget::OnBackClicked()
 // ── Teclado ──
 FReply UPTLockerWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
+    // Durante la edición (cabeza/cuerpo) el Locker queda COLAPSADO pero puede conservar el foco de teclado
+    // (sobre todo en la build empaquetada). Si procesara Escape acá, cerraría el Locker y "volvería al
+    // menú" en vez de dejar que el PlayerController abra el popup de guardar/descartar. Colapsado/oculto =
+    // no procesar teclas: que caigan al PlayerController.
+    const ESlateVisibility Vis = GetVisibility();
+    if (Vis == ESlateVisibility::Collapsed || Vis == ESlateVisibility::Hidden)
+        return FReply::Unhandled();
+
     const FKey Key = InKeyEvent.GetKey();
     if (Key == EKeys::Tab)   { SwitchTab(ActiveTab == 0 ? 1 : 0); return FReply::Handled(); }
     if (Key == EKeys::Right) { MoveSelection(+1, 0); return FReply::Handled(); }
