@@ -13,6 +13,7 @@ void UPTGameUserSettings::SetToDefaults()
     MasterVolume = 1.0f;
     MusicVolume  = 1.0f;
     SFXVolume    = 1.0f;
+    bTypingSoundEnabled = true;
     LanguageCode = TEXT("en");
 }
 

@@ -67,6 +67,8 @@ protected:
 
     // Checkbox de sincronización vertical (VSync). Crear un CheckBox llamado "VSyncCheckBox" en el WBP.
     UPROPERTY(meta = (BindWidgetOptional)) UCheckBox* VSyncCheckBox;
+    // Checkbox para activar/desactivar el sonido de tecla al tipear. Crear "TypingSoundCheckBox".
+    UPROPERTY(meta = (BindWidgetOptional)) UCheckBox* TypingSoundCheckBox;
 
     UFUNCTION() void OnVolumeChanged(float NewValue);
     UFUNCTION() void OnMusicChanged(float NewValue);
@@ -79,6 +81,7 @@ protected:
     UFUNCTION() void OnApplyClicked();
     UFUNCTION() void OnBackClicked();
     UFUNCTION() void OnVSyncChanged(bool bIsChecked);
+    UFUNCTION() void OnTypingSoundChanged(bool bIsChecked);
 
     /** Blueprint resalta el botón activo (estilo visual, no lógica) — llamado en ShowPanel y tras cada cambio. */
     UFUNCTION(BlueprintImplementableEvent, Category = "Settings")
