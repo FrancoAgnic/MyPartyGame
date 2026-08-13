@@ -40,6 +40,7 @@ void UPTLockerSlotWidget::Setup(UPTLockerWidget* InOwner, int32 InIndex, bool bI
 
 void UPTLockerSlotWidget::SetSelected(bool bSel)
 {
+    bSelected = bSel;
     if (SelectionBorder)
         SelectionBorder->SetVisibility(bSel ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 }
@@ -60,13 +61,17 @@ void UPTLockerSlotWidget::OnSlotClicked()
 
 void UPTLockerSlotWidget::OnSlotHovered()
 {
-    if (Owner && bUsed) Owner->HoverSlot(SlotIndex, bIsHead); // preview de la skin en el personaje
+    // Mostrar el borde en CUALQUIER slot bajo el mouse (lleno o vacío): feedback visual del hover.
+    if (SelectionBorder) SelectionBorder->SetVisibility(ESlateVisibility::HitTestInvisible);
+    if (Owner && bUsed) Owner->HoverSlot(SlotIndex, bIsHead); // preview de la skin (solo slots llenos)
 }
 
 void UPTLockerSlotWidget::OnSlotUnhovered()
 {
-    // No revertimos acá: el tick del locker detecta cuando NO hay ningún slot bajo el mouse y ahí vuelve
-    // a lo equipado. Así al pasar de un slot a otro no parpadea el equipado en el medio.
+    // Al salir, el borde queda solo si el slot está SELECCIONADO. (El preview del personaje lo revierte
+    // el tick del locker cuando no hay ningún slot bajo el mouse.)
+    if (SelectionBorder)
+        SelectionBorder->SetVisibility(bSelected ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 }
 
 bool UPTLockerSlotWidget::IsSlotHovered() const

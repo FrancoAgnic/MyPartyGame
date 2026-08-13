@@ -53,4 +53,5 @@ private:
     bool  bIsHead   = true;
     bool  bUsed     = false;
     bool  bBound    = false;
+    bool  bSelected = false; // para restaurar el borde al salir del hover
 };

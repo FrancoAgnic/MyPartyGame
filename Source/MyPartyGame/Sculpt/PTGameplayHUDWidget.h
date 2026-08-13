@@ -51,6 +51,9 @@ protected:
     // ── Widgets del WBP (todos opcionales: el WBP compila aunque falte alguno) ──
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      TxtSculptor;   // "X está esculpiendo"
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      TxtWord;       // "_ _ _ _" o la palabra
+    // Versión RichText de la palabra: la usa SOLO el escultor durante el dibujo para teñir de verde las
+    // letras ya reveladas (per-letra). Requiere un estilo "green" en su Text Style Set. Opcional.
+    UPROPERTY(meta=(BindWidgetOptional)) class URichTextBlock* TxtWordRich;
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      TxtTimer;      // segundos restantes
     UPROPERTY(meta=(BindWidgetOptional)) UWidget*         WordPickPanel; // panel de las 3 palabras
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      TxtChooseTimer;// cuenta regresiva DENTRO del panel de elección (opcional)
@@ -138,6 +141,16 @@ protected:
     UFUNCTION() void OnSomeoneGuessed(class APTPlayerState* Guesser, int32 Points);
     UFUNCTION() void OnAllGuessed();
 
+    /** Arranca la animación de la próxima letra en cola (RevealLetterText + RevealLetterAnim). La letra
+     *  recién revelada se agrega a la palabra del jugador reción cuando la animación TERMINA (aterriza). */
+    void StartNextRevealAnim();
+    UFUNCTION() void OnRevealAnimFinished(); // al terminar: commitea la letra a la palabra + sigue con la cola
+
+    // Letra grande al centro que se anima hacia la palabra. Creá el TextBlock "RevealLetterText" y la
+    // animación "RevealLetterAnim" (mueve/desvanece ese TextBlock) en el WBP; C++ las usa.
+    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* RevealLetterText;
+    UPROPERTY(Transient, meta=(BindWidgetAnimOptional)) class UWidgetAnimation* RevealLetterAnim = nullptr;
+
     // Popup GRANDE "adivinaste" (contenedor + dos textos). C++ los llena y los muestra/oculta.
     UPROPERTY(meta=(BindWidgetOptional)) UWidget*    GuessPopup;      // contenedor (oculto por defecto)
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* TxtGuessWord;    // "La palabra era «X»"
@@ -145,6 +158,15 @@ protected:
     // Aviso al escultor "¡Todos adivinaron!" (contenedor + texto). C++ pone el texto localizado y lo muestra.
     UPROPERTY(meta=(BindWidgetOptional)) UWidget*    AllGuessedPopup;
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* TxtAllGuessed; // texto del aviso (multi-idioma, GUESS_ALL)
+
+    // ── Sonidos del gameplay (asigná los USoundBase en el WBP). Se reproducen 2D (local a cada jugador) ──
+    UPROPERTY(EditAnywhere, Category="Sounds") USoundBase* SndTickSecond = nullptr; // 1 tick por segundo (dura ~1s)
+    UPROPERTY(EditAnywhere, Category="Sounds") USoundBase* SndCountdown   = nullptr; // clip de los últimos 10s (una vez)
+    UPROPERTY(EditAnywhere, Category="Sounds") USoundBase* SndYouGuessed  = nullptr; // vos adivinaste
+    UPROPERTY(EditAnywhere, Category="Sounds") USoundBase* SndOtherGuessed= nullptr; // otro adivinó
+    UPROPERTY(EditAnywhere, Category="Sounds") USoundBase* SndHintLetter  = nullptr; // se reveló una letra de pista
+    UPROPERTY(EditAnywhere, Category="Sounds") USoundBase* SndTimeUp      = nullptr; // se acabó el tiempo (no adivinaste)
+    UPROPERTY(EditAnywhere, Category="Sounds") USoundBase* SndAllGuessed  = nullptr; // todos adivinaron antes de tiempo
 
 private:
     FTimerHandle RefreshTimer;
@@ -180,6 +202,22 @@ private:
     // de los guiones. Se limpia al terminar el turno.
     bool    bLocalGuessed = false;
     FString LocalGuessedWord;
+
+    // ── Sonidos: seguimiento por polling (segundo actual, letras reveladas, fase, clip de countdown) ──
+    void UpdateGameplaySounds(class APTSculptGameState* G);
+    void StopCountdownSound();
+    int32 PrevSecondsLeft = -1;
+    FString PrevMaskedForReveal; // para el SONIDO de pista (diff del mask real contra el sample anterior)
+
+    // Revelado con retardo (solo los que adivinan): la palabra muestra DisplayedMask, que va "atrasada"
+    // respecto del mask real; cada letra nueva se agrega recién cuando su animación termina.
+    FString DisplayedMask;            // lo que muestra la palabra del jugador que adivina
+    TArray<int32> PendingReveals;     // índices revelados esperando que termine su animación
+    bool bRevealAnimating = false;
+    bool UseDelayedReveal() const { return RevealLetterAnim && RevealLetterText; } // si no hay anim, revela directo
+    bool  bCountdownPlayed = false;
+    EPTTurnPhase PrevSoundPhase = EPTTurnPhase::WaitingForPlayers;
+    UPROPERTY() class UAudioComponent* CountdownAudio = nullptr;
     FSlateColor DefaultWordColor = FSlateColor(FLinearColor::White); // color original de TxtWord
     bool    bWordColorCaptured = false;
 };

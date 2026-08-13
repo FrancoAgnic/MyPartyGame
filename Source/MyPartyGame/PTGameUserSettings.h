@@ -26,6 +26,13 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void SetMasterVolume(float InVolume);
 
+    // ── Volúmenes separados por Sound Class (Música / Efectos). El almacenamiento vive acá; la
+    //    aplicación real (SetSoundMixClassOverride) la hace UPTGameInstance::ApplyAudioMix. ──
+    UFUNCTION(BlueprintCallable, Category = "Settings") float GetMusicVolume() const { return MusicVolume; }
+    UFUNCTION(BlueprintCallable, Category = "Settings") float GetSFXVolume()   const { return SFXVolume; }
+    UFUNCTION(BlueprintCallable, Category = "Settings") void  SetMusicVolume(float V) { MusicVolume = FMath::Clamp(V, 0.f, 1.f); }
+    UFUNCTION(BlueprintCallable, Category = "Settings") void  SetSFXVolume(float V)   { SFXVolume   = FMath::Clamp(V, 0.f, 1.f); }
+
     UFUNCTION(BlueprintCallable, Category = "Settings")
     FString GetLanguageCode() const { return LanguageCode; }
 
@@ -53,6 +60,11 @@ public:
 private:
     UPROPERTY(Config)
     float MasterVolume = 1.0f;
+
+    UPROPERTY(Config)
+    float MusicVolume = 1.0f;
+    UPROPERTY(Config)
+    float SFXVolume = 1.0f;
 
     UPROPERTY(Config)
     FString LanguageCode = TEXT("en");

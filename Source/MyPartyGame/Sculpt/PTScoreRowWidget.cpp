@@ -2,6 +2,8 @@
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Animation/WidgetAnimation.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 
 void UPTScoreRowWidget::ApplyScoreText(int32 Value)
 {
@@ -86,6 +88,7 @@ void UPTScoreRowWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTim
         {
             LastShown = Cur;
             ApplyScoreText(Cur);
+            if (SndPointTick) UGameplayStatics::PlaySound2D(this, SndPointTick); // 1 tick por punto que sube
             // Rebote en cada subida: tu animación UMG (si la asignaste) o el fallback por código.
             if (ScorePopAnim)
             {

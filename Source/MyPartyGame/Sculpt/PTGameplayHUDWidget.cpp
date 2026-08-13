@@ -19,6 +19,10 @@
 #include "Engine/Engine.h"
 #include "../PTNetStats.h"
 #include "TimerManager.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
+#include "Components/AudioComponent.h"
+#include "Animation/WidgetAnimation.h"
 
 bool UPTGameplayHUDWidget::Initialize()
 {
@@ -33,6 +37,15 @@ bool UPTGameplayHUDWidget::Initialize()
 
     // Chat: envolver texto largo (que el mensaje baje de línea en vez de cortarse al salir del margen).
     if (TxtChat) TxtChat->SetAutoWrapText(true);
+
+    // Ocultar la letra revelada al terminar su animación (así no queda fija en pantalla).
+    if (RevealLetterAnim)
+    {
+        FWidgetAnimationDynamicEvent D;
+        D.BindDynamic(this, &UPTGameplayHUDWidget::OnRevealAnimFinished);
+        BindToAnimationFinished(RevealLetterAnim, D);
+    }
+    if (RevealLetterText) RevealLetterText->SetVisibility(ESlateVisibility::Collapsed);
 
     // Lista de controles (pantalla de ayuda opcional) + barra de herramientas: se arman una vez.
     RebuildControls();
@@ -239,6 +252,7 @@ void UPTGameplayHUDWidget::ShowHUD()
 
 void UPTGameplayHUDWidget::NativeDestruct()
 {
+    StopCountdownSound(); // que no quede el countdown sonando si se cierra el HUD
     if (UWorld* World = GetWorld())
         World->GetTimerManager().ClearTimer(RefreshTimer);
     if (LanguageHandle.IsValid())
@@ -274,6 +288,10 @@ void UPTGameplayHUDWidget::RefreshTick()
     }
     if (!G) return;
 
+    // Sonidos (tick por segundo, countdown, pista, fin de turno). Va ANTES de resetear bLocalGuessed,
+    // porque el sonido de "se acabó el tiempo" depende de si adivinaste en este turno.
+    UpdateGameplaySounds(G);
+
     // Fuera del turno de dibujo, olvidar que adivinaste (el próximo turno arranca con guiones de nuevo).
     if (G->TurnPhase != EPTTurnPhase::Drawing) bLocalGuessed = false;
 
@@ -307,6 +325,8 @@ void UPTGameplayHUDWidget::RefreshTick()
     case EPTTurnPhase::Drawing:
         if (bSculptor && PC)      WordText = PC->CurrentSecretWord;
         else if (bLocalGuessed)   WordText = LocalGuessedWord; // ya adivinaste → palabra completa (verde)
+        else if (UseDelayedReveal() && DisplayedMask.Len() == G->MaskedWord.Len())
+            WordText = DisplayedMask; // que adivina: letra aparece recién cuando su animación aterriza
         else                      WordText = G->MaskedWord;
         break;
     case EPTTurnPhase::TurnEnd:
@@ -319,13 +339,47 @@ void UPTGameplayHUDWidget::RefreshTick()
     }
     if (WordPickPanel)
         WordPickPanel->SetVisibility(bShowPanel ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+
+    // El ESCULTOR ve la palabra completa arriba: tiñe de VERDE las letras que ya se revelaron a los que
+    // adivinan (per-letra, vía RichText). Necesita TxtWordRich con un estilo "green" en su Style Set.
+    const bool bSculptorRichWord = TxtWordRich && bSculptor && PC
+                                   && G->TurnPhase == EPTTurnPhase::Drawing;
+    if (bSculptorRichWord)
+    {
+        const FString& Full = PC->CurrentSecretWord;
+        const FString& Mask = G->MaskedWord;
+        FString Rich;
+        for (int32 i = 0; i < Full.Len(); ++i)
+        {
+            const TCHAR Ch = Full[i];
+            if (Ch == TEXT(' ')) { Rich += TEXT(" "); continue; }
+            const bool bRevealed = Mask.IsValidIndex(i) && Mask[i] != TEXT('_') && Mask[i] != TEXT(' ');
+            Rich += bRevealed ? FString::Printf(TEXT("<green>%c</>"), Ch) : FString::Chr(Ch);
+        }
+        TxtWordRich->SetText(FText::FromString(Rich));
+        TxtWordRich->SetVisibility(ESlateVisibility::HitTestInvisible);
+    }
+    else if (TxtWordRich)
+    {
+        TxtWordRich->SetVisibility(ESlateVisibility::Collapsed);
+    }
+
     if (TxtWord)
     {
         if (!bWordColorCaptured) { DefaultWordColor = TxtWord->GetColorAndOpacity(); bWordColorCaptured = true; }
-        TxtWord->SetText(FText::FromString(WordText));
-        // Verde cuando VOS adivinaste (durante el dibujo); color original en el resto de los casos.
-        const bool bGreen = bLocalGuessed && G->TurnPhase == EPTTurnPhase::Drawing;
-        TxtWord->SetColorAndOpacity(bGreen ? FSlateColor(FLinearColor(0.15f, 0.9f, 0.2f)) : DefaultWordColor);
+        // Si el escultor usa la versión RichText, ocultar la plana para no duplicar.
+        if (bSculptorRichWord)
+        {
+            TxtWord->SetVisibility(ESlateVisibility::Collapsed);
+        }
+        else
+        {
+            TxtWord->SetVisibility(ESlateVisibility::HitTestInvisible);
+            TxtWord->SetText(FText::FromString(WordText));
+            // Verde cuando VOS adivinaste (durante el dibujo); color original en el resto de los casos.
+            const bool bGreen = bLocalGuessed && G->TurnPhase == EPTTurnPhase::Drawing;
+            TxtWord->SetColorAndOpacity(bGreen ? FSlateColor(FLinearColor(0.15f, 0.9f, 0.2f)) : DefaultWordColor);
+        }
     }
 
     // La caja de texto SÓLO se muestra mientras el chat está abierto (Enter). Colapsada,
@@ -507,6 +561,8 @@ void UPTGameplayHUDWidget::OnYouGuessed(const FString& Word, int32 Points)
     bLocalGuessed    = true;
     LocalGuessedWord = Word;
 
+    if (SndYouGuessed) UGameplayStatics::PlaySound2D(this, SndYouGuessed); // sonido: VOS adivinaste
+
     // Popup GRANDE: "La palabra era «X»" + "+N". Textos localizados; visibilidad/tiempo desde C++.
     if (TxtGuessWord)
     {
@@ -535,6 +591,9 @@ void UPTGameplayHUDWidget::HideGuessPopup()
 void UPTGameplayHUDWidget::OnSomeoneGuessed(APTPlayerState* Guesser, int32 Points)
 {
     if (!Guesser) return;
+    // Sonido "otro adivinó" (no para uno mismo: eso ya suena con SndYouGuessed).
+    if ((APlayerState*)Guesser != GetOwningPlayerState() && SndOtherGuessed)
+        UGameplayStatics::PlaySound2D(this, SndOtherGuessed);
     // El "+N" y el conteo animado se ven en la fila de CUALQUIERA que adivine, incluido uno mismo.
 
     // Registrar el flash "+N" para ese jugador; RebuildScoreboard lo aplica a su fila (y lo re-aplica
@@ -544,6 +603,115 @@ void UPTGameplayHUDWidget::OnSomeoneGuessed(APTPlayerState* Guesser, int32 Point
     GuessPlusPoints.Add(Guesser, Points);
     CachedScoreSig.Reset();  // forzar rebuild para que aparezca ya
     RebuildScoreboard();
+}
+
+void UPTGameplayHUDWidget::StopCountdownSound()
+{
+    if (CountdownAudio) { CountdownAudio->Stop(); CountdownAudio = nullptr; }
+}
+
+void UPTGameplayHUDWidget::StartNextRevealAnim()
+{
+    if (PendingReveals.Num() == 0) { bRevealAnimating = false; if (RevealLetterText) RevealLetterText->SetVisibility(ESlateVisibility::Collapsed); return; }
+
+    APTSculptGameState* G = GetGS();
+    const int32 Idx = PendingReveals[0];
+    const TCHAR Ch = (G && G->MaskedWord.IsValidIndex(Idx)) ? G->MaskedWord[Idx] : TEXT('?');
+    if (RevealLetterText)
+    {
+        RevealLetterText->SetText(FText::FromString(FString::Chr(Ch)));
+        RevealLetterText->SetVisibility(ESlateVisibility::HitTestInvisible);
+    }
+    bRevealAnimating = true;
+    if (RevealLetterAnim) PlayAnimation(RevealLetterAnim); // aparece al centro y sube desvaneciéndose
+}
+
+void UPTGameplayHUDWidget::OnRevealAnimFinished()
+{
+    // La animación aterrizó: AHORA sí se agrega la letra a la palabra (coincide con el final de la animación).
+    if (PendingReveals.Num() > 0)
+    {
+        const int32 Idx = PendingReveals[0];
+        PendingReveals.RemoveAt(0);
+        APTSculptGameState* G = GetGS();
+        if (G && G->MaskedWord.IsValidIndex(Idx) && DisplayedMask.IsValidIndex(Idx))
+            DisplayedMask[Idx] = G->MaskedWord[Idx];
+    }
+    // Encadenar la próxima (si hay), o cerrar.
+    if (PendingReveals.Num() > 0) StartNextRevealAnim();
+    else { bRevealAnimating = false; if (RevealLetterText) RevealLetterText->SetVisibility(ESlateVisibility::Collapsed); }
+}
+
+void UPTGameplayHUDWidget::UpdateGameplaySounds(APTSculptGameState* G)
+{
+    if (!G) return;
+    const EPTTurnPhase Phase = G->TurnPhase;
+
+    // ── Transiciones de fase (one-shots de fin de turno + reset de contadores) ──
+    if (Phase != PrevSoundPhase)
+    {
+        if (PrevSoundPhase == EPTTurnPhase::Drawing && Phase == EPTTurnPhase::TurnEnd)
+        {
+            StopCountdownSound();
+            if (G->bTurnEndedAllGuessed) { if (SndAllGuessed) UGameplayStatics::PlaySound2D(this, SndAllGuessed); }
+            else if (!bLocalGuessed)     { if (SndTimeUp)     UGameplayStatics::PlaySound2D(this, SndTimeUp); }
+        }
+        if (Phase == EPTTurnPhase::Drawing)
+        {
+            PrevSecondsLeft = -1; PrevMaskedForReveal.Reset(); bCountdownPlayed = false;
+            DisplayedMask.Reset(); PendingReveals.Reset(); bRevealAnimating = false;
+            if (RevealLetterText) RevealLetterText->SetVisibility(ESlateVisibility::Collapsed);
+        }
+        else { StopCountdownSound(); }
+        PrevSoundPhase = Phase;
+    }
+
+    if (Phase != EPTTurnPhase::Drawing) return;
+
+    // ── Tick por segundo + countdown de los últimos 10 ──
+    const int32 Left = FMath::Max(0, FMath::CeilToInt(G->GetTurnSecondsRemaining()));
+    if (Left != PrevSecondsLeft)
+    {
+        if (PrevSecondsLeft != -1) // no sonar en el primer sample del turno
+        {
+            // Countdown (clip de 10s): una sola vez al llegar a 10.
+            if (Left == 10 && !bCountdownPlayed)
+            {
+                bCountdownPlayed = true;
+                if (SndCountdown) CountdownAudio = UGameplayStatics::SpawnSound2D(this, SndCountdown);
+            }
+            // Tick por segundo: suena SIEMPRE hasta el segundo 1 (se solapa con el countdown en los últimos 10).
+            if (Left >= 1 && SndTickSecond) UGameplayStatics::PlaySound2D(this, SndTickSecond);
+        }
+        PrevSecondsLeft = Left;
+    }
+
+    // ── Pista ──
+    const FString& Cur = G->MaskedWord;
+
+    // Sonido: cuando aparece cualquier letra nueva en el mask real (para todos).
+    if (!PrevMaskedForReveal.IsEmpty() && Cur.Len() == PrevMaskedForReveal.Len())
+        for (int32 i = 0; i < Cur.Len(); ++i)
+            if (PrevMaskedForReveal[i] == TEXT('_') && Cur[i] != TEXT('_') && Cur[i] != TEXT(' '))
+            { if (SndHintLetter) UGameplayStatics::PlaySound2D(this, SndHintLetter); break; }
+    PrevMaskedForReveal = Cur;
+
+    // Visual con RETARDO, solo para los que adivinan (no escultor, no quien ya adivinó).
+    const bool bGuesser = !G->IsLocalPlayerSculptor() && !bLocalGuessed;
+    if (bGuesser && UseDelayedReveal())
+    {
+        // Inicializar la máscara mostrada al entrar (copia el estado actual: lo ya revelado se ve sin animar).
+        if (DisplayedMask.Len() != Cur.Len()) { DisplayedMask = Cur; PendingReveals.Reset(); }
+
+        // Encolar las letras que están reveladas en el mask real pero todavía no se mostraron ni están en cola.
+        for (int32 i = 0; i < Cur.Len(); ++i)
+            if (Cur[i] != TEXT('_') && Cur[i] != TEXT(' ')
+                && DisplayedMask.IsValidIndex(i) && DisplayedMask[i] == TEXT('_')
+                && !PendingReveals.Contains(i))
+                PendingReveals.Add(i);
+
+        if (!bRevealAnimating && PendingReveals.Num() > 0) StartNextRevealAnim();
+    }
 }
 
 void UPTGameplayHUDWidget::OnAllGuessed()

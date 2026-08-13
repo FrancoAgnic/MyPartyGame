@@ -2,6 +2,8 @@
 
 #include "PTSettingsWidget.h"
 #include "PTGameUserSettings.h"
+#include "../PTGameInstance.h"
+#include "Engine/World.h"
 #include "Components/Slider.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
@@ -21,6 +23,16 @@ bool UPTSettingsWidget::Initialize()
         VolumeSlider->SetMinValue(0.0f);
         VolumeSlider->SetMaxValue(1.0f);
         VolumeSlider->OnValueChanged.AddDynamic(this, &UPTSettingsWidget::OnVolumeChanged);
+    }
+    if (MusicSlider)
+    {
+        MusicSlider->SetMinValue(0.0f); MusicSlider->SetMaxValue(1.0f);
+        MusicSlider->OnValueChanged.AddDynamic(this, &UPTSettingsWidget::OnMusicChanged);
+    }
+    if (SFXSlider)
+    {
+        SFXSlider->SetMinValue(0.0f); SFXSlider->SetMaxValue(1.0f);
+        SFXSlider->OnValueChanged.AddDynamic(this, &UPTSettingsWidget::OnSFXChanged);
     }
 
     // Botones viejos (opcionales): siguen andando si el WBP todavía los tiene.
@@ -45,6 +57,13 @@ void UPTSettingsWidget::ShowPanel()
         const float Volume = Settings->GetMasterVolume();
         if (VolumeSlider)    VolumeSlider->SetValue(Volume);
         if (VolumeValueText) VolumeValueText->SetText(FText::AsNumber(FMath::RoundToInt(Volume * 100.0f)));
+
+        const float MusicV = Settings->GetMusicVolume();
+        const float SFXV   = Settings->GetSFXVolume();
+        if (MusicSlider)    MusicSlider->SetValue(MusicV);
+        if (MusicValueText) MusicValueText->SetText(FText::AsNumber(FMath::RoundToInt(MusicV * 100.0f)));
+        if (SFXSlider)      SFXSlider->SetValue(SFXV);
+        if (SFXValueText)   SFXValueText->SetText(FText::AsNumber(FMath::RoundToInt(SFXV * 100.0f)));
 
         OnLanguageStateChanged(Settings->GetLanguageCode() != TEXT("es"));
         OnGraphicsStateChanged(FMath::Clamp(Settings->GetGraphicsQuality(), 0, 2));
@@ -141,6 +160,20 @@ void UPTSettingsWidget::OnVolumeChanged(float NewValue)
         Settings->SetMasterVolume(NewValue);
     }
     if (VolumeValueText) VolumeValueText->SetText(FText::AsNumber(FMath::RoundToInt(NewValue * 100.0f)));
+}
+
+void UPTSettingsWidget::OnMusicChanged(float NewValue)
+{
+    if (UPTGameInstance* GI = GetWorld() ? Cast<UPTGameInstance>(GetWorld()->GetGameInstance()) : nullptr)
+        GI->SetMusicVolume(NewValue); // aplica al mix + guarda
+    if (MusicValueText) MusicValueText->SetText(FText::AsNumber(FMath::RoundToInt(NewValue * 100.0f)));
+}
+
+void UPTSettingsWidget::OnSFXChanged(float NewValue)
+{
+    if (UPTGameInstance* GI = GetWorld() ? Cast<UPTGameInstance>(GetWorld()->GetGameInstance()) : nullptr)
+        GI->SetSFXVolume(NewValue); // aplica al mix + guarda
+    if (SFXValueText) SFXValueText->SetText(FText::AsNumber(FMath::RoundToInt(NewValue * 100.0f)));
 }
 
 void UPTSettingsWidget::ApplyLanguage(const FString& Code)
