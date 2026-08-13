@@ -352,46 +352,43 @@ void UPTGameplayHUDWidget::RefreshTick()
     if (WordPickPanel)
         WordPickPanel->SetVisibility(bShowPanel ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 
-    // El ESCULTOR ve la palabra completa arriba: tiñe de VERDE las letras que ya se revelaron a los que
-    // adivinan (per-letra, vía RichText). Necesita TxtWordRich con un estilo "green" en su Style Set.
-    const bool bSculptorRichWord = TxtWordRich && bSculptor && PC
-                                   && G->TurnPhase == EPTTurnPhase::Drawing;
-    if (bSculptorRichWord)
-    {
-        const FString& Full = PC->CurrentSecretWord;
-        const FString& Mask = G->MaskedWord;
-        FString Rich;
-        for (int32 i = 0; i < Full.Len(); ++i)
-        {
-            const TCHAR Ch = Full[i];
-            if (Ch == TEXT(' ')) { Rich += TEXT(" "); continue; }
-            const bool bRevealed = Mask.IsValidIndex(i) && Mask[i] != TEXT('_') && Mask[i] != TEXT(' ');
-            Rich += bRevealed ? FString::Printf(TEXT("<green>%c</>"), Ch) : FString::Chr(Ch);
-        }
-        TxtWordRich->SetText(FText::FromString(Rich));
-        TxtWordRich->SetVisibility(ESlateVisibility::HitTestInvisible);
-    }
-    else if (TxtWordRich)
-    {
-        TxtWordRich->SetVisibility(ESlateVisibility::Collapsed);
-    }
-
+    // La palabra es un RichTextBlock: el coloreo se hace por TAGS (necesita un estilo "green" en su
+    // Text Style Set). El texto plano usa el estilo "Default".
     if (TxtWord)
     {
-        if (!bWordColorCaptured) { DefaultWordColor = TxtWord->GetColorAndOpacity(); bWordColorCaptured = true; }
-        // Si el escultor usa la versión RichText, ocultar la plana para no duplicar.
-        if (bSculptorRichWord)
+        FString Rich;
+        if (bSculptor && PC && G->TurnPhase == EPTTurnPhase::Drawing)
         {
-            TxtWord->SetVisibility(ESlateVisibility::Collapsed);
+            // ESCULTOR: palabra completa; las letras ya reveladas a los que adivinan van en VERDE.
+            // La máscara viene con un espacio entre cada letra ("_ N _ E ..."), así que la recorremos por
+            // CELDAS (salteando los espacios) y mapeamos cada celda a su letra del secreto → alineado.
+            const FString& Full = PC->CurrentSecretWord;
+            const FString& Mask = G->MaskedWord;
+            int32 mi = 0;
+            for (int32 i = 0; i < Full.Len(); ++i)
+            {
+                const TCHAR Ch = Full[i];
+                if (FChar::IsWhitespace(Ch))
+                {
+                    Rich += TEXT(" ");
+                    while (mi < Mask.Len() && Mask[mi] == TEXT(' ')) ++mi; // saltar el hueco entre palabras
+                    continue;
+                }
+                while (mi < Mask.Len() && Mask[mi] == TEXT(' ')) ++mi;     // avanzar a la próxima celda
+                const bool bRevealed = Mask.IsValidIndex(mi) && Mask[mi] != TEXT('_');
+                Rich += bRevealed ? FString::Printf(TEXT("<green>%c</>"), Ch) : FString::Chr(Ch);
+                ++mi; // consumir la celda
+            }
+        }
+        else if (bLocalGuessed && G->TurnPhase == EPTTurnPhase::Drawing)
+        {
+            Rich = FString::Printf(TEXT("<green>%s</>"), *WordText); // vos adivinaste → toda verde
         }
         else
         {
-            TxtWord->SetVisibility(ESlateVisibility::HitTestInvisible);
-            TxtWord->SetText(FText::FromString(WordText));
-            // Verde cuando VOS adivinaste (durante el dibujo); color original en el resto de los casos.
-            const bool bGreen = bLocalGuessed && G->TurnPhase == EPTTurnPhase::Drawing;
-            TxtWord->SetColorAndOpacity(bGreen ? FSlateColor(FLinearColor(0.15f, 0.9f, 0.2f)) : DefaultWordColor);
+            Rich = WordText; // guiones / máscara / "esperando" → texto plano
         }
+        TxtWord->SetText(FText::FromString(Rich));
     }
 
     // La caja de texto SÓLO se muestra mientras el chat está abierto (Enter). Colapsada,

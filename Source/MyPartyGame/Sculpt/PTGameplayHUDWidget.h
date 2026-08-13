@@ -50,10 +50,10 @@ protected:
 
     // ── Widgets del WBP (todos opcionales: el WBP compila aunque falte alguno) ──
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      TxtSculptor;   // "X está esculpiendo"
-    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      TxtWord;       // "_ _ _ _" o la palabra
-    // Versión RichText de la palabra: la usa SOLO el escultor durante el dibujo para teñir de verde las
-    // letras ya reveladas (per-letra). Requiere un estilo "green" en su Text Style Set. Opcional.
-    UPROPERTY(meta=(BindWidgetOptional)) class URichTextBlock* TxtWordRich;
+    // La palabra: RichTextBlock para poder teñir letras reveladas en verde (per-letra) al escultor y toda
+    // la palabra al que adivinó. Requiere un estilo "green" en su Text Style Set. En el WBP: convertí el
+    // TextBlock a RichTextBlock (mismo nombre "TxtWord").
+    UPROPERTY(meta=(BindWidgetOptional)) class URichTextBlock* TxtWord;
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      TxtTimer;      // segundos restantes
     UPROPERTY(meta=(BindWidgetOptional)) UWidget*         WordPickPanel; // panel de las 3 palabras
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      TxtChooseTimer;// cuenta regresiva DENTRO del panel de elección (opcional)
@@ -225,6 +225,4 @@ private:
     bool  bCountdownPlayed = false;
     EPTTurnPhase PrevSoundPhase = EPTTurnPhase::WaitingForPlayers;
     UPROPERTY() class UAudioComponent* CountdownAudio = nullptr;
-    FSlateColor DefaultWordColor = FSlateColor(FLinearColor::White); // color original de TxtWord
-    bool    bWordColorCaptured = false;
 };
