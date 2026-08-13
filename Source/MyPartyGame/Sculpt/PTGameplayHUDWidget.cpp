@@ -11,6 +11,7 @@
 #include "Components/Image.h"
 #include "../PTInputBindings.h"
 #include "../PTTextTable.h"
+#include "../PTGameUserSettings.h"
 #include "../UI/PTControlRowWidget.h"
 #include "../UI/PTToolSlotWidget.h"
 #include "Components/PanelWidget.h"
@@ -46,6 +47,17 @@ bool UPTGameplayHUDWidget::Initialize()
         BindToAnimationFinished(RevealLetterAnim, D);
     }
     if (RevealLetterText) RevealLetterText->SetVisibility(ESlateVisibility::Collapsed);
+
+    // Al terminar la animación de "acertaste", revelar la palabra completa (sincronizado).
+    if (YouGuessedAnim)
+    {
+        FWidgetAnimationDynamicEvent DG;
+        DG.BindDynamic(this, &UPTGameplayHUDWidget::OnYouGuessedAnimFinished);
+        BindToAnimationFinished(YouGuessedAnim, DG);
+    }
+
+    // Sonido de tecla (máquina de escribir) por cada cambio de texto del chat.
+    if (ChatInput) ChatInput->OnTextChanged.AddDynamic(this, &UPTGameplayHUDWidget::OnChatTextChanged);
 
     // Lista de controles (pantalla de ayuda opcional) + barra de herramientas: se arman una vez.
     RebuildControls();
@@ -538,6 +550,15 @@ void UPTGameplayHUDWidget::OnChatCommitted(const FText& Text, ETextCommit::Type 
     ApplyInputMode(true); // Game Only
 }
 
+void UPTGameplayHUDWidget::OnChatTextChanged(const FText& Text)
+{
+    if (!SndTyping) return;
+    // Se puede desactivar en Configuración (a algunos les molesta).
+    const UPTGameUserSettings* S = UPTGameUserSettings::Get();
+    if (S && !S->IsTypingSoundEnabled()) return;
+    UGameplayStatics::PlaySound2D(this, SndTyping); // el Sound Cue elige uno de sus 3 sonidos al azar
+}
+
 void UPTGameplayHUDWidget::OnChatLine(const FString& Name, const FString& Message, EPTChatType Type)
 {
     const FString ShortName = Name.Left(10); // nombre máximo 10 caracteres
@@ -557,13 +578,9 @@ void UPTGameplayHUDWidget::OnChatLine(const FString& Name, const FString& Messag
 
 void UPTGameplayHUDWidget::OnYouGuessed(const FString& Word, int32 Points)
 {
-    // Ya adivinaste: mostrar la palabra COMPLETA en verde en el HUD (en vez de los guiones).
-    bLocalGuessed    = true;
-    LocalGuessedWord = Word;
-
     if (SndYouGuessed) UGameplayStatics::PlaySound2D(this, SndYouGuessed); // sonido: VOS adivinaste
 
-    // Popup GRANDE: "La palabra era «X»" + "+N". Textos localizados; visibilidad/tiempo desde C++.
+    // Popup: "La palabra era «X»" + "+N". Textos localizados.
     if (TxtGuessWord)
     {
         FFormatOrderedArguments A; A.Add(FText::FromString(Word));
@@ -574,13 +591,26 @@ void UPTGameplayHUDWidget::OnYouGuessed(const FString& Word, int32 Points)
         FFormatOrderedArguments A; A.Add(FText::AsNumber(Points));
         TxtGuessPoints->SetText(PTText::Format(FName(TEXT("GUESS_POINTS")), A));
     }
-    if (GuessPopup)
+    if (GuessPopup) GuessPopup->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+    // Revelar la palabra COMPLETA (verde) apenas adivinás.
+    bLocalGuessed    = true;
+    LocalGuessedWord = Word;
+
+    if (YouGuessedAnim)
     {
-        GuessPopup->SetVisibility(ESlateVisibility::HitTestInvisible);
-        if (UWorld* W = GetWorld())
-            W->GetTimerManager().SetTimer(GuessPopupTimer, this, &UPTGameplayHUDWidget::HideGuessPopup,
-                                          GuessFeedbackSeconds, false);
+        PlayAnimation(YouGuessedAnim); // el popup se oculta cuando termina la animación (OnYouGuessedAnimFinished)
     }
+    else if (UWorld* W = GetWorld())
+    {
+        W->GetTimerManager().SetTimer(GuessPopupTimer, this, &UPTGameplayHUDWidget::HideGuessPopup,
+                                      GuessFeedbackSeconds, false);
+    }
+}
+
+void UPTGameplayHUDWidget::OnYouGuessedAnimFinished()
+{
+    if (GuessPopup) GuessPopup->SetVisibility(ESlateVisibility::Collapsed); // ocultar el popup al terminar
 }
 
 void UPTGameplayHUDWidget::HideGuessPopup()
@@ -646,30 +676,34 @@ void UPTGameplayHUDWidget::UpdateGameplaySounds(APTSculptGameState* G)
 {
     if (!G) return;
     const EPTTurnPhase Phase = G->TurnPhase;
+    // Fases con cuenta regresiva (tick + reloj): elegir palabra (15s) y dibujar.
+    const bool bCountdownPhase = (Phase == EPTTurnPhase::ChoosingWord || Phase == EPTTurnPhase::Drawing);
 
     // ── Transiciones de fase (one-shots de fin de turno + reset de contadores) ──
     if (Phase != PrevSoundPhase)
     {
+        StopCountdownSound(); // cortar cualquier clip de countdown de la fase anterior
+
         if (PrevSoundPhase == EPTTurnPhase::Drawing && Phase == EPTTurnPhase::TurnEnd)
         {
-            StopCountdownSound();
             if (G->bTurnEndedAllGuessed) { if (SndAllGuessed) UGameplayStatics::PlaySound2D(this, SndAllGuessed); }
             else if (!bLocalGuessed)     { if (SndTimeUp)     UGameplayStatics::PlaySound2D(this, SndTimeUp); }
         }
+        if (bCountdownPhase) { PrevSecondsLeft = -1; bCountdownPlayed = false; } // reinicia el reloj de esta fase
         if (Phase == EPTTurnPhase::Drawing)
         {
-            PrevSecondsLeft = -1; PrevMaskedForReveal.Reset(); bCountdownPlayed = false;
+            PrevMaskedForReveal.Reset();
             DisplayedMask.Reset(); PendingReveals.Reset(); bRevealAnimating = false;
             if (RevealLetterText) RevealLetterText->SetVisibility(ESlateVisibility::Collapsed);
         }
-        else { StopCountdownSound(); }
         PrevSoundPhase = Phase;
     }
 
-    if (Phase != EPTTurnPhase::Drawing) return;
+    if (!bCountdownPhase) return;
 
-    // ── Tick por segundo + countdown de los últimos 10 ──
-    const int32 Left = FMath::Max(0, FMath::CeilToInt(G->GetTurnSecondsRemaining()));
+    // ── Tick por segundo + countdown de los últimos 10 (en elegir-palabra y en dibujar) ──
+    const float Rem  = (Phase == EPTTurnPhase::Drawing) ? G->GetTurnSecondsRemaining() : G->GetPhaseSecondsRemaining();
+    const int32 Left = FMath::Max(0, FMath::CeilToInt(Rem));
     if (Left != PrevSecondsLeft)
     {
         if (PrevSecondsLeft != -1) // no sonar en el primer sample del turno
@@ -685,6 +719,8 @@ void UPTGameplayHUDWidget::UpdateGameplaySounds(APTSculptGameState* G)
         }
         PrevSecondsLeft = Left;
     }
+
+    if (Phase != EPTTurnPhase::Drawing) return; // la pista/revelado solo aplica dibujando
 
     // ── Pista ──
     const FString& Cur = G->MaskedWord;

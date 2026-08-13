@@ -33,6 +33,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Settings") void  SetMusicVolume(float V) { MusicVolume = FMath::Clamp(V, 0.f, 1.f); }
     UFUNCTION(BlueprintCallable, Category = "Settings") void  SetSFXVolume(float V)   { SFXVolume   = FMath::Clamp(V, 0.f, 1.f); }
 
+    // Sonido de "máquina de escribir" al tipear en el chat (se puede desactivar).
+    UFUNCTION(BlueprintCallable, Category = "Settings") bool  IsTypingSoundEnabled() const { return bTypingSoundEnabled; }
+    UFUNCTION(BlueprintCallable, Category = "Settings") void  SetTypingSoundEnabled(bool b) { bTypingSoundEnabled = b; }
+
     UFUNCTION(BlueprintCallable, Category = "Settings")
     FString GetLanguageCode() const { return LanguageCode; }
 
@@ -65,6 +69,8 @@ private:
     float MusicVolume = 1.0f;
     UPROPERTY(Config)
     float SFXVolume = 1.0f;
+    UPROPERTY(Config)
+    bool bTypingSoundEnabled = true;
 
     UPROPERTY(Config)
     FString LanguageCode = TEXT("en");

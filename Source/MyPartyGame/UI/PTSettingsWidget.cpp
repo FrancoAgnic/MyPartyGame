@@ -44,6 +44,7 @@ bool UPTSettingsWidget::Initialize()
     if (ApplyButton)   ApplyButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnApplyClicked);
     if (BackButton)    BackButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnBackClicked);
     if (VSyncCheckBox) VSyncCheckBox->OnCheckStateChanged.AddDynamic(this, &UPTSettingsWidget::OnVSyncChanged);
+    if (TypingSoundCheckBox) TypingSoundCheckBox->OnCheckStateChanged.AddDynamic(this, &UPTSettingsWidget::OnTypingSoundChanged);
 
     if (LanguageCombo) LanguageCombo->OnSelectionChanged.AddDynamic(this, &UPTSettingsWidget::OnLanguageComboChanged);
 
@@ -68,6 +69,7 @@ void UPTSettingsWidget::ShowPanel()
         OnLanguageStateChanged(Settings->GetLanguageCode() != TEXT("es"));
         OnGraphicsStateChanged(FMath::Clamp(Settings->GetGraphicsQuality(), 0, 2));
         if (VSyncCheckBox) VSyncCheckBox->SetIsChecked(Settings->IsVSyncEnabled());
+        if (TypingSoundCheckBox) TypingSoundCheckBox->SetIsChecked(Settings->IsTypingSoundEnabled());
     }
 
     BuildLanguageCombo();               // llena el desplegable con los idiomas del CSV
@@ -160,6 +162,11 @@ void UPTSettingsWidget::OnVolumeChanged(float NewValue)
         Settings->SetMasterVolume(NewValue);
     }
     if (VolumeValueText) VolumeValueText->SetText(FText::AsNumber(FMath::RoundToInt(NewValue * 100.0f)));
+}
+
+void UPTSettingsWidget::OnTypingSoundChanged(bool bIsChecked)
+{
+    if (UPTGameUserSettings* S = UPTGameUserSettings::Get()) { S->SetTypingSoundEnabled(bIsChecked); S->SaveSettings(); }
 }
 
 void UPTSettingsWidget::OnMusicChanged(float NewValue)

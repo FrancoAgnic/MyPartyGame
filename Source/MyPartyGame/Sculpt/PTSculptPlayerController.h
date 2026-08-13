@@ -20,6 +20,9 @@ class MYPARTYGAME_API APTSculptPlayerController : public APlayerController
 public:
     APTSculptPlayerController();
 
+    // Sonidos de esculpido (loops de herramienta + one-shots). Los assets viven en el GameInstance.
+    UPROPERTY(VisibleAnywhere, Category="Sculpt|Sound") class UPTSculptSoundComponent* SculptSounds = nullptr;
+
     // ── Input ───────────────────────────────────────────────────────────────
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input")
     UInputMappingContext* MovementMappingContext;

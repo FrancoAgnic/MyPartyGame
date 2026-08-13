@@ -9,6 +9,10 @@
 #include "Misc/ConfigCacheIni.h"
 #include "Framework/Application/SlateApplication.h"
 #include "../Sculpt/PTSculptPlayerController.h"
+#include "../PTGameInstance.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
+#include "Engine/World.h"
 
 void UPTColorPickerWidget::NativeConstruct()
 {
@@ -64,8 +68,21 @@ void UPTColorPickerWidget::RefreshRing()
     if (SwatchRing) SwatchRing->SetColors(Palette);
 }
 
+void UPTColorPickerWidget::PlayPickSound()
+{
+    UWorld* W = GetWorld();
+    if (!W) return;
+    const float Now = W->GetTimeSeconds();
+    if (Now - LastPickSoundTime < 0.06f) return; // dedupe: confirmar auto-guarda → no sonar dos veces
+    LastPickSoundTime = Now;
+    if (UPTGameInstance* Ins = Cast<UPTGameInstance>(W->GetGameInstance()))
+        if (Ins->SndColorPick) UGameplayStatics::PlaySound2D(this, Ins->SndColorPick);
+}
+
 void UPTColorPickerWidget::SaveCurrentColor()
 {
+    PlayPickSound();
+
     // Dedupe: si el color ya está (comparando en bytes sRGB, que es como se guarda), quitar la copia
     // vieja para que no se acumulen repetidos y el color recién usado quede como el más nuevo.
     const FColor Cur = CurrentColor.ToFColor(true);
@@ -183,6 +200,7 @@ void UPTColorPickerWidget::Confirm()
 
 void UPTColorPickerWidget::ConfirmQuickPick()
 {
+    PlayPickSound(); // sonido al confirmar/elegir color
     const FVector2D CursorPos = FSlateApplication::IsInitialized()
         ? FSlateApplication::Get().GetCursorPos() : FVector2D::ZeroVector;
 

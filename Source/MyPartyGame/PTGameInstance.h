@@ -80,6 +80,18 @@ public:
     /** Aplica ambos volúmenes al mix (SetSoundMixClassOverride + push). Se llama al arrancar y en cada mapa. */
     UFUNCTION(BlueprintCallable, Category="Audio") void  ApplyAudioMix();
 
+    // ── Sonidos de esculpido (compartidos gameplay Lvl-01 + editar skins en el lobby) ──────────
+    // Se asignan UNA vez acá. Los loops (Add/Erase/Paint) deben ser sonidos LOOPING. Todos 3D si se
+    // asigna SculptAttenuation. Los usa UPTSculptSoundComponent en ambos controladores.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt Sound") USoundBase* SndAddLoop      = nullptr;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt Sound") USoundBase* SndEraseLoop    = nullptr;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt Sound") USoundBase* SndPaintLoop    = nullptr;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt Sound") USoundBase* SndEyes         = nullptr;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt Sound") USoundBase* SndUndoSimple   = nullptr;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt Sound") USoundBase* SndUndoClearAll = nullptr;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt Sound") USoundBase* SndColorPick    = nullptr; // elegir/guardar color
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt Sound") class USoundAttenuation* SculptAttenuation = nullptr;
+
 private:
     void OnPostLoadMap(UWorld* LoadedWorld); // re-aplica el mix al cargar cada nivel
     void HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver,

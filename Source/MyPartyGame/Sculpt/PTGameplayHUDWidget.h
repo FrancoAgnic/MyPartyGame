@@ -131,6 +131,7 @@ protected:
     UFUNCTION() void OnBtnWord1();
     UFUNCTION() void OnBtnWord2();
     UFUNCTION() void OnChatCommitted(const FText& Text, ETextCommit::Type CommitMethod);
+    UFUNCTION() void OnChatTextChanged(const FText& Text); // sonido de tipeo por tecla
     UFUNCTION() void OnChatLine(const FString& Name, const FString& Message, EPTChatType Type);
     UFUNCTION() void OnBtnPlayAgain();
     UFUNCTION() void OnBtnReturnLobby();
@@ -140,6 +141,7 @@ protected:
     UFUNCTION() void OnYouGuessed(const FString& Word, int32 Points);
     UFUNCTION() void OnSomeoneGuessed(class APTPlayerState* Guesser, int32 Points);
     UFUNCTION() void OnAllGuessed();
+    UFUNCTION() void OnYouGuessedAnimFinished(); // al terminar: revela la palabra completa (sincronizado)
 
     /** Arranca la animación de la próxima letra en cola (RevealLetterText + RevealLetterAnim). La letra
      *  recién revelada se agrega a la palabra del jugador reción cuando la animación TERMINA (aterriza). */
@@ -155,6 +157,9 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) UWidget*    GuessPopup;      // contenedor (oculto por defecto)
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* TxtGuessWord;    // "La palabra era «X»"
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* TxtGuessPoints;  // "+N"
+    // Animación al ACERTAR (creála en el WBP con este nombre): la palabra + puntos aparecen al centro,
+    // los puntos vuelan al marcador y la palabra sube. La palabra se revela COMPLETA recién al terminar.
+    UPROPERTY(Transient, meta=(BindWidgetAnimOptional)) class UWidgetAnimation* YouGuessedAnim = nullptr;
     // Aviso al escultor "¡Todos adivinaron!" (contenedor + texto). C++ pone el texto localizado y lo muestra.
     UPROPERTY(meta=(BindWidgetOptional)) UWidget*    AllGuessedPopup;
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* TxtAllGuessed; // texto del aviso (multi-idioma, GUESS_ALL)
@@ -167,6 +172,7 @@ protected:
     UPROPERTY(EditAnywhere, Category="Sounds") USoundBase* SndHintLetter  = nullptr; // se reveló una letra de pista
     UPROPERTY(EditAnywhere, Category="Sounds") USoundBase* SndTimeUp      = nullptr; // se acabó el tiempo (no adivinaste)
     UPROPERTY(EditAnywhere, Category="Sounds") USoundBase* SndAllGuessed  = nullptr; // todos adivinaron antes de tiempo
+    UPROPERTY(EditAnywhere, Category="Sounds") USoundBase* SndTyping       = nullptr; // tecla de máquina de escribir (cue random) al tipear en el chat
 
 private:
     FTimerHandle RefreshTimer;
@@ -202,6 +208,7 @@ private:
     // de los guiones. Se limpia al terminar el turno.
     bool    bLocalGuessed = false;
     FString LocalGuessedWord;
+    FString PendingGuessedWord; // palabra a revelar cuando termine la animación de "acertaste"
 
     // ── Sonidos: seguimiento por polling (segundo actual, letras reveladas, fase, clip de countdown) ──
     void UpdateGameplaySounds(class APTSculptGameState* G);

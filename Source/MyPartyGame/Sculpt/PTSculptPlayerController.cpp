@@ -28,11 +28,13 @@
 #include "PTSculptGameMode.h"
 #include "PTSculptGameState.h"
 #include "PTGameplayHUDWidget.h"
+#include "PTSculptSoundComponent.h"
 
 APTSculptPlayerController::APTSculptPlayerController()
 {
     PrimaryActorTick.bCanEverTick = true;
     bShowMouseCursor = false;
+    SculptSounds = CreateDefaultSubobject<UPTSculptSoundComponent>(TEXT("SculptSounds"));
 }
 
 void APTSculptPlayerController::AcknowledgePossession(APawn* P)
@@ -410,6 +412,8 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
             bClearHeld    = false; // consumido: soltar después ya no dispara el "deshacer"
             ClearHoldTime = 0.f;
             Server_ClearSculpture();
+            if (SculptSounds) SculptSounds->PlayUndoClearAll(Volume ? Volume->GetActorLocation()
+                                                                     : (GetPawn() ? GetPawn()->GetActorLocation() : FVector::ZeroVector));
         }
     }
 
@@ -656,6 +660,10 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         bStrokeActive      = false;
         bStrokePlaneLocked = false; // soltó el click: liberar el plano congelado
     }
+
+    // Loop 3D de la herramienta (Add/Erase/Paint) mientras se está sellando; se corta solo al soltar.
+    if (SculptSounds)
+        SculptSounds->SetActiveTool(EditMode, bEyesTool, bIsStamping && CanLocalPlayerSculpt(), StampPos);
 }
 
 // ── Lógica de cursor ─────────────────────────────────────────────────────────
@@ -953,6 +961,8 @@ void APTSculptPlayerController::OnClearAllReleased()
     if (bClearHeld && ClearHoldTime < UndoTapMaxTime && CanLocalPlayerSculpt())
     {
         Server_Undo();
+        if (SculptSounds) SculptSounds->PlayUndoSimple(Volume ? Volume->GetActorLocation()
+                                                               : (GetPawn() ? GetPawn()->GetActorLocation() : FVector::ZeroVector));
         if (GEngine) GEngine->AddOnScreenDebugMessage(987723, 1.2f, FColor(150, 220, 255),
             PTText::GetStr(TEXT("SCULPT_UNDO")));
     }
@@ -1202,6 +1212,7 @@ void APTSculptPlayerController::PlaceEyeAtCursor()
     Server_BeginStroke();
     Server_AddEye(Pt, StampSize * 0.5f);        // vía el controller (tiene owner) → server → volumen
     Server_EndStroke();
+    if (SculptSounds) SculptSounds->PlayEyes(Pt); // sonido de colocar ojo (3D en el punto)
 }
 
 void APTSculptPlayerController::Server_AddEye_Implementation(FVector WorldPos, float Radius)

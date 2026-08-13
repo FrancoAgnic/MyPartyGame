@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "PTLobbyPlayerController.h"
+#include "../Sculpt/PTSculptSoundComponent.h"
 #include "PTLobbyEscapeMenuWidget.h"
 #include "PTGameState.h"
 #include "PTPlayerState.h"
@@ -321,7 +322,10 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
     // En el Locker (sin editar): la cámara sigue la POSICIÓN del personaje pero no rota (dirección fija).
     if (bLockerOpen && !bHeadSculptMode) UpdateLockerCam();
 
-    if (!bHeadSculptMode) return;
+    if (!bHeadSculptMode) { if (SculptSounds) SculptSounds->StopLoop(); return; }
+
+    // Sonidos de esculpido: crear el componente compartido la primera vez.
+    if (!SculptSounds) { SculptSounds = NewObject<UPTSculptSoundComponent>(this); if (SculptSounds) SculptSounds->RegisterComponent(); }
 
     // Mantener el resaltado de la hotbar al día con la herramienta equipada (1/2/3/4).
     if (HeadHUD) HeadHUD->Refresh(this);
@@ -375,6 +379,10 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
                 HeadUndoKinds.Reset();
                 if (C) C->ClearHeadPaint();
             }
+            // Sonido de "borrar todo" (mantener Backspace).
+            if (SculptSounds)
+                SculptSounds->PlayUndoClearAll(HeadVolume ? HeadVolume->GetActorLocation()
+                                                          : (GetPawn() ? GetPawn()->GetActorLocation() : FVector::ZeroVector));
         }
     }
 
@@ -445,6 +453,10 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
             bHasLastBodyCursor = false;
             PaintBudgetAccum = 0.f;
         }
+        // Loop del pincel (Paint) mientras pintás el cuerpo.
+        if (SculptSounds)
+            SculptSounds->SetActiveTool(EPTEditMode::Paint, false, bHeadStamping && bHit,
+                                        bHit ? BPt : (Char ? Char->GetActorLocation() : FVector::ZeroVector));
         return;
     }
 
@@ -541,6 +553,10 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
             }
         }
     }
+
+    // Loop 3D de la herramienta (Add/Erase/Paint de la cabeza) siguiendo el pincel; se corta al soltar.
+    if (SculptSounds)
+        SculptSounds->SetActiveTool(HeadEditMode, bHeadEyesTool, bHeadStamping && bHavePt, Pt);
 }
 
 void APTLobbyPlayerController::UpdateHeadPreview(const FVector* At, const FVector& Normal)
@@ -825,6 +841,9 @@ void APTLobbyPlayerController::OnHeadClearReleased()
             else if (Kind == 3)               { if (HeadEyes.Num() > 0) { HeadEyes.Pop(); RebuildEyesLiveMesh(); } bDone = true; }
             if (bDone) HeadUndoKinds.Pop();
         }
+        if (SculptSounds) // sonido de undo simple (toque corto de Backspace)
+            SculptSounds->PlayUndoSimple(HeadVolume ? HeadVolume->GetActorLocation()
+                                                    : (GetPawn() ? GetPawn()->GetActorLocation() : FVector::ZeroVector));
     }
     bHeadClearHeld    = false;
     HeadClearHoldTime = 0.f;
@@ -907,6 +926,7 @@ void APTLobbyPlayerController::PlaceEyeAtCursor()
     RebuildEyesLiveMesh();
     HeadUndoKinds.Add(3); // los ojos también entran al undo (Backspace saca el último)
     while (HeadUndoKinds.Num() > 32) HeadUndoKinds.RemoveAt(0);
+    if (SculptSounds) SculptSounds->PlayEyes(Pt); // sonido de colocar ojo (3D en el punto)
 }
 
 void APTLobbyPlayerController::RebuildEyesLiveMesh()

@@ -83,6 +83,9 @@ private:
 
     void PushLiveColorToPC(); // aplica el color actual a la brocha en vivo (mientras arrastrás)
 
+    void PlayPickSound();          // sonido al elegir/guardar color (dedupe interno)
+    float LastPickSoundTime = -1.f;
+
     void LoadPalette();
     void SavePalette() const;
     void RefreshRing();       // vuelca la paleta al anillo (SwatchRing)

@@ -247,6 +247,9 @@ protected:
     UPROPERTY(EditAnywhere, Category="Lobby") TSubclassOf<class UPTLockerWidget> LockerWidgetClass;
     UPROPERTY() class UPTLockerWidget* LockerWidget = nullptr;
 
+    // Sonidos de esculpido (compartidos con el gameplay; assets en el GameInstance). Creado lazy.
+    UPROPERTY() class UPTSculptSoundComponent* SculptSounds = nullptr;
+
     // ── Cámara del Locker (sigue la POSICIÓN del personaje, pero NO rota: dirección fija al mundo) ──
     // El personaje rota/se mueve; la cámara solo se desplaza con él manteniendo un offset y una rotación
     // FIJOS EN EL MUNDO. Editá estos valores para reencuadrar.
