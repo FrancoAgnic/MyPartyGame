@@ -62,8 +62,23 @@ if not exist "%CONTENT%" mkdir "%CONTENT%"
 REM /MIR = espeja (borra lo viejo que ya no esta), sin loguear cada archivo.
 robocopy "%PACKAGED_DIR%\Windows" "%CONTENT%" /MIR /NFL /NDL /NJH /NJS /NC /NS
 
-REM Poner la version actual en la "desc" del build de SteamPipe (solo esa linea del VDF).
-powershell -NoProfile -Command "(Get-Content -LiteralPath '%APPVDF%') -replace '\"desc\"\s+\"[^\"]*\"', ('\"desc\" \"Sculpturillo_v%VERSION%\"') | Set-Content -LiteralPath '%APPVDF%'"
+REM Regenerar el VDF del build con la version actual en la "desc" (echo = robusto en .bat).
+> "%APPVDF%" (
+echo "appbuild"
+echo {
+echo   "appid" "5114580"
+echo   "desc" "Sculpturillo_v%VERSION%"
+echo   "buildoutput" "%SDK%\output"
+echo   "contentroot" ""
+echo   "setlive" ""
+echo   "preview" "0"
+echo   "local" ""
+echo   "depots"
+echo   {
+echo     "5114581" "%SDK%\scripts\depot_5114581.vdf"
+echo   }
+echo }
+)
 
 echo.
 echo ========================================
@@ -74,8 +89,8 @@ echo.
 "%STEAMCMD%" +login %STEAMUSER% +run_app_build "%APPVDF%" +quit
 if errorlevel 1 (
     echo.
-    echo [ERROR] La subida a Steam fallo. Si pide password/Steam Guard, inicia sesion
-    echo         una vez con: "%STEAMCMD%" +login %STEAMUSER%  (y despues corre esto de nuevo).
+    echo [ERROR] La subida a Steam fallo. Si pide password/Steam Guard, inicia sesion una
+    echo         vez a mano con:  "%STEAMCMD%" +login %STEAMUSER%   y volve a correr esto.
     pause
     exit /b 1
 )
