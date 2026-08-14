@@ -32,6 +32,14 @@ public:
     /** Llamar justo antes del ClientTravel exitoso a un servidor, para poder reintentar si se cae. */
     void NotifyJoinedServer(const FString& TravelURL);
 
+    // ── Reconectar a la última partida (pública o privada) desde Find Sessions ──
+    // La URL de la última partida jugada (con password+nombre) sobrevive al volver al menú, así el
+    // jugador puede reconectarse a mano aunque el auto-reintento ya se haya rendido. Sirve para
+    // públicas Y privadas (la URL ya lleva el password, no hace falta re-ingresar el código).
+    UFUNCTION(BlueprintCallable, Category="Session") bool HasLastGame() const { return !LastGameURL.IsEmpty(); }
+    UFUNCTION(BlueprintCallable, Category="Session") void ReconnectToLastGame();
+    UFUNCTION(BlueprintCallable, Category="Session") void ClearLastGame() { LastGameURL.Reset(); }
+
     // Config de partida que arma el HOST en el lobby (tiempo/rondas/revelado/categorías/
     // dificultad/CSV). El GameInstance sobrevive al seamless travel, así que el host la setea
     // en el lobby y APTSculptGameMode la lee al arrancar en Lvl-01. Es del host/servidor; a los
@@ -109,5 +117,6 @@ private:
 
     FString PendingConnectError;
     FString PendingReconnectURL;
+    FString LastGameURL; // última partida jugada (persiste al volver al menú, para reconectar a mano)
     int32   ReconnectAttemptsRemaining = 0;
 };

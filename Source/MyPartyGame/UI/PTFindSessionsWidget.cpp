@@ -3,14 +3,16 @@
 #include "PTFindSessionsWidget.h"
 #include "MultiplayerSessionsSubsystem.h"
 #include "PTSessionRowWidget.h"
+#include "../PTGameInstance.h"
 #include "Components/ScrollBox.h"
 #include "Components/Button.h"
 
 bool UPTFindSessionsWidget::Initialize()
 {
     if (!Super::Initialize()) return false;
-    if (RefreshButton) RefreshButton->OnClicked.AddDynamic(this, &UPTFindSessionsWidget::OnRefreshClicked);
-    if (BackButton)    BackButton->OnClicked.AddDynamic(this, &UPTFindSessionsWidget::OnBackClicked);
+    if (RefreshButton)   RefreshButton->OnClicked.AddDynamic(this, &UPTFindSessionsWidget::OnRefreshClicked);
+    if (BackButton)      BackButton->OnClicked.AddDynamic(this, &UPTFindSessionsWidget::OnBackClicked);
+    if (ReconnectButton) ReconnectButton->OnClicked.AddDynamic(this, &UPTFindSessionsWidget::OnReconnectClicked);
 
     if (UGameInstance* GI = GetGameInstance())
         Sessions = GI->GetSubsystem<UMultiplayerSessionsSubsystem>();
@@ -21,6 +23,19 @@ bool UPTFindSessionsWidget::Initialize()
 void UPTFindSessionsWidget::ShowPanel()
 {
     SetVisibility(ESlateVisibility::Visible);
+    // "Reconectar a la partida anterior": solo si hay una última partida guardada (pública o privada).
+    if (ReconnectButton)
+    {
+        const UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance());
+        ReconnectButton->SetVisibility((GI && GI->HasLastGame())
+            ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+    }
+}
+
+void UPTFindSessionsWidget::OnReconnectClicked()
+{
+    if (UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance()))
+        GI->ReconnectToLastGame();
 }
 
 void UPTFindSessionsWidget::OnRefreshClicked()

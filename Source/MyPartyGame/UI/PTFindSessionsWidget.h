@@ -35,6 +35,9 @@ protected:
     UPROPERTY(meta = (BindWidget)) UScrollBox* ResultsBox;
     UPROPERTY(meta = (BindWidget)) UButton*    RefreshButton;
     UPROPERTY(meta = (BindWidget)) UButton*    BackButton;
+    // Botón "Reconectar a la partida anterior": aparece solo si hay una última partida (pública o
+    // privada). Crear un UButton "ReconnectButton" en el WBP (opcional).
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* ReconnectButton;
 
     /** Clase del widget de fila. Asignar en el WBP derivado. */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sessions")
@@ -42,6 +45,7 @@ protected:
 
     UFUNCTION() void OnRefreshClicked();
     UFUNCTION() void OnBackClicked();
+    UFUNCTION() void OnReconnectClicked();
 
 private:
     UPROPERTY() UMultiplayerSessionsSubsystem* Sessions = nullptr;

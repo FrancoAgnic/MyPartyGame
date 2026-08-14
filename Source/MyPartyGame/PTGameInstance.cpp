@@ -264,6 +264,17 @@ void UPTGameInstance::NotifyJoinedServer(const FString& TravelURL)
 {
     PendingReconnectURL      = TravelURL;
     ReconnectAttemptsRemaining = MaxReconnectAttempts;
+    LastGameURL              = TravelURL; // persiste para el botón "Reconectar" de Find Sessions
+}
+
+void UPTGameInstance::ReconnectToLastGame()
+{
+    if (LastGameURL.IsEmpty()) return;
+    PendingReconnectURL        = LastGameURL; // que el auto-reintento también aplique si se vuelve a caer
+    ReconnectAttemptsRemaining = MaxReconnectAttempts;
+    if (UWorld* W = GetWorld())
+        if (APlayerController* PC = W->GetFirstPlayerController())
+            PC->ClientTravel(LastGameURL, ETravelType::TRAVEL_Absolute);
 }
 
 void UPTGameInstance::HandleTravelFailure(UWorld* World, ETravelFailure::Type FailureType,
@@ -283,16 +294,20 @@ void UPTGameInstance::SetPendingConnectError(const FString& InError)
 {
     PendingConnectError = InError;
     // El host cerró a propósito: reintentar la conexión no tiene sentido y dejaría al jugador
-    // golpeando una dirección muerta.
+    // golpeando una dirección muerta. Tampoco ofrecer reconectar (la partida ya no existe).
     PendingReconnectURL.Reset();
     ReconnectAttemptsRemaining = 0;
+    LastGameURL.Reset();
 }
 
 void UPTGameInstance::ReturnToMainMenuWithError(const FString& ErrorString)
 {
     // Traducir el token del servidor a un mensaje amigable.
     if (ErrorString.Contains(TEXT("WrongPassword")))
+    {
         PendingConnectError = PTText::GetStr(TEXT("ERR_WRONG_PASSWORD"));
+        LastGameURL.Reset(); // password incorrecta: reconectar con la misma URL fallaría igual
+    }
     else if (!ErrorString.IsEmpty())
         PendingConnectError = PTText::GetStr(TEXT("ERR_CONNECT_SESSION"));
 

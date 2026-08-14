@@ -195,9 +195,13 @@ public:
     // Los sellos viajan por multicast (solo a los conectados), así que quien entra tarde se pierde lo
     // ya esculpido. Al entrar, el server le manda el estado del volumen (geometría base + capas)
     // troceado y el cliente lo aplica. Los ojos ya se replican por propiedad aparte.
-    void SendSculptSnapshot(const TArray<uint8>& Blob); // SERVER: arranca el envío troceado a este cliente
+    void SendSculptSnapshot(const TArray<uint8>& Blob); // SERVER: arranca el envío (comprimido, por ACK) a este cliente
     UFUNCTION(Client, Reliable)
     void Client_SculptSnapshotChunk(const TArray<uint8>& Data, bool bFirst, bool bLast);
+    // CLIENTE→SERVER: "recibí el chunk, mandá el próximo". Control de flujo por ACK: nunca hay más de UN
+    // chunk confiable en vuelo → no se desborda el buffer confiable (que cortaba la conexión al reconectar).
+    UFUNCTION(Server, Reliable)
+    void Server_AckSnapChunk();
 
     // ── Partida (Sculpturillo) ──────────────────────────────────────────────
     /** El servidor manda las 3 palabras SOLO al escultor. */
@@ -339,11 +343,10 @@ private:
     void OnOpenChat();
 
     // Snapshot de la escultura (envío troceado server→cliente al (re)conectar).
-    TArray<uint8> SnapOut;              // SERVER: bytes pendientes de enviar a este cliente
+    TArray<uint8> SnapOut;              // SERVER: bytes COMPRIMIDOS pendientes de enviar (con int32 tamaño crudo al inicio)
     int32         SnapSent = 0;         // SERVER: cuántos bytes ya se mandaron
-    FTimerHandle  SnapTimer;            // SERVER: pump de chunks
-    void          PumpSnapshot();       // SERVER: manda los próximos chunks (throttle anti-overflow)
-    TArray<uint8> SnapIn;               // CLIENTE: bytes recibidos (se ensamblan hasta bLast)
+    void          SendNextSnapChunk();  // SERVER: manda UN chunk y espera el ACK del cliente
+    TArray<uint8> SnapIn;               // CLIENTE: bytes comprimidos recibidos (se ensamblan hasta bLast)
 
     bool bIsStamping        = false;
     // El cursor apunta fuera del lienzo (BoundsBox del volumen) → no se puede construir ahí.

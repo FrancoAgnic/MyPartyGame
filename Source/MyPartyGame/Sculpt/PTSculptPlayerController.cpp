@@ -29,6 +29,7 @@
 #include "PTSculptGameState.h"
 #include "PTGameplayHUDWidget.h"
 #include "PTSculptSoundComponent.h"
+#include "Misc/Compression.h"
 
 APTSculptPlayerController::APTSculptPlayerController()
 {
@@ -1401,45 +1402,70 @@ void APTSculptPlayerController::Server_BeginDetailLayer_Implementation()
 }
 
 // ── Snapshot de la escultura para (re)conexiones tardías ─────────────────────
+// El campo SDF es grande; se COMPRIME (zlib) y se manda por ACK (un chunk confiable a la vez), así
+// nunca se desborda el buffer confiable — que era lo que saturaba y cortaba la conexión al reconectar.
 void APTSculptPlayerController::SendSculptSnapshot(const TArray<uint8>& Blob)
 {
     if (Blob.Num() == 0) return;
-    SnapOut  = Blob;
+
+    // Comprimir: SnapOut = [int32 tamañoCrudo][bytes comprimidos].
+    const int32 RawSize = Blob.Num();
+    int32 CompBound = FCompression::CompressMemoryBound(NAME_Zlib, RawSize);
+    TArray<uint8> Comp; Comp.SetNumUninitialized(CompBound);
+    int32 CompSize = CompBound;
+    if (!FCompression::CompressMemory(NAME_Zlib, Comp.GetData(), CompSize, Blob.GetData(), RawSize))
+        return;
+    Comp.SetNum(CompSize);
+
+    SnapOut.Reset();
+    SnapOut.Append((const uint8*)&RawSize, sizeof(int32));
+    SnapOut.Append(Comp);
     SnapSent = 0;
-    GetWorldTimerManager().ClearTimer(SnapTimer);
-    PumpSnapshot();
+    SendNextSnapChunk();
 }
 
-void APTSculptPlayerController::PumpSnapshot()
+void APTSculptPlayerController::SendNextSnapChunk()
 {
-    const int32 ChunkBytes = 8 * 1024;
-    const int32 MaxPerPump = 3; // throttle: evita desbordar el buffer confiable (como las cabezas)
-    for (int32 i = 0; i < MaxPerPump && SnapSent < SnapOut.Num(); ++i)
-    {
-        const int32 Take = FMath::Min(ChunkBytes, SnapOut.Num() - SnapSent);
-        TArray<uint8> Chunk;
-        Chunk.Append(SnapOut.GetData() + SnapSent, Take);
-        const bool bFirst = (SnapSent == 0);
-        SnapSent += Take;
-        const bool bLast  = (SnapSent >= SnapOut.Num());
-        Client_SculptSnapshotChunk(Chunk, bFirst, bLast);
-    }
-    if (SnapSent < SnapOut.Num())
-        GetWorldTimerManager().SetTimer(SnapTimer, this, &APTSculptPlayerController::PumpSnapshot, 0.05f, false);
-    else
-        SnapOut.Reset();
+    if (SnapSent >= SnapOut.Num()) { SnapOut.Reset(); return; }
+    const int32 ChunkBytes = 16 * 1024;
+    const int32 Take  = FMath::Min(ChunkBytes, SnapOut.Num() - SnapSent);
+    const bool  bFirst = (SnapSent == 0);
+    TArray<uint8> Chunk;
+    Chunk.Append(SnapOut.GetData() + SnapSent, Take);
+    SnapSent += Take;
+    const bool bLast = (SnapSent >= SnapOut.Num());
+    Client_SculptSnapshotChunk(Chunk, bFirst, bLast); // esperamos el ACK del cliente para el próximo
+}
+
+void APTSculptPlayerController::Server_AckSnapChunk_Implementation()
+{
+    SendNextSnapChunk(); // el cliente confirmó → mandar el siguiente
 }
 
 void APTSculptPlayerController::Client_SculptSnapshotChunk_Implementation(const TArray<uint8>& Data, bool bFirst, bool bLast)
 {
     if (bFirst) SnapIn.Reset();
     SnapIn.Append(Data);
-    if (!bLast) return;
+    if (!bLast) { Server_AckSnapChunk(); return; } // pedir el próximo chunk
 
-    if (!Volume)
-        Volume = Cast<APTSculptVolume>(
-            UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
-    if (Volume && SnapIn.Num() > 0) Volume->LoadSnapshot(SnapIn); // geometría base + capas + pintura
+    // Último chunk: descomprimir y aplicar. SnapIn = [int32 tamañoCrudo][comprimido].
+    if (SnapIn.Num() > (int32)sizeof(int32))
+    {
+        int32 RawSize = 0;
+        FMemory::Memcpy(&RawSize, SnapIn.GetData(), sizeof(int32));
+        if (RawSize > 0)
+        {
+            TArray<uint8> Raw; Raw.SetNumUninitialized(RawSize);
+            if (FCompression::UncompressMemory(NAME_Zlib, Raw.GetData(), RawSize,
+                    SnapIn.GetData() + sizeof(int32), SnapIn.Num() - sizeof(int32)))
+            {
+                if (!Volume)
+                    Volume = Cast<APTSculptVolume>(
+                        UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
+                if (Volume) Volume->LoadSnapshot(Raw); // geometría base + capas + pintura
+            }
+        }
+    }
     SnapIn.Reset();
 }
 
