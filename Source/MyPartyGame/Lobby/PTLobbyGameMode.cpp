@@ -132,6 +132,30 @@ void APTLobbyGameMode::Logout(AController* Exiting)
             Sessions->UpdateAdvertisedPlayerCount(PlayersJoined);
 }
 
+void APTLobbyGameMode::HandleSeamlessTravelPlayer(AController*& C)
+{
+    Super::HandleSeamlessTravelPlayer(C); // intercambia el PC a la clase de este GameMode si difiere
+
+    if (APlayerController* PC = Cast<APlayerController>(C))
+    {
+        if (APTPlayerState* PS = PC->GetPlayerState<APTPlayerState>())
+        {
+            PS->bIsReady  = false; // arrancan "no listo" al volver al lobby
+            PS->GameScore = 0;     // limpiar el puntaje de la partida anterior
+        }
+        // El seamless travel no llama PostLogin/RestartPlayer → el jugador llegaría sin pawn.
+        if (!PC->GetPawn())
+            RestartPlayer(PC);
+    }
+
+    // PostLogin (que no corre en seamless) es donde se cuenta a los jugadores. Sin esto el nuevo
+    // GameMode queda con PlayersJoined=0 y el primer Logout dispara "último jugador se fue → destruir
+    // sesión", matando la sala aunque siga habiendo gente (bug visto en logs 2026-08-15).
+    ++PlayersJoined;
+
+    CheckReadyState();
+}
+
 void APTLobbyGameMode::HostLeaveGame()
 {
     if (!HasAuthority()) return;

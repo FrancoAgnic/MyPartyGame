@@ -23,6 +23,12 @@ public:
     virtual void PostLogin(APlayerController* NewPlayer) override;
     virtual void Logout(AController* Exiting) override;
 
+    // Llegada por SEAMLESS TRAVEL al lobby (vuelta desde la partida con "Back to Lobby", manteniendo
+    // la sala). El seamless NO pasa por PostLogin, así que acá re-damos el pawn, reseteamos el estado
+    // de sala (no-listo + puntaje 0) y mantenemos el contador PlayersJoined (si queda en 0 el primer
+    // Logout destruye la sesión). APTSculptGameMode lo llama vía Super en el sentido lobby→juego.
+    virtual void HandleSeamlessTravelPlayer(AController*& C) override;
+
     /** El ANFITRIÓN se va. Saca a los clientes primero y recién después destruye la sesión y se
      *  va él: si el host cierra el mundo de una, los clientes se quedan con la conexión muerta y
      *  el juego se les cae. Lo llama el botón "Salir" cuando corre en el listen server. */
