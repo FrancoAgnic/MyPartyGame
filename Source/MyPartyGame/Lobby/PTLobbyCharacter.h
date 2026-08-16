@@ -326,7 +326,7 @@ public:
     // Color BASE del cuerpo (lo que se ve donde NO hay pintura). Se aplica al material dinámico del
     // cuerpo por este parámetro Vector. Default BLANCO. Requiere que M_SculperCharacter tenga un
     // parámetro Vector con este nombre enchufado al Base Color (tinte). Si no existe, es un no-op.
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Paint") FName BodyBaseColorParam = TEXT("BaseColor");
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Paint") FName BodyBaseColorParam = TEXT("Color");
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Paint") FLinearColor BodyBaseColor = FLinearColor::White;
 
     // ── Pintado de la CABEZA con textura 2D (igual que el cuerpo, NO el atlas de vóxeles) ──

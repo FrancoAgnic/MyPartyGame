@@ -1121,8 +1121,11 @@ void APTLobbyCharacter::InitCharacterPaint()
         if (CharPaintMID)
         {
             CharPaintMID->SetTextureParameterValue(PaintTexParam, PaintTex);
-            // Color base del cuerpo (donde no hay pintura) = blanco por defecto. No-op si el material
-            // no tiene ese parámetro Vector.
+            // Color base del cuerpo (donde no hay pintura) = blanco por defecto. El VectorParameter
+            // real del material se llama "Color" ("BaseColor" es el PIN de salida, no un parámetro,
+            // por eso antes el default salía NEGRO). Seteamos ambos por robustez: el que no exista es
+            // un no-op inofensivo.
+            CharPaintMID->SetVectorParameterValue(TEXT("Color"), BodyBaseColor);
             CharPaintMID->SetVectorParameterValue(BodyBaseColorParam, BodyBaseColor);
         }
     }

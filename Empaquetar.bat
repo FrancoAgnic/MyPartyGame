@@ -50,7 +50,18 @@ if errorlevel 1 (
 
 REM El exe se genera como MyPartyGame.exe (nombre del proyecto/target). Lo renombramos a
 REM Sculpturillo.exe (el bootstrap sigue lanzando la carpeta MyPartyGame internamente).
+REM Borrar primero un Sculpturillo.exe viejo de una build anterior: si no, el 'ren' falla
+REM (destino ya existe) y quedan los DOS exes en la carpeta.
+if exist "%PACKAGED_DIR%\Windows\Sculpturillo.exe" del /q "%PACKAGED_DIR%\Windows\Sculpturillo.exe"
 if exist "%PACKAGED_DIR%\Windows\MyPartyGame.exe" ren "%PACKAGED_DIR%\Windows\MyPartyGame.exe" "Sculpturillo.exe"
+
+REM Borrar cualquier carpeta "Saved" del build: si el dev corrio el .exe empaquetado, se crea
+REM Saved\Config\Windows\GameUserSettings.ini con SUS settings. Si eso se sube a Steam, cada
+REM update PISA la config del usuario (idioma/settings se resetean). Los SaveGames (skins) viven
+REM en el Saved del INSTALL del usuario y no se tocan; por eso los skins persisten y los settings no.
+REM Con /MIR mas abajo, borrarlas aca tambien las quita del content de SteamPipe.
+if exist "%PACKAGED_DIR%\Windows\MyPartyGame\Saved" rmdir /s /q "%PACKAGED_DIR%\Windows\MyPartyGame\Saved"
+if exist "%PACKAGED_DIR%\Windows\Engine\Saved"      rmdir /s /q "%PACKAGED_DIR%\Windows\Engine\Saved"
 
 echo.
 echo ========================================
