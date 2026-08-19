@@ -135,13 +135,13 @@ void UPTSettingsWidget::ApplyLanguageSectionAvailability()
     // layout, no ocupa lugar). Solo se ve en el menú principal.
     const ESlateVisibility SectionVis = bAllowed ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
 
-    if (LanguagePanel)
+    if (HB_LanguagePanel)
     {
-        LanguagePanel->SetVisibility(SectionVis);
+        HB_LanguagePanel->SetVisibility(SectionVis);
     }
     else
     {
-        // Sin un contenedor "LanguagePanel", colapsar al menos el combo y los botones viejos.
+        // Sin un contenedor "HB_LanguagePanel", colapsar al menos el combo y los botones viejos.
         if (LanguageCombo) LanguageCombo->SetVisibility(SectionVis);
         if (EnglishButton) EnglishButton->SetVisibility(SectionVis);
         if (SpanishButton) SpanishButton->SetVisibility(SectionVis);

@@ -18,6 +18,7 @@ class UPTCreateSessionWidget;
 class UPTFindSessionsWidget;
 class UPTEnterCodeWidget;
 class UPTSettingsWidget;
+class UPTLanguageSelectWidget;
 
 UCLASS()
 class MYPARTYGAME_API UPTMainMenuWidget : public UPTUserWidget
@@ -65,6 +66,9 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UPTFindSessionsWidget*  FindPanel;
     UPROPERTY(meta = (BindWidgetOptional)) UPTEnterCodeWidget*     EnterCodePanel;
     UPROPERTY(meta = (BindWidgetOptional)) UPTSettingsWidget*      SettingsPanel;
+    // Pantalla de idioma del primer arranque (overlay a pantalla completa). El MainMenu la muestra
+    // solo si el jugador todavía no eligió idioma; se oculta sola al confirmar.
+    UPROPERTY(meta = (BindWidgetOptional)) UPTLanguageSelectWidget* LanguageSelectPanel;
 
     // Fase 4 — Texto de error de conexión (ej: "Contraseña incorrecta")
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* ErrorText;

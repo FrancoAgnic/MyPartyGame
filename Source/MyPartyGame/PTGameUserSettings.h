@@ -40,6 +40,15 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Settings")
     FString GetLanguageCode() const { return LanguageCode; }
 
+    // ── Primer arranque: pantalla de selección de idioma ────────────────────
+    // false = todavía no eligió idioma → el MainMenu muestra la pantalla de selección (solo la
+    // primera vez). Al elegir se marca true y se guarda; después se cambia desde Configuración.
+    UFUNCTION(BlueprintCallable, Category = "Settings")
+    bool HasChosenLanguage() const { return bLanguageChosen; }
+
+    UFUNCTION(BlueprintCallable, Category = "Settings")
+    void MarkLanguageChosen();
+
     /** "en" o "es". Cambia la cultura activa de inmediato. */
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void SetLanguageCode(const FString& InLanguageCode);
@@ -74,6 +83,9 @@ private:
 
     UPROPERTY(Config)
     FString LanguageCode = TEXT("en");
+
+    UPROPERTY(Config)
+    bool bLanguageChosen = false;
 
     UPROPERTY(Config)
     TMap<FName, FString> KeyOverrides;

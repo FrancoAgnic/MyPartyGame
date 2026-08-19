@@ -35,6 +35,12 @@ void UPTGameUserSettings::SetMasterVolume(float InVolume)
     }
 }
 
+void UPTGameUserSettings::MarkLanguageChosen()
+{
+    bLanguageChosen = true;
+    SaveSettings();
+}
+
 void UPTGameUserSettings::SetLanguageCode(const FString& InLanguageCode)
 {
     LanguageCode = InLanguageCode;

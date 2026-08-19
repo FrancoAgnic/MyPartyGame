@@ -328,9 +328,9 @@ void UPTGameplayHUDWidget::RefreshTick()
         {
             bShowPanel = true;
             const TArray<FString>& Ch = PC ? PC->CurrentWordChoices : TArray<FString>();
-            if (TxtWord0) TxtWord0->SetText(FText::FromString(Ch.IsValidIndex(0) ? Ch[0] : FString()));
-            if (TxtWord1) TxtWord1->SetText(FText::FromString(Ch.IsValidIndex(1) ? Ch[1] : FString()));
-            if (TxtWord2) TxtWord2->SetText(FText::FromString(Ch.IsValidIndex(2) ? Ch[2] : FString()));
+            if (Txt_Easy) Txt_Easy->SetText(FText::FromString(Ch.IsValidIndex(0) ? Ch[0] : FString()));
+            if (Txt_Mid)  Txt_Mid->SetText(FText::FromString(Ch.IsValidIndex(1) ? Ch[1] : FString()));
+            if (Txt_Hard) Txt_Hard->SetText(FText::FromString(Ch.IsValidIndex(2) ? Ch[2] : FString()));
         }
         break;
     // (el contador de elección lo maneja el bloque del reloj de abajo)

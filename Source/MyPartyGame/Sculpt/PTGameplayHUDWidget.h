@@ -60,9 +60,11 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) UButton*         BtnWord0;
     UPROPERTY(meta=(BindWidgetOptional)) UButton*         BtnWord1;
     UPROPERTY(meta=(BindWidgetOptional)) UButton*         BtnWord2;
-    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      TxtWord0;      // texto dentro de BtnWord0
-    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      TxtWord1;
-    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      TxtWord2;
+    // Nombres del diseño del amigo: Txt_Easy/Txt_Mid/Txt_Hard son los textos dentro de
+    // BtnWord0/BtnWord1/BtnWord2 (ChoosingWord les escribe Ch[0]/Ch[1]/Ch[2]).
+    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      Txt_Easy;      // dentro de BtnWord0
+    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      Txt_Mid;       // dentro de BtnWord1
+    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      Txt_Hard;      // dentro de BtnWord2
     UPROPERTY(meta=(BindWidgetOptional)) UScrollBox*          ChatScroll;
 
     // ── Lista de controles completa (opcional: para una pantalla de ayuda/settings) ────

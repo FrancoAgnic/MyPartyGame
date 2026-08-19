@@ -143,19 +143,57 @@ void UPTColorPickerWidget::QuickPickTick()
     if (SwatchRing) SwatchRing->SetHovered(Seg);
 
     if (Seg >= 0 && Palette.IsValidIndex(Seg))
-        SetColor(Palette[Seg]);
+    {
+        // Si estamos editando la saturación de ESTE swatch (con la rueda), NO lo reseteamos al
+        // color guardado: dejamos el color editado en vivo. Si es otro swatch (o no se editó),
+        // mostramos el guardado tal cual.
+        if (Seg == EditingSeg && bSwatchEdited)
+        {
+            // mantener CurrentColor editado
+        }
+        else
+        {
+            EditingSeg = -1; bSwatchEdited = false;
+            SetColor(Palette[Seg]);
+        }
+    }
     else
+    {
+        EditingSeg = -1; bSwatchEdited = false;
         UpdateFromAbsolute(CursorPos);
+    }
 
     PushLiveColorToPC(); // color en vivo en la brocha
 }
 
 void UPTColorPickerWidget::QuickAdjustValue(float Delta)
 {
-    Val = FMath::Clamp(Val + Delta, 0.f, 1.f);
-    if (ValueSlider) ValueSlider->SetValue(Val); // reflejar en el slider si existe
-    RecomputeColor();
-    PushLiveColorToPC(); // color en vivo en la brocha
+    const FVector2D CursorPos = FSlateApplication::IsInitialized()
+        ? FSlateApplication::Get().GetCursorPos() : FVector2D::ZeroVector;
+    const int32 Seg = SwatchRing ? SwatchRing->SegmentAt(CursorPos) : -1;
+
+    if (Seg >= 0 && Palette.IsValidIndex(Seg))
+    {
+        // Cursor sobre un color GUARDADO → la rueda le sube/baja la SATURACIÓN (no el brillo).
+        if (EditingSeg != Seg)
+        {
+            SetColor(Palette[Seg]); // arrancar la edición desde el color guardado (setea Hue/Sat/Val)
+            EditingSeg = Seg;
+        }
+        Sat = FMath::Clamp(Sat + Delta, 0.f, 1.f);
+        bSwatchEdited = true;
+        RecomputeColor();
+        PushLiveColorToPC(); // color editado en vivo en la brocha
+    }
+    else
+    {
+        // Cursor sobre la rueda → ajustar el BRILLO (V), como siempre.
+        EditingSeg = -1; bSwatchEdited = false;
+        Val = FMath::Clamp(Val + Delta, 0.f, 1.f);
+        if (ValueSlider) ValueSlider->SetValue(Val); // reflejar en el slider si existe
+        RecomputeColor();
+        PushLiveColorToPC(); // color en vivo en la brocha
+    }
 }
 
 void UPTColorPickerWidget::RecomputeColor()
@@ -204,16 +242,29 @@ void UPTColorPickerWidget::ConfirmQuickPick()
     const FVector2D CursorPos = FSlateApplication::IsInitialized()
         ? FSlateApplication::Get().GetCursorPos() : FVector2D::ZeroVector;
 
-    // ¿Soltó sobre un segmento del anillo? → elegir ese color guardado (ya está en la paleta: no re-guardar).
+    // ¿Soltó sobre un segmento del anillo?
     FLinearColor Picked;
     if (SwatchRing && SwatchRing->GetColorAt(CursorPos, Picked))
     {
-        SetColor(Picked);
+        if (bSwatchEdited)
+        {
+            // Le modificó la saturación con la rueda → guardar el color EDITADO (CurrentColor) como
+            // uno NUEVO. El dedupe de SaveCurrentColor solo quita iguales exactos, así que el color
+            // original NO se pisa: quedan los dos en el radial.
+            SaveCurrentColor();
+        }
+        else
+        {
+            // Swatch sin editar → usar el color guardado tal cual (ya está en la paleta, no re-guardar).
+            SetColor(Picked);
+        }
+        EditingSeg = -1; bSwatchEdited = false;
         Confirm();
         return;
     }
 
     // Rueda: elegir un color NUEVO lo auto-guarda en el radial (con dedupe). Antes había que apretar E.
+    EditingSeg = -1; bSwatchEdited = false;
     SaveCurrentColor();
     Confirm();
 }

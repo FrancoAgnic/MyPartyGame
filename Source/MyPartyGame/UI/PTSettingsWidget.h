@@ -47,8 +47,8 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UComboBoxString* LanguageCombo;
 
     /** Sección entera del idioma (título + combo): se COLAPSA en partida (solo se ve en el menú
-     *  principal). Crear un contenedor llamado "LanguagePanel" que envuelva todo lo del idioma. */
-    UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* LanguagePanel;
+     *  principal). Crear un contenedor llamado "HB_LanguagePanel" que envuelva todo lo del idioma. */
+    UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* HB_LanguagePanel;
 
     /** Aviso opcional "el idioma se cambia desde el menú principal". */
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* LanguageHintText;

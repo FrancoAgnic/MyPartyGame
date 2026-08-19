@@ -8,6 +8,7 @@
 #include "PTFindSessionsWidget.h"
 #include "PTEnterCodeWidget.h"
 #include "PTSettingsWidget.h"
+#include "PTLanguageSelectWidget.h"
 #include "PTGameUserSettings.h"
 #include "PTGameInstance.h"
 #include "PTLobbyGameMode.h"
@@ -65,6 +66,23 @@ void UPTMainMenuWidget::MenuSetup(int32 InNumPublicConnections, FString InLobbyP
     if (UPTGameUserSettings* Settings = UPTGameUserSettings::Get())
     {
         Settings->ApplyAudioAndLanguage(GetWorld());
+    }
+
+    // Primer arranque: si el jugador TODAVÍA no eligió idioma, mostrar el overlay de selección
+    // arriba de todo. Se oculta solo al confirmar (marca el flag → no vuelve a aparecer).
+    if (LanguageSelectPanel)
+    {
+        const UPTGameUserSettings* S = UPTGameUserSettings::Get();
+        const bool bNeedPick = !(S && S->HasChosenLanguage());
+        if (bNeedPick)
+        {
+            LanguageSelectPanel->Refresh();
+            LanguageSelectPanel->SetVisibility(ESlateVisibility::Visible);
+        }
+        else
+        {
+            LanguageSelectPanel->SetVisibility(ESlateVisibility::Collapsed);
+        }
     }
 
     // NOTA (lobby interactivo): no tocar el input mode ni el cursor acá. El PlayerController
