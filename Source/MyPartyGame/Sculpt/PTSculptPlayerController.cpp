@@ -311,6 +311,13 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
 
+    // Durante el seamless travel de vuelta al lobby, este PlayerController sigue tickeando mientras
+    // el SculptVolume ya se está destruyendo. Aunque Volume es UPROPERTY, hay una ventana en la que
+    // el actor quedó "pending kill" pero el puntero todavía no es null → limpiarlo acá evita que
+    // GetStampPoint/ClampInsideCanvas corran sobre un volumen moribundo y crasheen (crash del
+    // cliente al tocar "Back to Lobby", visto en logs 2026-08-19).
+    if (Volume && !IsValid(Volume)) Volume = nullptr;
+
     // ── Menú de pausa (ESC) abierto: pausar el gameplay del mouse ──
     // Frena la cámara (el Look del character usa AddControllerYaw/PitchInput, que respetan
     // IgnoreLookInput) y el movimiento/vuelo (AddMovementInput respeta IgnoreMoveInput), dejando
@@ -823,7 +830,14 @@ void APTSculptPlayerController::ApplyPreviewMaterial()
         if (bTint)
         {
             UMaterialInstanceDynamic* MID = Comp->CreateDynamicMaterialInstance(0, Mat);
-            if (MID) MID->SetVectorParameterValue(TEXT("Color"), CurrentPaintColor);
+            if (MID)
+            {
+                MID->SetVectorParameterValue(TEXT("Color"), CurrentPaintColor);
+                // El preview NO debe tener el glow por-tiempo de la arcilla nueva (no tiene el dato
+                // de "tiempo agregado" por vóxel). GlowEnable=0 lo apaga; en el material del volumen
+                // real queda en su default 1. (El brillo AL estampar lo maneja aparte el param "Glow".)
+                MID->SetScalarParameterValue(TEXT("GlowEnable"), 0.f);
+            }
             return MID;
         }
         Comp->SetMaterial(0, Mat);

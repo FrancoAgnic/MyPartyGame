@@ -337,6 +337,11 @@ public:
     { return bClearHeld ? FMath::Max(0.f, ClearHoldDuration - ClearHoldTime) : ClearHoldDuration; }
 
 private:
+    // UPROPERTY: si no, al destruirse el SculptVolume (p.ej. seamless travel de vuelta al lobby) el
+    // puntero queda COLGADO (dangling) y los chequeos "Volume ?" pasan sobre memoria liberada →
+    // crash en GetStampPoint/ClampInsideCanvas durante el tick del travel. Con UPROPERTY el GC lo
+    // pone en null al destruirse el actor.
+    UPROPERTY()
     APTSculptVolume* Volume = nullptr;
     UPROPERTY() class UPTLobbyEscapeMenuWidget* EscapeMenu = nullptr;
     void OnPausePressed();

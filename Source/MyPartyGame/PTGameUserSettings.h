@@ -49,6 +49,11 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void MarkLanguageChosen();
 
+    /** DEV: resetea el flag (bLanguageChosen=false) para volver a ver la pantalla de idioma en el
+     *  próximo arranque del boot. Lo llama el comando de consola PT.ResetLanguage. */
+    UFUNCTION(BlueprintCallable, Category = "Settings")
+    void ResetLanguageChosen();
+
     /** "en" o "es". Cambia la cultura activa de inmediato. */
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void SetLanguageCode(const FString& InLanguageCode);

@@ -72,11 +72,11 @@ private:
     float Hue = 0.f, Sat = 0.f, Val = 1.f; // HSV actual (Val = brillo; el slider es opcional)
     bool  bDragging = false;
 
-    // Edición de saturación de un swatch guardado con la rueda del mouse (feature "saturar un
-    // color del radial"): mientras el cursor está sobre un swatch, la rueda le sube/baja la
-    // saturación; al soltar el RMB se guarda como un color NUEVO (distinto al original).
+    // Edición del BRILLO (Value) de un color guardado con la rueda del mouse: mientras el cursor
+    // está sobre un swatch, la rueda le sube/baja el value (y el ValueSlider lo muestra en vivo);
+    // al soltar el RMB se guarda como un color NUEVO (distinto al original).
     int32 EditingSeg   = -1;    // índice del swatch que se está editando (-1 = ninguno)
-    bool  bSwatchEdited = false; // true si ya se modificó su saturación (para no resetearlo en el tick)
+    bool  bSwatchEdited = false; // true si ya se modificó su value (para no resetearlo en el tick)
 
     // Actualiza matiz/saturación desde una posición ABSOLUTA de pantalla (Slate).
     bool UpdateFromAbsolute(FVector2D AbsPos);

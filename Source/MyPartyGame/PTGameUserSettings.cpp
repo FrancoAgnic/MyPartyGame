@@ -5,7 +5,23 @@
 #include "Engine/World.h"
 #include "AudioDevice.h"
 #include "Internationalization/Internationalization.h"
+#include "HAL/IConsoleManager.h"
 #include "PTTextTable.h"
+
+// DEV: comando de consola para volver a probar la pantalla de idioma sin cerrar el editor.
+// Abrir la consola con ~ y tipear:  PT.ResetLanguage
+// Resetea el flag y, en el próximo arranque del boot (BootLVl), vuelve a pedir idioma.
+static FAutoConsoleCommand GPTResetLanguageCmd(
+    TEXT("PT.ResetLanguage"),
+    TEXT("Resetea el flag de idioma elegido (bLanguageChosen=false) para volver a ver la pantalla de selección de idioma en el próximo arranque del boot."),
+    FConsoleCommandDelegate::CreateLambda([]()
+    {
+        if (UPTGameUserSettings* S = UPTGameUserSettings::Get())
+        {
+            S->ResetLanguageChosen();
+            UE_LOG(LogTemp, Log, TEXT("[PT.ResetLanguage] bLanguageChosen reseteado. Reabrí/volvé a Play el BootLVl para ver la selección de idioma."));
+        }
+    }));
 
 void UPTGameUserSettings::SetToDefaults()
 {
@@ -38,6 +54,12 @@ void UPTGameUserSettings::SetMasterVolume(float InVolume)
 void UPTGameUserSettings::MarkLanguageChosen()
 {
     bLanguageChosen = true;
+    SaveSettings();
+}
+
+void UPTGameUserSettings::ResetLanguageChosen()
+{
+    bLanguageChosen = false;
     SaveSettings();
 }
 

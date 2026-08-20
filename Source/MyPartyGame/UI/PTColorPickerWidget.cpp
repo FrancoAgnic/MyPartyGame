@@ -144,9 +144,9 @@ void UPTColorPickerWidget::QuickPickTick()
 
     if (Seg >= 0 && Palette.IsValidIndex(Seg))
     {
-        // Si estamos editando la saturación de ESTE swatch (con la rueda), NO lo reseteamos al
-        // color guardado: dejamos el color editado en vivo. Si es otro swatch (o no se editó),
-        // mostramos el guardado tal cual.
+        // Si estamos editando el brillo de ESTE swatch (con la rueda), NO lo reseteamos al color
+        // guardado: dejamos el color editado en vivo. Si es otro swatch (o no se editó), mostramos
+        // el guardado tal cual (y su Value aparece en el ValueSlider vía SetColor).
         if (Seg == EditingSeg && bSwatchEdited)
         {
             // mantener CurrentColor editado
@@ -174,26 +174,25 @@ void UPTColorPickerWidget::QuickAdjustValue(float Delta)
 
     if (Seg >= 0 && Palette.IsValidIndex(Seg))
     {
-        // Cursor sobre un color GUARDADO → la rueda le sube/baja la SATURACIÓN (no el brillo).
+        // Cursor sobre un color GUARDADO → editar SU brillo (Value). Arrancar desde el color
+        // guardado la primera vez, y marcarlo editado para que el tick no lo resetee.
         if (EditingSeg != Seg)
         {
-            SetColor(Palette[Seg]); // arrancar la edición desde el color guardado (setea Hue/Sat/Val)
+            SetColor(Palette[Seg]); // setea Hue/Sat/Val desde el swatch (y su Value en el slider)
             EditingSeg = Seg;
         }
-        Sat = FMath::Clamp(Sat + Delta, 0.f, 1.f);
         bSwatchEdited = true;
-        RecomputeColor();
-        PushLiveColorToPC(); // color editado en vivo en la brocha
     }
     else
     {
-        // Cursor sobre la rueda → ajustar el BRILLO (V), como siempre.
+        // Cursor sobre la rueda → brillo normal, sin editar ningún swatch.
         EditingSeg = -1; bSwatchEdited = false;
-        Val = FMath::Clamp(Val + Delta, 0.f, 1.f);
-        if (ValueSlider) ValueSlider->SetValue(Val); // reflejar en el slider si existe
-        RecomputeColor();
-        PushLiveColorToPC(); // color en vivo en la brocha
     }
+
+    Val = FMath::Clamp(Val + Delta, 0.f, 1.f);
+    if (ValueSlider) ValueSlider->SetValue(Val); // el slider muestra el Value en tiempo real
+    RecomputeColor();
+    PushLiveColorToPC(); // color en vivo en la brocha
 }
 
 void UPTColorPickerWidget::RecomputeColor()
@@ -248,9 +247,9 @@ void UPTColorPickerWidget::ConfirmQuickPick()
     {
         if (bSwatchEdited)
         {
-            // Le modificó la saturación con la rueda → guardar el color EDITADO (CurrentColor) como
-            // uno NUEVO. El dedupe de SaveCurrentColor solo quita iguales exactos, así que el color
-            // original NO se pisa: quedan los dos en el radial.
+            // Le modificó el brillo con la rueda → guardar el color EDITADO (CurrentColor) como uno
+            // NUEVO. El dedupe de SaveCurrentColor solo quita iguales exactos, así que el original NO
+            // se pisa: quedan los dos en el radial.
             SaveCurrentColor();
         }
         else
