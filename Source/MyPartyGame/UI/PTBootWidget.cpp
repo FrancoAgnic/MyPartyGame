@@ -39,7 +39,7 @@ void UPTBootWidget::StartTitleSequence()
 
     if (TitleAnim)
     {
-        // Al terminar el desvanecido del título → ir al menú.
+        // El borrado del título está keyframeado DENTRO de TitleAnim; al terminar → menú.
         FWidgetAnimationDynamicEvent Ev;
         Ev.BindUFunction(this, FName("OnTitleFinished"));
         BindToAnimationFinished(TitleAnim, Ev);
@@ -47,7 +47,7 @@ void UPTBootWidget::StartTitleSequence()
     }
     else
     {
-        // Sin animación: mostrar el título unos segundos y continuar.
+        // Sin animación: esperar unos segundos y continuar.
         if (UWorld* W = GetWorld())
             W->GetTimerManager().SetTimer(TitleTimer, this, &UPTBootWidget::OnTitleFinished,
                                           FMath::Max(FallbackTitleSeconds, 0.1f), false);

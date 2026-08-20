@@ -1,9 +1,9 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 // Widget del level de arranque ("boot"). Flujo:
-//   1) Si es el PRIMER arranque → primero la selección de idioma.
-//   2) Al aplicar el idioma (o directo si ya se eligió) → aparece el TÍTULO y se desvanece.
-//   3) Al terminar la animación del título → viaja al MainMenu (que reproduce su propia animación
-//      de entrada, "SpawnMainMenu").
+//   1) 1er arranque → selección de idioma.
+//   2) Al aplicar el idioma (o directo si ya se eligió) → reproduce TitleAnim (aparición + borrado
+//      del título; el borrado se keyframea en la propia animación, sobre el param del material).
+//   3) Al terminar TitleAnim → viaja al MainMenu (que reproduce su animación de entrada).
 
 #pragma once
 #include "CoreMinimal.h"
@@ -20,23 +20,21 @@ class MYPARTYGAME_API UPTBootWidget : public UPTUserWidget
 protected:
     virtual void NativeConstruct() override;
 
-    // Animación del título: aparece y se DESVANECE (varios segundos). Crearla en el WBP con nombre
-    // "TitleAnim". El título debe arrancar OCULTO (opacity 0) para que no se vea durante el idioma;
-    // esta animación lo muestra y lo funde. Al terminar → MainMenu.
+    // Animación del título: aparición + borrado (efecto goma). Crearla en el WBP como "TitleAnim".
+    // El borrado se maneja keyframeando el ScalarParameter del material del título DENTRO de esta anim.
     UPROPERTY(Transient, meta = (BindWidgetAnimOptional)) UWidgetAnimation* TitleAnim = nullptr;
 
-    // Selección de idioma (overlay a pantalla completa, Collapsed por default). Solo en el 1er arranque.
+    // Selección de idioma (overlay, Collapsed por default). Solo el 1er arranque.
     UPROPERTY(meta = (BindWidgetOptional)) UPTLanguageSelectWidget* LanguageSelectPanel = nullptr;
 
-    // Mapa del menú principal al que se viaja después del título.
     UPROPERTY(EditAnywhere, Category = "Boot") FString MainMenuMap = TEXT("MainMenu");
-    // Si no hay TitleAnim, cuántos segundos mostrar el título antes de ir al menú.
+    // Si no hay TitleAnim: cuántos segundos esperar antes de ir al menú.
     UPROPERTY(EditAnywhere, Category = "Boot") float FallbackTitleSeconds = 3.0f;
 
     UFUNCTION() void OnTitleFinished();
 
 private:
-    void StartTitleSequence(); // muestra el título (o su animación) y al terminar va al menú
+    void StartTitleSequence();
     void GoToMainMenu();
     FTimerHandle TitleTimer;
 };

@@ -20,4 +20,8 @@ protected:
     // WBP del boot (reparentado a UPTBootWidget). Asignar en BP_BootGameMode.
     UPROPERTY(EditDefaultsOnly, Category = "Boot")
     TSubclassOf<class UUserWidget> BootWidgetClass;
+
+    // Tag de la ACameraActor del level a la que se fija la vista (igual que el lobby: "DioramaCam").
+    UPROPERTY(EditDefaultsOnly, Category = "Boot")
+    FName BootCameraTag = TEXT("DioramaCam");
 };
