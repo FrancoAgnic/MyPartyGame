@@ -1,7 +1,9 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-// Widget del level de arranque ("boot"): reproduce la animación del logo de la empresa (siempre,
-// al abrir el juego) y — solo la primera vez — muestra la selección de idioma. Al terminar viaja
-// al MainMenu. Reparentar el WBP a esta clase.
+// Widget del level de arranque ("boot"). Flujo:
+//   1) Si es el PRIMER arranque → primero la selección de idioma.
+//   2) Al aplicar el idioma (o directo si ya se eligió) → aparece el TÍTULO y se desvanece.
+//   3) Al terminar la animación del título → viaja al MainMenu (que reproduce su propia animación
+//      de entrada, "SpawnMainMenu").
 
 #pragma once
 #include "CoreMinimal.h"
@@ -18,25 +20,23 @@ class MYPARTYGAME_API UPTBootWidget : public UPTUserWidget
 protected:
     virtual void NativeConstruct() override;
 
-    // Animación del logo de la empresa. Crearla en el WBP con nombre "LogoAnim". Si no existe, se
-    // espera FallbackLogoSeconds mostrando el logo estático y se continúa igual.
-    UPROPERTY(Transient, meta = (BindWidgetAnimOptional)) UWidgetAnimation* LogoAnim = nullptr;
+    // Animación del título: aparece y se DESVANECE (varios segundos). Crearla en el WBP con nombre
+    // "TitleAnim". El título debe arrancar OCULTO (opacity 0) para que no se vea durante el idioma;
+    // esta animación lo muestra y lo funde. Al terminar → MainMenu.
+    UPROPERTY(Transient, meta = (BindWidgetAnimOptional)) UWidgetAnimation* TitleAnim = nullptr;
 
-    // Pantalla de idioma embebida (overlay a pantalla completa, Collapsed por default). Solo se
-    // muestra en el PRIMER arranque; se oculta sola al confirmar y ahí se viaja al menú.
+    // Selección de idioma (overlay a pantalla completa, Collapsed por default). Solo en el 1er arranque.
     UPROPERTY(meta = (BindWidgetOptional)) UPTLanguageSelectWidget* LanguageSelectPanel = nullptr;
 
-    // Mapa del menú principal al que se viaja después del logo (+ idioma si es primer arranque).
+    // Mapa del menú principal al que se viaja después del título.
     UPROPERTY(EditAnywhere, Category = "Boot") FString MainMenuMap = TEXT("MainMenu");
-    // Si no hay LogoAnim (por ahora), cuántos segundos esperar antes de continuar. Bajo = arranca
-    // rápido a idioma/menú (el logo es un static mesh del level, siempre visible). Subir cuando se
-    // agregue la animación, o dejar que la propia LogoAnim marque el tiempo.
-    UPROPERTY(EditAnywhere, Category = "Boot") float FallbackLogoSeconds = 0.2f;
+    // Si no hay TitleAnim, cuántos segundos mostrar el título antes de ir al menú.
+    UPROPERTY(EditAnywhere, Category = "Boot") float FallbackTitleSeconds = 3.0f;
 
-    UFUNCTION() void OnLogoFinished();
+    UFUNCTION() void OnTitleFinished();
 
 private:
+    void StartTitleSequence(); // muestra el título (o su animación) y al terminar va al menú
     void GoToMainMenu();
-    void OnLanguageChosen();
-    FTimerHandle LogoTimer;
+    FTimerHandle TitleTimer;
 };

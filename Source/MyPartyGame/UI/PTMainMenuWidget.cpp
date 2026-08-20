@@ -59,6 +59,9 @@ void UPTMainMenuWidget::MenuSetup(int32 InNumPublicConnections, FString InLobbyP
 
     AddToViewport();
     SetVisibility(ESlateVisibility::Visible);
+
+    // Animación de entrada (botones deslizándose desde los lados) al aparecer el menú.
+    if (SpawnMainMenu) PlayAnimation(SpawnMainMenu);
     // No SetIsFocusable(true) acá: el teclado tiene que quedar para el juego (WASD/Space), no
     // para este widget. Los botones se clickean con mouse únicamente (ver nota de arriba).
 

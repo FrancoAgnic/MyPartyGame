@@ -15,47 +15,52 @@ void UPTBootWidget::NativeConstruct()
     if (LanguageSelectPanel)
         LanguageSelectPanel->SetVisibility(ESlateVisibility::Collapsed);
 
-    if (LogoAnim)
-    {
-        // Al terminar la animación del logo → OnLogoFinished.
-        FWidgetAnimationDynamicEvent Ev;
-        Ev.BindUFunction(this, FName("OnLogoFinished"));
-        BindToAnimationFinished(LogoAnim, Ev);
-        PlayAnimation(LogoAnim);
-    }
-    else
-    {
-        // Sin animación: esperar un rato mostrando el logo estático y seguir igual.
-        if (UWorld* W = GetWorld())
-            W->GetTimerManager().SetTimer(LogoTimer, this, &UPTBootWidget::OnLogoFinished,
-                                          FMath::Max(FallbackLogoSeconds, 0.1f), false);
-    }
-}
-
-void UPTBootWidget::OnLogoFinished()
-{
     const UPTGameUserSettings* S = UPTGameUserSettings::Get();
     const bool bNeedPick = !(S && S->HasChosenLanguage());
 
-    // Primer arranque → mostrar la selección de idioma en este mismo level; al confirmar, al menú.
     if (bNeedPick && LanguageSelectPanel)
     {
-        LanguageSelectPanel->OnLanguageChosen.AddUObject(this, &UPTBootWidget::OnLanguageChosen);
+        // PRIMER arranque: primero el idioma. Al confirmar arranca la secuencia del título.
+        LanguageSelectPanel->OnLanguageChosen.AddUObject(this, &UPTBootWidget::StartTitleSequence);
         LanguageSelectPanel->Refresh();
         LanguageSelectPanel->SetVisibility(ESlateVisibility::Visible);
     }
     else
     {
-        GoToMainMenu();
+        // Ya eligió idioma antes → directo al título.
+        StartTitleSequence();
     }
 }
 
-void UPTBootWidget::OnLanguageChosen()
+void UPTBootWidget::StartTitleSequence()
+{
+    if (LanguageSelectPanel)
+        LanguageSelectPanel->SetVisibility(ESlateVisibility::Collapsed);
+
+    if (TitleAnim)
+    {
+        // Al terminar el desvanecido del título → ir al menú.
+        FWidgetAnimationDynamicEvent Ev;
+        Ev.BindUFunction(this, FName("OnTitleFinished"));
+        BindToAnimationFinished(TitleAnim, Ev);
+        PlayAnimation(TitleAnim);
+    }
+    else
+    {
+        // Sin animación: mostrar el título unos segundos y continuar.
+        if (UWorld* W = GetWorld())
+            W->GetTimerManager().SetTimer(TitleTimer, this, &UPTBootWidget::OnTitleFinished,
+                                          FMath::Max(FallbackTitleSeconds, 0.1f), false);
+    }
+}
+
+void UPTBootWidget::OnTitleFinished()
 {
     GoToMainMenu();
 }
 
 void UPTBootWidget::GoToMainMenu()
 {
+    // Carga el lobby/MainMenu. Su widget reproduce su animación de entrada (SpawnMainMenu).
     UGameplayStatics::OpenLevel(this, FName(*MainMenuMap));
 }

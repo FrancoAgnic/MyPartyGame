@@ -70,6 +70,10 @@ protected:
     // solo si el jugador todavía no eligió idioma; se oculta sola al confirmar.
     UPROPERTY(meta = (BindWidgetOptional)) UPTLanguageSelectWidget* LanguageSelectPanel;
 
+    // Animación de entrada del menú (los botones entran deslizándose desde los lados). Crearla en el
+    // WBP con nombre "SpawnMainMenu"; se reproduce sola cuando aparece el menú (MenuSetup).
+    UPROPERTY(Transient, meta = (BindWidgetAnimOptional)) class UWidgetAnimation* SpawnMainMenu = nullptr;
+
     // Fase 4 — Texto de error de conexión (ej: "Contraseña incorrecta")
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* ErrorText;
 
