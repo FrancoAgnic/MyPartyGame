@@ -55,6 +55,12 @@ REM (destino ya existe) y quedan los DOS exes en la carpeta.
 if exist "%PACKAGED_DIR%\Windows\Sculpturillo.exe" del /q "%PACKAGED_DIR%\Windows\Sculpturillo.exe"
 if exist "%PACKAGED_DIR%\Windows\MyPartyGame.exe" ren "%PACKAGED_DIR%\Windows\MyPartyGame.exe" "Sculpturillo.exe"
 
+REM App ID REAL de Steam (5114580) en el build. Ya NO usamos Spacewar (480). Con esto, lanzado
+REM desde Steam o directo por un DUENO del juego, corre como Sculpturillo (5114580). Se escribe en
+REM la raiz (donde esta el launcher) y en el dir del binario real (el Steam API lo lee del CWD).
+> "%PACKAGED_DIR%\Windows\steam_appid.txt" echo 5114580
+if exist "%PACKAGED_DIR%\Windows\MyPartyGame\Binaries\Win64" > "%PACKAGED_DIR%\Windows\MyPartyGame\Binaries\Win64\steam_appid.txt" echo 5114580
+
 REM Borrar cualquier carpeta "Saved" del build: si el dev corrio el .exe empaquetado, se crea
 REM Saved\Config\Windows\GameUserSettings.ini con SUS settings. Si eso se sube a Steam, cada
 REM update PISA la config del usuario (idioma/settings se resetean). Los SaveGames (skins) viven
