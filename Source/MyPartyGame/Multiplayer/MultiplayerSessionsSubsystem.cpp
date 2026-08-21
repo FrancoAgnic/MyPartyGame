@@ -47,6 +47,11 @@ void UMultiplayerSessionsSubsystem::Initialize(FSubsystemCollectionBase& Collect
             SessionInviteAcceptedHandle = SessionInterface->AddOnSessionUserInviteAcceptedDelegate_Handle(
                 FOnSessionUserInviteAcceptedDelegate::CreateUObject(
                     this, &UMultiplayerSessionsSubsystem::HandleSessionUserInviteAccepted));
+
+            // Invitación RECIBIDA con el juego abierto → popup Aceptar/Rechazar (F3).
+            SessionInviteReceivedHandle = SessionInterface->AddOnSessionInviteReceivedDelegate_Handle(
+                FOnSessionInviteReceivedDelegate::CreateUObject(
+                    this, &UMultiplayerSessionsSubsystem::HandleSessionInviteReceived));
         }
     }
     else
@@ -96,6 +101,7 @@ void UMultiplayerSessionsSubsystem::Deinitialize()
         SessionInterface->ClearOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteHandle);
         SessionInterface->ClearOnStartSessionCompleteDelegate_Handle(StartSessionCompleteHandle);
         SessionInterface->ClearOnSessionUserInviteAcceptedDelegate_Handle(SessionInviteAcceptedHandle);
+        SessionInterface->ClearOnSessionInviteReceivedDelegate_Handle(SessionInviteReceivedHandle);
     }
 
     Super::Deinitialize();
@@ -614,6 +620,48 @@ void UMultiplayerSessionsSubsystem::ProcessPendingInvite()
     // Sin contraseña: la invitación ya autoriza. JoinSession dispara OnJoinSessionComplete →
     // el menú viaja con GetResolvedConnectString().
     JoinSession(*R, FString());
+}
+
+void UMultiplayerSessionsSubsystem::HandleSessionInviteReceived(
+    const FUniqueNetId& UserId, const FUniqueNetId& FromId,
+    const FString& AppId, const FOnlineSessionSearchResult& InviteResult)
+{
+    if (!InviteResult.IsValid())
+    {
+        UE_LOG(LogPTSessions, Warning, TEXT("Invitación recibida pero el resultado es inválido."));
+        return;
+    }
+
+    ReceivedInviteResult = MakeShared<FOnlineSessionSearchResult>(InviteResult);
+
+    // Nombre del que invita = dueño de la sesión (nombre de Steam del host). Fallback a la lista
+    // de amigos por si acaso, y si no, un genérico.
+    FString FromName = InviteResult.Session.OwningUserName;
+    if (FromName.IsEmpty())
+    {
+        const FString FromIdStr = FromId.ToString();
+        for (const FPTFriendInfo& F : CachedFriends)
+            if (F.UserId == FromIdStr) { FromName = F.DisplayName; break; }
+    }
+    if (FromName.IsEmpty()) FromName = TEXT("Un amigo");
+
+    UE_LOG(LogPTSessions, Log, TEXT("Invitación recibida de %s → mostrando popup."), *FromName);
+    OnInviteReceived.Broadcast(FromName);
+}
+
+void UMultiplayerSessionsSubsystem::AcceptReceivedInvite()
+{
+    if (!ReceivedInviteResult.IsValid()) return;
+    const TSharedPtr<FOnlineSessionSearchResult> R = ReceivedInviteResult;
+    ReceivedInviteResult.Reset();
+    UE_LOG(LogPTSessions, Log, TEXT("Popup: invitación ACEPTADA → uniéndose."));
+    JoinSession(*R, FString());
+}
+
+void UMultiplayerSessionsSubsystem::DeclineReceivedInvite()
+{
+    UE_LOG(LogPTSessions, Log, TEXT("Popup: invitación RECHAZADA."));
+    ReceivedInviteResult.Reset();
 }
 
 void UMultiplayerSessionsSubsystem::ShowSteamInviteOverlay()

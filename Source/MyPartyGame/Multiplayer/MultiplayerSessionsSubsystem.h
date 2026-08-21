@@ -25,6 +25,9 @@ DECLARE_MULTICAST_DELEGATE_OneParam(FPTOnStartSessionComplete,   bool /*bWasSucc
 DECLARE_MULTICAST_DELEGATE(FPTOnInviteAccepted);
 // La lista de amigos terminó de leerse (ReadFriends). La UI relee GetFriends() y repinta.
 DECLARE_MULTICAST_DELEGATE(FPTOnFriendsListUpdated);
+// LLEGÓ una invitación de un amigo (juego abierto). El GameInstance muestra el popup Aceptar/Rechazar.
+// Param: nombre del que invita.
+DECLARE_MULTICAST_DELEGATE_OneParam(FPTOnInviteReceived, const FString& /*FromName*/);
 
 // -------------------------------------------------------------------
 // Info de un amigo de Steam para la UI (sin exponer tipos de OSS hacia afuera).
@@ -148,6 +151,11 @@ public:
     void ProcessPendingInvite();
     bool HasPendingInvite() const { return bHasPendingInvite; }
 
+    // Popup de invitación (F3): al aceptar/rechazar el popup que muestra el GameInstance.
+    // Aceptar → se une a la partida del que invitó (join + travel). Rechazar → descarta.
+    void AcceptReceivedInvite();
+    void DeclineReceivedInvite();
+
     // Pide a Steam la lista de amigos; al terminar dispara OnFriendsListUpdated y GetFriends()
     // queda actualizado. Repetir para refrescar estados (online / jugando / joinable).
     void ReadFriends();
@@ -164,6 +172,7 @@ public:
     FPTOnStartSessionComplete    OnStartSessionComplete;
     FPTOnInviteAccepted          OnInviteAccepted;
     FPTOnFriendsListUpdated      OnFriendsListUpdated;
+    FPTOnInviteReceived          OnInviteReceived;
 
 protected:
     // Callbacks que OSS invoca internamente
@@ -177,6 +186,9 @@ protected:
     // Steam avisa que se aceptó una invitación (overlay) o "Unirse a partida" de la lista de amigos.
     void HandleSessionUserInviteAccepted(const bool bWasSuccessful, const int32 ControllerId,
         FUniqueNetIdPtr UserId, const FOnlineSessionSearchResult& InviteResult);
+    // Steam avisa que LLEGÓ una invitación (juego abierto) → mostramos el popup.
+    void HandleSessionInviteReceived(const FUniqueNetId& UserId, const FUniqueNetId& FromId,
+        const FString& AppId, const FOnlineSessionSearchResult& InviteResult);
     // La lectura de la lista de amigos terminó.
     void HandleReadFriendsComplete(int32 LocalUserNum, bool bWasSuccessful,
         const FString& ListName, const FString& ErrorStr);
@@ -197,10 +209,13 @@ private:
     FDelegateHandle DestroySessionCompleteHandle;
     FDelegateHandle StartSessionCompleteHandle;
     FDelegateHandle SessionInviteAcceptedHandle;
+    FDelegateHandle SessionInviteReceivedHandle;
 
     // Invitación aceptada que espera a que la UI del menú la procese (join+travel).
     bool bHasPendingInvite = false;
     TSharedPtr<FOnlineSessionSearchResult> PendingInviteResult;
+    // Invitación RECIBIDA (popup) a la espera de Aceptar/Rechazar.
+    TSharedPtr<FOnlineSessionSearchResult> ReceivedInviteResult;
 
     // Amigos leídos por ReadFriends (para la UI) + mapa UserId→net id para poder invitar.
     TArray<FPTFriendInfo> CachedFriends;

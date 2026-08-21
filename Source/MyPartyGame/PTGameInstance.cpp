@@ -17,6 +17,8 @@
 #include "Sound/SoundMix.h"
 #include "Sound/SoundClass.h"
 #include "PTGameUserSettings.h"
+#include "Multiplayer/MultiplayerSessionsSubsystem.h"
+#include "UI/PTInvitePopupWidget.h"
 
 namespace
 {
@@ -151,6 +153,54 @@ void UPTGameInstance::Init()
     // Re-aplicar el mix de audio (Música/Efectos) al cargar cada nivel: el SetSoundMixClassOverride se
     // pierde entre mundos, así que lo reponemos en cada mapa.
     FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(this, &UPTGameInstance::OnPostLoadMap);
+
+    // Invitaciones (F3): el subsistema ya está inicializado tras Super::Init().
+    if (UMultiplayerSessionsSubsystem* S = GetSubsystem<UMultiplayerSessionsSubsystem>())
+    {
+        // Llega una invitación de un amigo → popup Aceptar/Rechazar (sale en cualquier momento).
+        S->OnInviteReceived.AddUObject(this, &UPTGameInstance::HandleInviteReceived);
+
+        // Punto ÚNICO de viaje tras unirse: funciona desde el menú Y desde una partida (para aceptar
+        // el popup en medio del juego). El guard de BeginClientTravel evita doble-conexión aunque el
+        // menú también intente viajar (su 2º intento queda ignorado).
+        S->OnJoinSessionComplete.AddWeakLambda(this, [this](EOnJoinSessionCompleteResult::Type Result)
+        {
+            if (Result == EOnJoinSessionCompleteResult::Success) TravelToResolvedSession();
+        });
+    }
+}
+
+void UPTGameInstance::HandleInviteReceived(const FString& FromName)
+{
+    ShowInvitePopup(FromName);
+}
+
+void UPTGameInstance::ShowInvitePopup(const FString& FromName)
+{
+    if (!InvitePopupClass) return; // sin WBP asignado: el usuario igual puede aceptar por el overlay de Steam.
+
+    // Si ya había un popup, cerrarlo (siempre mostramos la última invitación).
+    if (ActivePopup) { ActivePopup->RemoveFromParent(); ActivePopup = nullptr; }
+
+    ActivePopup = CreateWidget<UPTInvitePopupWidget>(this, InvitePopupClass);
+    if (!ActivePopup) return;
+    ActivePopup->AddToViewport(1000); // Z alto: por encima de menús/HUD/otros popups
+    ActivePopup->Setup(FromName, InvitePopupSeconds);
+}
+
+void UPTGameInstance::TravelToResolvedSession()
+{
+    UMultiplayerSessionsSubsystem* S = GetSubsystem<UMultiplayerSessionsSubsystem>();
+    if (!S) return;
+
+    FString ConnectString;
+    if (!S->GetResolvedConnectString(ConnectString)) return;
+
+    // Sin contraseña (se sacó el código). Nombre para que el server lo lea en PostLogin.
+    const FString TravelURL = ConnectString
+        + TEXT("?Name=") + UMultiplayerSessionsSubsystem::SanitizeNameForTravelURL(S->GetLocalPlayerDisplayName());
+
+    NotifyJoinedServer(TravelURL); // guard anti-flood + arma reintento
 }
 
 void UPTGameInstance::OnPostLoadMap(UWorld* /*LoadedWorld*/)

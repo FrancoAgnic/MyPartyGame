@@ -12,6 +12,7 @@ class USoundBase;
 class USoundMix;
 class USoundClass;
 class UUserWidget;
+class UPTInvitePopupWidget;
 
 UCLASS()
 class MYPARTYGAME_API UPTGameInstance : public UGameInstance
@@ -106,6 +107,13 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt Sound") USoundBase* SndColorPick    = nullptr; // elegir/guardar color
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt Sound") class USoundAttenuation* SculptAttenuation = nullptr;
 
+    // ── Popup de invitación (F3) ────────────────────────────────────────────────
+    // WBP del popup (deriva de PTInvitePopupWidget). Asignar en BP_GameInstance. Si está vacío, no
+    // se muestra popup (igual llega la invitación por el overlay de Steam).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Invites") TSubclassOf<UPTInvitePopupWidget> InvitePopupClass;
+    // Segundos que dura el popup en pantalla antes de auto-cerrarse (rechazando).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Invites") float InvitePopupSeconds = 12.f;
+
 private:
     void OnPostLoadMap(UWorld* LoadedWorld); // re-aplica el mix al cargar cada nivel
     void HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver,
@@ -113,6 +121,16 @@ private:
     void HandleTravelFailure(UWorld* World, ETravelFailure::Type FailureType,
                              const FString& ErrorString);
     void ReturnToMainMenuWithError(const FString& ErrorString);
+
+    // ── Invitaciones (F3) ──
+    // Llega una invitación (subsistema) → mostrar el popup Aceptar/Rechazar.
+    void HandleInviteReceived(const FString& FromName);
+    void ShowInvitePopup(const FString& FromName);
+    // Tras un JoinSession exitoso, arma la URL y viaja (punto único, guard anti-flood). Funciona
+    // desde cualquier lado (menú o partida) → cubre aceptar el popup en medio de una partida.
+    void TravelToResolvedSession();
+
+    UPROPERTY() UPTInvitePopupWidget* ActivePopup = nullptr;
 
     // Reconexión — solo aplica a clientes (el host no se reconecta a sí mismo).
     bool TryReconnect(UWorld* World);
