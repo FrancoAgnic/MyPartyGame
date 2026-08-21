@@ -23,6 +23,8 @@
 #include "../Multiplayer/MultiplayerSessionsSubsystem.h"
 #include "Blueprint/UserWidget.h"
 #include "Kismet/GameplayStatics.h"
+#include "GameFramework/GameModeBase.h"
+#include "GameFramework/GameSession.h"
 #include "TimerManager.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
@@ -59,6 +61,24 @@ void APTLobbyPlayerController::Server_SetReady_Implementation(bool bInReady)
 
     if (APTLobbyGameMode* GM = GetWorld()->GetAuthGameMode<APTLobbyGameMode>())
         GM->CheckReadyState();
+}
+
+void APTLobbyPlayerController::Server_KickPlayer_Implementation(APlayerState* TargetPlayerState)
+{
+    // Seguridad: solo el HOST puede expulsar; nunca a sí mismo ni a otro host.
+    const APTPlayerState* MyPS = GetPlayerState<APTPlayerState>();
+    if (!MyPS || !MyPS->bIsHost) return;
+
+    APTPlayerState* TargetPS = Cast<APTPlayerState>(TargetPlayerState);
+    if (!TargetPS || TargetPS == MyPS || TargetPS->bIsHost) return;
+
+    APlayerController* TargetPC = TargetPS->GetPlayerController();
+    if (!TargetPC) return;
+
+    UE_LOG(LogTemp, Log, TEXT("[Lobby] Host expulsa a %s."), *TargetPS->GetDisplayNameSafe());
+    if (AGameModeBase* GM = GetWorld()->GetAuthGameMode())
+        if (AGameSession* Session = GM->GameSession)
+            Session->KickPlayer(TargetPC, FText::FromString(TEXT("Kicked by host")));
 }
 
 void APTLobbyPlayerController::BeginPlay()

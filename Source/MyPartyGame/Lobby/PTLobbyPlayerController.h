@@ -41,6 +41,11 @@ public:
     UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Lobby")
     void Server_SetReady(bool bInReady);
 
+    /** El HOST expulsa a un jugador de la sala. Valida en el server que quien llama sea el host y
+     *  que el objetivo no sea el propio host. Lo llama el botón Kick de la fila (UPTPlayerRowWidget). */
+    UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Lobby")
+    void Server_KickPlayer(APlayerState* TargetPlayerState);
+
     // ── Estado del modo cabeza (lo lee la hotbar del modo G para resaltar la herramienta) ──
     bool          IsHeadSculptMode()      const { return bHeadSculptMode; }
     EPTEditMode   GetHeadEditMode()       const { return HeadEditMode; }

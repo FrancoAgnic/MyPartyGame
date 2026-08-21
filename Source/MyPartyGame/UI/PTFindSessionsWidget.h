@@ -10,6 +10,7 @@
 
 class UScrollBox;
 class UButton;
+class UTextBlock;
 class UPTSessionRowWidget;
 class UMultiplayerSessionsSubsystem;
 
@@ -32,12 +33,26 @@ public:
 protected:
     virtual bool Initialize() override;
 
-    UPROPERTY(meta = (BindWidget)) UScrollBox* ResultsBox;
-    UPROPERTY(meta = (BindWidget)) UButton*    RefreshButton;
-    UPROPERTY(meta = (BindWidget)) UButton*    BackButton;
-    // Botón "Reconectar a la partida anterior": aparece solo si hay una última partida (pública o
-    // privada). Crear un UButton "ReconnectButton" en el WBP (opcional).
-    UPROPERTY(meta = (BindWidgetOptional)) UButton* ReconnectButton;
+    // Lista de la pestaña PÚBLICAS (partidas públicas de cualquiera).
+    UPROPERTY(meta = (BindWidget))         UScrollBox* ResultsBox;
+    // Lista de la pestaña AMIGOS (partidas privadas-solo-amigos creadas por tus amigos). Opcional:
+    // si no existe en el WBP, solo funciona la pestaña públicas.
+    UPROPERTY(meta = (BindWidgetOptional)) UScrollBox* FriendsBox;
+
+    UPROPERTY(meta = (BindWidget))         UButton*    RefreshButton;
+    UPROPERTY(meta = (BindWidget))         UButton*    BackButton;
+    // Pestañas (opcionales): alternan entre la lista pública y la de amigos.
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*    PublicTabButton;
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*    FriendsTabButton;
+    // Textos "no hay partidas" por lista (opcionales).
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* EmptyPublicText;
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* EmptyFriendsText;
+    // Botón "Reconectar a la partida anterior": aparece solo si hay una última partida.
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*    ReconnectButton;
+
+    // Colores de pestaña activa/inactiva.
+    UPROPERTY(EditAnywhere, Category = "Sessions") FLinearColor TabActiveColor   = FLinearColor(0.95f, 0.25f, 0.55f, 1.f);
+    UPROPERTY(EditAnywhere, Category = "Sessions") FLinearColor TabInactiveColor = FLinearColor(0.20f, 0.45f, 0.75f, 1.f);
 
     /** Clase del widget de fila. Asignar en el WBP derivado. */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sessions")
@@ -46,7 +61,17 @@ protected:
     UFUNCTION() void OnRefreshClicked();
     UFUNCTION() void OnBackClicked();
     UFUNCTION() void OnReconnectClicked();
+    UFUNCTION() void OnPublicTabClicked();
+    UFUNCTION() void OnFriendsTabClicked();
 
 private:
+    void RefreshList();          // ReadFriends + FindSessions
+    void SwitchTab(int32 Tab);
+    void ApplyTabVisual();
+    void UpdateEmptyLabels();    // muestra el cartel "no hay partidas" de la pestaña activa si está vacía
+
     UPROPERTY() UMultiplayerSessionsSubsystem* Sessions = nullptr;
+    int32 ActiveTab       = 0; // 0 = públicas, 1 = amigos
+    int32 LastPublicCount  = 0;
+    int32 LastFriendsCount = 0;
 };

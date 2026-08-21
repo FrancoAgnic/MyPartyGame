@@ -15,7 +15,6 @@
 #define PT_STEAMKEY_MATCH_TYPE         "MATCH_TYPE_s"
 #define PT_STEAMKEY_HAS_PASSWORD       "HAS_PASSWORD_b"
 #define PT_STEAMKEY_SERVER_NAME        "SERVER_NAME_s"
-#define PT_STEAMKEY_CODE_HASH          "CODE_HASH_s"
 #define PT_STEAMKEY_CUR_PLAYERS        "CUR_PLAYERS_i"
 
 // ===== FPTSteamWorldwideSearch ===============================================================
@@ -30,7 +29,7 @@ FPTSteamWorldwideSearch::~FPTSteamWorldwideSearch()
 	LobbyDataCallback.Unregister();
 }
 
-void FPTSteamWorldwideSearch::Start(int32 MaxResults, const FString& InCodeHash,
+void FPTSteamWorldwideSearch::Start(int32 MaxResults,
                                     TFunction<void(TArray<FPTLobbyEntry>&&, bool)> InCallback)
 {
 	if (!SteamMatchmaking())
@@ -51,13 +50,6 @@ void FPTSteamWorldwideSearch::Start(int32 MaxResults, const FString& InCodeHash,
 	SteamMatchmaking()->AddRequestLobbyListStringFilter(PT_STEAMKEY_MATCH_TYPE, "PartyLobby",
 	                                                    k_ELobbyComparisonEqual);
 	SteamMatchmaking()->AddRequestLobbyListFilterSlotsAvailable(1);
-
-	if (!InCodeHash.IsEmpty())
-	{
-		SteamMatchmaking()->AddRequestLobbyListStringFilter(
-			PT_STEAMKEY_CODE_HASH, TCHAR_TO_ANSI(*InCodeHash), k_ELobbyComparisonEqual);
-	}
-
 	SteamMatchmaking()->AddRequestLobbyListResultCountFilter(MaxResults);
 
 	SteamAPICall_t hCall = SteamMatchmaking()->RequestLobbyList();
@@ -130,7 +122,6 @@ void FPTSteamWorldwideSearch::OnLobbyDataUpdateInternal(LobbyDataUpdate_t* pPara
 		Entry.NumPublicConnections= FCString::Atoi(*ReadKey(PT_STEAMKEY_NUMPUBCONN));
 		Entry.NumOpenPublic       = FCString::Atoi(*ReadKey(PT_STEAMKEY_NUMOPENPUBCONN));
 		Entry.bHasPassword        = ReadKey(PT_STEAMKEY_HAS_PASSWORD) == TEXT("true");
-		Entry.CodeHash            = ReadKey(PT_STEAMKEY_CODE_HASH);
 		Entry.CurPlayers          = FCString::Atoi(*ReadKey(PT_STEAMKEY_CUR_PLAYERS)); // jugadores actuales
 
 		// P2PADDR almacena el Steam64 del host como string (ej. "76561198XXXXXXXX").

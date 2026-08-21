@@ -22,6 +22,8 @@
 #include "../PTNetStats.h"
 #include "../PTGameInstance.h"
 #include "../PTWordBank.h"
+#include "../Multiplayer/MultiplayerSessionsSubsystem.h"
+#include "../UI/PTFriendsWidget.h"
 
 bool UPTLobbyHUDWidget::Initialize()
 {
@@ -32,6 +34,9 @@ bool UPTLobbyHUDWidget::Initialize()
     if (StartGameButton) StartGameButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnStartGameClicked);
     if (ReadyButton)      ReadyButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnReadyClicked);
     if (LockerButton)     LockerButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnLockerClicked);
+    if (InviteButton)     InviteButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnInviteClicked);
+    if (FriendsOnlyCheckbox) FriendsOnlyCheckbox->OnCheckStateChanged.AddDynamic(this, &UPTLobbyHUDWidget::OnFriendsOnlyChanged);
+    if (FriendsPanel)     FriendsPanel->SetVisibility(ESlateVisibility::Collapsed);
 
     // Config de partida (host).
     if (TurnTimeMinus) TurnTimeMinus->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnTurnTimeMinus);
@@ -123,8 +128,10 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
                 // Fila = widget propio (nombre + corona si es host + check listo/no-listo teñido).
                 if (UPTPlayerRowWidget* Row = CreateWidget<UPTPlayerRowWidget>(this, PlayerRowClass))
                 {
+                    // Kick: solo lo ve el host, en filas de OTROS (no en la del propio host).
+                    const bool bCanKick = bLocalIsHost && !PTPS->bIsHost;
                     Row->SetRow(PTPS->GetDisplayNameSafe(), PTPS->bIsHost, PTPS->bIsReady,
-                                ReadyColor, NotReadyColor, MaxNameChars);
+                                ReadyColor, NotReadyColor, MaxNameChars, PTPS, bCanKick);
                     PlayersBox->AddChildToVerticalBox(Row);
                 }
             }
@@ -184,6 +191,16 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
     if (StartGameButton)
     {
         StartGameButton->SetVisibility(bLocalIsHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+    }
+
+    // Invitar: cualquier miembro puede invitar amigos a la sala. El toggle de visibilidad
+    // (pública/solo-amigos) SOLO lo ve/usa el host.
+    if (FriendsOnlyCheckbox)
+    {
+        FriendsOnlyCheckbox->SetVisibility(bLocalIsHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+        if (bLocalIsHost)
+            if (UMultiplayerSessionsSubsystem* S = GetGameInstance() ? GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>() : nullptr)
+                FriendsOnlyCheckbox->SetIsChecked(S->IsSessionFriendsOnly());
     }
 
     // Config de partida: el botón "Game Settings" lo ve solo el host. El panel se abre/cierra
@@ -257,6 +274,25 @@ void UPTLobbyHUDWidget::OnReadyClicked()
 void UPTLobbyHUDWidget::OnLockerClicked()
 {
     if (APTLobbyPlayerController* PC = Cast<APTLobbyPlayerController>(GetOwningPlayer())) PC->OpenLocker();
+}
+
+void UPTLobbyHUDWidget::OnInviteClicked()
+{
+    // Preferir el panel de amigos embebido; si no está en el WBP, caer al overlay de Steam.
+    if (FriendsPanel)
+    {
+        FriendsPanel->ShowPanel();
+        return;
+    }
+    if (UMultiplayerSessionsSubsystem* S = GetGameInstance() ? GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>() : nullptr)
+        S->ShowSteamInviteOverlay();
+}
+
+void UPTLobbyHUDWidget::OnFriendsOnlyChanged(bool bIsChecked)
+{
+    // El host cambia la visibilidad de la sala en vivo (el host ES el server → llamada directa).
+    if (UMultiplayerSessionsSubsystem* S = GetGameInstance() ? GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>() : nullptr)
+        S->SetSessionFriendsOnly(bIsChecked);
 }
 
 // ── Config de partida (host) ─────────────────────────────────────────────────

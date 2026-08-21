@@ -50,6 +50,14 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   ReadyButtonText;
     // Casillero: abre el Locker desde el lobby en sesión (al lado de Listo / Game Settings).
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      LockerButton;
+
+    // ── Invitaciones / visibilidad (SOLO host) ──────────────────────────────────
+    // Botón "Invitar": abre el panel de amigos (FriendsPanel) o, si no hay, el overlay de Steam.
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*      InviteButton;
+    // Panel de amigos embebido (deriva de PTFriendsWidget). Arranca oculto; lo muestra InviteButton.
+    UPROPERTY(meta = (BindWidgetOptional)) class UPTFriendsWidget* FriendsPanel;
+    // Toggle de visibilidad de la sala: marcado = privada solo amigos, desmarcado = pública.
+    UPROPERTY(meta = (BindWidgetOptional)) UCheckBox*    FriendsOnlyCheckbox;
     // Visible solo mientras APTGameState::CountdownSecondsRemaining >= 0.
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   CountdownText;
 
@@ -58,6 +66,8 @@ protected:
     UFUNCTION() void OnStartGameClicked();
     UFUNCTION() void OnReadyClicked();
     UFUNCTION() void OnLockerClicked();
+    UFUNCTION() void OnInviteClicked();
+    UFUNCTION() void OnFriendsOnlyChanged(bool bIsChecked);
 
     // ── Lista de jugadores (fila = widget propio) + colores de listo/no-listo ──
     UPROPERTY(EditAnywhere, Category = "Lobby") TSubclassOf<class UPTPlayerRowWidget> PlayerRowClass;

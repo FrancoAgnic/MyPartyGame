@@ -152,3 +152,16 @@ ERR_WRONG_PASSWORD,Contraseña incorrecta,Wrong password,Senha incorreta,Falsche
 ERR_CONNECT_SESSION,No se pudo conectar a la sesión,Could not connect to the game,Não foi possível conectar à partida,Verbindung zum Spiel fehlgeschlagen,Impossible de se connecter à la partie,Impossibile connettersi alla partita
 ERR_SESSION_FULL,La sala está llena,The room is full,A sala está cheia,Der Raum ist voll,Le salon est plein,La stanza è piena
 ERR_HOST_LEFT,El anfitrión cerró la partida,The host closed the game,O anfitrião encerrou a partida,Der Gastgeber hat das Spiel beendet,L'hôte a fermé la partie,L'host ha chiuso la partita
+FRIENDS_TITLE,Amigos,Friends,Amigos,Freunde,Amis,Amici
+FRIENDS_REFRESH,Actualizar,Refresh,Atualizar,Aktualisieren,Actualiser,Aggiorna
+FRIENDS_EMPTY,No hay amigos en línea,No friends online,Nenhum amigo online,Keine Freunde online,Aucun ami en ligne,Nessun amico online
+FRIENDS_STEAM_INVITE,Invitar por Steam,Invite via Steam,Convidar pela Steam,Über Steam einladen,Inviter via Steam,Invita tramite Steam
+FRIEND_STATUS_PLAYING,Jugando,In game,Jogando,Im Spiel,En jeu,In gioco
+FRIEND_STATUS_ONLINE,En línea,Online,Online,Online,En ligne,Online
+FRIEND_STATUS_OFFLINE,Desconectado,Offline,Offline,Offline,Hors ligne,Offline
+FRIEND_INVITE,Invitar,Invite,Convidar,Einladen,Inviter,Invita
+FRIEND_INVITED,Invitado,Invited,Convidado,Eingeladen,Invité,Invitato
+FIND_TAB_PUBLIC,Públicas,Public,Públicas,Öffentlich,Publiques,Pubbliche
+FIND_TAB_FRIENDS,Amigos,Friends,Amigos,Freunde,Amis,Amici
+FIND_FRIENDS_EMPTY,Ningún amigo tiene partida,No friends hosting,Nenhum amigo com partida,Keine Freunde hosten,Aucun ami n'héberge,Nessun amico ospita
+CREATE_FRIENDS_ONLY,Solo amigos,Friends only,Só amigos,Nur Freunde,Amis seulement,Solo amici

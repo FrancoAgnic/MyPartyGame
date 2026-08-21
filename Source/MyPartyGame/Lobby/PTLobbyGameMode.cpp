@@ -34,7 +34,7 @@ void APTLobbyGameMode::BeginPlay()
                 GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>())
         {
             PTGS->SessionDisplayName = Sessions->GetPendingSessionName();
-            PTGS->SessionCode        = Sessions->GetGeneratedSessionCode();
+            PTGS->SessionCode        = FString(); // ya no hay código de sesión
             const int32 M = Sessions->GetPendingMaxPlayers();
             PTGS->MaxPlayers         = (M > 0) ? M : 10; // sin sesión (PIE/local) → mostrar /10 igual
         }

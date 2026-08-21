@@ -120,6 +120,8 @@ void UPTMainMenuWidget::MenuSetup(int32 InNumPublicConnections, FString InLobbyP
         Sessions->OnCreateSessionComplete.AddUObject(this, &UPTMainMenuWidget::OnCreateSession);
         Sessions->OnFindSessionsComplete.AddUObject(this, &UPTMainMenuWidget::OnFindSessions);
         Sessions->OnJoinSessionComplete.AddUObject(this, &UPTMainMenuWidget::OnJoinSession);
+        // Invitaciones de Steam: si se acepta una estando ya en el menú, unirse enseguida.
+        Sessions->OnInviteAccepted.AddUObject(this, &UPTMainMenuWidget::OnInviteAccepted);
 
         // Botones deshabilitados hasta recibir OnLogin(true).
         if (HostButton) HostButton->SetIsEnabled(false);
@@ -230,7 +232,19 @@ void UPTMainMenuWidget::OnLogin(bool bWasSuccessful)
         {
             World->GetTimerManager().SetTimer(ErrorTextTimerHandle, this, &UPTMainMenuWidget::HideErrorText, 2.f, false);
         }
+        return;
     }
+
+    // Caso "el juego se LANZÓ desde una invitación de Steam": la invitación llegó durante el arranque
+    // y quedó en cola. Recién ahora (login OK, ya hay LocalPlayer/net id) la procesamos → join+travel.
+    if (bWasSuccessful && Sessions && Sessions->HasPendingInvite())
+        Sessions->ProcessPendingInvite();
+}
+
+void UPTMainMenuWidget::OnInviteAccepted()
+{
+    // Aceptaron una invitación con el juego ya abierto en el menú: ya estamos logueados, unirse ya.
+    if (Sessions) Sessions->ProcessPendingInvite();
 }
 
 void UPTMainMenuWidget::OnCreateSession(bool bWasSuccessful)
@@ -241,46 +255,19 @@ void UPTMainMenuWidget::OnCreateSession(bool bWasSuccessful)
         return;
     }
 
-    // Fase 5 — si la sesión es privada, copiar el código al portapapeles para compartirlo.
-    if (Sessions)
-    {
-        const FString Code = Sessions->GetGeneratedSessionCode();
-        if (!Code.IsEmpty())
-        {
-            FPlatformApplicationMisc::ClipboardCopy(*Code);
-            UE_LOG(LogTemp, Log, TEXT("[Menu] Sesión privada — código (copiado al portapapeles): %s"), *Code);
-            if (GeneratedCodeText)
-            {
-                FFormatOrderedArguments Args;
-                Args.Add(FText::FromString(Code));
-                GeneratedCodeText->SetText(PTText::Format(TEXT("MENU_CODE_COPIED"), Args));
-            }
-        }
-    }
-
     if (UWorld* World = GetWorld())
     {
         MenuTearDown();
 
-        // Host viaja al lobby como listen server. Su propia conexión local también
-        // pasa por PreLogin, así que si la sesión tiene contraseña hay que incluirla
-        // o PTLobbyGameMode::PreLogin rechaza al propio host.
+        // Host viaja al lobby como listen server. Ya no hay contraseña/código: la privacidad
+        // "solo amigos" es por visibilidad (la UI filtra), no por un gate en PreLogin.
         FString TravelURL = LobbyPath + TEXT("?listen");
         if (Sessions)
         {
-            const FString HostPassword = Sessions->GetPendingHostPassword();
-            if (!HostPassword.IsEmpty())
-            {
-                TravelURL += TEXT("?Password=") + HostPassword;
-            }
             // "Name" lo reconoce el motor nativamente (AGameModeBase::InitNewPlayer) y deja el
             // nombre real de Steam en PlayerState->GetPlayerName() antes de PostLogin.
             // No usar UrlEncode: CanServerTravel rechaza cualquier '%' en la URL (tildes/emojis
             // codificados la rompen entera) — sanitizar en su lugar (ver SanitizeNameForTravelURL).
-            // IMPORTANTE: las opciones de FURL se separan con '?', no con '&' (eso es para URLs
-            // web normales). Usar '&' acá hace que "Name=..." quede pegado como parte del VALOR
-            // de la opción anterior (p.ej. Password="XXXX&Name=Yyyy"), rompiendo la validación de
-            // contraseña en PreLogin para sesiones privadas.
             TravelURL += TEXT("?Name=") + UMultiplayerSessionsSubsystem::SanitizeNameForTravelURL(Sessions->GetLocalPlayerDisplayName());
         }
 
@@ -368,6 +355,7 @@ void UPTMainMenuWidget::MenuTearDown()
         Sessions->OnCreateSessionComplete.RemoveAll(this);
         Sessions->OnFindSessionsComplete.RemoveAll(this);
         Sessions->OnJoinSessionComplete.RemoveAll(this);
+        Sessions->OnInviteAccepted.RemoveAll(this);
     }
 
     if (UWorld* World = GetWorld())

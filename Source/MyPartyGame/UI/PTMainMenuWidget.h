@@ -106,6 +106,8 @@ protected:
     void OnCreateSession(bool bWasSuccessful);
     void OnFindSessions(const TArray<FOnlineSessionSearchResult>& Results, bool bWasSuccessful);
     void OnJoinSession(EOnJoinSessionCompleteResult::Type Result);
+    // Se aceptó una invitación de Steam estando ya en el menú: procesar el join en cola.
+    void OnInviteAccepted();
 
     void MenuTearDown();
 

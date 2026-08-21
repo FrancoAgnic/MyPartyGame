@@ -26,8 +26,9 @@ void UPTEnterCodeWidget::ShowPanel()
 
 void UPTEnterCodeWidget::OnJoinClicked()
 {
-    if (!Sessions || !CodeInput) return;
-    Sessions->JoinSessionByCode(CodeInput->GetText().ToString().ToUpper());
+    // OBSOLETO: el sistema de sesiones por código se eliminó (ahora hay Públicas y Privadas-solo-amigos).
+    // Este widget queda inerte; borrar el WBP_EnterCode y su botón "Unirse con código" del menú en el editor.
+    UE_LOG(LogTemp, Warning, TEXT("[PTEnterCode] Sesiones por código eliminadas; este panel ya no hace nada."));
 }
 
 void UPTEnterCodeWidget::OnBackClicked()

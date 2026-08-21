@@ -9,17 +9,20 @@
 #include "OnlineSessionSettings.h"              // FOnlineSessionSettings
 #include "Online/OnlineSessionNames.h"          // SEARCH_LOBBIES
 #include "Interfaces/OnlineIdentityInterface.h"
+#include "Interfaces/OnlineFriendsInterface.h"  // IOnlineFriends / FOnlineFriend / EFriendsLists
+#include "Interfaces/OnlineExternalUIInterface.h" // ShowInviteUI (overlay de Steam)
+#include "Interfaces/OnlinePresenceInterface.h" // FOnlineUserPresence
 #include "Misc/SecureHash.h"                    // FMD5
 
 DEFINE_LOG_CATEGORY_STATIC(LogPTSessions, Log, All);
 
 // --- Claves de settings de sesión ---
 const FName UMultiplayerSessionsSubsystem::KEY_SERVER_NAME  = FName("SERVER_NAME");
-const FName UMultiplayerSessionsSubsystem::KEY_HAS_PASSWORD = FName("HAS_PASSWORD");
+const FName UMultiplayerSessionsSubsystem::KEY_HAS_PASSWORD = FName("HAS_PASSWORD"); // = privada solo amigos
 const FName UMultiplayerSessionsSubsystem::KEY_CUR_PLAYERS  = FName("CUR_PLAYERS");
 const FName UMultiplayerSessionsSubsystem::KEY_MATCH_TYPE   = FName("MATCH_TYPE");
-const FName UMultiplayerSessionsSubsystem::KEY_CODE_HASH    = FName("CODE_HASH");
 const FName UMultiplayerSessionsSubsystem::KEY_LOBBY_ID     = FName("PT_LOBBY_ID");
+const FName UMultiplayerSessionsSubsystem::KEY_OWNER_ID     = FName("PT_OWNER_ID");
 
 // ==========================================================================
 // Lifecycle
@@ -35,6 +38,16 @@ void UMultiplayerSessionsSubsystem::Initialize(FSubsystemCollectionBase& Collect
     {
         SessionInterface = Subsystem->GetSessionInterface();
         UE_LOG(LogPTSessions, Log, TEXT("OSS activo: %s"), *Subsystem->GetSubsystemName().ToString());
+
+        // Invitaciones de Steam: registrar YA (en el arranque) el delegate de "invitación aceptada".
+        // Si el juego se LANZA desde una invitación, Steam dispara esto apenas termina de iniciar,
+        // así que tiene que estar registrado antes de que aparezca el menú. Ver ProcessPendingInvite.
+        if (SessionInterface.IsValid())
+        {
+            SessionInviteAcceptedHandle = SessionInterface->AddOnSessionUserInviteAcceptedDelegate_Handle(
+                FOnSessionUserInviteAcceptedDelegate::CreateUObject(
+                    this, &UMultiplayerSessionsSubsystem::HandleSessionUserInviteAccepted));
+        }
     }
     else
     {
@@ -82,6 +95,7 @@ void UMultiplayerSessionsSubsystem::Deinitialize()
         SessionInterface->ClearOnJoinSessionCompleteDelegate_Handle(JoinSessionCompleteHandle);
         SessionInterface->ClearOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteHandle);
         SessionInterface->ClearOnStartSessionCompleteDelegate_Handle(StartSessionCompleteHandle);
+        SessionInterface->ClearOnSessionUserInviteAcceptedDelegate_Handle(SessionInviteAcceptedHandle);
     }
 
     Super::Deinitialize();
@@ -120,18 +134,6 @@ FString UMultiplayerSessionsSubsystem::GetLocalPlayerDisplayName() const
         }
     }
     return TEXT("Player");
-}
-
-FString UMultiplayerSessionsSubsystem::GenerateSessionCode()
-{
-    // Alfabeto sin caracteres ambiguos (sin I/L/O/0/1) para que sea fácil de dictar/transcribir.
-    static const FString Alphabet = TEXT("ABCDEFGHJKMNPQRSTUVWXYZ23456789");
-    FString Code;
-    for (int32 i = 0; i < 6; ++i)
-    {
-        Code.AppendChar(Alphabet[FMath::RandRange(0, Alphabet.Len() - 1)]);
-    }
-    return Code;
 }
 
 // ==========================================================================
@@ -217,7 +219,7 @@ void UMultiplayerSessionsSubsystem::HandleLoginComplete(
 // CREATE SESSION
 // ==========================================================================
 
-void UMultiplayerSessionsSubsystem::CreateSession(int32 NumPublicConnections, bool bPrivate)
+void UMultiplayerSessionsSubsystem::CreateSession(int32 NumPublicConnections, bool bFriendsOnly)
 {
     if (!GetSessions().IsValid())
     {
@@ -236,8 +238,9 @@ void UMultiplayerSessionsSubsystem::CreateSession(int32 NumPublicConnections, bo
     PendingNumPublicConnections = FMath::Clamp(NumPublicConnections, MinPlayersAllowed, MaxPlayersAllowed);
     // El nombre de sala no lo tipea el usuario: es el nombre de Steam del host.
     PendingSessionName          = GetLocalPlayerDisplayName();
-    // Fase 5 — el código nunca lo escribe el usuario: se genera acá si la sesión es privada.
-    PendingPassword             = bPrivate ? GenerateSessionCode() : FString();
+    // Visibilidad: pública o privada-solo-amigos. Ya NO hay código/contraseña.
+    bPendingFriendsOnly         = bFriendsOnly;
+    PendingPassword             = FString(); // inerte (se sacó el sistema de código)
 
     WorldwideConnectURL.Reset(); // limpiar URL de join previo al crear una sesión nueva
 
@@ -267,24 +270,20 @@ void UMultiplayerSessionsSubsystem::InternalCreateSession()
     LastSessionSettings->bUsesPresence          = !bIsNULL;
     LastSessionSettings->bUseLobbiesIfAvailable = !bIsNULL;
     LastSessionSettings->bAllowJoinViaPresence  = !bIsNULL;
+    // Invitaciones nativas de Steam (overlay "Invitar amigo" + "Unirse a partida" desde la lista de
+    // amigos). No quita nada de lo público ni del código; solo agrega el camino de invitación directa.
+    LastSessionSettings->bAllowInvites          = !bIsNULL;
     LastSessionSettings->BuildUniqueId          = 1;
 
     // Nombre visible elegido por el usuario (el FName interno siempre es NAME_GameSession)
     LastSessionSettings->Set(KEY_SERVER_NAME, PendingSessionName,
         EOnlineDataAdvertisementType::ViaOnlineService);
 
-    // Solo se publica si es privada (booleano), NUNCA el código real
-    const bool bIsPrivate = !PendingPassword.IsEmpty();
-    LastSessionSettings->Set(KEY_HAS_PASSWORD, bIsPrivate,
+    // Visibilidad: true = privada solo amigos (pestaña Amigos), false = pública (pestaña Públicas).
+    // Se anuncia SIEMPRE (también las de amigos): así tus amigos la ven en su Find Game; el filtrado
+    // por pestaña + por relación de amistad lo hace la UI. Ya no hay contraseña.
+    LastSessionSettings->Set(KEY_HAS_PASSWORD, bPendingFriendsOnly,
         EOnlineDataAdvertisementType::ViaOnlineService);
-
-    // Fase 5 — hash del código para que JoinSessionByCode pueda reconocer la sesión correcta
-    // entre todos los resultados sin que el código viaje en claro por la red de matchmaking.
-    if (bIsPrivate)
-    {
-        LastSessionSettings->Set(KEY_CODE_HASH, HashPassword(PendingPassword),
-            EOnlineDataAdvertisementType::ViaOnlineService);
-    }
 
     // Clave de tipo para filtrar en búsquedas (solo sesiones de este template)
     LastSessionSettings->Set(KEY_MATCH_TYPE, FString("PartyLobby"),
@@ -337,37 +336,14 @@ void UMultiplayerSessionsSubsystem::HandleCreateSessionComplete(FName SessionNam
 
 void UMultiplayerSessionsSubsystem::FindSessions(int32 MaxSearchResults)
 {
-    bSearchingByCode = false;
     InternalFindSessions(MaxSearchResults);
-}
-
-void UMultiplayerSessionsSubsystem::JoinSessionByCode(const FString& Code)
-{
-    if (Code.IsEmpty())
-    {
-        UE_LOG(LogPTSessions, Warning, TEXT("JoinSessionByCode: código vacío."));
-        OnJoinSessionComplete.Broadcast(EOnJoinSessionCompleteResult::SessionDoesNotExist);
-        return;
-    }
-
-    PendingJoinCode  = Code;
-    bSearchingByCode = true;
-    InternalFindSessions(50); // suficientes resultados para encontrar la sesión por código
 }
 
 void UMultiplayerSessionsSubsystem::InternalFindSessions(int32 MaxSearchResults)
 {
     auto BroadcastFailure = [this]()
     {
-        if (bSearchingByCode)
-        {
-            bSearchingByCode = false;
-            OnJoinSessionComplete.Broadcast(EOnJoinSessionCompleteResult::UnknownError);
-        }
-        else
-        {
-            OnFindSessionsComplete.Broadcast({}, false);
-        }
+        OnFindSessionsComplete.Broadcast({}, false);
     };
 
     if (!bIsLoggedIn)
@@ -383,31 +359,19 @@ void UMultiplayerSessionsSubsystem::InternalFindSessions(int32 MaxSearchResults)
     // (misma región / regiones cercanas) y no expone ningún override.
     if (!IsUsingNullSubsystem() && SteamMatchmaking())
     {
-        const bool   bByCode  = bSearchingByCode;
-        const FString CodeHash = bByCode ? HashPassword(PendingJoinCode) : FString();
-
-        UE_LOG(LogPTSessions, Log, TEXT("FindSessions: usando búsqueda worldwide directa (Steam). bByCode=%s"),
-            bByCode ? TEXT("SÍ") : TEXT("NO"));
+        UE_LOG(LogPTSessions, Log, TEXT("FindSessions: usando búsqueda worldwide directa (Steam)."));
 
         delete WorldwideSearch;
         WorldwideSearch = new FPTSteamWorldwideSearch();
-        WorldwideSearch->Start(MaxSearchResults, CodeHash,
-            [this, bByCode](TArray<FPTLobbyEntry>&& Entries, bool bOk)
+        WorldwideSearch->Start(MaxSearchResults,
+            [this](TArray<FPTLobbyEntry>&& Entries, bool bOk)
             {
                 delete WorldwideSearch; WorldwideSearch = nullptr;
 
                 if (!bOk)
                 {
                     UE_LOG(LogPTSessions, Warning, TEXT("FindSessions (worldwide): búsqueda fallida."));
-                    if (bByCode)
-                    {
-                        bSearchingByCode = false;
-                        OnJoinSessionComplete.Broadcast(EOnJoinSessionCompleteResult::UnknownError);
-                    }
-                    else
-                    {
-                        OnFindSessionsComplete.Broadcast({}, false);
-                    }
+                    OnFindSessionsComplete.Broadcast({}, false);
                     return;
                 }
 
@@ -424,8 +388,9 @@ void UMultiplayerSessionsSubsystem::InternalFindSessions(int32 MaxSearchResults)
                     R.Session.NumOpenPublicConnections           = E.NumOpenPublic;
                     R.Session.SessionSettings.Set(KEY_SERVER_NAME,  E.Name,         EOnlineDataAdvertisementType::DontAdvertise);
                     R.Session.SessionSettings.Set(KEY_HAS_PASSWORD, E.bHasPassword, EOnlineDataAdvertisementType::DontAdvertise);
-                    R.Session.SessionSettings.Set(KEY_CODE_HASH,    E.CodeHash,     EOnlineDataAdvertisementType::DontAdvertise);
                     R.Session.SessionSettings.Set(KEY_CUR_PLAYERS,  E.CurPlayers,   EOnlineDataAdvertisementType::DontAdvertise);
+                    // SteamID del host (dueño de la sesión) → lo usa la pestaña Amigos para filtrar.
+                    R.Session.SessionSettings.Set(KEY_OWNER_ID,     E.P2PAddr,      EOnlineDataAdvertisementType::DontAdvertise);
                     // Guardar lobby ID como string para que InternalJoinByLobbyId lo lea.
                     R.Session.SessionSettings.Set(KEY_LOBBY_ID,
                         FString::Printf(TEXT("%llu"), E.LobbyId),
@@ -433,35 +398,10 @@ void UMultiplayerSessionsSubsystem::InternalFindSessions(int32 MaxSearchResults)
                     Results.Add(MoveTemp(R));
                 }
 
-                if (bByCode)
-                {
-                    bSearchingByCode = false;
-                    const FString Code = PendingJoinCode;
-                    PendingJoinCode.Reset();
-                    const FString WantedHash = HashPassword(Code);
-
-                    for (const FOnlineSessionSearchResult& R : Results)
-                    {
-                        FString StoredHash;
-                        R.Session.SessionSettings.Get(KEY_CODE_HASH, StoredHash);
-                        if (StoredHash == WantedHash)
-                        {
-                            UE_LOG(LogPTSessions, Log, TEXT("JoinSessionByCode (worldwide): código válido, uniendo..."));
-                            JoinSession(R, Code);
-                            return;
-                        }
-                    }
-
-                    UE_LOG(LogPTSessions, Log, TEXT("JoinSessionByCode (worldwide): código sin coincidencia."));
-                    OnJoinSessionComplete.Broadcast(EOnJoinSessionCompleteResult::SessionDoesNotExist);
-                }
-                else
-                {
 #if !UE_BUILD_SHIPPING
-                    CachedSearchResults = Results;
+                CachedSearchResults = Results;
 #endif
-                    OnFindSessionsComplete.Broadcast(Results, true);
-                }
+                OnFindSessionsComplete.Broadcast(Results, true);
             });
         return;
     }
@@ -510,34 +450,6 @@ void UMultiplayerSessionsSubsystem::HandleFindSessionsComplete(bool bWasSuccessf
     if (GetSessions().IsValid())
     {
         GetSessions()->ClearOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteHandle);
-    }
-
-    // Fase 5 — esta búsqueda era para JoinSessionByCode: matchear por hash y unirse directo,
-    // sin pasar por el delegate de lista (OnFindSessionsComplete) que usa el browse público.
-    if (bSearchingByCode)
-    {
-        bSearchingByCode = false;
-        const FString Code = PendingJoinCode;
-        PendingJoinCode.Reset();
-        const FString WantedHash = HashPassword(Code);
-
-        if (LastSessionSearch.IsValid())
-        {
-            for (const FOnlineSessionSearchResult& R : LastSessionSearch->SearchResults)
-            {
-                FString StoredHash;
-                if (R.Session.SessionSettings.Get(KEY_CODE_HASH, StoredHash) && StoredHash == WantedHash)
-                {
-                    UE_LOG(LogPTSessions, Log, TEXT("JoinSessionByCode: código válido, uniendo..."));
-                    JoinSession(R, Code);
-                    return;
-                }
-            }
-        }
-
-        UE_LOG(LogPTSessions, Log, TEXT("JoinSessionByCode: ningún resultado coincide con el código."));
-        OnJoinSessionComplete.Broadcast(EOnJoinSessionCompleteResult::SessionDoesNotExist);
-        return;
     }
 
     if (!LastSessionSearch.IsValid() || LastSessionSearch->SearchResults.Num() == 0)
@@ -659,6 +571,155 @@ void UMultiplayerSessionsSubsystem::HandleJoinSessionComplete(
     OnJoinSessionComplete.Broadcast(Result);
     // El ClientTravel (con ?Password=...) lo hace quien escuche este delegate (Fase 3),
     // usando GetResolvedConnectString() + GetPendingJoinPassword().
+}
+
+// ==========================================================================
+// INVITACIONES DE STEAM (aceptar + invitar + overlay)
+// ==========================================================================
+
+void UMultiplayerSessionsSubsystem::HandleSessionUserInviteAccepted(
+    const bool bWasSuccessful, const int32 ControllerId,
+    FUniqueNetIdPtr UserId, const FOnlineSessionSearchResult& InviteResult)
+{
+    if (!bWasSuccessful || !InviteResult.IsValid())
+    {
+        UE_LOG(LogPTSessions, Warning, TEXT("Invitación aceptada pero inválida (ok=%s, result válido=%s)."),
+            bWasSuccessful ? TEXT("sí") : TEXT("no"), InviteResult.IsValid() ? TEXT("sí") : TEXT("no"));
+        return;
+    }
+
+    // Guardar en cola: NO unirse acá. El join+travel lo dispara la UI del menú llamando a
+    // ProcessPendingInvite() — así funciona tanto si el juego ya está en el menú (escucha
+    // OnInviteAccepted) como si recién se lanzó desde la invitación (el menú lo procesa al construirse).
+    PendingInviteResult = MakeShared<FOnlineSessionSearchResult>(InviteResult);
+    bHasPendingInvite   = true;
+    UE_LOG(LogPTSessions, Log, TEXT("Invitación de Steam aceptada — encolada para unirse (%s)."),
+        *GetServerNameFromResult(InviteResult));
+
+    OnInviteAccepted.Broadcast();
+}
+
+void UMultiplayerSessionsSubsystem::ProcessPendingInvite()
+{
+    if (!bHasPendingInvite || !PendingInviteResult.IsValid()) return;
+
+    // Consumir la cola (idempotente: si se llama dos veces, la segunda no hace nada).
+    bHasPendingInvite = false;
+    const TSharedPtr<FOnlineSessionSearchResult> R = PendingInviteResult;
+    PendingInviteResult.Reset();
+
+    UE_LOG(LogPTSessions, Log, TEXT("Procesando invitación en cola → uniéndose a %s."),
+        *GetServerNameFromResult(*R));
+
+    // Sin contraseña: la invitación ya autoriza. JoinSession dispara OnJoinSessionComplete →
+    // el menú viaja con GetResolvedConnectString().
+    JoinSession(*R, FString());
+}
+
+void UMultiplayerSessionsSubsystem::ShowSteamInviteOverlay()
+{
+    IOnlineSubsystem* Subsystem = Online::GetSubsystem(GetWorld());
+    if (!Subsystem)
+    {
+        UE_LOG(LogPTSessions, Warning, TEXT("ShowSteamInviteOverlay: sin OnlineSubsystem."));
+        return;
+    }
+    if (IOnlineExternalUIPtr ExternalUI = Subsystem->GetExternalUIInterface())
+    {
+        // Abre el panel de amigos del overlay de Steam en modo "invitar a la sesión".
+        ExternalUI->ShowInviteUI(0, NAME_GameSession);
+    }
+    else
+    {
+        UE_LOG(LogPTSessions, Warning, TEXT("ShowSteamInviteOverlay: sin ExternalUI (¿overlay de Steam deshabilitado?)."));
+    }
+}
+
+void UMultiplayerSessionsSubsystem::InviteFriend(const FString& FriendUserId)
+{
+    if (!GetSessions().IsValid()) return;
+    const FUniqueNetIdPtr* Found = FriendIdMap.Find(FriendUserId);
+    if (!Found || !Found->IsValid())
+    {
+        UE_LOG(LogPTSessions, Warning, TEXT("InviteFriend: no se encontró el net id de %s (¿releer amigos?)."), *FriendUserId);
+        return;
+    }
+    const ULocalPlayer* LP = GetWorld() ? GetWorld()->GetFirstLocalPlayerFromController() : nullptr;
+    if (!LP) return;
+
+    if (GetSessions()->SendSessionInviteToFriend(*LP->GetPreferredUniqueNetId(), NAME_GameSession, **Found))
+    {
+        UE_LOG(LogPTSessions, Log, TEXT("Invitación enviada a %s."), *FriendUserId);
+    }
+    else
+    {
+        UE_LOG(LogPTSessions, Warning, TEXT("InviteFriend: SendSessionInviteToFriend devolvió false."));
+    }
+}
+
+// ==========================================================================
+// LISTA DE AMIGOS
+// ==========================================================================
+
+void UMultiplayerSessionsSubsystem::ReadFriends()
+{
+    IOnlineSubsystem* Subsystem = Online::GetSubsystem(GetWorld());
+    IOnlineFriendsPtr Friends = Subsystem ? Subsystem->GetFriendsInterface() : nullptr;
+    if (!Friends.IsValid())
+    {
+        UE_LOG(LogPTSessions, Warning, TEXT("ReadFriends: sin FriendsInterface (¿NULL subsystem/LAN?)."));
+        CachedFriends.Reset();
+        FriendIdMap.Reset();
+        OnFriendsListUpdated.Broadcast();
+        return;
+    }
+
+    Friends->ReadFriendsList(0, EFriendsLists::ToString(EFriendsLists::Default),
+        FOnReadFriendsListComplete::CreateUObject(this, &UMultiplayerSessionsSubsystem::HandleReadFriendsComplete));
+}
+
+void UMultiplayerSessionsSubsystem::HandleReadFriendsComplete(
+    int32 LocalUserNum, bool bWasSuccessful, const FString& ListName, const FString& ErrorStr)
+{
+    CachedFriends.Reset();
+    FriendIdMap.Reset();
+
+    IOnlineSubsystem* Subsystem = Online::GetSubsystem(GetWorld());
+    IOnlineFriendsPtr Friends = Subsystem ? Subsystem->GetFriendsInterface() : nullptr;
+
+    if (bWasSuccessful && Friends.IsValid())
+    {
+        TArray<TSharedRef<FOnlineFriend>> List;
+        Friends->GetFriendsList(0, ListName, List);
+        for (const TSharedRef<FOnlineFriend>& F : List)
+        {
+            const FOnlineUserPresence& P = F->GetPresence();
+            FPTFriendInfo Info;
+            Info.DisplayName      = F->GetDisplayName();
+            Info.UserId           = F->GetUserId()->ToString();
+            Info.bOnline          = P.bIsOnline;
+            Info.bPlayingThisGame = P.bIsPlayingThisGame;
+            Info.bJoinable        = P.bIsJoinable;
+            CachedFriends.Add(Info);
+            FriendIdMap.Add(Info.UserId, F->GetUserId());
+        }
+
+        // Orden: los que están jugando Sculpturillo primero, luego online, luego offline.
+        CachedFriends.Sort([](const FPTFriendInfo& A, const FPTFriendInfo& B)
+        {
+            auto Rank = [](const FPTFriendInfo& X) { return X.bPlayingThisGame ? 0 : (X.bOnline ? 1 : 2); };
+            const int32 RA = Rank(A), RB = Rank(B);
+            if (RA != RB) return RA < RB;
+            return A.DisplayName < B.DisplayName;
+        });
+    }
+    else
+    {
+        UE_LOG(LogPTSessions, Warning, TEXT("ReadFriends falló: %s"), *ErrorStr);
+    }
+
+    UE_LOG(LogPTSessions, Log, TEXT("Amigos leídos: %d"), CachedFriends.Num());
+    OnFriendsListUpdated.Broadcast();
 }
 
 // ==========================================================================
@@ -787,9 +848,30 @@ FString UMultiplayerSessionsSubsystem::GetServerNameFromResult(const FOnlineSess
 
 bool UMultiplayerSessionsSubsystem::GetHasPasswordFromResult(const FOnlineSessionSearchResult& Result)
 {
-    bool bHas = false;
-    Result.Session.SessionSettings.Get(KEY_HAS_PASSWORD, bHas);
-    return bHas;
+    // Compat: KEY_HAS_PASSWORD ahora significa "privada solo amigos".
+    return GetIsFriendsOnlyFromResult(Result);
+}
+
+bool UMultiplayerSessionsSubsystem::GetIsFriendsOnlyFromResult(const FOnlineSessionSearchResult& Result)
+{
+    bool bFriendsOnly = false;
+    Result.Session.SessionSettings.Get(KEY_HAS_PASSWORD, bFriendsOnly);
+    return bFriendsOnly;
+}
+
+FString UMultiplayerSessionsSubsystem::GetOwnerSteamIdFromResult(const FOnlineSessionSearchResult& Result)
+{
+    // Los resultados de la búsqueda worldwide guardan el SteamID del host en KEY_OWNER_ID.
+    FString OwnerId;
+    if (Result.Session.SessionSettings.Get(KEY_OWNER_ID, OwnerId) && !OwnerId.IsEmpty())
+        return OwnerId;
+    // Ruta estándar (NULL/LAN): el engine llena OwningUserId.
+    return Result.Session.OwningUserId.IsValid() ? Result.Session.OwningUserId->ToString() : FString();
+}
+
+bool UMultiplayerSessionsSubsystem::IsFriendSteamId(const FString& SteamId) const
+{
+    return !SteamId.IsEmpty() && FriendIdMap.Contains(SteamId);
 }
 
 int32 UMultiplayerSessionsSubsystem::GetCurrentPlayersFromResult(const FOnlineSessionSearchResult& Result)
@@ -798,6 +880,19 @@ int32 UMultiplayerSessionsSubsystem::GetCurrentPlayersFromResult(const FOnlineSe
     if (Result.Session.SessionSettings.Get(KEY_CUR_PLAYERS, Cur) && Cur > 0)
         return Cur;
     return -1; // no vino la clave → el que llama usa el fallback (Max - Open)
+}
+
+void UMultiplayerSessionsSubsystem::SetSessionFriendsOnly(bool bFriendsOnly)
+{
+    bPendingFriendsOnly = bFriendsOnly;
+    if (!LastSessionSettings.IsValid()) return; // solo el host tiene los settings creados
+    IOnlineSessionPtr S = GetSessions();
+    if (!S.IsValid()) return;
+
+    LastSessionSettings->Set(KEY_HAS_PASSWORD, bFriendsOnly, EOnlineDataAdvertisementType::ViaOnlineService);
+    S->UpdateSession(NAME_GameSession, *LastSessionSettings, /*bShouldRefreshOnlineData=*/true);
+    UE_LOG(LogPTSessions, Log, TEXT("SetSessionFriendsOnly: sesión ahora %s."),
+        bFriendsOnly ? TEXT("privada (solo amigos)") : TEXT("pública"));
 }
 
 void UMultiplayerSessionsSubsystem::UpdateAdvertisedPlayerCount(int32 CurrentPlayers)
@@ -890,18 +985,6 @@ void UMultiplayerSessionsSubsystem::RegisterDebugCommands()
         }),
         ECVF_Default);
 
-    // PT.Debug.JoinByCode [Código]
-    DebugCmd_JoinByCode = IConsoleManager::Get().RegisterConsoleCommand(
-        TEXT("PT.Debug.JoinByCode"),
-        TEXT("[Fase5 Debug] Buscar y unirse a una sesión privada por su código."),
-        FConsoleCommandWithArgsDelegate::CreateLambda([this](const TArray<FString>& Args)
-        {
-            const FString Code = Args.Num() > 0 ? Args[0] : TEXT("");
-            UE_LOG(LogPTSessions, Log, TEXT("[Debug] JoinSessionByCode(%s)"), *Code);
-            JoinSessionByCode(Code);
-        }),
-        ECVF_Default);
-
     // PT.Debug.Destroy
     DebugCmd_DestroySession = IConsoleManager::Get().RegisterConsoleCommand(
         TEXT("PT.Debug.Destroy"),
@@ -910,7 +993,7 @@ void UMultiplayerSessionsSubsystem::RegisterDebugCommands()
         ECVF_Default);
 
     UE_LOG(LogPTSessions, Log,
-        TEXT("Comandos de debug registrados: PT.Debug.Login | PT.Debug.Create | PT.Debug.Find | PT.Debug.Join | PT.Debug.JoinByCode | PT.Debug.Destroy"));
+        TEXT("Comandos de debug registrados: PT.Debug.Login | PT.Debug.Create | PT.Debug.Find | PT.Debug.Join | PT.Debug.Destroy"));
 }
 
 void UMultiplayerSessionsSubsystem::UnregisterDebugCommands()
@@ -931,7 +1014,6 @@ void UMultiplayerSessionsSubsystem::UnregisterDebugCommands()
     Unreg(DebugCmd_CreateSession,  TEXT("PT.Debug.Create"));
     Unreg(DebugCmd_FindSessions,   TEXT("PT.Debug.Find"));
     Unreg(DebugCmd_JoinSession,    TEXT("PT.Debug.Join"));
-    Unreg(DebugCmd_JoinByCode,     TEXT("PT.Debug.JoinByCode"));
     Unreg(DebugCmd_DestroySession, TEXT("PT.Debug.Destroy"));
 }
 

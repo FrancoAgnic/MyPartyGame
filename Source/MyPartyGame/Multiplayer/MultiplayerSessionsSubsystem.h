@@ -20,6 +20,27 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(FPTOnFindSessionsComplete,
 DECLARE_MULTICAST_DELEGATE_OneParam(FPTOnJoinSessionComplete,    EOnJoinSessionCompleteResult::Type /*Result*/);
 DECLARE_MULTICAST_DELEGATE_OneParam(FPTOnDestroySessionComplete, bool /*bWasSuccessful*/);
 DECLARE_MULTICAST_DELEGATE_OneParam(FPTOnStartSessionComplete,   bool /*bWasSuccessful*/);
+// Se aceptó una invitación de Steam (overlay o "Unirse a partida"). La UI del menú lo escucha
+// para procesar el join en cola. Ver ProcessPendingInvite().
+DECLARE_MULTICAST_DELEGATE(FPTOnInviteAccepted);
+// La lista de amigos terminó de leerse (ReadFriends). La UI relee GetFriends() y repinta.
+DECLARE_MULTICAST_DELEGATE(FPTOnFriendsListUpdated);
+
+// -------------------------------------------------------------------
+// Info de un amigo de Steam para la UI (sin exponer tipos de OSS hacia afuera).
+// -------------------------------------------------------------------
+USTRUCT(BlueprintType)
+struct FPTFriendInfo
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category="Friends") FString DisplayName;
+    // String del FUniqueNetId — se usa para invitar (InviteFriend). Opaco para la UI.
+    UPROPERTY(BlueprintReadOnly, Category="Friends") FString UserId;
+    UPROPERTY(BlueprintReadOnly, Category="Friends") bool bOnline          = false;
+    UPROPERTY(BlueprintReadOnly, Category="Friends") bool bPlayingThisGame = false;
+    UPROPERTY(BlueprintReadOnly, Category="Friends") bool bJoinable        = false;
+};
 
 // -------------------------------------------------------------------
 
@@ -43,20 +64,23 @@ public:
     static constexpr int32 MinPlayersAllowed = 2;
     static constexpr int32 MaxPlayersAllowed = 10;
 
-    // Fase 5 — bPrivate=true genera un código aleatorio internamente (ver GetGeneratedSessionCode);
-    // bPrivate=false crea una sesión pública sin código, visible en FindSessions sin filtrar.
+    // Visibilidad de la sesión (reemplaza al viejo sistema de código):
+    //   bFriendsOnly=false → PÚBLICA: aparece en la pestaña "Públicas" del Find Game; cualquiera entra.
+    //   bFriendsOnly=true  → PRIVADA SOLO AMIGOS: aparece solo en la pestaña "Amigos" (para tus amigos)
+    //                        y ellos entran directo (sin request). No lleva contraseña.
     // El nombre de la sala no se pasa: se toma del nombre de Steam del host (GetLocalPlayerDisplayName).
-    void CreateSession(int32 NumPublicConnections, bool bPrivate);
+    void CreateSession(int32 NumPublicConnections, bool bFriendsOnly);
     void FindSessions(int32 MaxSearchResults);
     void JoinSession(const FOnlineSessionSearchResult& SessionResult, const FString& Password);
 
-    // Fase 5 — busca entre las sesiones anunciadas la que coincide con este código de invitación
-    // y, si la encuentra, se une directamente (sin pasar por una lista visible).
-    // Si no hay coincidencia, OnJoinSessionComplete dispara con SessionDoesNotExist.
-    void JoinSessionByCode(const FString& Code);
-
     void DestroySession();
     void StartSession();
+
+    // El HOST cambia la visibilidad de la sesión YA CREADA (lobby → opciones): re-publica la sesión.
+    // true = privada solo amigos, false = pública. Solo tiene efecto en el host (tiene los settings).
+    void SetSessionFriendsOnly(bool bFriendsOnly);
+    // Visibilidad actual de la sesión propia (para inicializar el toggle del host).
+    bool IsSessionFriendsOnly() const { return bPendingFriendsOnly; }
 
     // Destruye una sesión que haya quedado REGISTRADA localmente de una partida anterior.
     // Llamar al mostrar el menú principal: ahí nunca debería haber sesión activa.
@@ -80,13 +104,15 @@ public:
     FString GetLocalPlayerDisplayName() const;
     bool    IsLoggedIn()                const { return bIsLoggedIn;          }
 
-    // Fase 5 — código de invitación recién generado para la sesión propia (vacío si es pública).
-    // Mostrar al host tras OnCreateSessionComplete(true) para que lo copie y comparta.
-    FString GetGeneratedSessionCode()   const { return PendingPassword;      }
-
     // Helpers estáticos para leer settings de un resultado de búsqueda
     static FString GetServerNameFromResult(const FOnlineSessionSearchResult& Result);
     static bool    GetHasPasswordFromResult(const FOnlineSessionSearchResult& Result);
+    // true si la sesión es PRIVADA SOLO AMIGOS (la usa el Find Game para separar las 2 pestañas).
+    static bool    GetIsFriendsOnlyFromResult(const FOnlineSessionSearchResult& Result);
+    // SteamID (string) del host/dueño de la sesión — para saber si es amigo nuestro (pestaña Amigos).
+    static FString GetOwnerSteamIdFromResult(const FOnlineSessionSearchResult& Result);
+    // true si ese SteamID está en nuestra lista de amigos (requiere ReadFriends previo).
+    bool           IsFriendSteamId(const FString& SteamId) const;
     // Jugadores actuales anunciados por el host (clave propia CUR_PLAYERS). Devuelve -1 si el resultado
     // no la trae (ahí el que llama cae al fallback NumPublicConnections - NumOpenPublicConnections).
     static int32   GetCurrentPlayersFromResult(const FOnlineSessionSearchResult& Result);
@@ -107,6 +133,27 @@ public:
     bool DoesHostPasswordMatch(const FString& Attempt) const;
 
     // ------------------------------------------------------------------
+    // Invitaciones nativas de Steam (conviven con el código y las públicas)
+    // ------------------------------------------------------------------
+    // Abre el panel "invitar amigos" del overlay de Steam para la sesión actual (camino simple,
+    // no necesita lista propia). Útil como botón "Invitar por Steam".
+    void ShowSteamInviteOverlay();
+
+    // Invita a un amigo puntual a la sesión actual, por su UserId (el de FPTFriendInfo).
+    void InviteFriend(const FString& FriendUserId);
+
+    // Procesa una invitación aceptada que quedó EN COLA (join + travel lo hace quien escuche
+    // OnJoinSessionComplete). La llama la UI del menú: en su NativeConstruct (caso "lanzado desde
+    // la invitación") y al recibir OnInviteAccepted (caso "juego ya abierto en el menú").
+    void ProcessPendingInvite();
+    bool HasPendingInvite() const { return bHasPendingInvite; }
+
+    // Pide a Steam la lista de amigos; al terminar dispara OnFriendsListUpdated y GetFriends()
+    // queda actualizado. Repetir para refrescar estados (online / jugando / joinable).
+    void ReadFriends();
+    const TArray<FPTFriendInfo>& GetFriends() const { return CachedFriends; }
+
+    // ------------------------------------------------------------------
     // Delegates hacia la UI — suscribirse a estos, no a los de OSS
     // ------------------------------------------------------------------
     FPTOnLoginComplete           OnLoginComplete;
@@ -115,6 +162,8 @@ public:
     FPTOnJoinSessionComplete     OnJoinSessionComplete;
     FPTOnDestroySessionComplete  OnDestroySessionComplete;
     FPTOnStartSessionComplete    OnStartSessionComplete;
+    FPTOnInviteAccepted          OnInviteAccepted;
+    FPTOnFriendsListUpdated      OnFriendsListUpdated;
 
 protected:
     // Callbacks que OSS invoca internamente
@@ -125,6 +174,12 @@ protected:
     void HandleJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result);
     void HandleDestroySessionComplete(FName SessionName, bool bWasSuccessful);
     void HandleStartSessionComplete(FName SessionName, bool bWasSuccessful);
+    // Steam avisa que se aceptó una invitación (overlay) o "Unirse a partida" de la lista de amigos.
+    void HandleSessionUserInviteAccepted(const bool bWasSuccessful, const int32 ControllerId,
+        FUniqueNetIdPtr UserId, const FOnlineSessionSearchResult& InviteResult);
+    // La lectura de la lista de amigos terminó.
+    void HandleReadFriendsComplete(int32 LocalUserNum, bool bWasSuccessful,
+        const FString& ListName, const FString& ErrorStr);
 
 private:
     // Interfaz de sesiones (única referencia a OSS en todo el proyecto)
@@ -141,27 +196,32 @@ private:
     FDelegateHandle JoinSessionCompleteHandle;
     FDelegateHandle DestroySessionCompleteHandle;
     FDelegateHandle StartSessionCompleteHandle;
+    FDelegateHandle SessionInviteAcceptedHandle;
+
+    // Invitación aceptada que espera a que la UI del menú la procese (join+travel).
+    bool bHasPendingInvite = false;
+    TSharedPtr<FOnlineSessionSearchResult> PendingInviteResult;
+
+    // Amigos leídos por ReadFriends (para la UI) + mapa UserId→net id para poder invitar.
+    TArray<FPTFriendInfo> CachedFriends;
+    TMap<FString, FUniqueNetIdPtr> FriendIdMap;
 
     // Estado interno
     bool    bIsLoggedIn               = false;
     bool    bCreateSessionOnDestroy   = false;  // si había sesión vieja, destruir y recrear
     int32   PendingNumPublicConnections = 0;
+    bool    bPendingFriendsOnly       = false; // visibilidad elegida al crear (true = privada solo amigos)
     FString PendingSessionName;
-    FString PendingPassword;        // código/contraseña que guarda el host (NO se publica en OSS)
-    FString PendingJoinPassword;    // código/contraseña que el cliente envía al hacer join
-
-    // Fase 5 — true mientras un FindSessions en curso es para JoinSessionByCode (no para
-    // poblar la lista pública); HandleFindSessionsComplete bifurca según este flag.
-    bool    bSearchingByCode = false;
-    FString PendingJoinCode;
+    FString PendingPassword;        // (obsoleto/inerte: siempre vacío desde que se sacó el código)
+    FString PendingJoinPassword;    // (obsoleto/inerte)
 
     // Claves de settings de sesión (definidas como FName para evitar typos)
     static const FName KEY_SERVER_NAME;
-    static const FName KEY_HAS_PASSWORD;
+    static const FName KEY_HAS_PASSWORD; // ahora = "privada solo amigos" (true) vs pública (false)
     static const FName KEY_MATCH_TYPE;
-    static const FName KEY_CODE_HASH;    // Fase 5 — hash del código; nunca se anuncia en claro
     static const FName KEY_LOBBY_ID;     // ID interno de lobby Steam para join directo worldwide
     static const FName KEY_CUR_PLAYERS;  // jugadores actuales (el host la actualiza al entrar/salir)
+    static const FName KEY_OWNER_ID;     // SteamID del host/dueño (para filtrar la pestaña Amigos)
 
     // URL de SteamSockets calculada por FPTSteamDirectJoin tras join directo worldwide.
     FString WorldwideConnectURL;
@@ -175,10 +235,9 @@ private:
     // Helpers privados
     IOnlineSessionPtr GetSessions() const;
     bool IsUsingNullSubsystem() const;                   // true → LAN (NULL subsystem)
-    static FString HashPassword(const FString& Plain);   // MD5 simple; reforzar en producción
-    static FString GenerateSessionCode();                // Fase 5 — código aleatorio de 6 caracteres
+    static FString HashPassword(const FString& Plain);   // (obsoleto/inerte; ya no hay contraseñas)
     void InternalCreateSession();                        // crea de verdad tras login/destroy
-    void InternalFindSessions(int32 MaxSearchResults);    // Find compartido por FindSessions y JoinSessionByCode
+    void InternalFindSessions(int32 MaxSearchResults);    // Find de sesiones (la UI filtra por pestaña)
     void InternalJoinByLobbyId(uint64 LobbyId);          // Join directo worldwide (sin SessionInterface)
 
 #if !UE_BUILD_SHIPPING
@@ -192,7 +251,6 @@ private:
     IConsoleCommand* DebugCmd_CreateSession  = nullptr;
     IConsoleCommand* DebugCmd_FindSessions   = nullptr;
     IConsoleCommand* DebugCmd_JoinSession    = nullptr;
-    IConsoleCommand* DebugCmd_JoinByCode     = nullptr;
     IConsoleCommand* DebugCmd_DestroySession = nullptr;
 
     // Caché de resultados para PT.Debug.Join [índice]
