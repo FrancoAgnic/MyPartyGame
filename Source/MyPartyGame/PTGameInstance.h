@@ -32,6 +32,12 @@ public:
     /** Llamar justo antes del ClientTravel exitoso a un servidor, para poder reintentar si se cae. */
     void NotifyJoinedServer(const FString& TravelURL);
 
+    /** Punto ÚNICO para que un cliente viaje a una sesión (join manual, por código o reconexión).
+     *  Anti-flood: si ya hay una conexión en curso, IGNORA el pedido (no abre una 2ª conexión al
+     *  mismo host — eso es lo que apilaba conexiones duplicadas y CRASHEABA al host, ver .cpp).
+     *  Arma el guard + watchdog y hace el ClientTravel. Devuelve false si se ignoró. */
+    bool BeginClientTravel(const FString& TravelURL);
+
     // ── Reconectar a la última partida (pública o privada) desde Find Sessions ──
     // La URL de la última partida jugada (con password+nombre) sobrevive al volver al menú, así el
     // jugador puede reconectarse a mano aunque el auto-reintento ya se haya rendido. Sirve para
@@ -112,11 +118,27 @@ private:
     bool TryReconnect(UWorld* World);
     void DoReconnectAttempt();
 
-    static constexpr int32 MaxReconnectAttempts      = 3;
-    static constexpr float ReconnectRetryDelaySeconds = 2.0f;
+    // Watchdog: si un intento de conexión queda trabado (el host tarda en soltar la conexión vieja
+    // → handshake rechazado → el motor reintenta el Browse solo), lo cortamos y volvemos al menú en
+    // vez de dejar que siga abriendo conexiones (que apilan y crashean al host).
+    void OnConnectWatchdog();
+
+    // UN solo intento automático, y ESPACIADO ≥ que el ConnectionTimeout del host (6s, ver
+    // DefaultEngine.ini): así cuando reintenta, el host YA soltó la conexión vieja del jugador y el
+    // handshake entra limpio (sin colisión → sin storm → sin crash). Si igual falla, va al menú y el
+    // jugador reintenta a mano.
+    static constexpr int32 MaxReconnectAttempts      = 1;
+    static constexpr float ReconnectRetryDelaySeconds = 7.0f;
+    // Ventana máxima para completar una conexión antes de abortar al menú. Un join sano completa en
+    // ~3-4s (routing SteamSockets + handshake + cargar mapa); 8s da margen y corta el storm temprano
+    // (bien por debajo del InitialConnectTimeout=12s del motor).
+    static constexpr float ConnectWatchdogSeconds     = 8.0f;
 
     FString PendingConnectError;
     FString PendingReconnectURL;
     FString LastGameURL; // última partida jugada (persiste al volver al menú, para reconectar a mano)
     int32   ReconnectAttemptsRemaining = 0;
+
+    bool         bClientConnectPending = false; // hay un ClientTravel a una sesión en curso (guard anti-flood)
+    FTimerHandle ConnectWatchdogHandle;
 };

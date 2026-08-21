@@ -156,6 +156,16 @@ void UPTGameInstance::Init()
 void UPTGameInstance::OnPostLoadMap(UWorld* /*LoadedWorld*/)
 {
     ApplyAudioMix();
+
+    // Terminó de cargar un mapa → cualquier intento de conexión que estuviera en curso YA se resolvió
+    // (o entramos a la sesión, o rebotamos al menú). Liberamos el guard anti-flood y cortamos el
+    // watchdog. Si la conexión tuvo éxito, además damos por buena la reconexión (rearmamos intentos).
+    bClientConnectPending = false;
+    if (ConnectWatchdogHandle.IsValid())
+    {
+        if (UWorld* W = GetWorld()) W->GetTimerManager().ClearTimer(ConnectWatchdogHandle);
+        ConnectWatchdogHandle.Invalidate();
+    }
 }
 
 float UPTGameInstance::GetMusicVolume() const
@@ -200,6 +210,15 @@ void UPTGameInstance::HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver,
 {
     // Con varios clientes en PIE comparten el mismo GEngine: ignorar fallos de otros mundos.
     if (World != GetWorld()) return;
+
+    // El intento de conexión actual falló → liberar el guard y cortar el watchdog. Si TryReconnect
+    // decide reintentar, arrancará un ClientTravel nuevo (con el guard ya libre) tras el delay.
+    bClientConnectPending = false;
+    if (ConnectWatchdogHandle.IsValid())
+    {
+        World->GetTimerManager().ClearTimer(ConnectWatchdogHandle);
+        ConnectWatchdogHandle.Invalidate();
+    }
 
     // FailureReceived = el servidor cerró la conexión con un ErrorMessage explícito
     // (ej. el "WrongPassword" que pone PTLobbyGameMode::PreLogin). Reintentar no arregla
@@ -247,34 +266,73 @@ bool UPTGameInstance::TryReconnect(UWorld* World)
     return true;
 }
 
-void UPTGameInstance::DoReconnectAttempt()
+bool UPTGameInstance::BeginClientTravel(const FString& TravelURL)
 {
-    UWorld* World = GetWorld();
-    APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
-    if (!PC)
+    if (TravelURL.IsEmpty()) return false;
+
+    // ANTI-FLOOD: si ya hay una conexión en curso, NO abrir otra. Abrir una 2ª conexión al mismo host
+    // (mismo SteamID) es justo lo que apilaba conexiones duplicadas y CRASHEABA al host con la
+    // assertion "MappedClientConnections.Remove(ConstAddrRef) == 1". Un solo intento a la vez.
+    if (bClientConnectPending)
     {
-        return;
+        UE_LOG(LogTemp, Warning,
+            TEXT("[GameInstance] BeginClientTravel IGNORADO: ya hay una conexión en curso."));
+        return false;
     }
 
+    UWorld* World = GetWorld();
+    APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+    if (!World || !PC) return false;
+
+    PendingReconnectURL = TravelURL;
+    LastGameURL         = TravelURL; // persiste para el botón "Reconectar" de Find Sessions
+
+    bClientConnectPending = true;
+    // Watchdog: si en ConnectWatchdogSeconds no aterrizamos en un mapa (OnPostLoadMap lo cancela al
+    // conectar OK), abortamos al menú en vez de dejar que el motor siga reintentando el Browse solo
+    // (cada reintento abre otra conexión → apila → crashea al host).
+    World->GetTimerManager().SetTimer(ConnectWatchdogHandle, this,
+        &UPTGameInstance::OnConnectWatchdog, ConnectWatchdogSeconds, false);
+
+    UE_LOG(LogTemp, Log, TEXT("[GameInstance] BeginClientTravel → %s"), *TravelURL);
+    PC->ClientTravel(TravelURL, ETravelType::TRAVEL_Absolute);
+    return true;
+}
+
+void UPTGameInstance::OnConnectWatchdog()
+{
+    if (!bClientConnectPending) return; // ya se resolvió (conectó o rebotó)
+
+    UE_LOG(LogTemp, Warning,
+        TEXT("[GameInstance] Watchdog: la conexión no completó a tiempo → aborto al menú. "
+             "Probá reconectar de nuevo en unos segundos (el host ya habrá soltado tu conexión vieja)."));
+
+    // No encadenar reintentos automáticos: el host quizá todavía no soltó la conexión vieja. Al menú;
+    // el jugador reintenta a mano (para entonces el host ya limpió → handshake limpio).
+    ReconnectAttemptsRemaining = 0;
+    PendingConnectError = PTText::GetStr(TEXT("ERR_CONNECT_SESSION"));
+    ReturnToMainMenuWithError(FString()); // string vacío = no pisa el PendingConnectError de arriba
+}
+
+void UPTGameInstance::DoReconnectAttempt()
+{
+    // NO resetea ReconnectAttemptsRemaining (ya se descontó en TryReconnect) → un solo intento auto.
     UE_LOG(LogTemp, Log, TEXT("[GameInstance] Reintentando conexión: %s"), *PendingReconnectURL);
-    PC->ClientTravel(PendingReconnectURL, ETravelType::TRAVEL_Absolute);
+    BeginClientTravel(PendingReconnectURL);
 }
 
 void UPTGameInstance::NotifyJoinedServer(const FString& TravelURL)
 {
-    PendingReconnectURL      = TravelURL;
+    // Join FRESCO (manual / por código): arma el auto-reintento y viaja por el punto único (guard).
     ReconnectAttemptsRemaining = MaxReconnectAttempts;
-    LastGameURL              = TravelURL; // persiste para el botón "Reconectar" de Find Sessions
+    BeginClientTravel(TravelURL);
 }
 
 void UPTGameInstance::ReconnectToLastGame()
 {
     if (LastGameURL.IsEmpty()) return;
-    PendingReconnectURL        = LastGameURL; // que el auto-reintento también aplique si se vuelve a caer
-    ReconnectAttemptsRemaining = MaxReconnectAttempts;
-    if (UWorld* W = GetWorld())
-        if (APlayerController* PC = W->GetFirstPlayerController())
-            PC->ClientTravel(LastGameURL, ETravelType::TRAVEL_Absolute);
+    ReconnectAttemptsRemaining = MaxReconnectAttempts; // reintento manual: rearma el auto-reintento
+    BeginClientTravel(LastGameURL);
 }
 
 void UPTGameInstance::HandleTravelFailure(UWorld* World, ETravelFailure::Type FailureType,
@@ -314,6 +372,15 @@ void UPTGameInstance::ReturnToMainMenuWithError(const FString& ErrorString)
     // Se rindió definitivamente: no dejar un intento de reconexión colgado para la próxima sesión.
     PendingReconnectURL.Reset();
     ReconnectAttemptsRemaining = 0;
+
+    // Cortar el guard/watchdog de conexión (el OpenLevel de abajo también dispara OnPostLoadMap que
+    // los limpia, pero lo hacemos ya para que el watchdog no llegue a re-disparar).
+    bClientConnectPending = false;
+    if (ConnectWatchdogHandle.IsValid())
+    {
+        if (UWorld* W = GetWorld()) W->GetTimerManager().ClearTimer(ConnectWatchdogHandle);
+        ConnectWatchdogHandle.Invalidate();
+    }
 
     // Volver al mapa del menú principal.
     UGameplayStatics::OpenLevel(this, FName("MainMenu"));

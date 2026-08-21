@@ -339,17 +339,13 @@ void UPTMainMenuWidget::OnJoinSession(EOnJoinSessionCompleteResult::Type Result)
             + Sessions->GetPendingJoinPassword()
             + TEXT("?Name=") + UMultiplayerSessionsSubsystem::SanitizeNameForTravelURL(Sessions->GetLocalPlayerDisplayName());
 
-        if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+        if (UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance()))
         {
-            // Guardar la URL para que el GameInstance pueda reintentar si la conexión se cae.
-            if (UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance()))
-            {
-                GI->NotifyJoinedServer(TravelURL);
-            }
-
             MenuTearDown();
-            // Cliente viaja al servidor con la contraseña en la URL (validación real en Fase 4).
-            PC->ClientTravel(TravelURL, ETravelType::TRAVEL_Absolute);
+            // Viaje por el PUNTO ÚNICO del GameInstance: guard anti-flood (no abre 2 conexiones al
+            // mismo host → evita el crash del host por conexiones duplicadas) + watchdog + arma el
+            // auto-reintento. La contraseña va en la URL (validación real en el PreLogin del server).
+            GI->NotifyJoinedServer(TravelURL);
         }
     }
 }

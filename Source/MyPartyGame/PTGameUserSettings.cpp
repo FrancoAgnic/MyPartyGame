@@ -31,6 +31,9 @@ void UPTGameUserSettings::SetToDefaults()
     SFXVolume    = 1.0f;
     bTypingSoundEnabled = true;
     LanguageCode = TEXT("en");
+    // VSync OFF por defecto: con VSync ON hay caída/relentización de FPS en algunos equipos. El que
+    // lo necesite (p.ej. jugando en una TV) lo activa en Configuración.
+    SetVSyncEnabled(false);
 }
 
 UPTGameUserSettings* UPTGameUserSettings::Get()

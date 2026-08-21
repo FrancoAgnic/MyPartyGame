@@ -219,7 +219,7 @@ void UPTLockerWidget::ActivateSelected()
 
 void UPTLockerWidget::EditSelected()
 {
-    // G / botón Editar: entra a editar (o crear si está vacío) el slot seleccionado.
+    // Edita el slot SELECCIONADO (lo usa CreateSlotNow para crear un slot vacío recién clickeado).
     const bool bHead = (ActiveTab == 0);
     if (APTLobbyPlayerController* PC = LobbyPC())
     {
@@ -228,11 +228,31 @@ void UPTLockerWidget::EditSelected()
     }
 }
 
+void UPTLockerWidget::EditEquipped()
+{
+    // Editar SIEMPRE la skin EQUIPADA (no la que quedó bajo el hover ni la navegada). Un hover rápido
+    // + click en Editar entraba a editar la skin equivocada / mostraba dos skins. Revertimos el
+    // preview de hover primero (así queda aplicada la equipada) y editamos esa.
+    if (bPreviewingHover) EndHoverPreview();
+
+    UPTLockerSubsystem* L = Locker();
+    APTLobbyPlayerController* PC = LobbyPC();
+    if (!L || !PC) return;
+
+    const bool bHead = (ActiveTab == 0);
+    const int32 Equipped = bHead ? L->GetEquippedHead() : L->GetEquippedBody();
+    if (Equipped < 0) return; // no hay skin equipada en esta pestaña → nada que editar
+
+    SelectSlot(Equipped, bHead); // dejar la selección en la equipada (coherencia visual)
+    if (bHead) PC->EnterHeadSculptForSlot(Equipped);
+    else       PC->EnterBodyPaintForSlot(Equipped);
+}
+
 // ── Botones ──
 void UPTLockerWidget::OnHeadTabClicked() { SwitchTab(0); }
 void UPTLockerWidget::OnBodyTabClicked() { SwitchTab(1); }
 void UPTLockerWidget::OnAssignClicked()  { ActivateSelected(); }
-void UPTLockerWidget::OnEditClicked()    { EditSelected(); }
+void UPTLockerWidget::OnEditClicked()    { EditEquipped(); }
 void UPTLockerWidget::OnBackClicked()
 {
     if (APTLobbyPlayerController* PC = LobbyPC()) PC->CloseLocker();
@@ -257,7 +277,7 @@ FReply UPTLockerWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyE
     if (Key == EKeys::Down)  { MoveSelection(0, +1); return FReply::Handled(); }
     if (Key == EKeys::Up)    { MoveSelection(0, -1); return FReply::Handled(); }
     if (Key == EKeys::Enter || Key == EKeys::SpaceBar)       { ActivateSelected(); return FReply::Handled(); }
-    if (Key == EKeys::G)                                     { EditSelected(); return FReply::Handled(); }
+    if (Key == EKeys::G)                                     { EditEquipped(); return FReply::Handled(); }
     if (Key == EKeys::Escape || Key == EKeys::BackSpace)     { OnBackClicked(); return FReply::Handled(); }
     return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
 }

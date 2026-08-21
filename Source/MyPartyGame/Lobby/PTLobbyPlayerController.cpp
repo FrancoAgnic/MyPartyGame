@@ -538,11 +538,13 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
             HeadVolume->Multicast_ApplyStamp_Implementation(Pt, EffectiveHeadShape(), HeadBrushSize,
                 HeadEditMode, HeadPaintColor, HeadStampRotation, bHeadStrokeIsDetail);
 
-            // AGREGAR limpia la pintura 2D vieja de esa zona (la textura de la cabeza es direccional, así
-            // que sin esto la arcilla nueva mostraría el color pintado antes ahí en vez del color del
-            // picker). Se borra por los MISMOS triángulos que pinta el pincel (base + capas de detalle),
-            // así el borrado coincide exacto con dónde pintaría (sin costuras/aproximaciones).
-            if (HeadChar && !bHeadEyesTool && HeadEditMode == EPTEditMode::Add)
+            // AGREGAR (SOLO base, NO detalle) limpia la pintura 2D vieja de esa zona (la textura de la
+            // cabeza es direccional, así que sin esto la arcilla nueva fusionada mostraría el color pintado
+            // antes ahí en vez del color del picker).
+            // En cambio, Alt+Add (capa de DETALLE: bigote/lentes) es geometría aparte que se apoya SOBRE lo
+            // ya esculpido/pintado: ahí NO se limpia la pintura, para conservar los detalles pintados debajo
+            // (p.ej. boca/dientes al agregar un bigote encima). El detalle igual se puede pintar por separado.
+            if (HeadChar && !bHeadEyesTool && HeadEditMode == EPTEditMode::Add && !bHeadStrokeIsDetail)
             {
                 // Borrar la pintura vieja por DIRECCIÓN (cono), no por triángulos: la arcilla recién
                 // agregada aún no está mallada este frame, así que un borrado por geometría no la

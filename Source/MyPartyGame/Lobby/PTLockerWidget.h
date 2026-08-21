@@ -78,7 +78,8 @@ private:
     void MoveSelection(int32 DX, int32 DY); // navegar en grilla (direccional, con wrap al borde opuesto)
     void ApplySelectionVisual();        // resaltar el slot seleccionado + refrescar botones
     void ActivateSelected();            // Asignar/Crear (Enter)
-    void EditSelected();                // Editar (G)
+    void EditSelected();                // Editar el slot seleccionado (lo usa CreateSlotNow para slots vacíos)
+    void EditEquipped();                // Editar SIEMPRE la skin equipada (botón Editar / G)
 
     UPTLockerSubsystem*      Locker()  const;
     APTLobbyPlayerController* LobbyPC() const;
