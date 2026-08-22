@@ -24,6 +24,7 @@
 #include "../PTWordBank.h"
 #include "../Multiplayer/MultiplayerSessionsSubsystem.h"
 #include "../UI/PTFriendsWidget.h"
+#include "../UI/PTWordPackWidget.h"
 
 bool UPTLobbyHUDWidget::Initialize()
 {
@@ -37,6 +38,8 @@ bool UPTLobbyHUDWidget::Initialize()
     if (InviteButton)     InviteButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnInviteClicked);
     if (FriendsOnlyCheckbox) FriendsOnlyCheckbox->OnCheckStateChanged.AddDynamic(this, &UPTLobbyHUDWidget::OnFriendsOnlyChanged);
     if (FriendsPanel)     FriendsPanel->SetVisibility(ESlateVisibility::Collapsed);
+    if (LibraryButton)    LibraryButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnLibraryClicked);
+    if (LibraryPanel)     LibraryPanel->SetVisibility(ESlateVisibility::Collapsed);
 
     // Config de partida (host).
     if (TurnTimeMinus) TurnTimeMinus->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnTurnTimeMinus);
@@ -203,6 +206,10 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
                 FriendsOnlyCheckbox->SetIsChecked(S->IsSessionFriendsOnly());
     }
 
+    // Biblioteca (banco de palabras + mapa): solo el host elige el contenido de la partida.
+    if (LibraryButton)
+        LibraryButton->SetVisibility(bLocalIsHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+
     // Config de partida: el botón "Game Settings" lo ve solo el host. El panel se abre/cierra
     // con ese botón (y la X interna); los que no son host nunca lo ven.
     if (GameSettingsButton)
@@ -293,6 +300,12 @@ void UPTLobbyHUDWidget::OnFriendsOnlyChanged(bool bIsChecked)
     // El host cambia la visibilidad de la sala en vivo (el host ES el server → llamada directa).
     if (UMultiplayerSessionsSubsystem* S = GetGameInstance() ? GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>() : nullptr)
         S->SetSessionFriendsOnly(bIsChecked);
+}
+
+void UPTLobbyHUDWidget::OnLibraryClicked()
+{
+    // Abre la Biblioteca (slots de banco de palabras + mapa bloqueado) que define la partida.
+    if (LibraryPanel) LibraryPanel->ShowPanel();
 }
 
 // ── Config de partida (host) ─────────────────────────────────────────────────

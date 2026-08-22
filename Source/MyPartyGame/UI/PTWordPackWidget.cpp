@@ -30,6 +30,10 @@ void UPTWordPackWidget::NativeConstruct()
 
     if (TitleText) TitleText->SetText(PTText::Get(TEXT("WORDPACK_TITLE")));
 
+    // Slot de MAPA: bloqueado ("Próximamente") hasta que estén los mapas custom.
+    if (MapSlotButton) MapSlotButton->SetIsEnabled(false);
+    if (MapSlotText)   MapSlotText->SetText(PTText::Get(TEXT("MAPS_SOON")));
+
     if (UPTWordPackSubsystem* P = Packs())
     {
         if (!bBound)

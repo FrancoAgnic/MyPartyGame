@@ -44,9 +44,12 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      DefaultButton;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      BackButton;
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   TitleText;
-    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   SelectedText;
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   SelectedText;   // "slot" de banco de palabras (elegido)
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   EmptyText;
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   StatusText;
+    // "Slot" de MAPA — bloqueado por ahora ("Próximamente"). Se activará cuando estén los mapas custom.
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*      MapSlotButton;
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   MapSlotText;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="WordPack")
     TSubclassOf<UPTWordPackRowWidget> RowWidgetClass;

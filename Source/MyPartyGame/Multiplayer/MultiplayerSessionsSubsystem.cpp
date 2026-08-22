@@ -1033,6 +1033,19 @@ void UMultiplayerSessionsSubsystem::RegisterDebugCommands()
         }),
         ECVF_Default);
 
+    // PT.Debug.InvitePopup [Nombre] — simula recibir una invitación para PROBAR el popup en PIE/standalone
+    // (las invitaciones reales de Steam necesitan 2 cuentas/máquinas). Aceptar no une a nada (es de prueba).
+    DebugCmd_InvitePopup = IConsoleManager::Get().RegisterConsoleCommand(
+        TEXT("PT.Debug.InvitePopup"),
+        TEXT("[Debug] Simula recibir una invitación y muestra el popup. Args: [Nombre=Amigo de prueba]"),
+        FConsoleCommandWithArgsDelegate::CreateLambda([this](const TArray<FString>& Args)
+        {
+            const FString Name = Args.Num() > 0 ? FString::Join(Args, TEXT(" ")) : TEXT("Amigo de prueba");
+            UE_LOG(LogPTSessions, Log, TEXT("[Debug] InvitePopup de '%s'"), *Name);
+            OnInviteReceived.Broadcast(Name);
+        }),
+        ECVF_Default);
+
     // PT.Debug.Destroy
     DebugCmd_DestroySession = IConsoleManager::Get().RegisterConsoleCommand(
         TEXT("PT.Debug.Destroy"),
@@ -1063,6 +1076,7 @@ void UMultiplayerSessionsSubsystem::UnregisterDebugCommands()
     Unreg(DebugCmd_FindSessions,   TEXT("PT.Debug.Find"));
     Unreg(DebugCmd_JoinSession,    TEXT("PT.Debug.Join"));
     Unreg(DebugCmd_DestroySession, TEXT("PT.Debug.Destroy"));
+    Unreg(DebugCmd_InvitePopup,    TEXT("PT.Debug.InvitePopup"));
 }
 
 #endif // !UE_BUILD_SHIPPING

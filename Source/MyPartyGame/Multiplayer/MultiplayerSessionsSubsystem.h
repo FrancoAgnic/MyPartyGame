@@ -267,6 +267,7 @@ private:
     IConsoleCommand* DebugCmd_FindSessions   = nullptr;
     IConsoleCommand* DebugCmd_JoinSession    = nullptr;
     IConsoleCommand* DebugCmd_DestroySession = nullptr;
+    IConsoleCommand* DebugCmd_InvitePopup    = nullptr;
 
     // Caché de resultados para PT.Debug.Join [índice]
     TArray<FOnlineSessionSearchResult> CachedSearchResults;

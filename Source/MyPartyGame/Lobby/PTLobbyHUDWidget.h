@@ -58,6 +58,11 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) class UPTFriendsWidget* FriendsPanel;
     // Toggle de visibilidad de la sala: marcado = privada solo amigos, desmarcado = pública.
     UPROPERTY(meta = (BindWidgetOptional)) UCheckBox*    FriendsOnlyCheckbox;
+
+    // Biblioteca (SOLO host): abre la ventana de slots (banco de palabras + mapa bloqueado) que
+    // define la partida. LibraryPanel = instancia de WBP del panel de bancos (deriva de PTWordPackWidget).
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*                  LibraryButton;
+    UPROPERTY(meta = (BindWidgetOptional)) class UPTWordPackWidget*  LibraryPanel;
     // Visible solo mientras APTGameState::CountdownSecondsRemaining >= 0.
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   CountdownText;
 
@@ -68,6 +73,7 @@ protected:
     UFUNCTION() void OnLockerClicked();
     UFUNCTION() void OnInviteClicked();
     UFUNCTION() void OnFriendsOnlyChanged(bool bIsChecked);
+    UFUNCTION() void OnLibraryClicked();
 
     // ── Lista de jugadores (fila = widget propio) + colores de listo/no-listo ──
     UPROPERTY(EditAnywhere, Category = "Lobby") TSubclassOf<class UPTPlayerRowWidget> PlayerRowClass;
