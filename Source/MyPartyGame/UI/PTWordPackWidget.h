@@ -38,18 +38,23 @@ protected:
     virtual void NativeConstruct() override;
     virtual void NativeDestruct() override;
 
+    // ── Lista de BANCOS DE PALABRAS (funcional) ──
     UPROPERTY(meta = (BindWidget))         UPanelWidget* PacksBox;
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   SelectedText;   // banco elegido ("En uso: X")
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   EmptyText;      // "no hay bancos"
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   StatusText;     // resultado de publicar
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      RefreshButton;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      PublishButton;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      DefaultButton;
+
+    // ── Lista de MAPAS (bloqueada por ahora) ──
+    // MapsBox queda vacío hasta que estén los mapas custom; MapsLockedPanel muestra "Próximamente".
+    UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* MapsBox;
+    UPROPERTY(meta = (BindWidgetOptional)) UWidget*      MapsLockedPanel;
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   MapsLockedText; // "Mapas — Próximamente"
+
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      BackButton;
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   TitleText;
-    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   SelectedText;   // "slot" de banco de palabras (elegido)
-    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   EmptyText;
-    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   StatusText;
-    // "Slot" de MAPA — bloqueado por ahora ("Próximamente"). Se activará cuando estén los mapas custom.
-    UPROPERTY(meta = (BindWidgetOptional)) UButton*      MapSlotButton;
-    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   MapSlotText;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="WordPack")
     TSubclassOf<UPTWordPackRowWidget> RowWidgetClass;

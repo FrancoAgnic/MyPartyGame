@@ -30,9 +30,11 @@ void UPTWordPackWidget::NativeConstruct()
 
     if (TitleText) TitleText->SetText(PTText::Get(TEXT("WORDPACK_TITLE")));
 
-    // Slot de MAPA: bloqueado ("Próximamente") hasta que estén los mapas custom.
-    if (MapSlotButton) MapSlotButton->SetIsEnabled(false);
-    if (MapSlotText)   MapSlotText->SetText(PTText::Get(TEXT("MAPS_SOON")));
+    // Lista de MAPAS: bloqueada ("Próximamente") hasta que estén los mapas custom → overlay visible,
+    // lista vacía. Cuando se implementen mapas, se poblará MapsBox y se ocultará MapsLockedPanel.
+    if (MapsLockedText)  MapsLockedText->SetText(PTText::Get(TEXT("MAPS_SOON")));
+    if (MapsLockedPanel) MapsLockedPanel->SetVisibility(ESlateVisibility::Visible);
+    if (MapsBox)         MapsBox->ClearChildren();
 
     if (UPTWordPackSubsystem* P = Packs())
     {
