@@ -53,6 +53,12 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UWidget*      MapsLockedPanel;
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   MapsLockedText; // "Mapas — Próximamente"
 
+    // ── Pestañas (como el Locker: Cabeza/Cuerpo → acá Palabras/Mapas) ──
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*      WordsTabButton;
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*      MapsTabButton;
+    UPROPERTY(EditAnywhere, Category="WordPack") FLinearColor TabActiveColor   = FLinearColor(0.95f, 0.25f, 0.55f, 1.f);
+    UPROPERTY(EditAnywhere, Category="WordPack") FLinearColor TabInactiveColor = FLinearColor(0.20f, 0.45f, 0.75f, 1.f);
+
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      BackButton;
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   TitleText;
 
@@ -63,13 +69,18 @@ protected:
     UFUNCTION() void OnPublishClicked();
     UFUNCTION() void OnDefaultClicked();
     UFUNCTION() void OnBackClicked();
+    UFUNCTION() void OnWordsTabClicked();
+    UFUNCTION() void OnMapsTabClicked();
 
 private:
     void Rebuild();
     void OnPacksUpdated();
     void OnPublished(bool bOk, const FString& Info);
+    void SwitchTab(int32 Tab);   // 0 = Palabras (funcional), 1 = Mapas (bloqueado)
+    void ApplyTabVisual();
     UPTWordPackSubsystem* Packs() const;
     UPTGameInstance*      GI() const;
 
+    int32 ActiveTab = 0;
     bool bBound = false;
 };

@@ -27,14 +27,12 @@ void UPTWordPackWidget::NativeConstruct()
     if (PublishButton) PublishButton->OnClicked.AddDynamic(this, &UPTWordPackWidget::OnPublishClicked);
     if (DefaultButton) DefaultButton->OnClicked.AddDynamic(this, &UPTWordPackWidget::OnDefaultClicked);
     if (BackButton)    BackButton->OnClicked.AddDynamic(this, &UPTWordPackWidget::OnBackClicked);
+    if (WordsTabButton) WordsTabButton->OnClicked.AddDynamic(this, &UPTWordPackWidget::OnWordsTabClicked);
+    if (MapsTabButton)  MapsTabButton->OnClicked.AddDynamic(this, &UPTWordPackWidget::OnMapsTabClicked);
 
-    if (TitleText) TitleText->SetText(PTText::Get(TEXT("WORDPACK_TITLE")));
-
-    // Lista de MAPAS: bloqueada ("Próximamente") hasta que estén los mapas custom → overlay visible,
-    // lista vacía. Cuando se implementen mapas, se poblará MapsBox y se ocultará MapsLockedPanel.
-    if (MapsLockedText)  MapsLockedText->SetText(PTText::Get(TEXT("MAPS_SOON")));
-    if (MapsLockedPanel) MapsLockedPanel->SetVisibility(ESlateVisibility::Visible);
-    if (MapsBox)         MapsBox->ClearChildren();
+    if (TitleText)      TitleText->SetText(PTText::Get(TEXT("WORDPACK_TITLE")));
+    if (MapsLockedText) MapsLockedText->SetText(PTText::Get(TEXT("MAPS_SOON")));
+    if (MapsBox)        MapsBox->ClearChildren(); // mapas bloqueados: lista vacía por ahora
 
     if (UPTWordPackSubsystem* P = Packs())
     {
@@ -46,7 +44,45 @@ void UPTWordPackWidget::NativeConstruct()
         }
         P->RescanPacks();
     }
+    SwitchTab(0); // arranca en Palabras
     Rebuild();
+}
+
+void UPTWordPackWidget::OnWordsTabClicked() { SwitchTab(0); }
+void UPTWordPackWidget::OnMapsTabClicked()  { SwitchTab(1); }
+
+void UPTWordPackWidget::SwitchTab(int32 Tab)
+{
+    ActiveTab = Tab;
+    const bool bMaps = (ActiveTab == 1);
+
+    // Palabras (funcional) vs Mapas (bloqueado): se muestra una lista u otra, como el Locker.
+    if (PacksBox)        PacksBox->SetVisibility(bMaps ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+    if (MapsBox)         MapsBox->SetVisibility(bMaps ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+    if (MapsLockedPanel) MapsLockedPanel->SetVisibility(bMaps ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+    // Controles de bancos (publicar/actualizar/default/estado) solo en la pestaña Palabras.
+    if (RefreshButton)   RefreshButton->SetVisibility(bMaps ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+    if (PublishButton)   PublishButton->SetVisibility(bMaps ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+    if (DefaultButton)   DefaultButton->SetVisibility(bMaps ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+    if (SelectedText)    SelectedText->SetVisibility(bMaps ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+    if (EmptyText && bMaps) EmptyText->SetVisibility(ESlateVisibility::Collapsed);
+
+    ApplyTabVisual();
+}
+
+void UPTWordPackWidget::ApplyTabVisual()
+{
+    const bool bWords = (ActiveTab == 0);
+    if (WordsTabButton)
+    {
+        WordsTabButton->SetBackgroundColor(bWords ? TabActiveColor : TabInactiveColor);
+        WordsTabButton->SetRenderOpacity(bWords ? 1.0f : 0.45f);
+    }
+    if (MapsTabButton)
+    {
+        MapsTabButton->SetBackgroundColor(!bWords ? TabActiveColor : TabInactiveColor);
+        MapsTabButton->SetRenderOpacity(!bWords ? 1.0f : 0.45f);
+    }
 }
 
 void UPTWordPackWidget::NativeDestruct()
@@ -67,6 +103,7 @@ void UPTWordPackWidget::ShowPanel()
 {
     SetVisibility(ESlateVisibility::Visible);
     PlayPopIn();
+    SwitchTab(0); // siempre abre en Palabras
     if (UPTWordPackSubsystem* P = Packs()) P->RescanPacks();
 }
 
@@ -144,7 +181,8 @@ void UPTWordPackWidget::Rebuild()
     if (EmptyText)
     {
         EmptyText->SetText(PTText::Get(TEXT("WORDPACK_EMPTY")));
-        EmptyText->SetVisibility(Count == 0 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+        // Solo en la pestaña Palabras (en Mapas manda el overlay "Próximamente").
+        EmptyText->SetVisibility((ActiveTab == 0 && Count == 0) ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
     }
 
     if (SelectedText)
