@@ -68,6 +68,15 @@ public:
     UFUNCTION(BlueprintCallable, Category="Match")
     void ClearCustomWords();
 
+    // ── Bancos de palabras de la comunidad (Workshop / locales) ──
+    // Selecciona un banco por su Id (de UPTWordPackSubsystem::GetPacks) → carga sus palabras en
+    // PendingMatchSettings (reusa LoadCustomWordsFromCSVFile). Lo llama el host desde el lobby.
+    UFUNCTION(BlueprintCallable, Category="WordPack") void SelectWordPack(const FString& PackId);
+    // Vuelve al banco por defecto del juego.
+    UFUNCTION(BlueprintCallable, Category="WordPack") void SelectDefaultWordBank();
+    // Título del banco elegido (vacío = default), para mostrarlo en el lobby.
+    UPROPERTY(BlueprintReadOnly, Category="WordPack") FString SelectedWordPackTitle;
+
     // ── Sonidos globales de UI ──────────────────────────────────────────────
     // Se asignan UNA vez (en BP_GameInstance o los class defaults) y se aplican a TODOS los botones
     // que ya existen, sin tocar cada uno: ApplyUIButtonSounds recorre el árbol del widget y setea el

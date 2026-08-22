@@ -19,6 +19,7 @@
 #include "PTGameUserSettings.h"
 #include "Multiplayer/MultiplayerSessionsSubsystem.h"
 #include "UI/PTInvitePopupWidget.h"
+#include "Mods/PTWordPackSubsystem.h"
 
 namespace
 {
@@ -114,6 +115,27 @@ void UPTGameInstance::ClearCustomWords()
 {
     PendingMatchSettings.CustomWords.Reset();
     PendingMatchSettings.bUseCustomWords = false;
+}
+
+void UPTGameInstance::SelectWordPack(const FString& PackId)
+{
+    UPTWordPackSubsystem* WP = GetSubsystem<UPTWordPackSubsystem>();
+    if (!WP) return;
+    const FPTWordPack* Pack = WP->FindPack(PackId);
+    if (!Pack)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[GameInstance] SelectWordPack: no se encontró el banco '%s'."), *PackId);
+        return;
+    }
+    const int32 N = LoadCustomWordsFromCSVFile(Pack->CsvPath);
+    SelectedWordPackTitle = (N > 0) ? Pack->Title : FString();
+    UE_LOG(LogTemp, Log, TEXT("[GameInstance] Banco '%s' seleccionado (%d palabras)."), *Pack->Title, N);
+}
+
+void UPTGameInstance::SelectDefaultWordBank()
+{
+    ClearCustomWords();
+    SelectedWordPackTitle.Reset();
 }
 
 void UPTGameInstance::ApplyUIButtonSounds(UUserWidget* Root) const
