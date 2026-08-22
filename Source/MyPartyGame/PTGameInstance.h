@@ -138,6 +138,8 @@ private:
     // Llega una invitación (subsistema) → mostrar el popup Aceptar/Rechazar.
     void HandleInviteReceived(const FString& FromName);
     void ShowInvitePopup(const FString& FromName);
+    // Steam pide unirse a la partida de un amigo (rich presence "connect") → viajar al host.
+    void HandleJoinRequestedById(const FString& HostSteamId);
     // Tras un JoinSession exitoso, arma la URL y viaja (punto único, guard anti-flood). Funciona
     // desde cualquier lado (menú o partida) → cubre aceptar el popup en medio de una partida.
     void TravelToResolvedSession();

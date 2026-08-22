@@ -203,6 +203,8 @@ void UPTGameInstance::Init()
     {
         // Llega una invitación de un amigo → popup Aceptar/Rechazar (sale en cualquier momento).
         S->OnInviteReceived.AddUObject(this, &UPTGameInstance::HandleInviteReceived);
+        // Steam "Unirse a partida" (rich presence connect / lanzado desde invitación) → viajar al host.
+        S->OnJoinRequestedById.AddUObject(this, &UPTGameInstance::HandleJoinRequestedById);
 
         // Punto ÚNICO de viaje tras unirse: funciona desde el menú Y desde una partida (para aceptar
         // el popup en medio del juego). El guard de BeginClientTravel evita doble-conexión aunque el
@@ -217,6 +219,18 @@ void UPTGameInstance::Init()
 void UPTGameInstance::HandleInviteReceived(const FString& FromName)
 {
     ShowInvitePopup(FromName);
+}
+
+void UPTGameInstance::HandleJoinRequestedById(const FString& HostSteamId)
+{
+    if (HostSteamId.IsEmpty()) return;
+    UMultiplayerSessionsSubsystem* S = GetSubsystem<UMultiplayerSessionsSubsystem>();
+    // Unirse directo a la partida del host por SteamSockets (mismo camino que un join normal).
+    const FString Name = S ? S->GetLocalPlayerDisplayName() : TEXT("Player");
+    const FString TravelURL = FString::Printf(TEXT("steam.%s?Name=%s"),
+        *HostSteamId, *UMultiplayerSessionsSubsystem::SanitizeNameForTravelURL(Name));
+    UE_LOG(LogTemp, Log, TEXT("[GameInstance] Unirse por Steam → %s"), *TravelURL);
+    NotifyJoinedServer(TravelURL); // guard anti-flood + arma reintento
 }
 
 void UPTGameInstance::ShowInvitePopup(const FString& FromName)

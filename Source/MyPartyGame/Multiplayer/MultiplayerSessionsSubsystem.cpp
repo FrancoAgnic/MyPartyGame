@@ -13,8 +13,50 @@
 #include "Interfaces/OnlineExternalUIInterface.h" // ShowInviteUI (overlay de Steam)
 #include "Interfaces/OnlinePresenceInterface.h" // FOnlineUserPresence
 #include "Misc/SecureHash.h"                    // FMD5
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+#include "Async/Async.h"
+#if PT_WITH_STEAM
+#include "steam/steam_api.h"                    // SteamFriends/SteamUser + callbacks de "unirse a partida"
+#endif
 
 DEFINE_LOG_CATEGORY_STATIC(LogPTSessions, Log, All);
+
+#if PT_WITH_STEAM
+// Escucha los eventos de Steam de "unirse a la partida de un amigo" (aceptar invitación con rich
+// presence "connect", o "Unirse" desde la lista de amigos). Extrae el SteamID del host y lo reenvía.
+// No es UObject (UHT no puede parsear steam_api.h con macros STEAM_CALLBACK).
+struct FPTSteamJoinListener
+{
+    TFunction<void(FString)> Cb;
+    explicit FPTSteamJoinListener(TFunction<void(FString)> InCb) : Cb(MoveTemp(InCb)) {}
+
+    STEAM_CALLBACK(FPTSteamJoinListener, OnRichJoin, GameRichPresenceJoinRequested_t);
+    STEAM_CALLBACK(FPTSteamJoinListener, OnLobbyJoin, GameLobbyJoinRequested_t);
+
+    void Fire(const FString& HostId)
+    {
+        if (HostId.IsEmpty()) return;
+        TFunction<void(FString)> C = Cb;
+        AsyncTask(ENamedThreads::GameThread, [C, HostId]() { if (C) C(HostId); });
+    }
+};
+
+void FPTSteamJoinListener::OnRichJoin(GameRichPresenceJoinRequested_t* p)
+{
+    if (!p) return;
+    // m_rgchConnect trae nuestro token "-PTJoin=<hostSteamId>".
+    const FString Connect = UTF8_TO_TCHAR(p->m_rgchConnect);
+    FString HostId;
+    if (FParse::Value(*Connect, TEXT("-PTJoin="), HostId)) Fire(HostId);
+}
+
+void FPTSteamJoinListener::OnLobbyJoin(GameLobbyJoinRequested_t* p)
+{
+    // Fallback (si el que invita es el host): m_steamIDFriend = dueño de la partida a unirse.
+    if (p) Fire(FString::Printf(TEXT("%llu"), p->m_steamIDFriend.ConvertToUint64()));
+}
+#endif // PT_WITH_STEAM
 
 // --- Claves de settings de sesión ---
 const FName UMultiplayerSessionsSubsystem::KEY_SERVER_NAME  = FName("SERVER_NAME");
@@ -53,6 +95,15 @@ void UMultiplayerSessionsSubsystem::Initialize(FSubsystemCollectionBase& Collect
                 FOnSessionInviteReceivedDelegate::CreateUObject(
                     this, &UMultiplayerSessionsSubsystem::HandleSessionInviteReceived));
         }
+
+#if PT_WITH_STEAM
+        // Escuchar "unirse a la partida" nativo de Steam (rich presence "connect" / "Unirse") → viajar al host.
+        JoinListener = new FPTSteamJoinListener([this](FString HostId)
+        {
+            UE_LOG(LogPTSessions, Log, TEXT("Steam: unirse a partida del host %s"), *HostId);
+            OnJoinRequestedById.Broadcast(HostId);
+        });
+#endif
     }
     else
     {
@@ -74,6 +125,7 @@ void UMultiplayerSessionsSubsystem::Deinitialize()
 #if PT_WITH_STEAM
     delete WorldwideSearch; WorldwideSearch = nullptr;
     delete WorldwideJoin;   WorldwideJoin   = nullptr;
+    delete JoinListener;    JoinListener    = nullptr;
 #endif
 
     // Limpiar cualquier handle de OSS pendiente por seguridad
@@ -140,6 +192,42 @@ FString UMultiplayerSessionsSubsystem::GetLocalPlayerDisplayName() const
         }
     }
     return TEXT("Player");
+}
+
+FString UMultiplayerSessionsSubsystem::GetLocalSteamId() const
+{
+#if PT_WITH_STEAM
+    if (SteamUser()) return FString::Printf(TEXT("%llu"), SteamUser()->GetSteamID().ConvertToUint64());
+#endif
+    return FString();
+}
+
+void UMultiplayerSessionsSubsystem::SetJoinPresence(const FString& HostSteamId)
+{
+#if PT_WITH_STEAM
+    if (!SteamFriends() || HostSteamId.IsEmpty()) return;
+    // Clave especial "connect": si está seteada, Steam muestra "Unirse a partida" y las invitaciones
+    // llevan este string. Al aceptar, Steam lanza el juego con el string en el command line, o (si ya
+    // está abierto) dispara GameRichPresenceJoinRequested_t con él → FPTSteamJoinListener lo maneja.
+    const FString Connect = FString::Printf(TEXT("-PTJoin=%s"), *HostSteamId);
+    SteamFriends()->SetRichPresence("connect", TCHAR_TO_UTF8(*Connect));
+    UE_LOG(LogPTSessions, Log, TEXT("Rich presence connect seteada → host %s"), *HostSteamId);
+#endif
+}
+
+void UMultiplayerSessionsSubsystem::ClearJoinPresence()
+{
+#if PT_WITH_STEAM
+    if (SteamFriends()) SteamFriends()->SetRichPresence("connect", "");
+#endif
+}
+
+FString UMultiplayerSessionsSubsystem::ConsumeLaunchJoinHostId()
+{
+    // El juego se lanzó desde una invitación/"Unirse" → Steam pone nuestro token en el command line.
+    FString HostId;
+    FParse::Value(FCommandLine::Get(), TEXT("-PTJoin="), HostId);
+    return HostId;
 }
 
 // ==========================================================================
@@ -219,6 +307,17 @@ void UMultiplayerSessionsSubsystem::HandleLoginComplete(
         bWasSuccessful ? TEXT("SÍ") : TEXT("NO"), *Error);
 
     OnLoginComplete.Broadcast(bWasSuccessful);
+
+    // ¿El juego se lanzó desde una invitación/"Unirse" de Steam? Recién ahora (logueado) unirse al host.
+    if (bWasSuccessful)
+    {
+        const FString LaunchHost = ConsumeLaunchJoinHostId();
+        if (!LaunchHost.IsEmpty())
+        {
+            UE_LOG(LogPTSessions, Log, TEXT("Lanzado desde invitación de Steam → unirse al host %s"), *LaunchHost);
+            OnJoinRequestedById.Broadcast(LaunchHost);
+        }
+    }
 }
 
 // ==========================================================================
@@ -330,6 +429,9 @@ void UMultiplayerSessionsSubsystem::HandleCreateSessionComplete(FName SessionNam
 
     UE_LOG(LogPTSessions, Log, TEXT("CreateSession completo — éxito: %s | sesión: %s"),
         bWasSuccessful ? TEXT("SÍ") : TEXT("NO"), *SessionName.ToString());
+
+    // Host: rich presence "connect" apuntando a sí mismo → sus amigos pueden "Unirse a partida".
+    if (bWasSuccessful) SetJoinPresence(GetLocalSteamId());
 
     OnCreateSessionComplete.Broadcast(bWasSuccessful);
     // El ServerTravel a /Game/Maps/Lobby?listen lo hará quien escuche este delegate (Fase 2/3),
@@ -550,6 +652,13 @@ void UMultiplayerSessionsSubsystem::InternalJoinByLobbyId(uint64 LobbyId)
         {
             WorldwideConnectURL = URL;
             UE_LOG(LogPTSessions, Log, TEXT("JoinSession (worldwide): lobby unida, URL=%s"), *URL);
+            // Rich presence "connect" al mismo host (URL = steam.<id>:port) → los amigos del cliente
+            // también pueden unirse.
+            {
+                FString Cs = URL; Cs.RemoveFromStart(TEXT("steam."));
+                FString IdPart; if (!Cs.Split(TEXT(":"), &IdPart, nullptr)) IdPart = Cs;
+                if (IdPart.IsNumeric()) SetJoinPresence(IdPart);
+            }
             OnJoinSessionComplete.Broadcast(EOnJoinSessionCompleteResult::Success);
         }
         else
@@ -573,6 +682,19 @@ void UMultiplayerSessionsSubsystem::HandleJoinSessionComplete(
     }
 
     UE_LOG(LogPTSessions, Log, TEXT("JoinSession completo — resultado: %d"), (int32)Result);
+
+    // Cliente unido: rich presence "connect" apuntando al MISMO host → sus amigos también pueden unirse.
+    if (Result == EOnJoinSessionCompleteResult::Success)
+    {
+        FString Cs;
+        if (GetResolvedConnectString(Cs))
+        {
+            Cs.RemoveFromStart(TEXT("steam."));
+            FString IdPart;
+            if (!Cs.Split(TEXT(":"), &IdPart, nullptr)) IdPart = Cs; // sin ":port"
+            if (IdPart.IsNumeric()) SetJoinPresence(IdPart);
+        }
+    }
 
     OnJoinSessionComplete.Broadcast(Result);
     // El ClientTravel (con ?Password=...) lo hace quien escuche este delegate (Fase 3),
@@ -815,6 +937,9 @@ void UMultiplayerSessionsSubsystem::HandleDestroySessionComplete(FName SessionNa
 
     UE_LOG(LogPTSessions, Log, TEXT("DestroySession completo — éxito: %s"),
         bWasSuccessful ? TEXT("SÍ") : TEXT("NO"));
+
+    // Ya no estás en ninguna partida → sacar el "Unirse a partida" de tu presencia de Steam.
+    ClearJoinPresence();
 
     // Si se destruyó para recrear (CreateSession cuando existía sesión previa)
     if (bWasSuccessful && bCreateSessionOnDestroy)

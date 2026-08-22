@@ -28,6 +28,9 @@ DECLARE_MULTICAST_DELEGATE(FPTOnFriendsListUpdated);
 // LLEGÓ una invitación de un amigo (juego abierto). El GameInstance muestra el popup Aceptar/Rechazar.
 // Param: nombre del que invita.
 DECLARE_MULTICAST_DELEGATE_OneParam(FPTOnInviteReceived, const FString& /*FromName*/);
+// Steam pide UNIRSE a la partida de un amigo (aceptó "Unirse"/invitación con rich presence "connect",
+// o el juego se lanzó desde ahí). Param: SteamID del host al que hay que viajar. El GameInstance viaja.
+DECLARE_MULTICAST_DELEGATE_OneParam(FPTOnJoinRequestedById, const FString& /*HostSteamId*/);
 
 // -------------------------------------------------------------------
 // Info de un amigo de Steam para la UI (sin exponer tipos de OSS hacia afuera).
@@ -173,6 +176,17 @@ public:
     FPTOnInviteAccepted          OnInviteAccepted;
     FPTOnFriendsListUpdated      OnFriendsListUpdated;
     FPTOnInviteReceived          OnInviteReceived;
+    FPTOnJoinRequestedById       OnJoinRequestedById;
+
+    // Rich presence "connect" de Steam: para que las invitaciones/"Unirse a partida" lleven A QUÉ
+    // partida unirse (el host), no un genérico "vení a jugar". Se setea al hostear/unirse; se limpia al salir.
+    void SetJoinPresence(const FString& HostSteamId);
+    void ClearJoinPresence();
+    // SteamID del jugador local (host) como string; vacío si no hay Steam.
+    FString GetLocalSteamId() const;
+    // Al arrancar: si el juego se lanzó desde una invitación (command line con nuestro token), devuelve
+    // el SteamID del host a unirse; vacío si no. Lo consulta el GameInstance tras el login.
+    FString ConsumeLaunchJoinHostId();
 
 protected:
     // Callbacks que OSS invoca internamente
@@ -245,6 +259,7 @@ private:
     // pero UHT genera código que no puede incluir steam_api.h.
     struct FPTSteamWorldwideSearch* WorldwideSearch = nullptr;
     struct FPTSteamDirectJoin*      WorldwideJoin   = nullptr;
+    struct FPTSteamJoinListener*    JoinListener    = nullptr; // escucha "Unirse a partida" de Steam
 #endif
 
     // Helpers privados
