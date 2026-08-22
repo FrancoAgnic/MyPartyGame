@@ -49,6 +49,9 @@ protected:
     UPROPERTY(meta = (BindWidget))         UButton* QuitButton;
     // Locker (casillero): abre el widget de personalización (reemplaza la vieja tecla G).
     UPROPERTY(meta = (BindWidgetOptional)) UButton* LockerButton;
+    // Workshop: abre el Browser de mods (bancos de palabras + mapas). Solo hace falta crear el botón
+    // con este nombre y asignar WorkshopBrowserClass en Details; el resto lo maneja C++.
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* WorkshopButton;
 
     // Agrupa título+subtítulo de la pantalla principal (se oculta junto con Play/Settings/Exit).
     UPROPERTY(meta = (BindWidgetOptional)) UWidget* MainMenuHeaderPanel;
@@ -85,6 +88,12 @@ protected:
     // que se sube en cada build. Crear un TextBlock llamado "VersionText" en el WBP.
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* VersionText;
 
+    // WBP del Browser del Workshop (deriva de PTWorkshopBrowserWidget). Asignar en Details del WBP del
+    // menú. El botón WorkshopButton crea una instancia y la muestra (se cachea en WorkshopBrowser).
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Workshop")
+    TSubclassOf<class UPTWorkshopBrowserWidget> WorkshopBrowserClass;
+    UPROPERTY() class UPTWorkshopBrowserWidget* WorkshopBrowser = nullptr;
+
     // ------------------------------------------------------------------
     // Handlers de botones
     // ------------------------------------------------------------------
@@ -92,6 +101,7 @@ protected:
     UFUNCTION() void OnPlayBackClicked();
     UFUNCTION() void OnHostClicked();
     UFUNCTION() void OnFindClicked();
+    UFUNCTION() void OnWorkshopClicked();
     UFUNCTION() void OnEnterCodeClicked();
     UFUNCTION() void OnQuitClicked();
     UFUNCTION() void OnSettingsClicked();

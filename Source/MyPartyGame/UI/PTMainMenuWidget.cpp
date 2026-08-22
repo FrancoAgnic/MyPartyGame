@@ -9,6 +9,7 @@
 #include "PTEnterCodeWidget.h"
 #include "PTSettingsWidget.h"
 #include "PTLanguageSelectWidget.h"
+#include "PTWorkshopBrowserWidget.h"
 #include "PTGameUserSettings.h"
 #include "PTGameInstance.h"
 #include "PTLobbyGameMode.h"
@@ -34,6 +35,7 @@ bool UPTMainMenuWidget::Initialize()
     if (QuitButton)      QuitButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnQuitClicked);
     if (SettingsButton)  SettingsButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnSettingsClicked);
     if (LockerButton)    LockerButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnLockerClicked);
+    if (WorkshopButton)  WorkshopButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnWorkshopClicked);
 
     // Si hay un PlayButton, arrancar en la pantalla principal (submenú Host/Find/EnterCode oculto).
     // Si el WBP todavía no tiene PlayButton, no se toca nada (comportamiento previo, todo visible).
@@ -212,6 +214,23 @@ void UPTMainMenuWidget::OnLockerClicked()
     // El Locker vive en el PlayerController del lobby (donde está el modo esculpir/pintar).
     if (APTLobbyPlayerController* PC = Cast<APTLobbyPlayerController>(GetOwningPlayer()))
         PC->OpenLocker();
+}
+
+void UPTMainMenuWidget::OnWorkshopClicked()
+{
+    if (!WorkshopBrowserClass)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[Menu] WorkshopButton sin WorkshopBrowserClass asignado (Details del WBP del menú)."));
+        return;
+    }
+    // Crear la ventana una sola vez y reusarla; mostrarla por encima del menú.
+    if (!WorkshopBrowser)
+    {
+        WorkshopBrowser = CreateWidget<UPTWorkshopBrowserWidget>(this, WorkshopBrowserClass);
+        if (!WorkshopBrowser) return;
+        WorkshopBrowser->AddToViewport(50); // por encima del menú
+    }
+    WorkshopBrowser->ShowPanel();
 }
 
 // ==========================================================================
