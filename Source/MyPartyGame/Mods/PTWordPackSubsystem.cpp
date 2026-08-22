@@ -6,6 +6,7 @@
 #include "Misc/Guid.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformFileManager.h"
+#include "Async/Async.h"
 
 #if PT_WITH_STEAM
 #include "steam/steam_api.h"
@@ -68,7 +69,64 @@ struct FPTWorkshopPublish
         FString Info = bOk
             ? FString::Printf(TEXT("%llu"), ItemId)
             : FString::Printf(TEXT("SubmitItemUpdate falló (%d)"), p ? (int32)p->m_eResult : -1);
-        if (Cb) Cb(bOk, Info);
+        // Los callbacks de Steam corren en el hilo de tareas de OSS, no en el GameThread; la UI que
+        // escucha el delegate toca Slate → marshalear al GameThread.
+        TFunction<void(bool, FString)> CB = MoveTemp(Cb);
+        AsyncTask(ENamedThreads::GameThread, [CB = MoveTemp(CB), bOk, Info]() mutable { if (CB) CB(bOk, Info); });
+    }
+};
+
+// ===== Búsqueda del catálogo del Workshop ===================================
+struct FPTWorkshopQuery
+{
+    TFunction<void(TArray<FPTWorkshopItem>&&, bool)> Cb;
+    UGCQueryHandle_t Handle = k_UGCQueryHandleInvalid;
+    CCallResult<FPTWorkshopQuery, SteamUGCQueryCompleted_t> QueryCR;
+
+    void Start(const FString& SearchText, const FString& Tag,
+               TFunction<void(TArray<FPTWorkshopItem>&&, bool)> InCb)
+    {
+        Cb = MoveTemp(InCb);
+        if (!SteamUGC() || !SteamUtils()) { if (Cb) Cb({}, false); return; }
+
+        const AppId_t App = SteamUtils()->GetAppID();
+        // Si hay texto de búsqueda, ordenar por relevancia; si no, por votos (populares primero).
+        const EUGCQuery QueryType = SearchText.IsEmpty()
+            ? k_EUGCQuery_RankedByVote : k_EUGCQuery_RankedByTextSearch;
+        Handle = SteamUGC()->CreateQueryAllUGCRequest(QueryType, k_EUGCMatchingUGCType_Items, App, App, 1);
+        if (!SearchText.IsEmpty()) SteamUGC()->SetSearchText(Handle, TCHAR_TO_UTF8(*SearchText));
+        if (!Tag.IsEmpty())        SteamUGC()->AddRequiredTag(Handle, TCHAR_TO_UTF8(*Tag));
+
+        const SteamAPICall_t h = SteamUGC()->SendQueryUGCRequest(Handle);
+        QueryCR.Set(h, this, &FPTWorkshopQuery::OnComplete);
+    }
+
+    void OnComplete(SteamUGCQueryCompleted_t* p, bool bIOFailure)
+    {
+        TArray<FPTWorkshopItem> Out;
+        const bool bOk = !bIOFailure && p && p->m_eResult == k_EResultOK;
+        if (bOk && SteamUGC())
+        {
+            for (uint32 i = 0; i < p->m_unNumResultsReturned; ++i)
+            {
+                SteamUGCDetails_t D;
+                if (SteamUGC()->GetQueryUGCResult(Handle, i, &D))
+                {
+                    FPTWorkshopItem It;
+                    It.Id    = FString::Printf(TEXT("%llu"), D.m_nPublishedFileId);
+                    It.Title = UTF8_TO_TCHAR(D.m_rgchTitle);
+                    const uint32 St = SteamUGC()->GetItemState(D.m_nPublishedFileId);
+                    It.bSubscribed = (St & k_EItemStateSubscribed) != 0;
+                    Out.Add(MoveTemp(It));
+                }
+            }
+        }
+        if (SteamUGC() && Handle != k_UGCQueryHandleInvalid)
+            SteamUGC()->ReleaseQueryUGCRequest(Handle);
+
+        TFunction<void(TArray<FPTWorkshopItem>&&, bool)> CB = MoveTemp(Cb);
+        AsyncTask(ENamedThreads::GameThread,
+            [CB = MoveTemp(CB), Out = MoveTemp(Out), bOk]() mutable { if (CB) CB(MoveTemp(Out), bOk); });
     }
 };
 #endif // PT_WITH_STEAM
@@ -87,8 +145,47 @@ void UPTWordPackSubsystem::Deinitialize()
 {
 #if PT_WITH_STEAM
     delete Publisher; Publisher = nullptr;
+    delete Query;     Query     = nullptr;
 #endif
     Super::Deinitialize();
+}
+
+void UPTWordPackSubsystem::SearchWorkshop(const FString& SearchText, const FString& Tag)
+{
+#if PT_WITH_STEAM
+    if (!SteamUGC())
+    {
+        OnWorkshopSearchComplete.Broadcast(TArray<FPTWorkshopItem>(), false);
+        return;
+    }
+    delete Query;
+    Query = new FPTWorkshopQuery();
+    Query->Start(SearchText, Tag, [this](TArray<FPTWorkshopItem>&& Items, bool bOk)
+    {
+        delete Query; Query = nullptr;
+        OnWorkshopSearchComplete.Broadcast(Items, bOk);
+    });
+#else
+    OnWorkshopSearchComplete.Broadcast(TArray<FPTWorkshopItem>(), false);
+#endif
+}
+
+void UPTWordPackSubsystem::SubscribeItem(const FString& Id)
+{
+#if PT_WITH_STEAM
+    if (!SteamUGC()) return;
+    const uint64 FileId = FCString::Strtoui64(*Id, nullptr, 10);
+    if (FileId != 0) SteamUGC()->SubscribeItem(FileId); // Steam descarga el item; luego aparece en GetPacks
+#endif
+}
+
+void UPTWordPackSubsystem::UnsubscribeItem(const FString& Id)
+{
+#if PT_WITH_STEAM
+    if (!SteamUGC()) return;
+    const uint64 FileId = FCString::Strtoui64(*Id, nullptr, 10);
+    if (FileId != 0) SteamUGC()->UnsubscribeItem(FileId);
+#endif
 }
 
 const FPTWordPack* UPTWordPackSubsystem::FindPack(const FString& Id) const

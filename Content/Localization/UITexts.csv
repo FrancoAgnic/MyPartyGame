@@ -179,3 +179,8 @@ WORDPACK_BY,por {0},by {0},por {0},von {0},par {0},di {0}
 WORDPACK_SELECTED,En uso: {0},In use: {0},Em uso: {0},In Verwendung: {0},Utilisé : {0},In uso: {0}
 WORDPACK_PUB_OK,¡Banco publicado al Workshop!,Bank published to Workshop!,Banco publicado no Workshop!,Bank im Workshop veröffentlicht!,Banque publiée sur le Workshop !,Banca pubblicata nel Workshop!
 WORDPACK_PUB_FAIL,No se pudo publicar: {0},Could not publish: {0},Não foi possível publicar: {0},Veröffentlichung fehlgeschlagen: {0},Échec de la publication : {0},Impossibile pubblicare: {0}
+WORKSHOP_TITLE,Workshop,Workshop,Workshop,Workshop,Workshop,Workshop
+WORKSHOP_ADD,Añadir,Add,Adicionar,Hinzufügen,Ajouter,Aggiungi
+WORKSHOP_ADDED,Añadido,Added,Adicionado,Hinzugefügt,Ajouté,Aggiunto
+WORKSHOP_SEARCHING,Buscando...,Searching...,Procurando...,Suche...,Recherche...,Ricerca...
+WORKSHOP_EMPTY,No se encontraron mods,No mods found,Nenhum mod encontrado,Keine Mods gefunden,Aucun mod trouvé,Nessun mod trovato

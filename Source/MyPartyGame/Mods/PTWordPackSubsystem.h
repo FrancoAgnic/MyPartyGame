@@ -31,9 +31,22 @@ struct FPTWordPack
     UPROPERTY(BlueprintReadOnly, Category="WordPack") bool    bFromWorkshop = false;
 };
 
+// Un item del catálogo del Workshop (resultado de una búsqueda), para el Browser.
+USTRUCT(BlueprintType)
+struct FPTWorkshopItem
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category="Workshop") FString Id;    // published file id (string)
+    UPROPERTY(BlueprintReadOnly, Category="Workshop") FString Title;
+    UPROPERTY(BlueprintReadOnly, Category="Workshop") bool    bSubscribed = false;
+};
+
 DECLARE_MULTICAST_DELEGATE(FPTOnWordPacksUpdated);
 // Resultado de publicar: (ok, mensaje/itemId o error).
 DECLARE_MULTICAST_DELEGATE_TwoParams(FPTOnWordPackPublished, bool /*bOk*/, const FString& /*Info*/);
+// Terminó una búsqueda del catálogo del Workshop: (items, ok).
+DECLARE_MULTICAST_DELEGATE_TwoParams(FPTOnWorkshopSearch, const TArray<FPTWorkshopItem>& /*Items*/, bool /*bOk*/);
 
 UCLASS()
 class MYPARTYGAME_API UPTWordPackSubsystem : public UGameInstanceSubsystem
@@ -55,8 +68,16 @@ public:
     UFUNCTION(BlueprintCallable, Category="WordPack")
     void PublishWordPack(const FString& CsvPath, const FString& Title, const FString& Description, const FString& PreviewPath);
 
+    /** Busca en el CATÁLOGO del Workshop (todos los items publicados) por texto, filtrando por Tag
+     *  ("WordBank" para bancos, "Map" para mapas). Async → OnWorkshopSearchComplete. */
+    void SearchWorkshop(const FString& SearchText, const FString& Tag);
+    /** Suscribir/desuscribir un item por su Id → Steam lo descarga/borra. Al bajarse aparece en GetPacks. */
+    void SubscribeItem(const FString& Id);
+    void UnsubscribeItem(const FString& Id);
+
     FPTOnWordPacksUpdated  OnWordPacksUpdated;
     FPTOnWordPackPublished OnWordPackPublished;
+    FPTOnWorkshopSearch    OnWorkshopSearchComplete;
 
 private:
     // Agrega un pack desde una carpeta si tiene words.csv válido. bWorkshop marca el origen.
@@ -68,5 +89,6 @@ private:
 
 #if PT_WITH_STEAM
     struct FPTWorkshopPublish* Publisher = nullptr; // puntero opaco (steam headers fuera de UHT)
+    struct FPTWorkshopQuery*   Query     = nullptr;
 #endif
 };
