@@ -170,6 +170,7 @@ void UPTMainMenuWidget::SetPlaySubmenuVisible(bool bVisible)
     if (SettingsButton)      SettingsButton->SetVisibility(bVisible ? Hidden : Shown);
     if (QuitButton)          QuitButton->SetVisibility(bVisible ? Hidden : Shown);
     if (LockerButton)        LockerButton->SetVisibility(bVisible ? Hidden : Shown); // no solapar en el submenú Play
+    if (WorkshopButton)      WorkshopButton->SetVisibility(bVisible ? Hidden : Shown); // idem: es de la pantalla principal
     if (MainMenuHeaderPanel) MainMenuHeaderPanel->SetVisibility(bVisible ? Hidden : Shown);
 }
 
