@@ -51,8 +51,6 @@ bool UPTLobbyHUDWidget::Initialize()
     if (DiffFacilButton)   DiffFacilButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnDiffFacil);
     if (DiffMediaButton)   DiffMediaButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnDiffMedia);
     if (DiffDificilButton) DiffDificilButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnDiffDificil);
-    if (LoadCSVButton)  LoadCSVButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnLoadCSV);
-    if (ClearCSVButton) ClearCSVButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnClearCSV);
     if (GameSettingsButton)  GameSettingsButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnGameSettingsClicked);
     if (CloseSettingsButton) CloseSettingsButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnCloseSettingsClicked);
 
@@ -395,19 +393,9 @@ void UPTLobbyHUDWidget::RefreshHostSettingsUI()
     Paint(DiffMediaButton,   DiffActive(EPTWordDifficulty::Media));
     Paint(DiffDificilButton, DiffActive(EPTWordDifficulty::Dificil));
 
-    // Estado del banco / CSV.
+    // Con un banco custom elegido en la Biblioteca, el filtro por categorías del banco default no
+    // tiene sentido → deshabilitar los checks.
     const bool bCustom = S.bUseCustomWords && S.CustomWords.Num() > 0;
-    if (CSVStatusText)
-    {
-        if (bCustom)
-        {
-            FFormatOrderedArguments Args;
-            Args.Add(FText::AsNumber(S.CustomWords.Num()));
-            CSVStatusText->SetText(PTText::Format(TEXT("LOBBY_CSV_CUSTOM"), Args));
-        }
-        else CSVStatusText->SetText(PTText::Get(TEXT("LOBBY_CSV_DEFAULT")));
-    }
-    // Con CSV propio, el filtro por categorías del banco default no tiene sentido → deshabilitar.
     for (UCheckBox* C : CategoryChecks) if (C) C->SetIsEnabled(!bCustom);
 }
 
@@ -435,8 +423,6 @@ void UPTLobbyHUDWidget::OnDiffFacil()   { ToggleDifficulty(EPTWordDifficulty::Fa
 void UPTLobbyHUDWidget::OnDiffMedia()   { ToggleDifficulty(EPTWordDifficulty::Media); }
 void UPTLobbyHUDWidget::OnDiffDificil() { ToggleDifficulty(EPTWordDifficulty::Dificil); }
 
-void UPTLobbyHUDWidget::OnLoadCSV()  { if (UPTGameInstance* GI=GetGI()){ GI->LoadCustomWordsFromCSVDialog(); RefreshHostSettingsUI(); } }
-void UPTLobbyHUDWidget::OnClearCSV() { if (UPTGameInstance* GI=GetGI()){ GI->ClearCustomWords(); RefreshHostSettingsUI(); } }
 
 void UPTLobbyHUDWidget::OnGameSettingsClicked()
 {

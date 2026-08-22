@@ -111,16 +111,10 @@ protected:
     // Categorías: contenedor (VerticalBox/ScrollBox) que C++ llena con un checkbox por categoría.
     UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* CategoriesBox;
 
-    // CSV propio del host.
-    UPROPERTY(meta = (BindWidgetOptional)) UButton*    LoadCSVButton;
-    UPROPERTY(meta = (BindWidgetOptional)) UButton*    ClearCSVButton;
-    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* CSVStatusText;  // "Banco default (100)" / "CSV: 42 palabras"
-
     UFUNCTION() void OnTurnTimeMinus(); UFUNCTION() void OnTurnTimePlus();
     UFUNCTION() void OnRoundsMinus();   UFUNCTION() void OnRoundsPlus();
     UFUNCTION() void OnRevealMinus();   UFUNCTION() void OnRevealPlus();
     UFUNCTION() void OnDiffFacil();     UFUNCTION() void OnDiffMedia();  UFUNCTION() void OnDiffDificil();
-    UFUNCTION() void OnLoadCSV();       UFUNCTION() void OnClearCSV();
     UFUNCTION() void OnCategoryChanged(bool bChecked); // rebuild desde el estado de todos los checks
     UFUNCTION() void OnGameSettingsClicked(); // abre el panel
     UFUNCTION() void OnCloseSettingsClicked(); // aplica (ya está en vivo) y cierra el panel
