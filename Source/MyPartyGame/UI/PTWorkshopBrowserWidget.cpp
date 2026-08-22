@@ -3,6 +3,7 @@
 #include "PTWorkshopBrowserWidget.h"
 #include "PTWorkshopItemRowWidget.h"
 #include "../PTTextTable.h"
+#include "../PTGameInstance.h"
 #include "Mods/PTWordPackSubsystem.h"
 #include "Components/PanelWidget.h"
 #include "Components/Button.h"
@@ -22,6 +23,7 @@ void UPTWorkshopBrowserWidget::NativeConstruct()
     Super::NativeConstruct();
 
     if (SearchButton)       SearchButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnSearchClicked);
+    if (PublishButton)      PublishButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnPublishClicked);
     if (WordBanksTabButton) WordBanksTabButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnWordBanksTabClicked);
     if (MapsTabButton)      MapsTabButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnMapsTabClicked);
     if (BackButton)         BackButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnBackClicked);
@@ -34,6 +36,7 @@ void UPTWorkshopBrowserWidget::NativeConstruct()
         if (!bBound)
         {
             P->OnWorkshopSearchComplete.AddUObject(this, &UPTWorkshopBrowserWidget::OnSearchComplete);
+            P->OnWordPackPublished.AddUObject(this, &UPTWorkshopBrowserWidget::OnPublished);
             bBound = true;
         }
     }
@@ -45,7 +48,12 @@ void UPTWorkshopBrowserWidget::NativeDestruct()
 {
     if (UPTWordPackSubsystem* P = Packs())
     {
-        if (bBound) { P->OnWorkshopSearchComplete.RemoveAll(this); bBound = false; }
+        if (bBound)
+        {
+            P->OnWorkshopSearchComplete.RemoveAll(this);
+            P->OnWordPackPublished.RemoveAll(this);
+            bBound = false;
+        }
     }
     Super::NativeDestruct();
 }
@@ -157,4 +165,27 @@ void UPTWorkshopBrowserWidget::OnSearchComplete(const TArray<FPTWorkshopItem>& I
 void UPTWorkshopBrowserWidget::AddItem(const FString& ItemId)
 {
     if (UPTWordPackSubsystem* P = Packs()) P->SubscribeItem(ItemId);
+}
+
+void UPTWorkshopBrowserWidget::OnPublishClicked()
+{
+    // Elegir un .csv y subirlo al Workshop como banco de palabras (el resultado llega por OnPublished).
+    if (UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance()))
+        GI->PublishWordPackFromDialog();
+}
+
+void UPTWorkshopBrowserWidget::OnPublished(bool bOk, const FString& Info)
+{
+    if (!StatusText) return;
+    if (bOk)
+    {
+        StatusText->SetText(PTText::Get(TEXT("WORDPACK_PUB_OK")));
+    }
+    else
+    {
+        FFormatOrderedArguments Args;
+        Args.Add(FText::FromString(Info));
+        StatusText->SetText(PTText::Format(TEXT("WORDPACK_PUB_FAIL"), Args));
+    }
+    StatusText->SetVisibility(ESlateVisibility::Visible);
 }

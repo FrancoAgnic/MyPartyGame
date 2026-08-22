@@ -42,9 +42,7 @@ protected:
     UPROPERTY(meta = (BindWidget))         UPanelWidget* PacksBox;
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   SelectedText;   // banco elegido ("En uso: X")
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   EmptyText;      // "no hay bancos"
-    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   StatusText;     // resultado de publicar
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      RefreshButton;
-    UPROPERTY(meta = (BindWidgetOptional)) UButton*      PublishButton;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      DefaultButton;
 
     // ── Lista de MAPAS (bloqueada por ahora) ──
@@ -66,7 +64,6 @@ protected:
     TSubclassOf<UPTWordPackRowWidget> RowWidgetClass;
 
     UFUNCTION() void OnRefreshClicked();
-    UFUNCTION() void OnPublishClicked();
     UFUNCTION() void OnDefaultClicked();
     UFUNCTION() void OnBackClicked();
     UFUNCTION() void OnWordsTabClicked();
@@ -75,7 +72,6 @@ protected:
 private:
     void Rebuild();
     void OnPacksUpdated();
-    void OnPublished(bool bOk, const FString& Info);
     void SwitchTab(int32 Tab);   // 0 = Palabras (funcional), 1 = Mapas (bloqueado)
     void ApplyTabVisual();
     UPTWordPackSubsystem* Packs() const;

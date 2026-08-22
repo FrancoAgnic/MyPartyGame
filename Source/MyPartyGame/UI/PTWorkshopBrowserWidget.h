@@ -44,6 +44,8 @@ protected:
     UPROPERTY(meta = (BindWidget))         UPanelWidget*     ResultsBox;
     UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* SearchBox;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*          SearchButton;
+    // Publicar tu propio banco de palabras (.csv) al Workshop. El resultado se muestra en StatusText.
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*          PublishButton;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*          WordBanksTabButton;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*          MapsTabButton;
     UPROPERTY(meta = (BindWidgetOptional)) UWidget*          MapsLockedPanel;
@@ -63,12 +65,14 @@ protected:
     UFUNCTION() void OnWordBanksTabClicked();
     UFUNCTION() void OnMapsTabClicked();
     UFUNCTION() void OnBackClicked();
+    UFUNCTION() void OnPublishClicked();
 
 private:
     void SwitchTab(int32 Tab);           // 0 = bancos (funcional), 1 = mapas (bloqueado)
     void ApplyTabVisual();
     void RunSearch();
     void OnSearchComplete(const TArray<FPTWorkshopItem>& Items, bool bOk);
+    void OnPublished(bool bOk, const FString& Info);
     UPTWordPackSubsystem* Packs() const;
 
     int32 ActiveTab = 0;
