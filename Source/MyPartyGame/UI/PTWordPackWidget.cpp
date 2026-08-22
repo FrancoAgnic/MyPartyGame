@@ -60,6 +60,7 @@ void UPTWordPackWidget::NativeDestruct()
 void UPTWordPackWidget::ShowPanel()
 {
     SetVisibility(ESlateVisibility::Visible);
+    PlayPopIn();
     if (UPTWordPackSubsystem* P = Packs()) P->RescanPacks();
 }
 

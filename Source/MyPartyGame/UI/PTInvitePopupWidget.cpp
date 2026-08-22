@@ -31,6 +31,8 @@ void UPTInvitePopupWidget::Setup(const FString& FromName, float TimeoutSeconds)
     TimeTotal = FMath::Max(1.f, TimeoutSeconds);
     TimeLeft  = TimeTotal;
     if (TimeBar) TimeBar->SetPercent(1.f);
+
+    PlayPopIn(); // aparece con el "blop"
 }
 
 void UPTInvitePopupWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)

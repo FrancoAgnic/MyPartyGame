@@ -53,6 +53,7 @@ void UPTWorkshopBrowserWidget::NativeDestruct()
 void UPTWorkshopBrowserWidget::ShowPanel()
 {
     SetVisibility(ESlateVisibility::Visible);
+    PlayPopIn();
     SwitchTab(0);
 }
 

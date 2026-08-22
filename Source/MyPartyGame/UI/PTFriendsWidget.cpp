@@ -45,6 +45,7 @@ void UPTFriendsWidget::NativeDestruct()
 void UPTFriendsWidget::ShowPanel()
 {
     SetVisibility(ESlateVisibility::Visible);
+    PlayPopIn();
     if (Sessions) Sessions->ReadFriends();
 }
 

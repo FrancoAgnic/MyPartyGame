@@ -1,7 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-// Clase base de TODOS los widgets de UI del juego. Su único trabajo extra: al construirse, aplicar
-// los sonidos de UI (hover/click) del GameInstance a TODOS los botones del widget, sin tener que
-// tocar cada botón a mano. Reproducir el sonido lo hace Slate solo (via el estilo del botón).
+// Clase base de TODOS los widgets de UI del juego. Trabajo extra:
+//  1) al construirse, aplica los sonidos de UI (hover/click) del GameInstance a TODOS los botones.
+//  2) provee PlayPopIn(): animación "blop" (escala 0→1 con un pequeño rebote) para popups.
 
 #pragma once
 #include "CoreMinimal.h"
@@ -13,6 +13,25 @@ class MYPARTYGAME_API UPTUserWidget : public UUserWidget
 {
     GENERATED_BODY()
 
+public:
+    /** Reproduce la animación "blop": escala el widget de 0 a 1 con un pequeño rebote (overshoot).
+     *  Los popups la llaman al mostrarse (en ShowPanel / Setup / NativeConstruct). Va por TIMER (no
+     *  depende de NativeTick, que en modo Auto puede no correr si el WBP no implementa Tick). */
+    UFUNCTION(BlueprintCallable, Category="PopIn")
+    void PlayPopIn();
+
 protected:
     virtual void NativeConstruct() override;
+    virtual void NativeDestruct() override;
+
+    // Duración del blop (segundos). Editable por si se quiere más rápido/lento.
+    UPROPERTY(EditAnywhere, Category="PopIn") float PopInDuration = 1.0f;
+    // Si es true, el blop se reproduce solo al construirse (para popups que se crean ya visibles).
+    UPROPERTY(EditAnywhere, Category="PopIn") bool  bAutoPopIn = false;
+
+private:
+    void PopInStep();
+
+    FTimerHandle PopInTimer;
+    float PopInElapsed = 0.f;
 };
