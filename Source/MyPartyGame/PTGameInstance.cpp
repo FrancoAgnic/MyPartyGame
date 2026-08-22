@@ -138,6 +138,28 @@ void UPTGameInstance::SelectDefaultWordBank()
     SelectedWordPackTitle.Reset();
 }
 
+void UPTGameInstance::PublishWordPackFromDialog()
+{
+    IDesktopPlatform* DP = FDesktopPlatformModule::Get();
+    if (!DP) return;
+
+    const void* ParentHandle = FSlateApplication::IsInitialized()
+        ? FSlateApplication::Get().FindBestParentWindowHandleForDialogs(nullptr) : nullptr;
+
+    TArray<FString> Files;
+    const bool bPicked = DP->OpenFileDialog(
+        ParentHandle, TEXT("Elegir CSV para publicar al Workshop"), FPaths::ProjectDir(), TEXT(""),
+        TEXT("CSV (*.csv)|*.csv|Texto (*.txt)|*.txt|Todos (*.*)|*.*"),
+        EFileDialogFlags::None, Files);
+
+    if (!bPicked || Files.Num() == 0) return;
+
+    const FString Path  = Files[0];
+    const FString Title = FPaths::GetBaseFilename(Path); // nombre del archivo como título inicial
+    if (UPTWordPackSubsystem* WP = GetSubsystem<UPTWordPackSubsystem>())
+        WP->PublishWordPack(Path, Title, FString(), FString());
+}
+
 void UPTGameInstance::ApplyUIButtonSounds(UUserWidget* Root) const
 {
     if (!Root || (!UIHoverSound && !UIClickSound) || !Root->WidgetTree) return;

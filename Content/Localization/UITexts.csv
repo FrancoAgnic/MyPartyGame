@@ -168,3 +168,14 @@ CREATE_FRIENDS_ONLY,Solo amigos,Friends only,Só amigos,Nur Freunde,Amis seuleme
 INVITE_POPUP_MSG,{0} te invitó a jugar,{0} invited you to play,{0} convidou você para jogar,{0} hat dich zum Spielen eingeladen,{0} t'a invité à jouer,{0} ti ha invitato a giocare
 INVITE_ACCEPT,Aceptar,Accept,Aceitar,Annehmen,Accepter,Accetta
 INVITE_REJECT,Rechazar,Decline,Recusar,Ablehnen,Refuser,Rifiuta
+WORDPACK_TITLE,Bancos de palabras,Word banks,Bancos de palavras,Wortbänke,Banques de mots,Banche di parole
+WORDPACK_USE,Usar,Use,Usar,Verwenden,Utiliser,Usa
+WORDPACK_INUSE,En uso,In use,Em uso,In Verwendung,Utilisé,In uso
+WORDPACK_PUBLISH,Publicar CSV,Publish CSV,Publicar CSV,CSV veröffentlichen,Publier CSV,Pubblica CSV
+WORDPACK_REFRESH,Actualizar,Refresh,Atualizar,Aktualisieren,Actualiser,Aggiorna
+WORDPACK_DEFAULT,Banco por defecto,Default bank,Banco padrão,Standardbank,Banque par défaut,Banca predefinita
+WORDPACK_EMPTY,No hay bancos (suscribite a alguno en el Workshop),No banks (subscribe to some on the Workshop),Nenhum banco (inscreva-se em algum no Workshop),Keine Bänke (im Workshop abonnieren),Aucune banque (abonnez-vous sur le Workshop),Nessuna banca (iscriviti nel Workshop)
+WORDPACK_BY,por {0},by {0},por {0},von {0},par {0},di {0}
+WORDPACK_SELECTED,En uso: {0},In use: {0},Em uso: {0},In Verwendung: {0},Utilisé : {0},In uso: {0}
+WORDPACK_PUB_OK,¡Banco publicado al Workshop!,Bank published to Workshop!,Banco publicado no Workshop!,Bank im Workshop veröffentlicht!,Banque publiée sur le Workshop !,Banca pubblicata nel Workshop!
+WORDPACK_PUB_FAIL,No se pudo publicar: {0},Could not publish: {0},Não foi possível publicar: {0},Veröffentlichung fehlgeschlagen: {0},Échec de la publication : {0},Impossibile pubblicare: {0}
