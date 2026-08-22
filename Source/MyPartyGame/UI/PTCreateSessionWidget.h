@@ -5,7 +5,7 @@
 
 #pragma once
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "PTUserWidget.h"
 #include "PTCreateSessionWidget.generated.h"
 
 class UButton;
@@ -14,7 +14,7 @@ class UTextBlock;
 class UMultiplayerSessionsSubsystem;
 
 UCLASS()
-class MYPARTYGAME_API UPTCreateSessionWidget : public UUserWidget
+class MYPARTYGAME_API UPTCreateSessionWidget : public UPTUserWidget
 {
     GENERATED_BODY()
 

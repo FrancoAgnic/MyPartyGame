@@ -1136,6 +1136,7 @@ void APTLobbyPlayerController::OpenLocker()
     if (!LockerWidget) return;
     if (!LockerWidget->IsInViewport()) LockerWidget->AddToViewport(50);
     LockerWidget->SetVisibility(ESlateVisibility::Visible);
+    LockerWidget->PlayPopIn();
     LockerWidget->RefreshSlots();
     LockerWidget->SetKeyboardFocus();
 
@@ -1556,6 +1557,7 @@ void APTLobbyPlayerController::ExitHeadSculpt(bool bSaveChanges)
         if (LockerWidget)
         {
             LockerWidget->SetVisibility(ESlateVisibility::Visible);
+            LockerWidget->PlayPopIn();
             LockerWidget->RefreshSlots();
             LockerWidget->SetKeyboardFocus();
         }
@@ -1588,6 +1590,8 @@ void APTLobbyPlayerController::ToggleEscapeMenu(const FInputActionValue& Value)
     }
 
     if (EscapeMenuWidget) EscapeMenuWidget->HandleEscape();
+    // Blop al ABRIR (si quedó abierto tras el toggle).
+    if (EscapeMenuWidget && EscapeMenuWidget->IsMenuOpen()) EscapeMenuWidget->PlayPopIn();
 
     // Al cerrar el menú de Escape, UPTLobbyEscapeMenuWidget::ToggleMenu deja el input en
     // GameOnly + cursor oculto (correcto para el juego FPS, NO para el lobby diegético, que

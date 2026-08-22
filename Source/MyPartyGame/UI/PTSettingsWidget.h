@@ -7,7 +7,7 @@
 
 #pragma once
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "PTUserWidget.h"
 #include "PTSettingsWidget.generated.h"
 
 class USlider;
@@ -18,7 +18,7 @@ class UPanelWidget;
 class UComboBoxString;
 
 UCLASS()
-class MYPARTYGAME_API UPTSettingsWidget : public UUserWidget
+class MYPARTYGAME_API UPTSettingsWidget : public UPTUserWidget
 {
     GENERATED_BODY()
 

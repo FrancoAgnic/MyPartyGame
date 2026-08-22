@@ -27,6 +27,7 @@ bool UPTFindSessionsWidget::Initialize()
 void UPTFindSessionsWidget::ShowPanel()
 {
     SetVisibility(ESlateVisibility::Visible);
+    PlayPopIn();
 
     // "Reconectar a la partida anterior": solo si hay una última partida guardada.
     if (ReconnectButton)

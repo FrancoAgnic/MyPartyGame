@@ -3,7 +3,7 @@
 
 #pragma once
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "PTUserWidget.h"
 #include "Interfaces/OnlineSessionInterface.h"
 #include "OnlineSessionSettings.h"
 #include "PTFindSessionsWidget.generated.h"
@@ -15,7 +15,7 @@ class UPTSessionRowWidget;
 class UMultiplayerSessionsSubsystem;
 
 UCLASS()
-class MYPARTYGAME_API UPTFindSessionsWidget : public UUserWidget
+class MYPARTYGAME_API UPTFindSessionsWidget : public UPTUserWidget
 {
     GENERATED_BODY()
 

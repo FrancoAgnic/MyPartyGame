@@ -29,6 +29,7 @@ void UPTCreateSessionWidget::ShowPanel(int32 DefaultMaxPlayers)
     RefreshMaxPlayersText();
 
     SetVisibility(ESlateVisibility::Visible);
+    PlayPopIn();
 }
 
 void UPTCreateSessionWidget::RefreshMaxPlayersText()

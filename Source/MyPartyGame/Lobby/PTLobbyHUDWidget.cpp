@@ -430,7 +430,11 @@ void UPTLobbyHUDWidget::OnGameSettingsClicked()
     bSettingsOpen = true;
     if (!bCategoryChecksBuilt) BuildCategoryChecks();
     RefreshHostSettingsUI();
-    if (HostSettingsPanel) HostSettingsPanel->SetVisibility(ESlateVisibility::Visible);
+    if (HostSettingsPanel)
+    {
+        HostSettingsPanel->SetVisibility(ESlateVisibility::Visible);
+        PlayPopInOn(HostSettingsPanel); // blop del panel de settings
+    }
 }
 
 void UPTLobbyHUDWidget::OnCloseSettingsClicked()

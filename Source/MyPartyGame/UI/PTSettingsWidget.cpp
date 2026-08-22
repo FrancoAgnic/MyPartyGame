@@ -75,6 +75,7 @@ void UPTSettingsWidget::ShowPanel()
     BuildLanguageCombo();               // llena el desplegable con los idiomas del CSV
     ApplyLanguageSectionAvailability(); // colapsa la sección si no estamos en el menú
     SetVisibility(ESlateVisibility::Visible);
+    PlayPopIn();
 }
 
 void UPTSettingsWidget::BuildLanguageCombo()

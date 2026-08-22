@@ -2,6 +2,7 @@
 
 #include "PTUserWidget.h"
 #include "../PTGameInstance.h"
+#include "Components/Widget.h"
 #include "TimerManager.h"
 #include "Engine/World.h"
 
@@ -28,12 +29,18 @@ void UPTUserWidget::NativeDestruct()
 
 void UPTUserWidget::PlayPopIn()
 {
-    UWorld* W = GetWorld();
-    if (!W) return;
+    PlayPopInOn(this);
+}
 
+void UPTUserWidget::PlayPopInOn(UWidget* Target)
+{
+    UWorld* W = GetWorld();
+    if (!W || !Target) return;
+
+    PopInTarget = Target;
     // Pivote en el centro para que escale desde el medio; arranca en 0.
-    SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
-    SetRenderScale(FVector2D(0.f, 0.f));
+    Target->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
+    Target->SetRenderScale(FVector2D(0.f, 0.f));
     PopInElapsed = 0.f;
 
     W->GetTimerManager().SetTimer(PopInTimer, this, &UPTUserWidget::PopInStep, PT_POPIN_STEP, /*loop=*/true);
@@ -41,6 +48,13 @@ void UPTUserWidget::PlayPopIn()
 
 void UPTUserWidget::PopInStep()
 {
+    UWidget* Target = PopInTarget.Get();
+    if (!Target)
+    {
+        if (UWorld* W = GetWorld()) W->GetTimerManager().ClearTimer(PopInTimer);
+        return;
+    }
+
     PopInElapsed += PT_POPIN_STEP;
     const float Dur = FMath::Max(0.05f, PopInDuration);
     const float T   = FMath::Clamp(PopInElapsed / Dur, 0.f, 1.f);
@@ -51,11 +65,11 @@ void UPTUserWidget::PopInStep()
     const float U  = T - 1.f;
     const float Scale = 1.f + C3 * U * U * U + C1 * U * U;
 
-    SetRenderScale(FVector2D(Scale, Scale));
+    Target->SetRenderScale(FVector2D(Scale, Scale));
 
     if (T >= 1.f)
     {
-        SetRenderScale(FVector2D(1.f, 1.f)); // asentar exacto
+        Target->SetRenderScale(FVector2D(1.f, 1.f)); // asentar exacto
         if (UWorld* W = GetWorld()) W->GetTimerManager().ClearTimer(PopInTimer);
     }
 }
