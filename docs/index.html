@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="en" data-lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -36,7 +36,9 @@
   pre{background:var(--code);padding:14px 16px;border-radius:12px;overflow:auto;border:1px solid var(--line);color:#cfe9ff}
   .tag{display:inline-block;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:2px 8px;color:var(--accent2);font-weight:600}
   .step{background:var(--bg2);border-radius:10px;padding:10px 14px;margin:8px 0;border:1px solid var(--line)}
-  .en{display:none}
+  /* Mostrar solo el idioma activo (sin romper si el elemento es inline o bloque). */
+  html[data-lang="es"] .en{display:none}
+  html[data-lang="en"] .es{display:none}
   footer{text-align:center;color:var(--muted);margin-top:26px;font-size:.9rem}
   a{color:var(--accent2)}
 </style>
@@ -47,8 +49,8 @@
     <div class="logo">Sculpturillo · Workshop</div>
     <div class="sub" data-es="Cómo crear y compartir contenido de la comunidad" data-en="How to create & share community content"></div>
     <div class="lang">
-      <button id="btn-es" class="active" onclick="setLang('es')">Español</button>
-      <button id="btn-en" onclick="setLang('en')">English</button>
+      <button id="btn-es" onclick="setLang('es')">Español</button>
+      <button id="btn-en" class="active" onclick="setLang('en')">English</button>
     </div>
   </header>
 
@@ -129,14 +131,13 @@ Pulpo,Animales,3</pre>
 
 <script>
   function setLang(l){
-    document.documentElement.lang=l;
-    document.querySelectorAll('.es').forEach(e=>e.style.display = (l==='es')?'':'none');
-    document.querySelectorAll('.en').forEach(e=>e.style.display = (l==='en')?'':'none');
+    document.documentElement.setAttribute('lang', l);
+    document.documentElement.setAttribute('data-lang', l); // el CSS oculta el idioma inactivo
     document.querySelectorAll('[data-es]').forEach(e=>e.textContent = (l==='es')?e.dataset.es:e.dataset.en);
     document.getElementById('btn-es').classList.toggle('active',l==='es');
     document.getElementById('btn-en').classList.toggle('active',l==='en');
   }
-  setLang('es');
+  setLang('en'); // por defecto en inglés
 </script>
 </body>
 </html>
