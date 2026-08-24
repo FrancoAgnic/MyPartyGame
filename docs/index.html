@@ -19,13 +19,14 @@
   }
   /* Fondo: capsule difuminada + overlay cálido para que el texto se lea */
   body::before{
-    content:""; position:fixed; inset:-20px; z-index:-2;
+    content:""; position:fixed; inset:-8px; z-index:-2;
     background:url("img/bg.png") center/cover no-repeat;
-    filter:blur(16px) saturate(1.15); transform:scale(1.12);
+    filter:blur(1.5px) saturate(1.05); transform:scale(1.03); /* casi nítida */
   }
+  /* Fundido suave (no desenfoque): apenas un velo cálido para que el texto de las cards se lea. */
   body::after{
     content:""; position:fixed; inset:0; z-index:-1;
-    background:linear-gradient(180deg, rgba(40,16,4,.42) 0%, rgba(30,12,4,.66) 100%);
+    background:linear-gradient(180deg, rgba(30,12,4,.14) 0%, rgba(30,12,4,.34) 100%);
   }
   .wrap{max-width:820px;margin:0 auto;padding:22px 18px 60px}
 
