@@ -99,6 +99,10 @@ private:
     TArray<FPTWordEntry>   CurrentChoices; // las 3 opciones, cada una con todas sus traducciones
     int32                  TurnsLeftThisRound = 0; // turnos que faltan para cerrar la ronda
 
+    // #3 — Puntaje guardado por SteamID: al irse un jugador (Logout) se guarda su GameScore, y si
+    // RECONECTA (PostLogin) se le restaura, para que no pierda los puntos por una desconexión.
+    TMap<FString, int32> SavedScores;
+
     // Revelado progresivo POR IDIOMA: cada traducción tiene letras distintas, así que lleva su
     // propia cola y su propio set de posiciones ya reveladas. Un elemento por idioma del CSV.
     TArray<TArray<int32>> RevealQueues;

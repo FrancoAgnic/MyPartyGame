@@ -55,6 +55,22 @@ void APTSculptGameMode::PostLogin(APlayerController* NewPlayer)
     StartPawnFlying(NewPlayer);
     CheckStart();
 
+    // #3 — Si este jugador ya había estado y se reconecta, restaurarle el puntaje guardado.
+    if (NewPlayer && NewPlayer->PlayerState)
+    {
+        if (APTPlayerState* PT = Cast<APTPlayerState>(NewPlayer->PlayerState))
+        {
+            const FString Id = PT->GetUniqueId().ToString();
+            if (const int32* Saved = SavedScores.Find(Id))
+            {
+                PT->GameScore = *Saved;
+                SavedScores.Remove(Id);
+                UE_LOG(LogTemp, Log, TEXT("[SculptGM] Reconexión: puntaje restaurado (%d) para %s."),
+                    PT->GameScore, *PT->GetDisplayNameSafe());
+            }
+        }
+    }
+
     // (Re)conexión TARDÍA: los que llegan del lobby vienen por seamless travel (HandleSeamlessTravelPlayer),
     // así que PostLogin acá = una conexión NUEVA a mitad de partida (reconexión / late join). Le mandamos
     // el estado actual de la escultura (geometría base + capas) para que vea lo ya esculpido, no solo lo
@@ -102,6 +118,17 @@ void APTSculptGameMode::Logout(AController* Exiting)
     APTSculptGameState* G = GS();
     const bool bWasSculptor =
         (G && Exiting && Exiting->PlayerState && Exiting->PlayerState == G->CurrentSculptor);
+
+    // #3 — Guardar el puntaje del que se va, por SteamID, para restaurarlo si reconecta.
+    if (Exiting && Exiting->PlayerState)
+    {
+        if (APTPlayerState* PT = Cast<APTPlayerState>(Exiting->PlayerState))
+        {
+            const FString Id = PT->GetUniqueId().ToString();
+            if (!Id.IsEmpty() && Id != TEXT("INVALID"))
+                SavedScores.Add(Id, PT->GameScore);
+        }
+    }
 
     Super::Logout(Exiting);
 

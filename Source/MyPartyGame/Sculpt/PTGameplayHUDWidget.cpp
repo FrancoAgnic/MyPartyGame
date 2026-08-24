@@ -733,8 +733,17 @@ void UPTGameplayHUDWidget::UpdateGameplaySounds(APTSculptGameState* G)
     const bool bGuesser = !G->IsLocalPlayerSculptor() && !bLocalGuessed;
     if (bGuesser && UseDelayedReveal())
     {
-        // Inicializar la máscara mostrada al entrar (copia el estado actual: lo ya revelado se ve sin animar).
-        if (DisplayedMask.Len() != Cur.Len()) { DisplayedMask = Cur; PendingReveals.Reset(); }
+        // Inicializar la máscara mostrada al entrar. IMPORTANTE: arrancar TODO oculto (mismo largo,
+        // conservando espacios). Las letras que ya estén reveladas se encolan abajo y se animan DE A UNA
+        // (#4). Antes hacíamos DisplayedMask=Cur, que si la init llegaba tarde (hitch/join) con varias
+        // letras ya reveladas, las mostraba TODAS de golpe ("3 letras a la vez").
+        if (DisplayedMask.Len() != Cur.Len())
+        {
+            DisplayedMask = Cur;
+            for (int32 i = 0; i < DisplayedMask.Len(); ++i)
+                if (DisplayedMask[i] != TEXT(' ')) DisplayedMask[i] = TEXT('_');
+            PendingReveals.Reset();
+        }
 
         // Encolar las letras que están reveladas en el mask real pero todavía no se mostraron ni están en cola.
         for (int32 i = 0; i < Cur.Len(); ++i)
