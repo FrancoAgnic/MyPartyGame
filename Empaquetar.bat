@@ -55,11 +55,12 @@ REM (destino ya existe) y quedan los DOS exes en la carpeta.
 if exist "%PACKAGED_DIR%\Windows\Sculpturillo.exe" del /q "%PACKAGED_DIR%\Windows\Sculpturillo.exe"
 if exist "%PACKAGED_DIR%\Windows\MyPartyGame.exe" ren "%PACKAGED_DIR%\Windows\MyPartyGame.exe" "Sculpturillo.exe"
 
-REM App ID REAL de Steam (5114580) en el build. Ya NO usamos Spacewar (480). Con esto, lanzado
-REM desde Steam o directo por un DUENO del juego, corre como Sculpturillo (5114580). Se escribe en
-REM la raiz (donde esta el launcher) y en el dir del binario real (el Steam API lo lee del CWD).
-> "%PACKAGED_DIR%\Windows\steam_appid.txt" echo 5114580
-if exist "%PACKAGED_DIR%\Windows\MyPartyGame\Binaries\Win64" > "%PACKAGED_DIR%\Windows\MyPartyGame\Binaries\Win64\steam_appid.txt" echo 5114580
+REM NO se escribe steam_appid.txt en el build: cuando Steam lanza el juego desde la biblioteca
+REM (juego base 5114580 O el Playtest 5115870), Steam le pasa el App ID correcto automaticamente.
+REM Si forzaramos steam_appid.txt=5114580, abrir por el Playtest correria igual como 5114580 y el
+REM Workshop del Playtest no funcionaria. Por si quedo uno de una build vieja, lo borramos.
+if exist "%PACKAGED_DIR%\Windows\steam_appid.txt" del /q "%PACKAGED_DIR%\Windows\steam_appid.txt"
+if exist "%PACKAGED_DIR%\Windows\MyPartyGame\Binaries\Win64\steam_appid.txt" del /q "%PACKAGED_DIR%\Windows\MyPartyGame\Binaries\Win64\steam_appid.txt"
 
 REM Borrar cualquier carpeta "Saved" del build: si el dev corrio el .exe empaquetado, se crea
 REM Saved\Config\Windows\GameUserSettings.ini con SUS settings. Si eso se sube a Steam, cada
