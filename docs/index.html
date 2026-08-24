@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sculpturillo — Guía del Workshop</title>
+<style>
+  :root{
+    --bg:#1b1030; --bg2:#241542; --card:#2c1a52; --ink:#f3ecff; --muted:#b9a8e0;
+    --accent:#ff5da2; --accent2:#4bc0ff; --ok:#5be08a; --code:#170d29; --line:#3d2a6b;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif; color:var(--ink);
+    background:radial-gradient(1200px 600px at 50% -10%,#3a1e6b 0%,var(--bg) 60%);
+    line-height:1.55;
+  }
+  .wrap{max-width:820px;margin:0 auto;padding:28px 20px 80px}
+  header{text-align:center;padding:26px 0 10px}
+  .logo{font-size:2.1rem;font-weight:800;letter-spacing:.5px;
+    background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--muted);margin-top:4px}
+  .lang{display:flex;gap:8px;justify-content:center;margin:16px 0 6px}
+  .lang button{background:var(--card);color:var(--ink);border:1px solid var(--line);
+    padding:6px 14px;border-radius:999px;cursor:pointer;font-weight:600}
+  .lang button.active{background:var(--accent);border-color:var(--accent);color:#2a0f22}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 22px;margin:18px 0;
+    box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  h2{margin:.2em 0 .4em;font-size:1.35rem}
+  h2 .pill{font-size:.7rem;vertical-align:middle;margin-left:8px;padding:3px 9px;border-radius:999px;
+    background:var(--bg2);color:var(--muted);border:1px solid var(--line)}
+  .soon{color:#ffcf5b;border-color:#6b551f !important;background:#3a2e10}
+  ol,ul{padding-left:20px} li{margin:6px 0}
+  code,pre{font-family:ui-monospace,Consolas,monospace}
+  code{background:var(--code);padding:2px 6px;border-radius:6px;color:#ffd8ec}
+  pre{background:var(--code);padding:14px 16px;border-radius:12px;overflow:auto;border:1px solid var(--line);color:#cfe9ff}
+  .tag{display:inline-block;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:2px 8px;color:var(--accent2);font-weight:600}
+  .step{background:var(--bg2);border-radius:10px;padding:10px 14px;margin:8px 0;border:1px solid var(--line)}
+  .en{display:none}
+  footer{text-align:center;color:var(--muted);margin-top:26px;font-size:.9rem}
+  a{color:var(--accent2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">Sculpturillo · Workshop</div>
+    <div class="sub" data-es="Cómo crear y compartir contenido de la comunidad" data-en="How to create & share community content"></div>
+    <div class="lang">
+      <button id="btn-es" class="active" onclick="setLang('es')">Español</button>
+      <button id="btn-en" onclick="setLang('en')">English</button>
+    </div>
+  </header>
+
+  <!-- INTRO -->
+  <div class="card">
+    <p class="es">En Sculpturillo podés crear tu propio contenido y compartirlo por el <b>Steam Workshop</b>: otros se suscriben, lo descargan y lo usan en sus partidas. Hoy podés crear <b>bancos de palabras</b>; los <b>mapas</b> llegarán pronto.</p>
+    <p class="en">In Sculpturillo you can create your own content and share it through the <b>Steam Workshop</b>: others subscribe, download it, and use it in their games. Today you can make <b>word banks</b>; <b>maps</b> are coming soon.</p>
+  </div>
+
+  <!-- WORD BANKS -->
+  <div class="card">
+    <h2><span class="es">Bancos de palabras</span><span class="en">Word banks</span> <span class="pill">tag: WordBank</span></h2>
+
+    <p class="es">Un banco es un archivo <code>.csv</code> (texto) con una palabra por línea. Lo abrís con el Bloc de notas o Excel. <b>No necesitás Unreal.</b></p>
+    <p class="en">A word bank is a <code>.csv</code> (text) file with one word per line. Open it with Notepad or Excel. <b>No Unreal needed.</b></p>
+
+    <p class="es"><b>Formato:</b> <code>Palabra,Categoría,Dificultad</code></p>
+    <p class="en"><b>Format:</b> <code>Word,Category,Difficulty</code></p>
+    <ul>
+      <li class="es"><b>Palabra</b>: lo que hay que esculpir/adivinar.</li>
+      <li class="en"><b>Word</b>: what players sculpt/guess.</li>
+      <li class="es"><b>Categoría</b>: texto libre (ej: Películas, Animales).</li>
+      <li class="en"><b>Category</b>: free text (e.g. Movies, Animals).</li>
+      <li class="es"><b>Dificultad</b>: <code>1</code> fácil, <code>2</code> media, <code>3</code> difícil.</li>
+      <li class="en"><b>Difficulty</b>: <code>1</code> easy, <code>2</code> medium, <code>3</code> hard.</li>
+    </ul>
+
+    <p class="es">Ejemplo (<code>animales.csv</code>):</p>
+    <p class="en">Example (<code>animals.csv</code>):</p>
+<pre>Palabra,Categoria,Dificultad
+Perro,Animales,1
+Elefante,Animales,2
+Pulpo,Animales,3</pre>
+
+    <div class="step">
+      <b class="es">Guardalo como UTF-8</b><b class="en">Save it as UTF-8</b>
+      <span class="es"> para que los acentos y la ñ se vean bien.</span>
+      <span class="en"> so accents and special characters display correctly.</span>
+    </div>
+
+    <h3 class="es">Cómo publicarlo</h3>
+    <h3 class="en">How to publish it</h3>
+    <ol>
+      <li class="es">Abrí el juego → <b>Workshop</b> (menú principal).</li>
+      <li class="en">Open the game → <b>Workshop</b> (main menu).</li>
+      <li class="es">Pestaña <b>Bancos de palabras</b> → botón <b>Publicar CSV</b>.</li>
+      <li class="en"><b>Word banks</b> tab → <b>Publish CSV</b> button.</li>
+      <li class="es">Elegí tu archivo <code>.csv</code> → se sube a tu Workshop.</li>
+      <li class="en">Pick your <code>.csv</code> file → it uploads to your Workshop.</li>
+      <li class="es">La primera vez, Steam te pide aceptar el acuerdo del Workshop.</li>
+      <li class="en">The first time, Steam asks you to accept the Workshop agreement.</li>
+    </ol>
+
+    <h3 class="es">Cómo usarlo en una partida</h3>
+    <h3 class="en">How to use it in a game</h3>
+    <ol>
+      <li class="es">Suscribite a un banco desde el <b>Workshop</b> (botón Añadir).</li>
+      <li class="en">Subscribe to a bank from the <b>Workshop</b> (Add button).</li>
+      <li class="es">Creá una partida → <b>Game Settings → Biblioteca</b>.</li>
+      <li class="en">Host a game → <b>Game Settings → Library</b>.</li>
+      <li class="es">Pestaña <b>Palabras</b> → <b>Usar</b> el banco que quieras.</li>
+      <li class="en"><b>Words</b> tab → <b>Use</b> the bank you want.</li>
+    </ol>
+  </div>
+
+  <!-- MAPS -->
+  <div class="card">
+    <h2><span class="es">Mapas</span><span class="en">Maps</span> <span class="pill soon"><span class="es">Próximamente</span><span class="en">Coming soon</span></span> <span class="pill">tag: Map</span></h2>
+    <p class="es">Los mapas custom (con su propio escenario) van a necesitar Unreal Engine y un kit de modding. Estamos trabajando en eso — cuando esté, actualizamos esta guía.</p>
+    <p class="en">Custom maps (with their own scenery) will need Unreal Engine and a modding kit. We're working on it — this guide will be updated when it's ready.</p>
+  </div>
+
+  <footer>
+    <span class="es">¡Gracias por crear para Sculpturillo! 🎨</span>
+    <span class="en">Thanks for creating for Sculpturillo! 🎨</span>
+  </footer>
+</div>
+
+<script>
+  function setLang(l){
+    document.documentElement.lang=l;
+    document.querySelectorAll('.es').forEach(e=>e.style.display = (l==='es')?'':'none');
+    document.querySelectorAll('.en').forEach(e=>e.style.display = (l==='en')?'':'none');
+    document.querySelectorAll('[data-es]').forEach(e=>e.textContent = (l==='es')?e.dataset.es:e.dataset.en);
+    document.getElementById('btn-es').classList.toggle('active',l==='es');
+    document.getElementById('btn-en').classList.toggle('active',l==='en');
+  }
+  setLang('es');
+</script>
+</body>
+</html>
