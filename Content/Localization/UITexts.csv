@@ -148,6 +148,9 @@ ERR_STEAM_CONNECT,No se pudo conectar con Steam,Could not connect to Steam,Não 
 ERR_CREATE_SESSION,No se pudo crear la sesión,Could not create the game,Não foi possível criar a partida,Spiel konnte nicht erstellt werden,Impossible de créer la partie,Impossibile creare la partita
 ERR_JOIN_SESSION,No se pudo unir a la sesión,Could not join the game,Não foi possível entrar na partida,Beitritt zum Spiel fehlgeschlagen,Impossible de rejoindre la partie,Impossibile entrare nella partita
 ERR_INVALID_CODE,Código inválido,Invalid code,Código inválido,Ungültiger Code,Code invalide,Codice non valido
+ERR_SESSION_NOT_FOUND,No se encontró la partida,Game not found,Partida não encontrada,Spiel nicht gefunden,Partie introuvable,Partita non trovata
+ERR_KICKED,El anfitrión te expulsó de la partida,The host kicked you from the game,O anfitrião te expulsou da partida,Der Gastgeber hat dich entfernt,L'hôte vous a expulsé,L'host ti ha espulso
+INVITE_HOST_OFFLINE,No podés invitar: no estás conectado a Steam,Can't invite: you're not connected to Steam,Não pode convidar: não está conectado à Steam,Einladen nicht möglich: nicht mit Steam verbunden,Invitation impossible : non connecté à Steam,Impossibile invitare: non connesso a Steam
 ERR_WRONG_PASSWORD,Contraseña incorrecta,Wrong password,Senha incorreta,Falsches Passwort,Mot de passe incorrect,Password errata
 ERR_CONNECT_SESSION,No se pudo conectar a la sesión,Could not connect to the game,Não foi possível conectar à partida,Verbindung zum Spiel fehlgeschlagen,Impossible de se connecter à la partie,Impossibile connettersi alla partita
 ERR_SESSION_FULL,La sala está llena,The room is full,A sala está cheia,Der Raum ist voll,Le salon est plein,La stanza è piena

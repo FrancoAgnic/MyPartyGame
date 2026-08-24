@@ -46,6 +46,11 @@ public:
     UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Lobby")
     void Server_KickPlayer(APlayerState* TargetPlayerState);
 
+    /** El server avisa al cliente expulsado ANTES de cerrarle la conexión, para que NO intente
+     *  auto-reconectarse (si no, el kick se cae como "conexión perdida" y el cliente vuelve a entrar). */
+    UFUNCTION(Client, Reliable)
+    void Client_KickedFromSession();
+
     // ── Estado del modo cabeza (lo lee la hotbar del modo G para resaltar la herramienta) ──
     bool          IsHeadSculptMode()      const { return bHeadSculptMode; }
     EPTEditMode   GetHeadEditMode()       const { return HeadEditMode; }

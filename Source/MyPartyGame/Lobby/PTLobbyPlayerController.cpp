@@ -21,6 +21,8 @@
 #include "PTHeadSculptHUDWidget.h"
 #include "../PTGameUserSettings.h"
 #include "../Multiplayer/MultiplayerSessionsSubsystem.h"
+#include "../PTGameInstance.h"
+#include "../PTTextTable.h"
 #include "Blueprint/UserWidget.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/GameModeBase.h"
@@ -76,9 +78,22 @@ void APTLobbyPlayerController::Server_KickPlayer_Implementation(APlayerState* Ta
     if (!TargetPC) return;
 
     UE_LOG(LogTemp, Log, TEXT("[Lobby] Host expulsa a %s."), *TargetPS->GetDisplayNameSafe());
+
+    // Avisar al cliente ANTES de echarlo: así desactiva el auto-reconnect y NO vuelve a entrar solo.
+    if (APTLobbyPlayerController* TargetLobbyPC = Cast<APTLobbyPlayerController>(TargetPC))
+        TargetLobbyPC->Client_KickedFromSession();
+
     if (AGameModeBase* GM = GetWorld()->GetAuthGameMode())
         if (AGameSession* Session = GM->GameSession)
             Session->KickPlayer(TargetPC, FText::FromString(TEXT("Kicked by host")));
+}
+
+void APTLobbyPlayerController::Client_KickedFromSession_Implementation()
+{
+    // Cancelar cualquier reintento de reconexión + dejar el mensaje para el menú. Cuando la conexión
+    // se cierre (por el kick), HandleNetworkFailure ya no reconecta (url/intentos vacíos) y va al menú.
+    if (UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance()))
+        GI->SetPendingConnectError(PTText::GetStr(TEXT("ERR_KICKED")));
 }
 
 void APTLobbyPlayerController::BeginPlay()

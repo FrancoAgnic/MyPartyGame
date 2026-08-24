@@ -122,6 +122,8 @@ protected:
     void MenuTearDown();
 
     void HideErrorText();
+    // Muestra un error en ErrorText y SIEMPRE programa el auto-ocultar (evita mensajes pegados).
+    void ShowError(const FText& Msg);
 
 private:
     UPROPERTY() UMultiplayerSessionsSubsystem* Sessions = nullptr;

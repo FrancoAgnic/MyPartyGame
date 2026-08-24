@@ -24,8 +24,10 @@ void UPTFriendsWidget::NativeConstruct()
     if (Sessions && !bBound)
     {
         Sessions->OnFriendsListUpdated.AddUObject(this, &UPTFriendsWidget::OnFriendsListUpdated);
+        Sessions->OnInviteWarning.AddUObject(this, &UPTFriendsWidget::OnInviteWarning);
         bBound = true;
     }
+    if (StatusText) StatusText->SetVisibility(ESlateVisibility::Collapsed);
 
     // Leer la lista al abrir. Si aún no hay datos, Rebuild deja el panel vacío hasta el callback.
     if (Sessions) Sessions->ReadFriends();
@@ -37,6 +39,7 @@ void UPTFriendsWidget::NativeDestruct()
     if (Sessions && bBound)
     {
         Sessions->OnFriendsListUpdated.RemoveAll(this);
+        Sessions->OnInviteWarning.RemoveAll(this);
         bBound = false;
     }
     Super::NativeDestruct();
@@ -67,6 +70,13 @@ void UPTFriendsWidget::OnBackClicked()
 void UPTFriendsWidget::OnFriendsListUpdated()
 {
     Rebuild();
+}
+
+void UPTFriendsWidget::OnInviteWarning(const FString& MsgKey)
+{
+    if (!StatusText) return;
+    StatusText->SetText(PTText::Get(FName(*MsgKey)));
+    StatusText->SetVisibility(ESlateVisibility::Visible);
 }
 
 void UPTFriendsWidget::Rebuild()

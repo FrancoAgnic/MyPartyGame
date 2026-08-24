@@ -28,11 +28,13 @@ DEFINE_LOG_CATEGORY_STATIC(LogPTSessions, Log, All);
 // No es UObject (UHT no puede parsear steam_api.h con macros STEAM_CALLBACK).
 struct FPTSteamJoinListener
 {
-    TFunction<void(FString)> Cb;
+    TFunction<void(FString)> Cb;                    // "unirse ya" → host id (aceptar/lanzar desde invitación)
+    TFunction<void(FString, uint64)> InviteCb;      // "llegó una invitación" → (nombre, lobbyId) para el popup
     explicit FPTSteamJoinListener(TFunction<void(FString)> InCb) : Cb(MoveTemp(InCb)) {}
 
     STEAM_CALLBACK(FPTSteamJoinListener, OnRichJoin, GameRichPresenceJoinRequested_t);
     STEAM_CALLBACK(FPTSteamJoinListener, OnLobbyJoin, GameLobbyJoinRequested_t);
+    STEAM_CALLBACK(FPTSteamJoinListener, OnLobbyInvite, LobbyInvite_t);
 
     void Fire(const FString& HostId)
     {
@@ -41,6 +43,17 @@ struct FPTSteamJoinListener
         AsyncTask(ENamedThreads::GameThread, [C, HostId]() { if (C) C(HostId); });
     }
 };
+
+void FPTSteamJoinListener::OnLobbyInvite(LobbyInvite_t* p)
+{
+    // Llegó una invitación de un amigo estando en el juego → mostramos NUESTRO popup Aceptar/Rechazar.
+    if (!p || !InviteCb) return;
+    FString Name = TEXT("Un amigo");
+    if (SteamFriends()) Name = UTF8_TO_TCHAR(SteamFriends()->GetFriendPersonaName(CSteamID(p->m_ulSteamIDUser)));
+    const uint64 LobbyId = p->m_ulSteamIDLobby;
+    TFunction<void(FString, uint64)> C = InviteCb;
+    AsyncTask(ENamedThreads::GameThread, [C, Name, LobbyId]() { if (C) C(Name, LobbyId); });
+}
 
 void FPTSteamJoinListener::OnRichJoin(GameRichPresenceJoinRequested_t* p)
 {
@@ -103,6 +116,14 @@ void UMultiplayerSessionsSubsystem::Initialize(FSubsystemCollectionBase& Collect
             UE_LOG(LogPTSessions, Log, TEXT("Steam: unirse a partida del host %s"), *HostId);
             OnJoinRequestedById.Broadcast(HostId);
         });
+        // Invitación RECIBIDA (LobbyInvite_t) → mostrar NUESTRO popup Aceptar/Rechazar (#7).
+        JoinListener->InviteCb = [this](FString FromName, uint64 LobbyId)
+        {
+            ReceivedInviteLobbyId = LobbyId;
+            ReceivedInviteResult.Reset();
+            UE_LOG(LogPTSessions, Log, TEXT("Invitación de Steam recibida de %s (lobby %llu) → popup."), *FromName, LobbyId);
+            OnInviteReceived.Broadcast(FromName);
+        };
 #endif
     }
     else
@@ -200,6 +221,17 @@ FString UMultiplayerSessionsSubsystem::GetLocalSteamId() const
     if (SteamUser()) return FString::Printf(TEXT("%llu"), SteamUser()->GetSteamID().ConvertToUint64());
 #endif
     return FString();
+}
+
+bool UMultiplayerSessionsSubsystem::IsSteamOnline() const
+{
+#if PT_WITH_STEAM
+    if (!SteamUser() || !SteamUser()->BLoggedOn()) return false;
+    if (SteamFriends() && SteamFriends()->GetPersonaState() == k_EPersonaStateOffline) return false;
+    return true;
+#else
+    return false;
+#endif
 }
 
 void UMultiplayerSessionsSubsystem::SetJoinPresence(const FString& HostSteamId)
@@ -773,10 +805,20 @@ void UMultiplayerSessionsSubsystem::HandleSessionInviteReceived(
 
 void UMultiplayerSessionsSubsystem::AcceptReceivedInvite()
 {
+    UE_LOG(LogPTSessions, Log, TEXT("Popup: invitación ACEPTADA → uniéndose."));
+    // Caso LobbyInvite_t (raw Steam): unirse directo por la lobby id.
+    if (ReceivedInviteLobbyId != 0)
+    {
+        const uint64 Lobby = ReceivedInviteLobbyId;
+        ReceivedInviteLobbyId = 0;
+        ReceivedInviteResult.Reset();
+        InternalJoinByLobbyId(Lobby);
+        return;
+    }
+    // Caso OSS (FOnlineSessionSearchResult).
     if (!ReceivedInviteResult.IsValid()) return;
     const TSharedPtr<FOnlineSessionSearchResult> R = ReceivedInviteResult;
     ReceivedInviteResult.Reset();
-    UE_LOG(LogPTSessions, Log, TEXT("Popup: invitación ACEPTADA → uniéndose."));
     JoinSession(*R, FString());
 }
 
@@ -784,10 +826,16 @@ void UMultiplayerSessionsSubsystem::DeclineReceivedInvite()
 {
     UE_LOG(LogPTSessions, Log, TEXT("Popup: invitación RECHAZADA."));
     ReceivedInviteResult.Reset();
+    ReceivedInviteLobbyId = 0;
 }
 
 void UMultiplayerSessionsSubsystem::ShowSteamInviteOverlay()
 {
+    if (!IsSteamOnline())
+    {
+        OnInviteWarning.Broadcast(TEXT("INVITE_HOST_OFFLINE"));
+        return;
+    }
     IOnlineSubsystem* Subsystem = Online::GetSubsystem(GetWorld());
     if (!Subsystem)
     {
@@ -808,6 +856,13 @@ void UMultiplayerSessionsSubsystem::ShowSteamInviteOverlay()
 void UMultiplayerSessionsSubsystem::InviteFriend(const FString& FriendUserId)
 {
     if (!GetSessions().IsValid()) return;
+    // #6: si Steam está offline/desconectado, invitar no sirve → avisar y no enviar.
+    if (!IsSteamOnline())
+    {
+        OnInviteWarning.Broadcast(TEXT("INVITE_HOST_OFFLINE"));
+        UE_LOG(LogPTSessions, Warning, TEXT("InviteFriend: Steam offline/desconectado, no se invita."));
+        return;
+    }
     const FUniqueNetIdPtr* Found = FriendIdMap.Find(FriendUserId);
     if (!Found || !Found->IsValid())
     {

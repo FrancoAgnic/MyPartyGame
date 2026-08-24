@@ -42,6 +42,7 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      BackButton;
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   TitleText;
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   EmptyText;
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   StatusText; // avisos (ej: Steam offline)
 
     /** Clase del widget de fila. Asignar en el WBP derivado. */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Friends")
@@ -54,6 +55,7 @@ protected:
 private:
     void Rebuild();                 // repuebla FriendsBox desde Sessions->GetFriends()
     void OnFriendsListUpdated();     // callback del subsistema
+    void OnInviteWarning(const FString& MsgKey); // aviso (ej: Steam offline)
 
     UPROPERTY() UMultiplayerSessionsSubsystem* Sessions = nullptr;
     bool bBound = false;

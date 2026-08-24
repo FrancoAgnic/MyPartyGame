@@ -102,7 +102,7 @@ void UPTMainMenuWidget::MenuSetup(int32 InNumPublicConnections, FString InLobbyP
         const FString Err = GI->ConsumePendingConnectError();
         if (!Err.IsEmpty())
         {
-            if (ErrorText) ErrorText->SetText(FText::FromString(Err));
+            ShowError(FText::FromString(Err)); // con auto-ocultar (antes quedaba pegado)
             UE_LOG(LogTemp, Warning, TEXT("[Menu] Error de conexión: %s"), *Err);
         }
     }
@@ -243,15 +243,10 @@ void UPTMainMenuWidget::OnLogin(bool bWasSuccessful)
     if (HostButton) HostButton->SetIsEnabled(bWasSuccessful);
     if (FindButton) FindButton->SetIsEnabled(bWasSuccessful);
 
-    if (!bWasSuccessful && ErrorText)
+    if (!bWasSuccessful)
     {
         // Causa típica: el cliente de Steam no está corriendo en esta PC.
-        ErrorText->SetText(PTText::Get(TEXT("ERR_STEAM_CONNECT")));
-
-        if (UWorld* World = GetWorld())
-        {
-            World->GetTimerManager().SetTimer(ErrorTextTimerHandle, this, &UPTMainMenuWidget::HideErrorText, 2.f, false);
-        }
+        ShowError(PTText::Get(TEXT("ERR_STEAM_CONNECT")));
         return;
     }
 
@@ -271,7 +266,7 @@ void UPTMainMenuWidget::OnCreateSession(bool bWasSuccessful)
 {
     if (!bWasSuccessful)
     {
-        if (ErrorText) ErrorText->SetText(PTText::Get(TEXT("ERR_CREATE_SESSION")));
+        ShowError(PTText::Get(TEXT("ERR_CREATE_SESSION")));
         return;
     }
 
@@ -320,17 +315,9 @@ void UPTMainMenuWidget::OnJoinSession(EOnJoinSessionCompleteResult::Type Result)
 {
     if (Result != EOnJoinSessionCompleteResult::Success)
     {
-        if (ErrorText)
-        {
-            ErrorText->SetText(PTText::Get(Result == EOnJoinSessionCompleteResult::SessionDoesNotExist
-                ? TEXT("ERR_INVALID_CODE")
-                : TEXT("ERR_JOIN_SESSION")));
-
-            if (UWorld* World = GetWorld())
-            {
-                World->GetTimerManager().SetTimer(ErrorTextTimerHandle, this, &UPTMainMenuWidget::HideErrorText, 2.f, false);
-            }
-        }
+        ShowError(PTText::Get(Result == EOnJoinSessionCompleteResult::SessionDoesNotExist
+            ? TEXT("ERR_SESSION_NOT_FOUND")
+            : TEXT("ERR_JOIN_SESSION")));
         return;
     }
 
@@ -387,4 +374,13 @@ void UPTMainMenuWidget::MenuTearDown()
 void UPTMainMenuWidget::HideErrorText()
 {
     if (ErrorText) ErrorText->SetText(FText::GetEmpty());
+}
+
+void UPTMainMenuWidget::ShowError(const FText& Msg)
+{
+    if (!ErrorText) return;
+    ErrorText->SetText(Msg);
+    // SIEMPRE reprogramar el auto-ocultar → así ningún mensaje queda pegado para siempre.
+    if (UWorld* World = GetWorld())
+        World->GetTimerManager().SetTimer(ErrorTextTimerHandle, this, &UPTMainMenuWidget::HideErrorText, 3.f, false);
 }

@@ -31,6 +31,8 @@ DECLARE_MULTICAST_DELEGATE_OneParam(FPTOnInviteReceived, const FString& /*FromNa
 // Steam pide UNIRSE a la partida de un amigo (aceptó "Unirse"/invitación con rich presence "connect",
 // o el juego se lanzó desde ahí). Param: SteamID del host al que hay que viajar. El GameInstance viaja.
 DECLARE_MULTICAST_DELEGATE_OneParam(FPTOnJoinRequestedById, const FString& /*HostSteamId*/);
+// No se pudo invitar (p.ej. Steam offline). Param: mensaje para mostrar. La UI lo escucha.
+DECLARE_MULTICAST_DELEGATE_OneParam(FPTOnInviteWarning, const FString& /*Msg*/);
 
 // -------------------------------------------------------------------
 // Info de un amigo de Steam para la UI (sin exponer tipos de OSS hacia afuera).
@@ -177,6 +179,7 @@ public:
     FPTOnFriendsListUpdated      OnFriendsListUpdated;
     FPTOnInviteReceived          OnInviteReceived;
     FPTOnJoinRequestedById       OnJoinRequestedById;
+    FPTOnInviteWarning           OnInviteWarning;
 
     // Rich presence "connect" de Steam: para que las invitaciones/"Unirse a partida" lleven A QUÉ
     // partida unirse (el host), no un genérico "vení a jugar". Se setea al hostear/unirse; se limpia al salir.
@@ -184,6 +187,9 @@ public:
     void ClearJoinPresence();
     // SteamID del jugador local (host) como string; vacío si no hay Steam.
     FString GetLocalSteamId() const;
+    // true si Steam está conectado y el jugador local NO está en estado "Desconectado/Offline".
+    // Si es false, invitar no sirve → conviene avisar antes de enviar.
+    bool IsSteamOnline() const;
     // Al arrancar: si el juego se lanzó desde una invitación (command line con nuestro token), devuelve
     // el SteamID del host a unirse; vacío si no. Lo consulta el GameInstance tras el login.
     FString ConsumeLaunchJoinHostId();
@@ -230,6 +236,8 @@ private:
     TSharedPtr<FOnlineSessionSearchResult> PendingInviteResult;
     // Invitación RECIBIDA (popup) a la espera de Aceptar/Rechazar.
     TSharedPtr<FOnlineSessionSearchResult> ReceivedInviteResult;
+    // Si la invitación llegó como LobbyInvite_t (raw Steam), guardamos la lobby a unirse al Aceptar.
+    uint64 ReceivedInviteLobbyId = 0;
 
     // Amigos leídos por ReadFriends (para la UI) + mapa UserId→net id para poder invitar.
     TArray<FPTFriendInfo> CachedFriends;
