@@ -5,8 +5,9 @@ REM ============================================================
 REM  Empaqueta Sculpturillo y lo sube al PLAYTEST (App 5115870, Depot 5115871).
 REM  Igual que Empaquetar.bat pero apuntando a la app del Playtest.
 REM  - NO escribe steam_appid.txt: al abrir por el Playtest, Steam pasa 5115870 solo.
-REM  - setlive vacio: subir el build y luego dejarlo LIVE en la rama default del Playtest
-REM    desde la web (SteamPipe -> Builds -> Set Build Live), porque steamcmd no puede el default.
+REM  - setlive "test": queda LIVE automaticamente en la rama beta "test" del Playtest (steamcmd
+REM    SI puede marcar live ramas beta; la default/public solo se puede desde la web). Los testers
+REM    deben elegir la rama "test" una vez en Steam (Propiedades -> Betas).
 REM ============================================================
 
 set PROJECT_DIR=%~dp0
@@ -73,7 +74,7 @@ echo   "appid" "5115870"
 echo   "desc" "Sculpturillo_Playtest_v%VERSION%"
 echo   "buildoutput" "%SDK%\output"
 echo   "contentroot" ""
-echo   "setlive" ""
+echo   "setlive" "test"
 echo   "preview" "0"
 echo   "local" ""
 echo   "depots"
@@ -100,12 +101,8 @@ if errorlevel 1 (
 
 echo.
 echo ========================================
-echo   Listo! Playtest v%VERSION% subido.
-echo   Abriendo la pagina de Builds... solo falta: Set Build Live -^> rama default.
+echo   Listo! Playtest v%VERSION% subido y LIVE en la rama "test".
+echo   Los testers: Steam -^> Sculpturillo Playtest -^> Propiedades -^> Betas -^> elegir "test".
 echo ========================================
 echo.
-
-REM Abrir la pagina de Builds del Playtest en el navegador (unico paso manual: Set Build Live -> default).
-start "" "https://partner.steamgames.com/apps/builds/5115870"
-
 pause
