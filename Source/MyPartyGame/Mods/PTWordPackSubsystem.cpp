@@ -9,6 +9,9 @@
 #include "HAL/PlatformFileManager.h"
 #include "HAL/PlatformProcess.h" // UserTempDir
 #include "Async/Async.h"
+#include "IImageWrapper.h"
+#include "IImageWrapperModule.h"
+#include "Modules/ModuleManager.h"
 
 #if PT_WITH_STEAM
 #include "steam/steam_api.h"
@@ -307,51 +310,56 @@ void UPTWordPackSubsystem::PublishWordPack(const FString& CsvPath, const FString
         return;
     }
 
-    // ISteamUGC sube una CARPETA, no un archivo suelto: armamos un staging con words.csv (+ pack.txt).
-    // OJO: SetItemContent exige ruta ABSOLUTA. Y NO puede ir bajo ProjectSavedDir(): si el juego está
-    // instalado en C:\Program Files (x86)\Steam\... esa carpeta NO es escribible sin admin → el copiado
-    // falla, la carpeta queda vacía y Steam devuelve InvalidParam (8). Por eso usamos %TEMP% (siempre
-    // escribible). ConvertRelativePathToFull + MakePlatformFilename para ruta absoluta y nativa.
-    FString Staging = FPaths::Combine(FString(FPlatformProcess::UserTempDir()),
-                                      TEXT("SculpturilloWorkshop"),
-                                      FGuid::NewGuid().ToString(EGuidFormats::Short));
-    Staging = FPaths::ConvertRelativePathToFull(Staging);
-    FPaths::MakePlatformFilename(Staging);
+    // ISteamUGC sube una CARPETA, no un archivo suelto. Estructura del staging (en %TEMP%, siempre
+    // escribible — NO bajo ProjectSavedDir(), que si el juego está en Program Files no es escribible):
+    //   <base>/content/   → words.csv + pack.txt   → SetItemContent (ruta ABSOLUTA + nativa)
+    //   <base>/preview.png → imagen de preview FUERA de content (Steam la quiere separada; adentro da (8))
+    FString Base = FPaths::Combine(FString(FPlatformProcess::UserTempDir()),
+                                   TEXT("SculpturilloWorkshop"),
+                                   FGuid::NewGuid().ToString(EGuidFormats::Short));
+    Base = FPaths::ConvertRelativePathToFull(Base);
+    FPaths::MakePlatformFilename(Base);
+    FString Content = FPaths::Combine(Base, TEXT("content"));
+    FPaths::MakePlatformFilename(Content);
 
     IFileManager& FM = IFileManager::Get();
-    const bool bDir  = FM.MakeDirectory(*Staging, /*Tree=*/true);
-    const bool bCopy = (FM.Copy(*FPaths::Combine(Staging, TEXT("words.csv")), *CsvPath) == COPY_OK);
+    const bool bDir  = FM.MakeDirectory(*Content, /*Tree=*/true);
+    const bool bCopy = (FM.Copy(*FPaths::Combine(Content, TEXT("words.csv")), *CsvPath) == COPY_OK);
 
     // pack.txt con título/autor para que se muestre bien al que lo descargue.
     const FString PackTxt = Title + LINE_TERMINATOR;
-    const bool bTxt = FFileHelper::SaveStringToFile(PackTxt, *FPaths::Combine(Staging, TEXT("pack.txt")));
+    const bool bTxt = FFileHelper::SaveStringToFile(PackTxt, *FPaths::Combine(Content, TEXT("pack.txt")));
 
-    // Preview: Steam suele RECHAZAR el primer SubmitItemUpdate de un item nuevo sin imagen de preview
-    // (InvalidParam=8). Si el caller no pasó una, generamos un PNG mínimo (1x1) para satisfacerlo.
+    // Preview: Steam RECHAZA el primer SubmitItemUpdate de un item nuevo sin imagen válida (InvalidParam=8).
+    // Si el caller no pasó una, generamos un PNG sólido 256x256 (dimensiones válidas) FUERA de content.
     FString UsePreview = PreviewPath;
     if (UsePreview.IsEmpty())
     {
-        static const TCHAR* kPngB64 =
-            TEXT("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
-        TArray<uint8> Png;
-        if (FBase64::Decode(FString(kPngB64), Png))
+        const int32 Sz = 256;
+        TArray<FColor> Pixels; Pixels.Init(FColor(150, 90, 200, 255), Sz * Sz);
+        IImageWrapperModule& IW = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
+        TSharedPtr<IImageWrapper> Wrapper = IW.CreateImageWrapper(EImageFormat::PNG);
+        if (Wrapper.IsValid() &&
+            Wrapper->SetRaw(Pixels.GetData(), Pixels.Num() * sizeof(FColor), Sz, Sz, ERGBFormat::BGRA, 8))
         {
-            const FString PrevFile = FPaths::Combine(Staging, TEXT("preview.png"));
-            if (FFileHelper::SaveArrayToFile(Png, *PrevFile)) UsePreview = PrevFile;
+            const TArray64<uint8>& Png = Wrapper->GetCompressed(100);
+            const FString PrevFile = FPaths::Combine(Base, TEXT("preview.png"));
+            if (FFileHelper::SaveArrayToFile(TArray<uint8>(Png), *PrevFile)) UsePreview = PrevFile;
         }
     }
+    if (!UsePreview.IsEmpty()) FPaths::MakePlatformFilename(UsePreview);
 
-    UE_LOG(LogPTWordPacks, Warning, TEXT("[Publish] Staging='%s' dir=%d copy=%d txt=%d preview=%d"),
-        *Staging, bDir ? 1 : 0, bCopy ? 1 : 0, bTxt ? 1 : 0, UsePreview.IsEmpty() ? 0 : 1);
+    UE_LOG(LogPTWordPacks, Warning, TEXT("[Publish] Content='%s' dir=%d copy=%d txt=%d preview='%s'"),
+        *Content, bDir ? 1 : 0, bCopy ? 1 : 0, bTxt ? 1 : 0, *UsePreview);
     if (!bCopy)
     {
-        OnWordPackPublished.Broadcast(false, FString::Printf(TEXT("No se pudo escribir el staging: %s"), *Staging));
+        OnWordPackPublished.Broadcast(false, FString::Printf(TEXT("No se pudo escribir el staging: %s"), *Content));
         return;
     }
 
     delete Publisher;
     Publisher = new FPTWorkshopPublish();
-    Publisher->Start(Staging, UsePreview, Title, Description,
+    Publisher->Start(Content, UsePreview, Title, Description,
         [this](bool bOk, FString Info)
         {
             UE_LOG(LogPTWordPacks, Log, TEXT("PublishWordPack: %s (%s)"),
