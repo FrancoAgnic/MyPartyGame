@@ -4,6 +4,7 @@
 #include "Misc/Paths.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
+#include "Misc/Base64.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformFileManager.h"
 #include "HAL/PlatformProcess.h" // UserTempDir
@@ -24,7 +25,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogPTWordPacks, Log, All);
 struct FPTWorkshopPublish
 {
     TFunction<void(bool, FString)> Cb;
-    FString ContentFolder, PreviewPath, Title, Desc;
+    FString ContentFolder, PreviewPath, Title, Desc, Diag;
     PublishedFileId_t ItemId = 0;
     CCallResult<FPTWorkshopPublish, CreateItemResult_t>       CreateCR;
     CCallResult<FPTWorkshopPublish, SubmitItemUpdateResult_t> SubmitCR;
@@ -66,16 +67,16 @@ struct FPTWorkshopPublish
         const bool bPrev    = PreviewPath.IsEmpty() || SteamUGC()->SetItemPreview(U, TCHAR_TO_UTF8(*PreviewPath));
         // Item público por defecto (algunos flujos lo requieren explícito).
         const bool bVis     = SteamUGC()->SetItemVisibility(U, k_ERemoteStoragePublishedFileVisibilityPublic);
-        // NOTA: el tag "WordBank" está DESACTIVADO temporalmente para aislar el InvalidParam(8).
-        // Si sin tag publica, el problema eran los tags (hay que habilitarlos en Steamworks).
-        // const char* Tags[] = { "WordBank" };
-        // SteamParamStringArray_t TagArr; TagArr.m_ppStrings = Tags; TagArr.m_nNumStrings = 1;
-        // const bool bTags = SteamUGC()->SetItemTags(U, &TagArr);
+        // Tag para poder filtrar solo bancos de palabras en el buscador del juego (AddRequiredTag).
+        const char* Tags[] = { "WordBank" };
+        SteamParamStringArray_t TagArr; TagArr.m_ppStrings = Tags; TagArr.m_nNumStrings = 1;
+        const bool bTags    = SteamUGC()->SetItemTags(U, &TagArr);
 
+        Diag = FString::Printf(TEXT("U=%d t=%d d=%d c=%d p=%d v=%d tag=%d"),
+            U != k_UGCUpdateHandleInvalid ? 1 : 0, bTitle, bDesc, bContent, bPrev, bVis, bTags);
         UE_LOG(LogPTWordPacks, Warning,
-            TEXT("[Publish] ItemId=%llu Uvalid=%d title=%d desc=%d content=%d prev=%d vis=%d content='%s'"),
-            (uint64)ItemId, U != k_UGCUpdateHandleInvalid ? 1 : 0,
-            bTitle, bDesc, bContent, bPrev, bVis, *ContentFolder);
+            TEXT("[Publish] ItemId=%llu %s content='%s' preview='%s'"),
+            (uint64)ItemId, *Diag, *ContentFolder, *PreviewPath);
 
         const SteamAPICall_t h = SteamUGC()->SubmitItemUpdate(U, "Banco de palabras");
         SubmitCR.Set(h, this, &FPTWorkshopPublish::OnSubmit);
@@ -87,8 +88,8 @@ struct FPTWorkshopPublish
         // m_bUserNeedsToAcceptWorkshopLegalAgreement: si es true, Steam le muestra el acuerdo al usuario.
         FString Info = bOk
             ? FString::Printf(TEXT("%llu"), ItemId)
-            : FString::Printf(TEXT("SubmitItemUpdate falló (%d) | %s"),
-                              p ? (int32)p->m_eResult : -1, *ContentFolder);
+            : FString::Printf(TEXT("SubmitItemUpdate falló (%d) [%s]"),
+                              p ? (int32)p->m_eResult : -1, *Diag);
         if (!bOk)
             UE_LOG(LogPTWordPacks, Error, TEXT("[Publish] %s (IOFailure=%d)"), *Info, bIOFailure ? 1 : 0);
         // Los callbacks de Steam corren en el hilo de tareas de OSS, no en el GameThread; la UI que
@@ -325,8 +326,23 @@ void UPTWordPackSubsystem::PublishWordPack(const FString& CsvPath, const FString
     const FString PackTxt = Title + LINE_TERMINATOR;
     const bool bTxt = FFileHelper::SaveStringToFile(PackTxt, *FPaths::Combine(Staging, TEXT("pack.txt")));
 
-    UE_LOG(LogPTWordPacks, Warning, TEXT("[Publish] Staging='%s' dir=%d copy=%d txt=%d"),
-        *Staging, bDir ? 1 : 0, bCopy ? 1 : 0, bTxt ? 1 : 0);
+    // Preview: Steam suele RECHAZAR el primer SubmitItemUpdate de un item nuevo sin imagen de preview
+    // (InvalidParam=8). Si el caller no pasó una, generamos un PNG mínimo (1x1) para satisfacerlo.
+    FString UsePreview = PreviewPath;
+    if (UsePreview.IsEmpty())
+    {
+        static const TCHAR* kPngB64 =
+            TEXT("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
+        TArray<uint8> Png;
+        if (FBase64::Decode(FString(kPngB64), Png))
+        {
+            const FString PrevFile = FPaths::Combine(Staging, TEXT("preview.png"));
+            if (FFileHelper::SaveArrayToFile(Png, *PrevFile)) UsePreview = PrevFile;
+        }
+    }
+
+    UE_LOG(LogPTWordPacks, Warning, TEXT("[Publish] Staging='%s' dir=%d copy=%d txt=%d preview=%d"),
+        *Staging, bDir ? 1 : 0, bCopy ? 1 : 0, bTxt ? 1 : 0, UsePreview.IsEmpty() ? 0 : 1);
     if (!bCopy)
     {
         OnWordPackPublished.Broadcast(false, FString::Printf(TEXT("No se pudo escribir el staging: %s"), *Staging));
@@ -335,7 +351,7 @@ void UPTWordPackSubsystem::PublishWordPack(const FString& CsvPath, const FString
 
     delete Publisher;
     Publisher = new FPTWorkshopPublish();
-    Publisher->Start(Staging, PreviewPath, Title, Description,
+    Publisher->Start(Staging, UsePreview, Title, Description,
         [this](bool bOk, FString Info)
         {
             UE_LOG(LogPTWordPacks, Log, TEXT("PublishWordPack: %s (%s)"),
