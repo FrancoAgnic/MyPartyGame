@@ -78,10 +78,15 @@ protected:
     // Botón "Game Settings" (host-only) que ABRE el panel de ajustes.
     UPROPERTY(meta = (BindWidgetOptional)) UButton* GameSettingsButton;
     // Panel de ajustes = su propio widget (deriva de PTGameSettingsWidget). Arranca oculto; lo abre
-    // GameSettingsButton. Toda la lógica (steppers/dificultad/categorías/privada/biblioteca) vive ahí.
+    // GameSettingsButton. Toda la lógica (steppers/dificultad/categorías/privada) vive ahí.
     UPROPERTY(meta = (BindWidgetOptional)) class UPTGameSettingsWidget* GameSettingsPanel;
+    // Biblioteca de bancos de palabras (deriva de PTWordPackWidget). Vive acá (no dentro del settings)
+    // para poder acomodarla libre en el canvas. Arranca oculta; la abre el botón "Library Mods" del
+    // GameSettings vía su delegate OnRequestLibrary.
+    UPROPERTY(meta = (BindWidgetOptional)) class UPTWordPackWidget* LibraryPanel;
 
     UFUNCTION() void OnGameSettingsClicked(); // abre el panel
+    void OnLibraryRequested();                // abre LibraryPanel (lo pide el GameSettings)
 
 private:
     FTimerHandle RefreshTimerHandle;

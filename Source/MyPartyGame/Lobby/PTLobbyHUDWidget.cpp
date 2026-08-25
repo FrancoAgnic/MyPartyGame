@@ -24,6 +24,7 @@
 #include "../PTWordBank.h"
 #include "../Multiplayer/MultiplayerSessionsSubsystem.h"
 #include "../UI/PTFriendsWidget.h"
+#include "../UI/PTWordPackWidget.h"
 #include "PTGameSettingsWidget.h"
 
 bool UPTLobbyHUDWidget::Initialize()
@@ -38,9 +39,20 @@ bool UPTLobbyHUDWidget::Initialize()
     if (InviteButton)     InviteButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnInviteClicked);
     if (FriendsPanel)     FriendsPanel->SetVisibility(ESlateVisibility::Collapsed);
     if (GameSettingsButton) GameSettingsButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnGameSettingsClicked);
-    if (GameSettingsPanel)  GameSettingsPanel->SetVisibility(ESlateVisibility::Collapsed);
+    if (GameSettingsPanel)
+    {
+        GameSettingsPanel->SetVisibility(ESlateVisibility::Collapsed);
+        // El botón "Library Mods" vive en el settings, pero el WBP_WordPack vive acá → lo abrimos nosotros.
+        GameSettingsPanel->OnRequestLibrary.BindUObject(this, &UPTLobbyHUDWidget::OnLibraryRequested);
+    }
+    if (LibraryPanel) LibraryPanel->SetVisibility(ESlateVisibility::Collapsed);
 
     return true;
+}
+
+void UPTLobbyHUDWidget::OnLibraryRequested()
+{
+    if (LibraryPanel) LibraryPanel->ShowPanel();
 }
 
 void UPTLobbyHUDWidget::ShowHUD()

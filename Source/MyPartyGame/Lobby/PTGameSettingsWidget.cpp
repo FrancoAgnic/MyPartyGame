@@ -5,7 +5,6 @@
 #include "../PTWordBank.h"
 #include "../PTTextTable.h"
 #include "../Multiplayer/MultiplayerSessionsSubsystem.h"
-#include "../UI/PTWordPackWidget.h"
 #include "Components/Button.h"
 #include "Components/CheckBox.h"
 #include "Components/TextBlock.h"
@@ -34,8 +33,6 @@ bool UPTGameSettingsWidget::Initialize()
     if (CloseButton)         CloseButton->OnClicked.AddDynamic(this, &UPTGameSettingsWidget::OnCloseClicked);
     if (Btn_Back)            Btn_Back->OnClicked.AddDynamic(this, &UPTGameSettingsWidget::OnCloseClicked);
     if (CloseSettingsButton) CloseSettingsButton->OnClicked.AddDynamic(this, &UPTGameSettingsWidget::OnCloseClicked);
-
-    if (LibraryPanel) LibraryPanel->SetVisibility(ESlateVisibility::Collapsed);
 
     // Refrescar los textos "Word:/Map:" cuando el host cambia de banco desde la Biblioteca.
     if (UPTGameInstance* GI = GetGI())
@@ -88,7 +85,8 @@ void UPTGameSettingsWidget::OnFriendsOnlyChanged(bool bIsChecked)
 
 void UPTGameSettingsWidget::OnLibraryClicked()
 {
-    if (LibraryPanel) LibraryPanel->ShowPanel();
+    // El WBP_WordPack vive en el HUD; le pedimos que lo abra.
+    OnRequestLibrary.ExecuteIfBound();
 }
 
 void UPTGameSettingsWidget::BuildCategoryChecks()

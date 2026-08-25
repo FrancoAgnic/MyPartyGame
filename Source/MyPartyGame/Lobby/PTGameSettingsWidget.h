@@ -10,8 +10,7 @@
 //   RevealText/RevealMinus/RevealPlus
 //   DiffFacilButton/DiffMediaButton/DiffDificilButton  (dificultades; coloreadas si activas)
 //   CategoriesBox (Panel)  → C++ lo llena con un check por categoría
-//   LibraryButton (Button) → abre la Biblioteca (LibraryPanel)
-//   LibraryPanel  (instancia de WBP_WordPack)  → arranca oculto
+//   LibraryButton (Button) → pide abrir la Biblioteca (el WBP_WordPack vive en el HUD ahora)
 //   WordBankText / MapText (TextBlock) → debajo de Library: "Word: X" / "Map: Default" (opcionales)
 //   CloseButton   (Button) → cerrar (Back/Apply; los ajustes se aplican en vivo)
 //   TitleText (TextBlock)
@@ -29,6 +28,10 @@ class UPanelWidget;
 class UPTWordPackWidget;
 class UPTGameInstance;
 
+// El botón "Library Mods" vive acá, pero el panel WBP_WordPack ahora vive en el HUD (para poder
+// acomodarlo libre). Este delegate avisa al HUD que lo abra.
+DECLARE_DELEGATE(FPTOnRequestLibrary);
+
 UCLASS()
 class MYPARTYGAME_API UPTGameSettingsWidget : public UPTUserWidget
 {
@@ -38,6 +41,9 @@ public:
     /** Mostrar el panel: construye los checks de categoría (una vez), refresca valores y hace el blop. */
     UFUNCTION(BlueprintCallable, Category="GameSettings")
     void ShowPanel();
+
+    /** Lo dispara el botón "Library Mods". El HUD se suscribe y abre su WBP_WordPack. */
+    FPTOnRequestLibrary OnRequestLibrary;
 
 protected:
     virtual bool Initialize() override;
@@ -57,7 +63,6 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UButton*    DiffDificilButton;
     UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* CategoriesBox;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*    LibraryButton;
-    UPROPERTY(meta = (BindWidgetOptional)) UPTWordPackWidget* LibraryPanel;
     // Debajo de "Library Mods": qué está activo ahora mismo. Word = banco elegido (o Default);
     // Map = mapa custom (bloqueado por ahora → siempre "Default").
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* WordBankText; // "Word: Title Movies"
