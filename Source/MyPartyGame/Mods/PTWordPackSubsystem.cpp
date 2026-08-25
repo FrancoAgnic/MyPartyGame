@@ -6,6 +6,7 @@
 #include "Misc/Guid.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformFileManager.h"
+#include "HAL/PlatformProcess.h" // UserTempDir
 #include "Async/Async.h"
 
 #if PT_WITH_STEAM
@@ -298,18 +299,31 @@ void UPTWordPackSubsystem::PublishWordPack(const FString& CsvPath, const FString
     }
 
     // ISteamUGC sube una CARPETA, no un archivo suelto: armamos un staging con words.csv (+ pack.txt).
-    // OJO: SetItemContent exige ruta ABSOLUTA. En build empaquetada ProjectSavedDir() es relativa
-    // (../../../…) → Steam la rechaza con InvalidParam (8). Por eso la convertimos a full path.
-    const FString Staging = FPaths::ConvertRelativePathToFull(
-        FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("WorkshopStaging"),
-                        FGuid::NewGuid().ToString(EGuidFormats::Short)));
+    // OJO: SetItemContent exige ruta ABSOLUTA. Y NO puede ir bajo ProjectSavedDir(): si el juego está
+    // instalado en C:\Program Files (x86)\Steam\... esa carpeta NO es escribible sin admin → el copiado
+    // falla, la carpeta queda vacía y Steam devuelve InvalidParam (8). Por eso usamos %TEMP% (siempre
+    // escribible). ConvertRelativePathToFull + MakePlatformFilename para ruta absoluta y nativa.
+    FString Staging = FPaths::Combine(FString(FPlatformProcess::UserTempDir()),
+                                      TEXT("SculpturilloWorkshop"),
+                                      FGuid::NewGuid().ToString(EGuidFormats::Short));
+    Staging = FPaths::ConvertRelativePathToFull(Staging);
+    FPaths::MakePlatformFilename(Staging);
+
     IFileManager& FM = IFileManager::Get();
-    FM.MakeDirectory(*Staging, /*Tree=*/true);
-    FM.Copy(*FPaths::Combine(Staging, TEXT("words.csv")), *CsvPath);
+    const bool bDir  = FM.MakeDirectory(*Staging, /*Tree=*/true);
+    const bool bCopy = (FM.Copy(*FPaths::Combine(Staging, TEXT("words.csv")), *CsvPath) == COPY_OK);
 
     // pack.txt con título/autor para que se muestre bien al que lo descargue.
     const FString PackTxt = Title + LINE_TERMINATOR;
-    FFileHelper::SaveStringToFile(PackTxt, *FPaths::Combine(Staging, TEXT("pack.txt")));
+    const bool bTxt = FFileHelper::SaveStringToFile(PackTxt, *FPaths::Combine(Staging, TEXT("pack.txt")));
+
+    UE_LOG(LogPTWordPacks, Warning, TEXT("[Publish] Staging='%s' dir=%d copy=%d txt=%d"),
+        *Staging, bDir ? 1 : 0, bCopy ? 1 : 0, bTxt ? 1 : 0);
+    if (!bCopy)
+    {
+        OnWordPackPublished.Broadcast(false, FString::Printf(TEXT("No se pudo escribir el staging: %s"), *Staging));
+        return;
+    }
 
     delete Publisher;
     Publisher = new FPTWorkshopPublish();
