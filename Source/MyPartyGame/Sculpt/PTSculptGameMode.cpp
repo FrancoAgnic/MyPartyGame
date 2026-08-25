@@ -177,9 +177,8 @@ void APTSculptGameMode::ApplyMatchSettingsFromGameInstance()
     NumRounds      = FMath::Clamp(MatchSettings.NumRounds, 1, 20);
     RevealFraction = FMath::Clamp(MatchSettings.RevealFraction, 0.f, 0.95f);
 
-    UE_LOG(LogTemp, Log, TEXT("[SculptGM] Config: %.0fs/turno, %d rondas, revelado %.0f%%, cats=%d, difs=%d, customWords=%d"),
+    UE_LOG(LogTemp, Log, TEXT("[SculptGM] Config: %.0fs/turno, %d rondas, revelado %.0f%%, customWords=%d"),
         TurnDuration, NumRounds, RevealFraction * 100.f,
-        MatchSettings.ActiveCategories.Num(), MatchSettings.ActiveDifficulties.Num(),
         MatchSettings.bUseCustomWords ? MatchSettings.CustomWords.Num() : 0);
 }
 
@@ -680,23 +679,10 @@ TArray<FPTWordEntry> APTSculptGameMode::BuildEligibleWordPool() const
         (MatchSettings.bUseCustomWords && MatchSettings.CustomWords.Num() > 0)
         ? MatchSettings.CustomWords : WordBank;
 
-    auto Passes = [this](const FPTWordEntry& E)
-    {
-        const bool bCatOK  = MatchSettings.ActiveCategories.Num() == 0
-                          || MatchSettings.ActiveCategories.Contains(E.Category);
-        const bool bDiffOK = MatchSettings.ActiveDifficulties.Num() == 0
-                          || MatchSettings.ActiveDifficulties.Contains(E.Difficulty);
-        return bCatOK && bDiffOK;
-    };
-
-    TArray<FPTWordEntry> Pool; // se lleva la entry entera (con las 2 traducciones)
+    // Ya no hay filtros de categoría/dificultad: entran todas las palabras válidas.
+    TArray<FPTWordEntry> Pool; // se lleva la entry entera (con todas las traducciones)
     for (const FPTWordEntry& E : Source)
-        if (E.IsValidEntry() && Passes(E)) Pool.Add(E);
-
-    // Fallback: si el filtro no dejó ninguna, usar todas las de la fuente (no dejar sin palabras).
-    if (Pool.Num() == 0)
-        for (const FPTWordEntry& E : Source)
-            if (E.IsValidEntry()) Pool.Add(E);
+        if (E.IsValidEntry()) Pool.Add(E);
 
     return Pool;
 }

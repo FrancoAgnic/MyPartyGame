@@ -8,8 +8,6 @@
 //   TurnTimeText/TurnTimeMinus/TurnTimePlus
 //   RoundsText/RoundsMinus/RoundsPlus
 //   RevealText/RevealMinus/RevealPlus
-//   DiffFacilButton/DiffMediaButton/DiffDificilButton  (dificultades; coloreadas si activas)
-//   CategoriesBox (Panel)  → C++ lo llena con un check por categoría
 //   LibraryButton (Button) → pide abrir la Biblioteca (el WBP_WordPack vive en el HUD ahora)
 //   WordBankText / MapText (TextBlock) → debajo de Library: "Word: X" / "Map: Default" (opcionales)
 //   CloseButton   (Button) → cerrar (Back/Apply; los ajustes se aplican en vivo)
@@ -18,13 +16,11 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "../UI/PTUserWidget.h"
-#include "../PTMatchSettings.h" // EPTWordDifficulty
 #include "PTGameSettingsWidget.generated.h"
 
 class UButton;
 class UCheckBox;
 class UTextBlock;
-class UPanelWidget;
 class UPTWordPackWidget;
 class UPTGameInstance;
 
@@ -38,7 +34,7 @@ class MYPARTYGAME_API UPTGameSettingsWidget : public UPTUserWidget
     GENERATED_BODY()
 
 public:
-    /** Mostrar el panel: construye los checks de categoría (una vez), refresca valores y hace el blop. */
+    /** Mostrar el panel: refresca valores y hace el blop. */
     UFUNCTION(BlueprintCallable, Category="GameSettings")
     void ShowPanel();
 
@@ -58,10 +54,6 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* RevealText;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*    RevealMinus;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*    RevealPlus;
-    UPROPERTY(meta = (BindWidgetOptional)) UButton*    DiffFacilButton;
-    UPROPERTY(meta = (BindWidgetOptional)) UButton*    DiffMediaButton;
-    UPROPERTY(meta = (BindWidgetOptional)) UButton*    DiffDificilButton;
-    UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* CategoriesBox;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*    LibraryButton;
     // Debajo de "Library Mods": qué está activo ahora mismo. Word = banco elegido (o Default);
     // Map = mapa custom (bloqueado por ahora → siempre "Default").
@@ -76,20 +68,12 @@ protected:
     UFUNCTION() void OnTurnTimeMinus(); UFUNCTION() void OnTurnTimePlus();
     UFUNCTION() void OnRoundsMinus();   UFUNCTION() void OnRoundsPlus();
     UFUNCTION() void OnRevealMinus();   UFUNCTION() void OnRevealPlus();
-    UFUNCTION() void OnDiffFacil();     UFUNCTION() void OnDiffMedia();  UFUNCTION() void OnDiffDificil();
-    UFUNCTION() void OnCategoryChanged(bool bChecked);
     UFUNCTION() void OnFriendsOnlyChanged(bool bIsChecked);
     UFUNCTION() void OnLibraryClicked();
     UFUNCTION() void OnCloseClicked();
 
 private:
     UPTGameInstance* GetGI() const;
-    void BuildCategoryChecks();
     void RefreshUI();
     void RefreshPackTexts(); // actualiza "Word:" / "Map:" (también en OnSelectedWordPackChanged)
-    void ToggleDifficulty(EPTWordDifficulty Diff);
-
-    UPROPERTY() TArray<UCheckBox*> CategoryChecks;
-    TArray<FName>                  CategoryNames;
-    bool bCategoryChecksBuilt = false;
 };

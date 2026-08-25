@@ -2,11 +2,13 @@
 // Banco de palabras cargado desde un CSV suelto (NO hardcodeado, NO DataTable).
 //
 // N IDIOMAS, igual que los textos de la UI: los idiomas salen de los ENCABEZADOS del CSV.
-//     Name,Category,Difficulty,ES,EN
-//     1,ANIMALES,1,ABEJA,BEE
+//     Name,ES,EN
+//     1,ABEJA,BEE
 // Para sumar portugués se agrega la columna PT y sus palabras — sin tocar C++, sin reimportar nada:
-//     Name,Category,Difficulty,ES,EN,PT
-//     1,ANIMALES,1,ABEJA,BEE,ABELHA
+//     Name,ES,EN,PT
+//     1,ABEJA,BEE,ABELHA
+// La palabra puede llevar ACENTOS (se muestran tal cual arriba); al adivinar en el chat no importan
+// (la comparación normaliza acentos). Columnas viejas "Category"/"Difficulty" se ignoran si aparecen.
 //
 // Las columnas se mapean POR CÓDIGO contra PTText::GetAvailableLanguages(), no por posición: así el
 // índice de idioma significa lo mismo en la UI y en las palabras aunque el orden difiera.
@@ -25,9 +27,6 @@ namespace PTWordBank
 
     /** Banco por defecto. Carga el CSV la primera vez y cachea. */
     const TArray<FPTWordEntry>& GetDefaultWords();
-
-    /** Categorías únicas del banco (para los checkboxes del lobby), ordenadas alfabéticamente. */
-    const TArray<FName>& GetDefaultCategories();
 
     /** Vuelve a leer el CSV del disco. */
     void Reload();

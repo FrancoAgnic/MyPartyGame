@@ -1,22 +1,14 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-// Tipos compartidos: banco de palabras (palabra + categoría + dificultad) y la configuración de
-// partida que el host arma en el lobby (tiempo de turno, rondas, % de revelado, categorías,
-// dificultad, y palabras propias subidas por CSV). Los usan el lobby, el GameInstance y el
-// SculptGameMode.
+// Tipos compartidos: banco de palabras (solo la palabra en sus idiomas) y la configuración de
+// partida que el host arma en el lobby (tiempo de turno, rondas, % de revelado, y palabras propias
+// subidas por CSV). Los usan el lobby, el GameInstance y el SculptGameMode.
+// (Categoría y dificultad se eliminaron: el banco es solo la lista de palabras — "menos es más".)
 
 #pragma once
 #include "CoreMinimal.h"
 #include "PTMatchSettings.generated.h"
 
-UENUM(BlueprintType)
-enum class EPTWordDifficulty : uint8
-{
-    Facil   UMETA(DisplayName="Fácil"),
-    Media   UMETA(DisplayName="Media"),
-    Dificil UMETA(DisplayName="Difícil")
-};
-
-// Una palabra del banco, con su categoría y dificultad (para filtrar).
+// Una palabra del banco, en sus distintos idiomas.
 //
 // N IDIOMAS: Words está indexado por el MISMO índice de idioma que la UI
 // (PTText::GetAvailableLanguages()), así "el idioma 2" significa lo mismo en todo el juego.
@@ -30,12 +22,8 @@ struct FPTWordEntry
      *  Una entrada vacía = falta esa traducción → se usa el fallback de ForLang(). */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Word") TArray<FString> Words;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Word") FName   Category;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Word") EPTWordDifficulty Difficulty = EPTWordDifficulty::Media;
-
     FPTWordEntry() {}
-    FPTWordEntry(const TArray<FString>& InWords, const FName& InCat, EPTWordDifficulty InDiff)
-        : Words(InWords), Category(InCat), Difficulty(InDiff) {}
+    explicit FPTWordEntry(const TArray<FString>& InWords) : Words(InWords) {}
 
     /** Traducción para ese índice de idioma. Si falta, cae a la primera que exista (nunca vacío). */
     FString ForLang(int32 LangIndex) const
@@ -63,14 +51,7 @@ struct FPTMatchSettings
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Match") int32 NumRounds      = 3;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Match") float RevealFraction = 0.3f; // 0..0.95 (default 30%, igual que el game mode)
 
-    // Filtros de palabras. Array vacío = sin filtrar (entran todas).
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Match") TArray<FName> ActiveCategories;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Match") TArray<EPTWordDifficulty> ActiveDifficulties;
-
     // Palabras subidas por el host (CSV). Si bUseCustomWords, reemplazan el banco default.
     UPROPERTY(BlueprintReadWrite, Category="Match") TArray<FPTWordEntry> CustomWords;
     UPROPERTY(BlueprintReadWrite, Category="Match") bool bUseCustomWords = false;
 };
-
-// (Las categorías del banco default ahora se derivan del DataTable en tiempo real —
-//  ver PTWordBank::GetDefaultCategories(). Ya no hay lista hardcodeada acá.)

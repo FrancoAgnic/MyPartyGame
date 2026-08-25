@@ -12,32 +12,20 @@ namespace
 {
     bool                 WB_GLoaded = false;
     TArray<FPTWordEntry> GWords;
-    TArray<FName>        GCategories;
-
-    EPTWordDifficulty DiffFromInt(int32 D)
-    {
-        if (D <= 1) return EPTWordDifficulty::Facil;
-        if (D >= 3) return EPTWordDifficulty::Dificil;
-        return EPTWordDifficulty::Media;
-    }
 
     // Fallback mínimo si el CSV no está (así el juego no queda sin palabras). Solo el idioma de
     // referencia: si falta el banco, el problema es el banco, no las traducciones.
     void SeedFallback()
     {
-        using D = EPTWordDifficulty;
-        auto One = [](const TCHAR* W, const TCHAR* C, D Diff)
+        auto One = [](const TCHAR* W)
         {
             TArray<FString> Words; Words.Add(W);
-            return FPTWordEntry(Words, FName(C), Diff);
+            return FPTWordEntry(Words);
         };
         GWords = {
-            One(TEXT("Gato"),TEXT("ANIMALES"),D::Facil),   One(TEXT("Perro"),TEXT("ANIMALES"),D::Facil),
-            One(TEXT("Pez"),TEXT("ANIMALES"),D::Facil),    One(TEXT("Pizza"),TEXT("COMIDA"),D::Facil),
-            One(TEXT("Manzana"),TEXT("COMIDA"),D::Facil),  One(TEXT("Auto"),TEXT("VEHICULOS"),D::Facil),
-            One(TEXT("Barco"),TEXT("VEHICULOS"),D::Media), One(TEXT("Arbol"),TEXT("PLANTAS"),D::Facil),
-            One(TEXT("Sol"),TEXT("FENOMENOS_NATURALES"),D::Facil), One(TEXT("Casa"),TEXT("EDIFICIOS"),D::Facil),
-            One(TEXT("Mano"),TEXT("CUERPO_HUMANO"),D::Facil), One(TEXT("Robot"),TEXT("TECNOLOGIA"),D::Facil)
+            One(TEXT("Gato")),  One(TEXT("Perro")), One(TEXT("Pez")),   One(TEXT("Pizza")),
+            One(TEXT("Manzana")), One(TEXT("Auto")), One(TEXT("Barco")), One(TEXT("Árbol")),
+            One(TEXT("Sol")),   One(TEXT("Casa")),  One(TEXT("Mano")),  One(TEXT("Robot"))
         };
     }
 
@@ -64,11 +52,6 @@ namespace
         {
             UE_LOG(LogTemp, Log, TEXT("[WordBank] %d palabras desde %s."), GWords.Num(), *Path);
         }
-
-        TSet<FName> Seen;
-        for (const FPTWordEntry& W : GWords) if (!W.Category.IsNone()) Seen.Add(W.Category);
-        GCategories = Seen.Array();
-        GCategories.Sort([](const FName& A, const FName& B){ return A.LexicalLess(B); });
     }
 }
 
@@ -82,7 +65,6 @@ bool PTWordBank::ParseWordCsv(const TArray<FString>& Lines, TArray<FPTWordEntry>
 
     // Las columnas se identifican POR NOMBRE, no por posición: así el CSV puede tener las columnas
     // en cualquier orden y el que sube un CSV propio no tiene que respetar un layout exacto.
-    int32 CatCol = INDEX_NONE, DiffCol = INDEX_NONE;
 
     // Columna de CSV -> índice de idioma global (el de PTText). INDEX_NONE = no es un idioma.
     TArray<int32> ColToLang;
@@ -93,8 +75,9 @@ bool PTWordBank::ParseWordCsv(const TArray<FString>& Lines, TArray<FPTWordEntry>
     for (int32 c = 0; c < Header.Num(); ++c)
     {
         const FString H = Header[c].TrimStartAndEnd();
-        if (H.Equals(TEXT("Category"),   ESearchCase::IgnoreCase)) { CatCol  = c; continue; }
-        if (H.Equals(TEXT("Difficulty"), ESearchCase::IgnoreCase)) { DiffCol = c; continue; }
+        // Categoría/dificultad ya no se usan: se ignoran si aparecen (compat con CSV viejos).
+        if (H.Equals(TEXT("Category"),   ESearchCase::IgnoreCase)) continue;
+        if (H.Equals(TEXT("Difficulty"), ESearchCase::IgnoreCase)) continue;
         if (H.Equals(TEXT("Name"),       ESearchCase::IgnoreCase)) continue; // índice de fila
 
         // Compatibilidad con los CSV viejos: "Word"/"WordEs" = idioma de referencia, "WordEn" = inglés.
@@ -124,9 +107,6 @@ bool PTWordBank::ParseWordCsv(const TArray<FString>& Lines, TArray<FPTWordEntry>
 
         if (!E.IsValidEntry()) continue; // fila sin ninguna palabra
 
-        if (Cells.IsValidIndex(CatCol))  E.Category   = FName(*Cells[CatCol].TrimStartAndEnd());
-        if (Cells.IsValidIndex(DiffCol)) E.Difficulty = DiffFromInt(FCString::Atoi(*Cells[DiffCol]));
-
         OutWords.Add(MoveTemp(E));
     }
 
@@ -139,16 +119,9 @@ const TArray<FPTWordEntry>& PTWordBank::GetDefaultWords()
     return GWords;
 }
 
-const TArray<FName>& PTWordBank::GetDefaultCategories()
-{
-    WB_EnsureLoaded();
-    return GCategories;
-}
-
 void PTWordBank::Reload()
 {
     WB_GLoaded = false;
     GWords.Reset();
-    GCategories.Reset();
     WB_EnsureLoaded();
 }

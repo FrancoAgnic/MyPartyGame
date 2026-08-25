@@ -23,10 +23,26 @@ namespace
     /** Índice inverso "texto → clave", con TODOS los idiomas, para la traducción automática. */
     TMap<FString, FName> GReverse;
 
-    // Clave de comparación: sin espacios de más y sin distinguir mayúsculas.
+    // Clave de comparación para la traducción automática: sin distinguir mayúsculas, sin espacios de
+    // más, e IGNORANDO signos decorativos al inicio/fin (¡ ¿ ! ? - – — . * _). Así un texto del WBP
+    // matchea la fila del CSV aunque difiera solo en esos signos (p.ej. "Todos adivinaron!" vs la fila
+    // "¡Todos adivinaron!", o "-No hay amigos-" vs "No hay amigos"). El texto MOSTRADO sale igual del
+    // CSV, así que queda bien escrito. Se aplica igual al construir el índice y al buscar → simétrico.
     FString NormalizeForLookup(const FString& S)
     {
-        return S.TrimStartAndEnd().ToLower();
+        FString T = S.TrimStartAndEnd();
+        auto IsDeco = [](TCHAR C)
+        {
+            return C == TEXT('!') || C == TEXT('?') ||
+                   C == TCHAR(0x00A1) || C == TCHAR(0x00BF) ||                 // ¡ ¿
+                   C == TEXT('-') || C == TCHAR(0x2013) || C == TCHAR(0x2014) || // - – —
+                   C == TEXT('.') || C == TEXT('*') || C == TEXT('_') ||
+                   FChar::IsWhitespace(C);
+        };
+        int32 A = 0, B = T.Len();
+        while (A < B && IsDeco(T[A]))     ++A;
+        while (B > A && IsDeco(T[B - 1])) --B;
+        return T.Mid(A, B - A).ToLower();
     }
 
     /** Nombre lindo de un idioma. Si sale uno nuevo y no está acá, se muestra el código en mayúscula

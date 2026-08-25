@@ -21,18 +21,6 @@
 #include "UI/PTInvitePopupWidget.h"
 #include "Mods/PTWordPackSubsystem.h"
 
-namespace
-{
-    // "facil/fácil/1/f" → Facil; "dificil/difícil/3/d" → Dificil; resto → Media.
-    EPTWordDifficulty ParseDifficulty(const FString& In)
-    {
-        const FString S = In.TrimStartAndEnd().ToLower();
-        if (S == TEXT("1") || S.StartsWith(TEXT("f"))) return EPTWordDifficulty::Facil;
-        if (S == TEXT("3") || S.StartsWith(TEXT("d"))) return EPTWordDifficulty::Dificil;
-        return EPTWordDifficulty::Media;
-    }
-}
-
 int32 UPTGameInstance::LoadCustomWordsFromCSVDialog()
 {
     IDesktopPlatform* DP = FDesktopPlatformModule::Get();
@@ -76,8 +64,8 @@ int32 UPTGameInstance::LoadCustomWordsFromCSVFile(const FString& Path)
     }
     Parsed.Reset();
 
-    // Formato SIMPLE de siempre: "Palabra,Categoria,Dificultad" (un solo idioma). Se sigue
-    // aceptando para no romper los CSV que la gente ya tenga armados.
+    // Formato SIMPLE de siempre: una palabra por línea (la 1ª columna). Se ignoran columnas extra
+    // (categoría/dificultad de CSV viejos). Se sigue aceptando para no romper los CSV ya armados.
     for (int32 i = 0; i < Lines.Num(); ++i)
     {
         const FString Line = Lines[i].TrimStartAndEnd();
@@ -90,16 +78,13 @@ int32 UPTGameInstance::LoadCustomWordsFromCSVFile(const FString& Path)
         const FString Word = Cols.IsValidIndex(0) ? Cols[0] : FString();
         if (Word.IsEmpty()) continue;
 
-        // Saltar una fila de encabezado ("Palabra,Categoria,..." o "Word,...").
+        // Saltar una fila de encabezado ("Palabra,..." o "Word,...").
         const FString WLow = Word.ToLower();
         if (i == 0 && (WLow == TEXT("palabra") || WLow == TEXT("word"))) continue;
 
-        const FName Category = (Cols.IsValidIndex(1) && !Cols[1].IsEmpty())
-            ? FName(*Cols[1]) : FName(TEXT("Personalizadas"));
-        const EPTWordDifficulty Diff = ParseDifficulty(Cols.IsValidIndex(2) ? Cols[2] : FString());
         // Una sola traducción: va en el idioma de referencia y el resto cae a esa por el fallback.
         TArray<FString> OneLang; OneLang.Add(Word);
-        Parsed.Add(FPTWordEntry(OneLang, Category, Diff));
+        Parsed.Add(FPTWordEntry(OneLang));
     }
 
     if (Parsed.Num() == 0) return 0;
