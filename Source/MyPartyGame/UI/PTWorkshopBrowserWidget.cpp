@@ -9,6 +9,7 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/EditableTextBox.h"
+#include "HAL/PlatformProcess.h" // LaunchURL
 
 // Tag del catálogo para cada sección.
 static const TCHAR* PT_TAG_WORDBANK = TEXT("WordBank");
@@ -24,6 +25,10 @@ void UPTWorkshopBrowserWidget::NativeConstruct()
 
     if (SearchButton)       SearchButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnSearchClicked);
     if (PublishButton)      PublishButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnPublishClicked);
+    if (UploadCsvButton)    UploadCsvButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnUploadCsvClicked);
+    if (GuideButton)        GuideButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnGuideClicked);
+    if (PopupCloseButton)   PopupCloseButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnPopupCloseClicked);
+    if (PublishPopup)       PublishPopup->SetVisibility(ESlateVisibility::Collapsed);
     if (WordBanksTabButton) WordBanksTabButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnWordBanksTabClicked);
     if (MapsTabButton)      MapsTabButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnMapsTabClicked);
     if (BackButton)         BackButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnBackClicked);
@@ -61,6 +66,7 @@ void UPTWorkshopBrowserWidget::NativeDestruct()
 void UPTWorkshopBrowserWidget::ShowPanel()
 {
     SetVisibility(ESlateVisibility::Visible);
+    if (PublishPopup) PublishPopup->SetVisibility(ESlateVisibility::Collapsed); // arranca cerrado
     PlayPopIn();
     SwitchTab(0);
 }
@@ -169,6 +175,31 @@ void UPTWorkshopBrowserWidget::AddItem(const FString& ItemId)
 
 void UPTWorkshopBrowserWidget::OnPublishClicked()
 {
+    // Abre el popup con Upload/Template. Si el WBP no tiene popup, cae al flujo directo de subir.
+    if (PublishPopup)
+    {
+        PublishPopup->SetVisibility(ESlateVisibility::Visible);
+        PlayPopInOn(PublishPopup);
+        return;
+    }
+    OnUploadCsvClicked();
+}
+
+void UPTWorkshopBrowserWidget::OnPopupCloseClicked()
+{
+    if (PublishPopup) PublishPopup->SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UPTWorkshopBrowserWidget::OnGuideClicked()
+{
+    // Abre la guía (GitHub Pages) en el navegador del sistema.
+    if (!GuideUrl.IsEmpty())
+        FPlatformProcess::LaunchURL(*GuideUrl, nullptr, nullptr);
+}
+
+void UPTWorkshopBrowserWidget::OnUploadCsvClicked()
+{
+    if (PublishPopup) PublishPopup->SetVisibility(ESlateVisibility::Collapsed);
     // Elegir un .csv y subirlo al Workshop como banco de palabras (el resultado llega por OnPublished).
     if (UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance()))
         GI->PublishWordPackFromDialog();

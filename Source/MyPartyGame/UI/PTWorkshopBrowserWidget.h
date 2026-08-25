@@ -10,6 +10,11 @@
 //   WordBanksTabButton / MapsTabButton (Button) → pestañas (opcionales)
 //   MapsLockedPanel   (cualquier Widget)  → overlay "Próximamente" que se muestra en la pestaña Mapas (opcional)
 //   BackButton        (Button)            → cerrar (opcional)
+//   PublishButton     (Button)            → abre el popup de publicar (opcional)
+//   PublishPopup      (Border/Overlay)    → popup con Upload/Template; arranca oculto (opcional)
+//   UploadCsvButton   (Button)            → dentro del popup: subir .csv (texto "Upload CSV")
+//   GuideButton       (Button)            → dentro del popup: abre la guía web ("Guide")
+//   PopupCloseButton  (Button)            → cerrar el popup (opcional)
 //   TitleText / EmptyText / StatusText (TextBlock) → título / "sin resultados" / "Buscando..." (opcionales)
 // En Details (categoría Workshop) asignar RowWidgetClass = WBP de la fila (deriva de PTWorkshopItemRowWidget).
 
@@ -44,8 +49,18 @@ protected:
     UPROPERTY(meta = (BindWidget))         UPanelWidget*     ResultsBox;
     UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* SearchBox;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*          SearchButton;
-    // Publicar tu propio banco de palabras (.csv) al Workshop. El resultado se muestra en StatusText.
+    // "Publish" abre un popup chico con dos botones: subir CSV y descargar plantilla.
     UPROPERTY(meta = (BindWidgetOptional)) UButton*          PublishButton;
+    // Popup (Border/Overlay) que agrupa Upload/Template. Arranca oculto; lo abre PublishButton.
+    UPROPERTY(meta = (BindWidgetOptional)) UWidget*          PublishPopup;
+    // Dentro del popup: subir tu .csv al Workshop (resultado en StatusText).
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*          UploadCsvButton;
+    // Abre la guía (página web) de cómo crear/subir el CSV, en el navegador.
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*          GuideButton;
+    // URL de la guía. Editable por si cambia el repo/usuario.
+    UPROPERTY(EditAnywhere, Category="Workshop") FString     GuideUrl = TEXT("https://francoagnic.github.io/MyPartyGame/");
+    // Cerrar el popup (opcional).
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*          PopupCloseButton;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*          WordBanksTabButton;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*          MapsTabButton;
     UPROPERTY(meta = (BindWidgetOptional)) UWidget*          MapsLockedPanel;
@@ -65,7 +80,10 @@ protected:
     UFUNCTION() void OnWordBanksTabClicked();
     UFUNCTION() void OnMapsTabClicked();
     UFUNCTION() void OnBackClicked();
-    UFUNCTION() void OnPublishClicked();
+    UFUNCTION() void OnPublishClicked();     // abre el popup
+    UFUNCTION() void OnUploadCsvClicked();   // sube el .csv (dentro del popup)
+    UFUNCTION() void OnGuideClicked();       // abre la guía web
+    UFUNCTION() void OnPopupCloseClicked();
 
 private:
     void SwitchTab(int32 Tab);           // 0 = bancos (funcional), 1 = mapas (bloqueado)

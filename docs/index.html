@@ -61,6 +61,10 @@
   pre{font-family:ui-monospace,Consolas,monospace;background:var(--code);color:var(--codeink);
     padding:14px 16px;border-radius:14px;overflow:auto;box-shadow:inset 0 2px 8px rgba(0,0,0,.4)}
   .step{background:#fff3e3;border:1px dashed #e9c39a;border-radius:12px;padding:10px 14px;margin:8px 0}
+  a.dl{display:inline-block;text-decoration:none;color:#fff;font-weight:800;
+    background:linear-gradient(180deg,var(--pink),var(--orange));border-bottom:4px solid #c23b12;
+    padding:11px 20px;border-radius:999px;box-shadow:0 4px 0 rgba(0,0,0,.15);margin:6px 0;transition:transform .06s ease}
+  a.dl:active{transform:translateY(2px)}
 
   .madeby{text-align:center;margin-top:34px}
   .madeby img{width:min(340px,70%);height:auto;filter:drop-shadow(0 6px 16px rgba(0,0,0,.45))}
@@ -92,26 +96,28 @@
   <div class="card">
     <h2><span class="es">Bancos de palabras</span><span class="en">Word banks</span> <span class="pill">tag: WordBank</span></h2>
 
-    <p class="es">Un banco es un archivo <code>.csv</code> (texto) con una palabra por línea. Lo abrís con el Bloc de notas o Excel. <b>No necesitás Unreal.</b></p>
-    <p class="en">A word bank is a <code>.csv</code> (text) file with one word per line. Open it with Notepad or Excel. <b>No Unreal needed.</b></p>
+    <p class="es">Un banco es un archivo <code>.csv</code> (texto) con una palabra por línea, en los distintos idiomas. Lo abrís con el Bloc de notas o Excel. <b>No necesitás Unreal.</b></p>
+    <p class="en">A word bank is a <code>.csv</code> (text) file with one word per line, in the different languages. Open it with Notepad or Excel. <b>No Unreal needed.</b></p>
 
-    <p class="es"><b>Formato:</b> <code>Palabra,Categoría,Dificultad</code></p>
-    <p class="en"><b>Format:</b> <code>Word,Category,Difficulty</code></p>
+    <p class="es"><b>Formato:</b> una columna por idioma — <code>ES,EN,PT,DE,FR,IT</code> (Español, Inglés, Portugués, Alemán, Francés, Italiano).</p>
+    <p class="en"><b>Format:</b> one column per language — <code>ES,EN,PT,DE,FR,IT</code> (Spanish, English, Portuguese, German, French, Italian).</p>
     <ul>
-      <li class="es"><b>Palabra</b>: lo que hay que esculpir/adivinar.</li>
-      <li class="en"><b>Word</b>: what players sculpt/guess.</li>
-      <li class="es"><b>Categoría</b>: texto libre (ej: Películas, Animales).</li>
-      <li class="en"><b>Category</b>: free text (e.g. Movies, Animals).</li>
-      <li class="es"><b>Dificultad</b>: <code>1</code> fácil, <code>2</code> media, <code>3</code> difícil.</li>
-      <li class="en"><b>Difficulty</b>: <code>1</code> easy, <code>2</code> medium, <code>3</code> hard.</li>
+      <li class="es">La <b>primera fila</b> son los códigos de idioma; cada fila siguiente es <b>una palabra</b>.</li>
+      <li class="en">The <b>first row</b> is the language codes; each following row is <b>one word</b>.</li>
+      <li class="es">Completá al menos el <b>Español (ES)</b>. Si dejás un idioma vacío, se usa el español.</li>
+      <li class="en">Fill at least <b>Spanish (ES)</b>. If you leave a language empty, Spanish is used.</li>
+      <li class="es">Podés poner <b>solo los idiomas que quieras</b> (ej: solo ES,EN).</li>
+      <li class="en">You can include <b>only the languages you want</b> (e.g. just ES,EN).</li>
     </ul>
 
     <p class="es">Ejemplo (<code>animales.csv</code>):</p>
     <p class="en">Example (<code>animals.csv</code>):</p>
-<pre>Palabra,Categoria,Dificultad
-Perro,Animales,1
-Elefante,Animales,2
-Pulpo,Animales,3</pre>
+<pre>ES,EN,PT,DE,FR,IT
+Perro,Dog,Cachorro,Hund,Chien,Cane
+Gato,Cat,Gato,Katze,Chat,Gatto
+Árbol,Tree,Árvore,Baum,Arbre,Albero</pre>
+
+    <p><a class="dl" href="plantilla_palabras.csv" download><span class="es">⬇ Descargar plantilla CSV</span><span class="en">⬇ Download CSV template</span></a></p>
 
     <div class="step">
       <b class="es">Guardalo como UTF-8</b><b class="en">Save it as UTF-8</b>
