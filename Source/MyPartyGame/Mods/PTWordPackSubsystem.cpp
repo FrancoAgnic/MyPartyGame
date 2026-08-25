@@ -32,11 +32,18 @@ struct FPTWorkshopPublish
                const FString& InDesc, TFunction<void(bool, FString)> InCb)
     {
         Cb = MoveTemp(InCb);
-        // SetItemContent/SetItemPreview exigen rutas ABSOLUTAS (si no, Steam devuelve InvalidParam=8).
+        // SetItemContent/SetItemPreview exigen rutas ABSOLUTAS y, en Windows, con separadores NATIVOS
+        // (backslashes). Si van relativas o con '/', Steam devuelve InvalidParam=8.
         ContentFolder = FPaths::ConvertRelativePathToFull(InFolder);
+        FPaths::MakePlatformFilename(ContentFolder);
         PreviewPath   = InPreview.IsEmpty() ? FString() : FPaths::ConvertRelativePathToFull(InPreview);
+        if (!PreviewPath.IsEmpty()) FPaths::MakePlatformFilename(PreviewPath);
         Title = InTitle; Desc = InDesc;
         if (!SteamUGC() || !SteamUtils()) { if (Cb) Cb(false, TEXT("Steam UGC no disponible")); return; }
+
+        UE_LOG(LogPTWordPacks, Warning, TEXT("[Publish] AppID=%u ContentFolder='%s' existe=%d preview='%s'"),
+            SteamUtils()->GetAppID(), *ContentFolder,
+            IFileManager::Get().DirectoryExists(*ContentFolder) ? 1 : 0, *PreviewPath);
 
         const SteamAPICall_t h = SteamUGC()->CreateItem(SteamUtils()->GetAppID(), k_EWorkshopFileTypeCommunity);
         CreateCR.Set(h, this, &FPTWorkshopPublish::OnCreate);
@@ -71,7 +78,10 @@ struct FPTWorkshopPublish
         // m_bUserNeedsToAcceptWorkshopLegalAgreement: si es true, Steam le muestra el acuerdo al usuario.
         FString Info = bOk
             ? FString::Printf(TEXT("%llu"), ItemId)
-            : FString::Printf(TEXT("SubmitItemUpdate falló (%d)"), p ? (int32)p->m_eResult : -1);
+            : FString::Printf(TEXT("SubmitItemUpdate falló (%d) | %s"),
+                              p ? (int32)p->m_eResult : -1, *ContentFolder);
+        if (!bOk)
+            UE_LOG(LogPTWordPacks, Error, TEXT("[Publish] %s (IOFailure=%d)"), *Info, bIOFailure ? 1 : 0);
         // Los callbacks de Steam corren en el hilo de tareas de OSS, no en el GameThread; la UI que
         // escucha el delegate toca Slate → marshalear al GameThread.
         TFunction<void(bool, FString)> CB = MoveTemp(Cb);
