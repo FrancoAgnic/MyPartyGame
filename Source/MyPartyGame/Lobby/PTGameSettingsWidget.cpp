@@ -31,9 +31,15 @@ bool UPTGameSettingsWidget::Initialize()
     if (DiffDificilButton) DiffDificilButton->OnClicked.AddDynamic(this, &UPTGameSettingsWidget::OnDiffDificil);
     if (FriendsOnlyCheckbox) FriendsOnlyCheckbox->OnCheckStateChanged.AddDynamic(this, &UPTGameSettingsWidget::OnFriendsOnlyChanged);
     if (LibraryButton) LibraryButton->OnClicked.AddDynamic(this, &UPTGameSettingsWidget::OnLibraryClicked);
-    if (CloseButton)   CloseButton->OnClicked.AddDynamic(this, &UPTGameSettingsWidget::OnCloseClicked);
+    if (CloseButton)         CloseButton->OnClicked.AddDynamic(this, &UPTGameSettingsWidget::OnCloseClicked);
+    if (Btn_Back)            Btn_Back->OnClicked.AddDynamic(this, &UPTGameSettingsWidget::OnCloseClicked);
+    if (CloseSettingsButton) CloseSettingsButton->OnClicked.AddDynamic(this, &UPTGameSettingsWidget::OnCloseClicked);
 
     if (LibraryPanel) LibraryPanel->SetVisibility(ESlateVisibility::Collapsed);
+
+    // Refrescar los textos "Word:/Map:" cuando el host cambia de banco desde la Biblioteca.
+    if (UPTGameInstance* GI = GetGI())
+        GI->OnSelectedWordPackChanged.AddUObject(this, &UPTGameSettingsWidget::RefreshPackTexts);
     return true;
 }
 
@@ -57,6 +63,21 @@ void UPTGameSettingsWidget::ShowPanel()
 void UPTGameSettingsWidget::OnCloseClicked()
 {
     SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UPTGameSettingsWidget::RefreshPackTexts()
+{
+    if (WordBankText)
+    {
+        const FString Title = GetGI() ? GetGI()->SelectedWordPackTitle : FString();
+        const FString Word  = Title.IsEmpty() ? TEXT("Default") : Title;
+        WordBankText->SetText(FText::FromString(FString::Printf(TEXT("Word: %s"), *Word)));
+    }
+    if (MapText)
+    {
+        // Mapas custom bloqueados por ahora → siempre Default.
+        MapText->SetText(FText::FromString(TEXT("Map: Default")));
+    }
 }
 
 void UPTGameSettingsWidget::OnFriendsOnlyChanged(bool bIsChecked)
@@ -143,6 +164,8 @@ void UPTGameSettingsWidget::RefreshUI()
 
     const bool bCustom = S.bUseCustomWords && S.CustomWords.Num() > 0;
     for (UCheckBox* C : CategoryChecks) if (C) C->SetIsEnabled(!bCustom);
+
+    RefreshPackTexts();
 }
 
 void UPTGameSettingsWidget::ToggleDifficulty(EPTWordDifficulty Diff)

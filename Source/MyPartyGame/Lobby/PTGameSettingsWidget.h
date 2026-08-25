@@ -12,6 +12,7 @@
 //   CategoriesBox (Panel)  → C++ lo llena con un check por categoría
 //   LibraryButton (Button) → abre la Biblioteca (LibraryPanel)
 //   LibraryPanel  (instancia de WBP_WordPack)  → arranca oculto
+//   WordBankText / MapText (TextBlock) → debajo de Library: "Word: X" / "Map: Default" (opcionales)
 //   CloseButton   (Button) → cerrar (Back/Apply; los ajustes se aplican en vivo)
 //   TitleText (TextBlock)
 
@@ -57,7 +58,14 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* CategoriesBox;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*    LibraryButton;
     UPROPERTY(meta = (BindWidgetOptional)) UPTWordPackWidget* LibraryPanel;
-    UPROPERTY(meta = (BindWidgetOptional)) UButton*    CloseButton;
+    // Debajo de "Library Mods": qué está activo ahora mismo. Word = banco elegido (o Default);
+    // Map = mapa custom (bloqueado por ahora → siempre "Default").
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* WordBankText; // "Word: Title Movies"
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* MapText;      // "Map: Default"
+    // Cerrar el panel: los dos hacen lo mismo (los ajustes se aplican en vivo). Nombres reales del WBP.
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*    Btn_Back;             // botón "Back"
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*    CloseSettingsButton;  // botón "Apply"
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*    CloseButton;          // alias por si lo renombrás
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* TitleText;
 
     UFUNCTION() void OnTurnTimeMinus(); UFUNCTION() void OnTurnTimePlus();
@@ -73,6 +81,7 @@ private:
     UPTGameInstance* GetGI() const;
     void BuildCategoryChecks();
     void RefreshUI();
+    void RefreshPackTexts(); // actualiza "Word:" / "Map:" (también en OnSelectedWordPackChanged)
     void ToggleDifficulty(EPTWordDifficulty Diff);
 
     UPROPERTY() TArray<UCheckBox*> CategoryChecks;

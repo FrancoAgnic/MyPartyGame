@@ -14,6 +14,10 @@ class USoundClass;
 class UUserWidget;
 class UPTInvitePopupWidget;
 
+// Se dispara cuando cambia el banco de palabras elegido (elegir uno / volver a Default), para que la UI
+// del lobby (Game Settings) refresque el texto "Word: ...".
+DECLARE_MULTICAST_DELEGATE(FPTOnSelectedWordPackChanged);
+
 UCLASS()
 class MYPARTYGAME_API UPTGameInstance : public UGameInstance
 {
@@ -79,6 +83,8 @@ public:
     UFUNCTION(BlueprintCallable, Category="WordPack") void PublishWordPackFromDialog();
     // Título del banco elegido (vacío = default), para mostrarlo en el lobby.
     UPROPERTY(BlueprintReadOnly, Category="WordPack") FString SelectedWordPackTitle;
+    // Notifica a la UI que cambió el banco elegido (ver SelectWordPack/SelectDefaultWordBank).
+    FPTOnSelectedWordPackChanged OnSelectedWordPackChanged;
 
     // ── Sonidos globales de UI ──────────────────────────────────────────────
     // Se asignan UNA vez (en BP_GameInstance o los class defaults) y se aplican a TODOS los botones

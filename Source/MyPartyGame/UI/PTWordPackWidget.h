@@ -8,7 +8,9 @@
 //   PublishButton (Button)           → elegir un CSV y subirlo al Workshop (opcional)
 //   DefaultButton (Button)           → volver al banco por defecto del juego (opcional)
 //   BackButton    (Button)           → cerrar el panel (opcional)
+//   WorkshopButton(Button)           → abre el Workshop Browser (buscar/suscribir/publicar) (opcional)
 //   TitleText / SelectedText / EmptyText / StatusText (TextBlock) → título / elegido / vacío / estado (opcionales)
+// En Details (categoría WordPack) asignar WorkshopBrowserClass = WBP_WorkshopBrowser (deriva de PTWorkshopBrowserWidget).
 // En Details (categoría WordPack) asignar RowWidgetClass = WBP de la fila (deriva de PTWordPackRowWidget).
 
 #pragma once
@@ -22,6 +24,7 @@ class UTextBlock;
 class UPTWordPackRowWidget;
 class UPTWordPackSubsystem;
 class UPTGameInstance;
+class UPTWorkshopBrowserWidget;
 
 UCLASS()
 class MYPARTYGAME_API UPTWordPackWidget : public UPTUserWidget
@@ -60,6 +63,11 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      BackButton;
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   TitleText;
 
+    // Abre el Workshop Browser (buscar/suscribir/publicar items) desde la Biblioteca.
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*      WorkshopButton;
+    // WBP del Browser (deriva de PTWorkshopBrowserWidget). Asignar en Details (categoría WordPack).
+    UPROPERTY(EditAnywhere, Category="WordPack") TSubclassOf<UPTWorkshopBrowserWidget> WorkshopBrowserClass;
+
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="WordPack")
     TSubclassOf<UPTWordPackRowWidget> RowWidgetClass;
 
@@ -68,6 +76,7 @@ protected:
     UFUNCTION() void OnBackClicked();
     UFUNCTION() void OnWordsTabClicked();
     UFUNCTION() void OnMapsTabClicked();
+    UFUNCTION() void OnWorkshopClicked();
 
 private:
     void Rebuild();
@@ -79,4 +88,6 @@ private:
 
     int32 ActiveTab = 0;
     bool bBound = false;
+
+    UPROPERTY(Transient) UPTWorkshopBrowserWidget* WorkshopBrowser = nullptr; // creado una vez y reusado
 };

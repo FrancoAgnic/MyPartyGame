@@ -130,12 +130,14 @@ void UPTGameInstance::SelectWordPack(const FString& PackId)
     const int32 N = LoadCustomWordsFromCSVFile(Pack->CsvPath);
     SelectedWordPackTitle = (N > 0) ? Pack->Title : FString();
     UE_LOG(LogTemp, Log, TEXT("[GameInstance] Banco '%s' seleccionado (%d palabras)."), *Pack->Title, N);
+    OnSelectedWordPackChanged.Broadcast();
 }
 
 void UPTGameInstance::SelectDefaultWordBank()
 {
     ClearCustomWords();
     SelectedWordPackTitle.Reset();
+    OnSelectedWordPackChanged.Broadcast();
 }
 
 void UPTGameInstance::PublishWordPackFromDialog()

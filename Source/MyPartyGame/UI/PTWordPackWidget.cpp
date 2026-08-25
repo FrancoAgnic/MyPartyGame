@@ -2,6 +2,7 @@
 
 #include "PTWordPackWidget.h"
 #include "PTWordPackRowWidget.h"
+#include "PTWorkshopBrowserWidget.h"
 #include "../PTGameInstance.h"
 #include "../PTTextTable.h"
 #include "Mods/PTWordPackSubsystem.h"
@@ -28,6 +29,7 @@ void UPTWordPackWidget::NativeConstruct()
     if (BackButton)    BackButton->OnClicked.AddDynamic(this, &UPTWordPackWidget::OnBackClicked);
     if (WordsTabButton) WordsTabButton->OnClicked.AddDynamic(this, &UPTWordPackWidget::OnWordsTabClicked);
     if (MapsTabButton)  MapsTabButton->OnClicked.AddDynamic(this, &UPTWordPackWidget::OnMapsTabClicked);
+    if (WorkshopButton) WorkshopButton->OnClicked.AddDynamic(this, &UPTWordPackWidget::OnWorkshopClicked);
 
     if (TitleText)      TitleText->SetText(PTText::Get(TEXT("WORDPACK_TITLE")));
     if (MapsLockedText) MapsLockedText->SetText(PTText::Get(TEXT("MAPS_SOON")));
@@ -123,6 +125,23 @@ void UPTWordPackWidget::OnDefaultClicked()
 void UPTWordPackWidget::OnBackClicked()
 {
     SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UPTWordPackWidget::OnWorkshopClicked()
+{
+    if (!WorkshopBrowserClass)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[WordPack] WorkshopButton sin WorkshopBrowserClass asignado (Details del WBP_WordPack)."));
+        return;
+    }
+    // Crear la ventana una sola vez y reusarla; mostrarla por encima de la Biblioteca.
+    if (!WorkshopBrowser)
+    {
+        WorkshopBrowser = CreateWidget<UPTWorkshopBrowserWidget>(this, WorkshopBrowserClass);
+        if (!WorkshopBrowser) return;
+        WorkshopBrowser->AddToViewport(60); // por encima del lobby y de la Biblioteca
+    }
+    WorkshopBrowser->ShowPanel();
 }
 
 void UPTWordPackWidget::OnPacksUpdated()
