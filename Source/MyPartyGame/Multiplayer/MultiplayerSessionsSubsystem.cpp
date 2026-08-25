@@ -234,6 +234,14 @@ bool UMultiplayerSessionsSubsystem::IsSteamOnline() const
 #endif
 }
 
+uint32 UMultiplayerSessionsSubsystem::GetSteamAppId() const
+{
+#if PT_WITH_STEAM
+    if (SteamUtils()) return SteamUtils()->GetAppID();
+#endif
+    return 0;
+}
+
 void UMultiplayerSessionsSubsystem::SetJoinPresence(const FString& HostSteamId)
 {
 #if PT_WITH_STEAM

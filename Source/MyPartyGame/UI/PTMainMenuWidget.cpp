@@ -42,13 +42,21 @@ bool UPTMainMenuWidget::Initialize()
     if (PlayButton) SetPlaySubmenuVisible(false);
 
     // Número de versión (desde ProjectVersion de DefaultGame.ini, que se sube en cada build).
+    // Si se lanzó como la app del Playtest (5115870), agregar "Playtest" para distinguirlo del juego base.
     if (VersionText)
     {
         FString Ver;
         GConfig->GetString(TEXT("/Script/EngineSettings.GeneralProjectSettings"),
                            TEXT("ProjectVersion"), Ver, GGameIni);
         if (Ver.IsEmpty()) Ver = TEXT("0.0.0");
-        VersionText->SetText(FText::FromString(FString::Printf(TEXT("v%s"), *Ver)));
+
+        const bool bPlaytest = GetGameInstance()
+            && GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>()
+            && GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>()->GetSteamAppId() == 5115870;
+
+        VersionText->SetText(FText::FromString(
+            bPlaytest ? FString::Printf(TEXT("v%s Playtest"), *Ver)
+                      : FString::Printf(TEXT("v%s"), *Ver)));
     }
 
     return true;

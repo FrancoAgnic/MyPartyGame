@@ -190,6 +190,9 @@ public:
     // true si Steam está conectado y el jugador local NO está en estado "Desconectado/Offline".
     // Si es false, invitar no sirve → conviene avisar antes de enviar.
     bool IsSteamOnline() const;
+    // AppID de Steam con el que se lanzó el juego (base 5114580 vs Playtest 5115870). 0 si no hay Steam.
+    // Sirve para distinguir en runtime si estamos corriendo la build del Playtest.
+    uint32 GetSteamAppId() const;
     // Al arrancar: si el juego se lanzó desde una invitación (command line con nuestro token), devuelve
     // el SteamID del host a unirse; vacío si no. Lo consulta el GameInstance tras el login.
     FString ConsumeLaunchJoinHostId();
