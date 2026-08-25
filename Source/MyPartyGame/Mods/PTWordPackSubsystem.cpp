@@ -60,14 +60,22 @@ struct FPTWorkshopPublish
         ItemId = p->m_nPublishedFileId;
 
         UGCUpdateHandle_t U = SteamUGC()->StartItemUpdate(SteamUtils()->GetAppID(), ItemId);
-        SteamUGC()->SetItemTitle(U, TCHAR_TO_UTF8(*Title));
-        if (!Desc.IsEmpty())        SteamUGC()->SetItemDescription(U, TCHAR_TO_UTF8(*Desc));
-        SteamUGC()->SetItemContent(U, TCHAR_TO_UTF8(*ContentFolder));
-        if (!PreviewPath.IsEmpty()) SteamUGC()->SetItemPreview(U, TCHAR_TO_UTF8(*PreviewPath));
-        // Tag para poder filtrar solo bancos de palabras más adelante.
-        const char* Tags[] = { "WordBank" };
-        SteamParamStringArray_t TagArr; TagArr.m_ppStrings = Tags; TagArr.m_nNumStrings = 1;
-        SteamUGC()->SetItemTags(U, &TagArr);
+        const bool bTitle   = SteamUGC()->SetItemTitle(U, TCHAR_TO_UTF8(*Title));
+        const bool bDesc    = Desc.IsEmpty() || SteamUGC()->SetItemDescription(U, TCHAR_TO_UTF8(*Desc));
+        const bool bContent = SteamUGC()->SetItemContent(U, TCHAR_TO_UTF8(*ContentFolder));
+        const bool bPrev    = PreviewPath.IsEmpty() || SteamUGC()->SetItemPreview(U, TCHAR_TO_UTF8(*PreviewPath));
+        // Item público por defecto (algunos flujos lo requieren explícito).
+        const bool bVis     = SteamUGC()->SetItemVisibility(U, k_ERemoteStoragePublishedFileVisibilityPublic);
+        // NOTA: el tag "WordBank" está DESACTIVADO temporalmente para aislar el InvalidParam(8).
+        // Si sin tag publica, el problema eran los tags (hay que habilitarlos en Steamworks).
+        // const char* Tags[] = { "WordBank" };
+        // SteamParamStringArray_t TagArr; TagArr.m_ppStrings = Tags; TagArr.m_nNumStrings = 1;
+        // const bool bTags = SteamUGC()->SetItemTags(U, &TagArr);
+
+        UE_LOG(LogPTWordPacks, Warning,
+            TEXT("[Publish] ItemId=%llu Uvalid=%d title=%d desc=%d content=%d prev=%d vis=%d content='%s'"),
+            (uint64)ItemId, U != k_UGCUpdateHandleInvalid ? 1 : 0,
+            bTitle, bDesc, bContent, bPrev, bVis, *ContentFolder);
 
         const SteamAPICall_t h = SteamUGC()->SubmitItemUpdate(U, "Banco de palabras");
         SubmitCR.Set(h, this, &FPTWorkshopPublish::OnSubmit);
