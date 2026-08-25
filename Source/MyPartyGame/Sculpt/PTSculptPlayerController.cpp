@@ -1218,6 +1218,9 @@ void APTSculptPlayerController::CycleShapes()
 
 void APTSculptPlayerController::SetMode(EPTEditMode M)
 {
+    // No cambiar de herramienta MID-TRAZO (con el click apretado): hacerlo a mitad de un trazo bugea
+    // (el sello sigue del modo viejo, cambia profundidad, etc.). Solo se cambia con el click suelto.
+    if (bIsStamping) return;
     SetModeInternal(M, /*bResetAxis=*/true);
 }
 
@@ -1246,6 +1249,7 @@ void APTSculptPlayerController::SetModeInternal(EPTEditMode M, bool bResetAxis)
 
 void APTSculptPlayerController::SetModeEyes()
 {
+    if (bIsStamping) return; // no cambiar a Ojos mid-trazo (ver SetMode)
     if (bAxisLock) SetAxisMode(false, bAxisHorizontal); // idem: la tool de ojos no usa el plano
 
     bEyesTool = true;
