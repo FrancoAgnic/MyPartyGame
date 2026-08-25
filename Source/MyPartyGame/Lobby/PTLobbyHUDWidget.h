@@ -56,13 +56,6 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      InviteButton;
     // Panel de amigos embebido (deriva de PTFriendsWidget). Arranca oculto; lo muestra InviteButton.
     UPROPERTY(meta = (BindWidgetOptional)) class UPTFriendsWidget* FriendsPanel;
-    // Toggle de visibilidad de la sala: marcado = privada solo amigos, desmarcado = pública.
-    UPROPERTY(meta = (BindWidgetOptional)) UCheckBox*    FriendsOnlyCheckbox;
-
-    // Biblioteca (SOLO host): abre la ventana de slots (banco de palabras + mapa bloqueado) que
-    // define la partida. LibraryPanel = instancia de WBP del panel de bancos (deriva de PTWordPackWidget).
-    UPROPERTY(meta = (BindWidgetOptional)) UButton*                  LibraryButton;
-    UPROPERTY(meta = (BindWidgetOptional)) class UPTWordPackWidget*  LibraryPanel;
     // Visible solo mientras APTGameState::CountdownSecondsRemaining >= 0.
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   CountdownText;
 
@@ -72,8 +65,6 @@ protected:
     UFUNCTION() void OnReadyClicked();
     UFUNCTION() void OnLockerClicked();
     UFUNCTION() void OnInviteClicked();
-    UFUNCTION() void OnFriendsOnlyChanged(bool bIsChecked);
-    UFUNCTION() void OnLibraryClicked();
 
     // ── Lista de jugadores (fila = widget propio) + colores de listo/no-listo ──
     UPROPERTY(EditAnywhere, Category = "Lobby") TSubclassOf<class UPTPlayerRowWidget> PlayerRowClass;
@@ -84,53 +75,15 @@ protected:
     void RefreshPlayerList();
 
     // ── Config de partida (SOLO host) ──────────────────────────────────────────
-    // Todo BindWidgetOptional: el WBP se arma aparte. Se muestran solo si el jugador es el host.
-    // Botón "Game Settings" (al lado del Listo, host-only) que ABRE el panel.
+    // Botón "Game Settings" (host-only) que ABRE el panel de ajustes.
     UPROPERTY(meta = (BindWidgetOptional)) UButton* GameSettingsButton;
-    // Botón "X" dentro del panel que lo CIERRA (los ajustes ya se aplican en vivo).
-    UPROPERTY(meta = (BindWidgetOptional)) UButton* CloseSettingsButton;
-    // Panel raíz que agrupa toda la config. Arranca oculto; se abre con GameSettingsButton.
-    UPROPERTY(meta = (BindWidgetOptional)) UWidget* HostSettingsPanel;
+    // Panel de ajustes = su propio widget (deriva de PTGameSettingsWidget). Arranca oculto; lo abre
+    // GameSettingsButton. Toda la lógica (steppers/dificultad/categorías/privada/biblioteca) vive ahí.
+    UPROPERTY(meta = (BindWidgetOptional)) class UPTGameSettingsWidget* GameSettingsPanel;
 
-    // Steppers numéricos: cada uno un texto + botón menos/más.
-    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* TurnTimeText;   // "90 s"
-    UPROPERTY(meta = (BindWidgetOptional)) UButton*    TurnTimeMinus;
-    UPROPERTY(meta = (BindWidgetOptional)) UButton*    TurnTimePlus;
-    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* RoundsText;     // "3 rondas"
-    UPROPERTY(meta = (BindWidgetOptional)) UButton*    RoundsMinus;
-    UPROPERTY(meta = (BindWidgetOptional)) UButton*    RoundsPlus;
-    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* RevealText;     // "70%"
-    UPROPERTY(meta = (BindWidgetOptional)) UButton*    RevealMinus;
-    UPROPERTY(meta = (BindWidgetOptional)) UButton*    RevealPlus;
-
-    // Dificultad: 3 toggles multi-selección (activa = coloreado). Vacío = todas.
-    UPROPERTY(meta = (BindWidgetOptional)) UButton* DiffFacilButton;
-    UPROPERTY(meta = (BindWidgetOptional)) UButton* DiffMediaButton;
-    UPROPERTY(meta = (BindWidgetOptional)) UButton* DiffDificilButton;
-
-    // Categorías: contenedor (VerticalBox/ScrollBox) que C++ llena con un checkbox por categoría.
-    UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* CategoriesBox;
-
-    UFUNCTION() void OnTurnTimeMinus(); UFUNCTION() void OnTurnTimePlus();
-    UFUNCTION() void OnRoundsMinus();   UFUNCTION() void OnRoundsPlus();
-    UFUNCTION() void OnRevealMinus();   UFUNCTION() void OnRevealPlus();
-    UFUNCTION() void OnDiffFacil();     UFUNCTION() void OnDiffMedia();  UFUNCTION() void OnDiffDificil();
-    UFUNCTION() void OnCategoryChanged(bool bChecked); // rebuild desde el estado de todos los checks
     UFUNCTION() void OnGameSettingsClicked(); // abre el panel
-    UFUNCTION() void OnCloseSettingsClicked(); // aplica (ya está en vivo) y cierra el panel
-
-    UPTGameInstance* GetGI() const;
-    void BuildCategoryChecks();     // crea los checkboxes una vez (según PTDefaultWordCategories)
-    void RefreshHostSettingsUI();   // vuelca PendingMatchSettings a los textos/colores
-    void ToggleDifficulty(EPTWordDifficulty Diff);
 
 private:
     FTimerHandle RefreshTimerHandle;
     FString CachedRoomCode;
-
-    // Checkbox ↔ categoría (para reconstruir ActiveCategories al cambiar cualquiera).
-    UPROPERTY() TArray<UCheckBox*> CategoryChecks;
-    TArray<FName>                  CategoryNames;
-    bool bCategoryChecksBuilt = false;
-    bool bSettingsOpen        = false; // panel de config abierto/cerrado (host)
 };

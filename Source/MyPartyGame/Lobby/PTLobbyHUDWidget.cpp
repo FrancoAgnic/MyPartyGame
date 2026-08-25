@@ -24,7 +24,7 @@
 #include "../PTWordBank.h"
 #include "../Multiplayer/MultiplayerSessionsSubsystem.h"
 #include "../UI/PTFriendsWidget.h"
-#include "../UI/PTWordPackWidget.h"
+#include "PTGameSettingsWidget.h"
 
 bool UPTLobbyHUDWidget::Initialize()
 {
@@ -36,26 +36,9 @@ bool UPTLobbyHUDWidget::Initialize()
     if (ReadyButton)      ReadyButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnReadyClicked);
     if (LockerButton)     LockerButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnLockerClicked);
     if (InviteButton)     InviteButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnInviteClicked);
-    if (FriendsOnlyCheckbox) FriendsOnlyCheckbox->OnCheckStateChanged.AddDynamic(this, &UPTLobbyHUDWidget::OnFriendsOnlyChanged);
     if (FriendsPanel)     FriendsPanel->SetVisibility(ESlateVisibility::Collapsed);
-    if (LibraryButton)    LibraryButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnLibraryClicked);
-    if (LibraryPanel)     LibraryPanel->SetVisibility(ESlateVisibility::Collapsed);
-
-    // Config de partida (host).
-    if (TurnTimeMinus) TurnTimeMinus->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnTurnTimeMinus);
-    if (TurnTimePlus)  TurnTimePlus->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnTurnTimePlus);
-    if (RoundsMinus)   RoundsMinus->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnRoundsMinus);
-    if (RoundsPlus)    RoundsPlus->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnRoundsPlus);
-    if (RevealMinus)   RevealMinus->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnRevealMinus);
-    if (RevealPlus)    RevealPlus->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnRevealPlus);
-    if (DiffFacilButton)   DiffFacilButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnDiffFacil);
-    if (DiffMediaButton)   DiffMediaButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnDiffMedia);
-    if (DiffDificilButton) DiffDificilButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnDiffDificil);
-    if (GameSettingsButton)  GameSettingsButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnGameSettingsClicked);
-    if (CloseSettingsButton) CloseSettingsButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnCloseSettingsClicked);
-
-    // El panel arranca cerrado.
-    if (HostSettingsPanel) HostSettingsPanel->SetVisibility(ESlateVisibility::Collapsed);
+    if (GameSettingsButton) GameSettingsButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnGameSettingsClicked);
+    if (GameSettingsPanel)  GameSettingsPanel->SetVisibility(ESlateVisibility::Collapsed);
 
     return true;
 }
@@ -194,31 +177,9 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
         StartGameButton->SetVisibility(bLocalIsHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
     }
 
-    // Invitar: cualquier miembro puede invitar amigos a la sala. El toggle de visibilidad
-    // (pública/solo-amigos) SOLO lo ve/usa el host.
-    if (FriendsOnlyCheckbox)
-    {
-        FriendsOnlyCheckbox->SetVisibility(bLocalIsHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-        if (bLocalIsHost)
-            if (UMultiplayerSessionsSubsystem* S = GetGameInstance() ? GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>() : nullptr)
-                FriendsOnlyCheckbox->SetIsChecked(S->IsSessionFriendsOnly());
-    }
-
-    // Biblioteca (banco de palabras + mapa): solo el host elige el contenido de la partida.
-    if (LibraryButton)
-        LibraryButton->SetVisibility(bLocalIsHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-
-    // Config de partida: el botón "Game Settings" lo ve solo el host. El panel se abre/cierra
-    // con ese botón (y la X interna); los que no son host nunca lo ven.
+    // Config de partida: el botón "Game Settings" lo ve solo el host y abre el panel (widget aparte).
     if (GameSettingsButton)
         GameSettingsButton->SetVisibility(bLocalIsHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-    if (HostSettingsPanel)
-        HostSettingsPanel->SetVisibility((bLocalIsHost && bSettingsOpen) ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-    if (bLocalIsHost)
-    {
-        if (!bCategoryChecksBuilt) BuildCategoryChecks();
-        RefreshHostSettingsUI();
-    }
 
     // Botón Ready: refleja el estado propio. No listo → "Not Ready" en rojo pastel; listo →
     // "Ready" en verde pastel. Clickearlo alterna (ver OnReadyClicked). SetBackgroundColor tiñe
@@ -293,153 +254,10 @@ void UPTLobbyHUDWidget::OnInviteClicked()
         S->ShowSteamInviteOverlay();
 }
 
-void UPTLobbyHUDWidget::OnFriendsOnlyChanged(bool bIsChecked)
-{
-    // El host cambia la visibilidad de la sala en vivo (el host ES el server → llamada directa).
-    if (UMultiplayerSessionsSubsystem* S = GetGameInstance() ? GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>() : nullptr)
-        S->SetSessionFriendsOnly(bIsChecked);
-}
-
-void UPTLobbyHUDWidget::OnLibraryClicked()
-{
-    // Abre la Biblioteca (slots de banco de palabras + mapa bloqueado) que define la partida.
-    if (LibraryPanel) LibraryPanel->ShowPanel();
-}
-
-// ── Config de partida (host) ─────────────────────────────────────────────────
-// Todo escribe directo en el GameInstance del host (que ES el server). Al viajar a Lvl-01 el
-// GameInstance sobrevive y APTSculptGameMode lee PendingMatchSettings al arrancar.
-
-UPTGameInstance* UPTLobbyHUDWidget::GetGI() const
-{
-    return GetWorld() ? GetWorld()->GetGameInstance<UPTGameInstance>() : nullptr;
-}
-
-void UPTLobbyHUDWidget::BuildCategoryChecks()
-{
-    if (bCategoryChecksBuilt || !CategoriesBox || !WidgetTree) return;
-    bCategoryChecksBuilt = true;
-
-    CategoryNames = PTWordBank::GetDefaultCategories(); // 18 categorías del DataTable
-    CategoryChecks.Reset();
-
-    // Grid de 3 columnas adentro de CategoriesBox (así 9 categorías no forman una columna larga
-    // que rompe el layout). C++ crea el grid, no importa qué contenedor sea CategoriesBox.
-    const int32 Cols = 3;
-    UUniformGridPanel* Grid = WidgetTree->ConstructWidget<UUniformGridPanel>();
-    if (!Grid) return;
-    Grid->SetSlotPadding(FMargin(2.f, 2.f));
-    CategoriesBox->AddChild(Grid);
-
-    UPTGameInstance* GI = GetGI();
-    for (int32 i = 0; i < CategoryNames.Num(); ++i)
-    {
-        const FName Cat = CategoryNames[i];
-        UHorizontalBox* Cell  = WidgetTree->ConstructWidget<UHorizontalBox>();
-        UCheckBox*      Chk   = WidgetTree->ConstructWidget<UCheckBox>();
-        UTextBlock*     Label = WidgetTree->ConstructWidget<UTextBlock>();
-        if (!Cell || !Chk || !Label) continue;
-
-        // Estado inicial: ActiveCategories vacío = todas activas.
-        const bool bActive = !GI || GI->PendingMatchSettings.ActiveCategories.Num() == 0
-                          || GI->PendingMatchSettings.ActiveCategories.Contains(Cat);
-        Chk->SetIsChecked(bActive);
-        Chk->OnCheckStateChanged.AddDynamic(this, &UPTLobbyHUDWidget::OnCategoryChanged);
-
-        // Display: los FName vienen tipo "CRIATURAS_MITOLOGICAS" → mostrar "CRIATURAS MITOLOGICAS".
-        Label->SetText(FText::FromString(Cat.ToString().Replace(TEXT("_"), TEXT(" "))));
-
-        Cell->AddChild(Chk);
-        if (UHorizontalBoxSlot* LSlot = Cast<UHorizontalBoxSlot>(Cell->AddChild(Label)))
-            LSlot->SetPadding(FMargin(4.f, 0.f, 8.f, 0.f));
-
-        // Fila i → (fila i/3, columna i%3) → 3 columnas.
-        if (UUniformGridSlot* GSlot = Cast<UUniformGridSlot>(Grid->AddChildToUniformGrid(Cell, i / Cols, i % Cols)))
-            GSlot->SetHorizontalAlignment(HAlign_Left);
-
-        CategoryChecks.Add(Chk);
-    }
-}
-
-void UPTLobbyHUDWidget::OnCategoryChanged(bool /*bChecked*/)
-{
-    UPTGameInstance* GI = GetGI();
-    if (!GI) return;
-
-    TArray<FName> Active;
-    for (int32 i = 0; i < CategoryChecks.Num(); ++i)
-        if (CategoryChecks[i] && CategoryChecks[i]->IsChecked() && CategoryNames.IsValidIndex(i))
-            Active.Add(CategoryNames[i]);
-
-    // Todas marcadas → tratar como "sin filtro" (vacío = todas).
-    if (Active.Num() == CategoryChecks.Num()) Active.Reset();
-    GI->PendingMatchSettings.ActiveCategories = Active;
-}
-
-void UPTLobbyHUDWidget::RefreshHostSettingsUI()
-{
-    UPTGameInstance* GI = GetGI();
-    if (!GI) return;
-    const FPTMatchSettings& S = GI->PendingMatchSettings;
-
-    if (TurnTimeText) TurnTimeText->SetText(FText::FromString(FString::Printf(TEXT("%d s"), FMath::RoundToInt(S.TurnDuration))));
-    if (RoundsText)   RoundsText->SetText(FText::FromString(FString::Printf(TEXT("%d"), S.NumRounds)));
-    if (RevealText)   RevealText->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::RoundToInt(S.RevealFraction * 100.f))));
-
-    // Dificultad: coloreada si activa (ActiveDifficulties vacío = todas activas).
-    auto DiffActive = [&S](EPTWordDifficulty D){ return S.ActiveDifficulties.Num() == 0 || S.ActiveDifficulties.Contains(D); };
-    auto Paint = [](UButton* B, bool bOn){ if (B) B->SetBackgroundColor(bOn ? FLinearColor(0.47f, 0.87f, 0.50f) : FLinearColor(0.45f, 0.45f, 0.45f)); };
-    Paint(DiffFacilButton,   DiffActive(EPTWordDifficulty::Facil));
-    Paint(DiffMediaButton,   DiffActive(EPTWordDifficulty::Media));
-    Paint(DiffDificilButton, DiffActive(EPTWordDifficulty::Dificil));
-
-    // Con un banco custom elegido en la Biblioteca, el filtro por categorías del banco default no
-    // tiene sentido → deshabilitar los checks.
-    const bool bCustom = S.bUseCustomWords && S.CustomWords.Num() > 0;
-    for (UCheckBox* C : CategoryChecks) if (C) C->SetIsEnabled(!bCustom);
-}
-
-void UPTLobbyHUDWidget::ToggleDifficulty(EPTWordDifficulty Diff)
-{
-    UPTGameInstance* GI = GetGI();
-    if (!GI) return;
-    TArray<EPTWordDifficulty>& A = GI->PendingMatchSettings.ActiveDifficulties;
-
-    // "Vacío = todas" → expandir a las 3 para poder sacar una.
-    if (A.Num() == 0) A = { EPTWordDifficulty::Facil, EPTWordDifficulty::Media, EPTWordDifficulty::Dificil };
-    if (A.Contains(Diff)) A.Remove(Diff); else A.AddUnique(Diff);
-    if (A.Num() == 0) A = { EPTWordDifficulty::Facil, EPTWordDifficulty::Media, EPTWordDifficulty::Dificil }; // no dejar sin ninguna
-    if (A.Num() == 3) A.Reset(); // las 3 = sin filtro
-    RefreshHostSettingsUI();
-}
-
-void UPTLobbyHUDWidget::OnTurnTimeMinus() { if (UPTGameInstance* GI=GetGI()){ GI->PendingMatchSettings.TurnDuration = FMath::Clamp(GI->PendingMatchSettings.TurnDuration - 15.f, 15.f, 300.f); RefreshHostSettingsUI(); } }
-void UPTLobbyHUDWidget::OnTurnTimePlus()  { if (UPTGameInstance* GI=GetGI()){ GI->PendingMatchSettings.TurnDuration = FMath::Clamp(GI->PendingMatchSettings.TurnDuration + 15.f, 15.f, 300.f); RefreshHostSettingsUI(); } }
-void UPTLobbyHUDWidget::OnRoundsMinus()   { if (UPTGameInstance* GI=GetGI()){ GI->PendingMatchSettings.NumRounds = FMath::Clamp(GI->PendingMatchSettings.NumRounds - 1, 1, 10); RefreshHostSettingsUI(); } }
-void UPTLobbyHUDWidget::OnRoundsPlus()    { if (UPTGameInstance* GI=GetGI()){ GI->PendingMatchSettings.NumRounds = FMath::Clamp(GI->PendingMatchSettings.NumRounds + 1, 1, 10); RefreshHostSettingsUI(); } }
-void UPTLobbyHUDWidget::OnRevealMinus()   { if (UPTGameInstance* GI=GetGI()){ GI->PendingMatchSettings.RevealFraction = FMath::Clamp(GI->PendingMatchSettings.RevealFraction - 0.1f, 0.f, 0.9f); RefreshHostSettingsUI(); } }
-void UPTLobbyHUDWidget::OnRevealPlus()    { if (UPTGameInstance* GI=GetGI()){ GI->PendingMatchSettings.RevealFraction = FMath::Clamp(GI->PendingMatchSettings.RevealFraction + 0.1f, 0.f, 0.9f); RefreshHostSettingsUI(); } }
-void UPTLobbyHUDWidget::OnDiffFacil()   { ToggleDifficulty(EPTWordDifficulty::Facil); }
-void UPTLobbyHUDWidget::OnDiffMedia()   { ToggleDifficulty(EPTWordDifficulty::Media); }
-void UPTLobbyHUDWidget::OnDiffDificil() { ToggleDifficulty(EPTWordDifficulty::Dificil); }
-
 
 void UPTLobbyHUDWidget::OnGameSettingsClicked()
 {
-    bSettingsOpen = true;
-    if (!bCategoryChecksBuilt) BuildCategoryChecks();
-    RefreshHostSettingsUI();
-    if (HostSettingsPanel)
-    {
-        HostSettingsPanel->SetVisibility(ESlateVisibility::Visible);
-        PlayPopInOn(HostSettingsPanel); // blop del panel de settings
-    }
-}
-
-void UPTLobbyHUDWidget::OnCloseSettingsClicked()
-{
-    // Los ajustes ya se aplican en vivo (cada control escribe al GameInstance al tocarlo), así
-    // que "aplicar y cerrar" es simplemente cerrar el panel.
-    bSettingsOpen = false;
-    if (HostSettingsPanel) HostSettingsPanel->SetVisibility(ESlateVisibility::Collapsed);
+    // El panel de ajustes es su propio widget (GameSettingsPanel). Solo lo mostramos; toda la lógica
+    // (steppers, dificultad, categorías, privada, biblioteca) vive adentro de PTGameSettingsWidget.
+    if (GameSettingsPanel) GameSettingsPanel->ShowPanel();
 }
