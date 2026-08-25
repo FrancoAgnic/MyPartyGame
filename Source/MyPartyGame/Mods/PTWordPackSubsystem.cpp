@@ -32,7 +32,10 @@ struct FPTWorkshopPublish
                const FString& InDesc, TFunction<void(bool, FString)> InCb)
     {
         Cb = MoveTemp(InCb);
-        ContentFolder = InFolder; PreviewPath = InPreview; Title = InTitle; Desc = InDesc;
+        // SetItemContent/SetItemPreview exigen rutas ABSOLUTAS (si no, Steam devuelve InvalidParam=8).
+        ContentFolder = FPaths::ConvertRelativePathToFull(InFolder);
+        PreviewPath   = InPreview.IsEmpty() ? FString() : FPaths::ConvertRelativePathToFull(InPreview);
+        Title = InTitle; Desc = InDesc;
         if (!SteamUGC() || !SteamUtils()) { if (Cb) Cb(false, TEXT("Steam UGC no disponible")); return; }
 
         const SteamAPICall_t h = SteamUGC()->CreateItem(SteamUtils()->GetAppID(), k_EWorkshopFileTypeCommunity);
@@ -285,8 +288,11 @@ void UPTWordPackSubsystem::PublishWordPack(const FString& CsvPath, const FString
     }
 
     // ISteamUGC sube una CARPETA, no un archivo suelto: armamos un staging con words.csv (+ pack.txt).
-    const FString Staging = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("WorkshopStaging"),
-                                            FGuid::NewGuid().ToString(EGuidFormats::Short));
+    // OJO: SetItemContent exige ruta ABSOLUTA. En build empaquetada ProjectSavedDir() es relativa
+    // (../../../…) → Steam la rechaza con InvalidParam (8). Por eso la convertimos a full path.
+    const FString Staging = FPaths::ConvertRelativePathToFull(
+        FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("WorkshopStaging"),
+                        FGuid::NewGuid().ToString(EGuidFormats::Short)));
     IFileManager& FM = IFileManager::Get();
     FM.MakeDirectory(*Staging, /*Tree=*/true);
     FM.Copy(*FPaths::Combine(Staging, TEXT("words.csv")), *CsvPath);
