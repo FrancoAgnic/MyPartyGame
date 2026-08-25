@@ -101,7 +101,11 @@ if errorlevel 1 (
 echo.
 echo ========================================
 echo   Listo! Playtest v%VERSION% subido.
-echo   AHORA: Steamworks (app 5115870) -^> SteamPipe -^> Builds -^> Set Build Live -^> rama default.
+echo   Abriendo la pagina de Builds... solo falta: Set Build Live -^> rama default.
 echo ========================================
 echo.
+
+REM Abrir la pagina de Builds del Playtest en el navegador (unico paso manual: Set Build Live -> default).
+start "" "https://partner.steamgames.com/apps/builds/5115870"
+
 pause
