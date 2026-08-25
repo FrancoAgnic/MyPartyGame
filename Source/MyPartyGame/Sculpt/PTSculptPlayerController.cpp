@@ -133,6 +133,10 @@ void APTSculptPlayerController::BeginPlay()
         PreviewActor->SetRootComponent(PreviewMesh);
         if (PreviewMeshMaterial)
             PreviewMesh->SetMaterial(0, PreviewMeshMaterial);
+        // Translúcido vs translúcido: UE ordena por objeto (distancia del pivote), no por píxel, así que
+        // el boundary (M_SculptBoundary) a veces tapaba el preview aunque el preview esté DENTRO. Le damos
+        // al preview una prioridad alta para que siempre se dibuje por encima del boundary (que va a -100).
+        PreviewMesh->SetTranslucentSortPriority(10);
 
         // Mesh estático opcional (cuando el usuario asigna sus propios meshes).
         PreviewStaticMesh = NewObject<UStaticMeshComponent>(PreviewActor, TEXT("PreviewStaticMesh"));
@@ -140,6 +144,7 @@ void APTSculptPlayerController::BeginPlay()
         PreviewStaticMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         PreviewStaticMesh->SetCastShadow(false);
         PreviewStaticMesh->SetReceivesDecals(false);
+        PreviewStaticMesh->SetTranslucentSortPriority(10); // igual que PreviewMesh: por encima del boundary
         PreviewStaticMesh->RegisterComponent();
         PreviewStaticMesh->SetVisibility(false);
 
@@ -208,6 +213,9 @@ void APTSculptPlayerController::BeginPlay()
             if (BoxMesh) BoundaryMesh->SetStaticMesh(BoxMesh);
         }
         BoundaryMesh->RegisterComponent();
+        // Siempre detrás de los demás translúcidos (preview, ring, etc.): así el límite no tapa el
+        // preview del Add que está adentro del volumen.
+        BoundaryMesh->SetTranslucentSortPriority(-100);
         // El MID se crea DESPUÉS de registrar, si no el render se queda con el material
         // base (CursorPos en 0 → grilla estática) e ignora las updates del C++.
         if (BoundaryMaterial)
@@ -669,9 +677,24 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         bStrokePlaneLocked = false; // soltó el click: liberar el plano congelado
     }
 
+    // X-ray del preview: ocultarlo mientras se AGREGA arcilla (Add + click apretado). El contorno de
+    // solape molesta justo cuando estás construyendo; solo tiene sentido al posicionar (sin sellar).
+    const bool bAddingClay = bIsStamping && CanLocalPlayerSculpt() && (EditMode == EPTEditMode::Add);
+    SetPreviewXrayEnabled(!bAddingClay);
+
     // Loop 3D de la herramienta (Add/Erase/Paint) mientras se está sellando; se corta solo al soltar.
     if (SculptSounds)
         SculptSounds->SetActiveTool(EditMode, bEyesTool, bIsStamping && CanLocalPlayerSculpt(), StampPos);
+}
+
+void APTSculptPlayerController::SetPreviewXrayEnabled(bool bOn)
+{
+    if (bOn == bXrayOverlayOn) return; // sin cambios → no re-setear
+    bXrayOverlayOn = bOn;
+    UMaterialInterface* Ov = bOn ? PreviewOverlayMaterial : nullptr;
+    if (PreviewMesh)       PreviewMesh->SetOverlayMaterial(Ov);
+    if (PreviewStaticMesh) PreviewStaticMesh->SetOverlayMaterial(Ov);
+    if (PaintRing)         PaintRing->SetOverlayMaterial(Ov);
 }
 
 // ── Lógica de cursor ─────────────────────────────────────────────────────────
@@ -1058,10 +1081,24 @@ void APTSculptPlayerController::OnShapeRotateReleased()
 
 // HOLD: mantener la tecla activa el eje; soltarla vuelve a Add. Al soltar solo apago si el eje activo
 // es el de esta tecla (así si tenés Z apretada y tocás X, soltar X no rompe el vertical, y viceversa).
-void APTSculptPlayerController::OnAxisVerticalPressed()   { SetAxisMode(true, /*bHorizontal=*/false); }
+// Z/X/Alt son holds mutuamente excluyentes: al apretar uno se apaga el otro (la nueva tecla quema a la
+// anterior). Si dejo Alt prendido y aprieto Z, se usa SOLO el eje; y viceversa. No "vuelven" solos al
+// soltar el nuevo (hay que re-apretar el anterior), que es justo lo que evita los estados combinados.
+void APTSculptPlayerController::OnAxisVerticalPressed()   { if (bIsStamping) return; bSurfaceSnap = false; SetAxisMode(true, /*bHorizontal=*/false); }
 void APTSculptPlayerController::OnAxisVerticalReleased()  { if (bAxisLock && !bAxisHorizontal) SetAxisMode(false, false); }
-void APTSculptPlayerController::OnAxisHorizontalPressed() { SetAxisMode(true, /*bHorizontal=*/true); }
+void APTSculptPlayerController::OnAxisHorizontalPressed() { if (bIsStamping) return; bSurfaceSnap = false; SetAxisMode(true, /*bHorizontal=*/true); }
 void APTSculptPlayerController::OnAxisHorizontalReleased(){ if (bAxisLock && bAxisHorizontal) SetAxisMode(false, true); }
+
+void APTSculptPlayerController::OnSurfaceSnapPressed()
+{
+    // No cambiar de herramienta hold MID-TRAZO (con el click apretado): apagar el eje a mitad del trazo
+    // hacía que el sello volviera al "brazo extendido" y la arcilla escalara hacia la cámara. Solo se
+    // puede cambiar con el click suelto.
+    if (bIsStamping) return;
+    // Alt quema el modo eje: si había un eje activo, se apaga antes de prender el snap.
+    if (bAxisLock) SetAxisMode(false, bAxisHorizontal);
+    bSurfaceSnap = true;
+}
 
 void APTSculptPlayerController::SetAxisMode(bool bEnable, bool bHorizontal)
 {

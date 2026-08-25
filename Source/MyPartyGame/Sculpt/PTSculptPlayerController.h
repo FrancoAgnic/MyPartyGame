@@ -408,6 +408,11 @@ private:
     void RebuildPreviewMesh();
     void UpdatePreviewVisual();  // elige mesh (tool/stamp/procedural) y material
     void ApplyPreviewMaterial(); // aplica el material según EditMode
+    // Overlay X-ray (M_PreviewXray, el contorno al solaparse con la arcilla): se apaga mientras se
+    // agrega arcilla (Add + click apretado) y se repone al soltar. Guardado en bXrayOverlayOn para no
+    // re-setear el overlay cada frame.
+    void SetPreviewXrayEnabled(bool bOn);
+    bool bXrayOverlayOn = true;
     void UpdatePreviewBrightness(float Dt); // brillo del preview (sube al esculpir, fade al soltar)
     bool    GetCameraRay(FVector& Start, FVector& Dir) const;
     FVector GetStampPoint(FVector& OutNormal) const;
@@ -463,7 +468,10 @@ private:
     // Con Alt mantenido, en Add el sello deja de ir al "brazo extendido" y se pega a la superficie de
     // la malla existente (raymarch), como Paint/Smooth. Sirve para agregar detalle fino sobre la arcilla.
     bool bSurfaceSnap = false;
-    void OnSurfaceSnapPressed()  { bSurfaceSnap = true;  }
+    // Z (eje vertical), X (eje horizontal) y Alt (snap a superficie) son 3 holds MUTUAMENTE EXCLUYENTES:
+    // la última tecla apretada "quema" a la anterior (usarlas juntas causaba bugs raros, p.ej. la arcilla
+    // escalando hacia la cámara). Ver OnSurfaceSnapPressed / OnAxis*Pressed.
+    void OnSurfaceSnapPressed();
     void OnSurfaceSnapReleased() { bSurfaceSnap = false; }
     // Latcheado al iniciar el trazo (= Add + Alt en ese momento): mientras dura el trazo, sus sellos
     // van a la capa de detalle y usan el plano congelado, aunque sueltes Alt a mitad de camino.
