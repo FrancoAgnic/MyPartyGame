@@ -1118,6 +1118,22 @@ int32 UMultiplayerSessionsSubsystem::GetCurrentPlayersFromResult(const FOnlineSe
     return -1; // no vino la clave → el que llama usa el fallback (Max - Open)
 }
 
+bool UMultiplayerSessionsSubsystem::IsSessionFriendsOnly() const
+{
+    // Fuente de verdad = la sesión REAL publicada (así el toggle del lobby refleja cómo se creó la
+    // room, aunque bPendingFriendsOnly quedara viejo). Si todavía no hay sesión, usa el pendiente.
+    if (const IOnlineSessionPtr S = GetSessions())
+    {
+        if (const FNamedOnlineSession* Named = S->GetNamedSession(NAME_GameSession))
+        {
+            bool bVal = false;
+            Named->SessionSettings.Get(KEY_HAS_PASSWORD, bVal);
+            return bVal;
+        }
+    }
+    return bPendingFriendsOnly;
+}
+
 void UMultiplayerSessionsSubsystem::SetSessionFriendsOnly(bool bFriendsOnly)
 {
     bPendingFriendsOnly = bFriendsOnly;

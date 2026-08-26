@@ -87,8 +87,9 @@ public:
     // El HOST cambia la visibilidad de la sesión YA CREADA (lobby → opciones): re-publica la sesión.
     // true = privada solo amigos, false = pública. Solo tiene efecto en el host (tiene los settings).
     void SetSessionFriendsOnly(bool bFriendsOnly);
-    // Visibilidad actual de la sesión propia (para inicializar el toggle del host).
-    bool IsSessionFriendsOnly() const { return bPendingFriendsOnly; }
+    // Visibilidad actual de la sesión propia (para inicializar el toggle del host). Lee el estado REAL
+    // de la sesión publicada (KEY_HAS_PASSWORD = cómo se creó la room); cae al pendiente si no hay sesión.
+    bool IsSessionFriendsOnly() const;
 
     // Destruye una sesión que haya quedado REGISTRADA localmente de una partida anterior.
     // Llamar al mostrar el menú principal: ahí nunca debería haber sesión activa.
