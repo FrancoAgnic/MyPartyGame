@@ -16,6 +16,7 @@
 #include "Sound/SoundBase.h"
 #include "Sound/SoundMix.h"
 #include "Sound/SoundClass.h"
+#include "Components/AudioComponent.h"
 #include "PTGameUserSettings.h"
 #include "Multiplayer/MultiplayerSessionsSubsystem.h"
 #include "UI/PTInvitePopupWidget.h"
@@ -248,9 +249,10 @@ void UPTGameInstance::TravelToResolvedSession()
     NotifyJoinedServer(TravelURL); // guard anti-flood + arma reintento
 }
 
-void UPTGameInstance::OnPostLoadMap(UWorld* /*LoadedWorld*/)
+void UPTGameInstance::OnPostLoadMap(UWorld* LoadedWorld)
 {
     ApplyAudioMix();
+    UpdateMenuMusic(LoadedWorld);
 
     // Terminó de cargar un mapa → cualquier intento de conexión que estuviera en curso YA se resolvió
     // (o entramos a la sesión, o rebotamos al menú). Liberamos el guard anti-flood y cortamos el
@@ -285,6 +287,39 @@ void UPTGameInstance::SetSFXVolume(float V)
 {
     if (UPTGameUserSettings* S = UPTGameUserSettings::Get()) { S->SetSFXVolume(V); S->SaveSettings(); }
     ApplyAudioMix();
+}
+
+void UPTGameInstance::UpdateMenuMusic(UWorld* World)
+{
+    if (!World) return;
+
+    // Nombre del mapa cargado (sin el prefijo de PIE tipo "UEDPIE_0_"). El lobby corre sobre el mismo
+    // mapa MainMenu, así que con chequear MainMenu cubrimos menú + lobby; Lvl-01 queda afuera.
+    const FString MapName = World->GetMapName();
+    const bool bWantMusic = MapName.Contains(MenuMusicMapName);
+
+    const bool bPlaying = MenuMusicComp && MenuMusicComp->IsPlaying();
+
+    if (bWantMusic)
+    {
+        if (!bPlaying && MenuMusic)
+        {
+            // Persiste entre transiciones (menú→lobby es un ServerTravel sobre el mismo mapa) para que
+            // NO se reinicie. bAutoDestroy: al hacer Stop() en Lvl-01 se limpia solo. El loop lo da el asset.
+            // CreateSound2D (no auto-play) + FadeIn: arranca en 0 y sube al volumen del settings de forma
+            // progresiva, siempre (incluso la primera vez que abrís el juego).
+            MenuMusicComp = UGameplayStatics::CreateSound2D(
+                World, MenuMusic, 1.f, 1.f, 0.f, nullptr,
+                /*bPersistAcrossLevelTransition=*/true, /*bAutoDestroy=*/true);
+            if (MenuMusicComp)
+                MenuMusicComp->FadeIn(FMath::Max(0.f, MenuMusicFadeInSeconds), 1.f, 0.f, EAudioFaderCurve::Linear);
+        }
+    }
+    else if (MenuMusicComp)
+    {
+        MenuMusicComp->Stop(); // Lvl-01 (u otro mapa): cortar la música del menú/lobby
+        MenuMusicComp = nullptr;
+    }
 }
 
 void UPTGameInstance::ApplyAudioMix()

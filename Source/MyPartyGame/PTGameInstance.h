@@ -113,6 +113,21 @@ public:
     /** Aplica ambos volúmenes al mix (SetSoundMixClassOverride + push). Se llama al arrancar y en cada mapa. */
     UFUNCTION(BlueprintCallable, Category="Audio") void  ApplyAudioMix();
 
+    // ── Música del menú/lobby (loop, persiste entre menú↔lobby, para en Lvl-01) ─────────────
+    // Asigná el SoundWave/Cue en BP_GameInstance. El asset debe: (1) tener Sound Class = SC_Music
+    // (para que el slider de música lo afecte), y (2) ser LOOPING. Suena en el mapa MainMenu (que es
+    // a la vez menú y lobby) y se corta en Lvl-01 (ahí va otra música).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Audio") USoundBase* MenuMusic = nullptr;
+    // Nombre del mapa donde suena la música (el lobby corre sobre este mismo mapa). Editable por si cambia.
+    UPROPERTY(EditAnywhere, Category="Audio") FString MenuMusicMapName = TEXT("MainMenu");
+    // Fade-in al arrancar la música: sube de 0 al volumen del settings en estos segundos (0 = sin fade).
+    UPROPERTY(EditAnywhere, Category="Audio") float MenuMusicFadeInSeconds = 2.5f;
+private:
+    UPROPERTY(Transient) class UAudioComponent* MenuMusicComp = nullptr;
+    // Arranca/corta la música del menú según el mapa cargado (lo llama OnPostLoadMap).
+    void UpdateMenuMusic(UWorld* World);
+public:
+
     // ── Sonidos de esculpido (compartidos gameplay Lvl-01 + editar skins en el lobby) ──────────
     // Se asignan UNA vez acá. Los loops (Add/Erase/Paint) deben ser sonidos LOOPING. Todos 3D si se
     // asigna SculptAttenuation. Los usa UPTSculptSoundComponent en ambos controladores.
