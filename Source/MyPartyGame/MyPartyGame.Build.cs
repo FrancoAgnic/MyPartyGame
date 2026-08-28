@@ -25,6 +25,7 @@ public class MyPartyGame : ModuleRules
 			"Slate",
 			"SlateCore",
 			"Niagara",
+			"AudioMixer", // análisis espectral de la música (banda aguda → baile del personaje)
 			// Online Subsystem — Steam (cargado dinámicamente vía plugin/config).
 			"OnlineSubsystem",
 			"OnlineSubsystemUtils",

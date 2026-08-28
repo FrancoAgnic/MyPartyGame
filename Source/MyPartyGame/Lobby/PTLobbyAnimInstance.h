@@ -44,9 +44,20 @@ public:
     UPROPERTY(BlueprintReadOnly, Category="Music") float SwayRollDeg = 0.f;
     UPROPERTY(BlueprintReadOnly, Category="Music") float SwayPitchDeg = 0.f;
 
-    // Tuneables del baile por BPM (Class Defaults del AnimBP). El vaivén se calcula por la FASE del
-    // ritmo (posición de la música × BPM) → sincronía perfecta, sin latencia ni detección.
-    UPROPERTY(EditDefaultsOnly, Category="Music|Sway") float SwayMaxDeg      = 26.f;  // inclinación máxima a cada lado
-    UPROPERTY(EditDefaultsOnly, Category="Music|Sway") float SwayBeatsPerSide = 1.f;  // beats por cambio de lado (1=cada beat; 2=cada 2; 0.5=dos por beat)
-    UPROPERTY(EditDefaultsOnly, Category="Music|Sway") float SwayFollow      = 25.f;  // cuán pegado sigue la fase (alto = más sincronizado; suaviza el arranque/loop)
+    // Tuneables del baile (Class Defaults del AnimBP). Detecta cada NOTA ALTA nueva por FLUJO (subida
+    // brusca de la energía aguda) → alterna SÍ O SÍ de lado (uno y uno). Funciona con cualquier música
+    // (no hay BPM ni nada timeado). En silencio queda quieto en el centro.
+    UPROPERTY(EditDefaultsOnly, Category="Music|Sway") float HighFluxThreshold = 0.06f; // cuánto tiene que SUBIR el agudo para contar como golpe (bajar = más sensible)
+    UPROPERTY(EditDefaultsOnly, Category="Music|Sway") float HighMinLevel      = 0.05f; // piso: por debajo no cuenta (gate de silencio)
+    UPROPERTY(EditDefaultsOnly, Category="Music|Sway") float HitMinInterval    = 0.09f; // seg mínimos entre golpes (bajo = permite cruces muy rápidos)
+    UPROPERTY(EditDefaultsOnly, Category="Music|Sway") float SwayMaxDeg        = 45.f;  // inclinación a cada lado (±). Neutro del hueso = su rest (p.ej. 90°)
+    UPROPERTY(EditDefaultsOnly, Category="Music|Sway") float SwaySnapSpeed     = 22.f;  // qué tan rápido cruza al lado en el golpe
+    UPROPERTY(EditDefaultsOnly, Category="Music|Sway") float SwayReturnSpeed   = 5.f;   // qué tan rápido vuelve al centro cuando no hay agudos
+
+private:
+    float SwaySide   = 1.f;       // lado del próximo golpe (+1 / -1), alterna sí o sí
+    float SwayTarget = 0.f;       // objetivo (se fija en el golpe y se sostiene; vuelve al centro en silencio)
+    float PrevHigh   = 0.f;       // energía aguda del frame anterior (para el flujo)
+    float HitTimer   = 0.f;       // cooldown entre golpes
+    float NoHitTime  = 0.f;       // hace cuánto que no hay golpe (para volver al centro)
 };

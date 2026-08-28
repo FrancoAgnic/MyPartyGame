@@ -9,26 +9,36 @@ void UPTLobbyAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 {
     Super::NativeUpdateAnimation(DeltaSeconds);
 
-    // Energía de la música (0..1) para que el personaje reaccione al beat. Vive en el GameInstance
-    // (el envelope follower del submix de música la calcula). Es local/cosmético: no se replica.
-    if (const UWorld* W = GetWorld())
-        if (const UPTGameInstance* GI = W->GetGameInstance<UPTGameInstance>())
-            MusicEnergy = GI->GetMusicEnergy();
-
-    // Baile por FASE de BPM = sincronía perfecta con la música (sin latencia ni detección de beats).
-    // La fase la da el GameInstance: beats transcurridos desde que arrancó la música (posición × BPM).
-    // cos(π·beats/beatsPerSide) → +Max en un beat, -Max en el siguiente → vaivén de lado a lado clavado
-    // al ritmo. Las físicas de los huesos de abajo cuelgan de este vaivén y lo siguen solas.
-    float TargetRoll = 0.f;
+    // Energías de la música (del GameInstance): MusicEnergy = general; MusicHighEnergy = solo agudos.
+    // El baile usa la AGUDA. Es local/cosmético: no se replica.
+    float High = 0.f;
     if (const UWorld* W = GetWorld())
         if (const UPTGameInstance* GI = W->GetGameInstance<UPTGameInstance>())
         {
-            const float Beats = GI->GetMenuMusicBeats();
-            if (Beats >= 0.f)
-                TargetRoll = SwayMaxDeg * FMath::Cos(PI * Beats / FMath::Max(0.01f, SwayBeatsPerSide));
+            MusicEnergy = GI->GetMusicEnergy();
+            High        = GI->GetMusicHighEnergy();
         }
-    // Follow alto = prácticamente exacto, pero suaviza el snap del arranque y la costura del loop.
-    SwayRollDeg  = FMath::FInterpTo(SwayRollDeg, TargetRoll, DeltaSeconds, SwayFollow);
+
+    // Detección por FLUJO: un golpe agudo = la energía aguda SUBE de golpe (High - PrevHigh grande) y
+    // está por encima del piso. Así detecta cada nota alta nueva aunque los agudos sean sostenidos
+    // (el umbral simple fallaba: disparaba una vez y se quedaba de un lado). Cada golpe alterna de lado.
+    HitTimer  += DeltaSeconds;
+    NoHitTime += DeltaSeconds;
+    const float Flux = High - PrevHigh;
+    if (Flux > HighFluxThreshold && High > HighMinLevel && HitTimer >= HitMinInterval)
+    {
+        SwayTarget = SwaySide * SwayMaxDeg; // golpe → al lado que toca
+        SwaySide   = -SwaySide;             // el próximo golpe, al OTRO lado (uno y uno)
+        HitTimer   = 0.f;
+        NoHitTime  = 0.f;
+    }
+    PrevHigh = High;
+
+    // Se sostiene en el lado del último golpe (para que se vea el cruce completo L→R); si hace rato que
+    // no hay agudos (silencio), vuelve suave al centro.
+    if (NoHitTime > 0.4f) SwayTarget = FMath::FInterpTo(SwayTarget, 0.f, DeltaSeconds, SwayReturnSpeed);
+
+    SwayRollDeg  = FMath::FInterpTo(SwayRollDeg, SwayTarget, DeltaSeconds, SwaySnapSpeed);
     SwayPitchDeg = -FMath::Abs(SwayRollDeg) * 0.2f; // leve inclinación al frente en los extremos (opcional)
 
     if (const APawn* Owner = TryGetPawnOwner())

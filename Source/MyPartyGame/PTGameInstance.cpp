@@ -18,6 +18,8 @@
 #include "Sound/SoundClass.h"
 #include "Sound/SoundSubmix.h"
 #include "Components/AudioComponent.h"
+#include "AudioMixerBlueprintLibrary.h"
+#include "TimerManager.h"
 #include "PTGameUserSettings.h"
 #include "Multiplayer/MultiplayerSessionsSubsystem.h"
 #include "UI/PTInvitePopupWidget.h"
@@ -327,6 +329,16 @@ void UPTGameInstance::UpdateMenuMusic(UWorld* World)
                     MusicAnalysisSubmix->AddEnvelopeFollowerDelegate(World, Del);
                     bEnvelopeBound = true;
                 }
+                // Análisis ESPECTRAL de la banda aguda (notas altas) → MusicHighEnergy, que maneja el baile.
+                // Por POLLING (StartAnalyzingOutput + GetMagnitudeForFrequencies): más robusto que el
+                // delegate por bandas (que en 5.8 tira un ensure de "band extractor inválido").
+                if (MusicAnalysisSubmix && !bSpectrumBound)
+                {
+                    UAudioMixerBlueprintLibrary::StartAnalyzingOutput(World, MusicAnalysisSubmix);
+                    World->GetTimerManager().SetTimer(SpectrumPollHandle, this,
+                        &UPTGameInstance::PollSpectrum, 1.f / 60.f, /*bLoop=*/true);
+                    bSpectrumBound = true;
+                }
             }
         }
     }
@@ -335,7 +347,34 @@ void UPTGameInstance::UpdateMenuMusic(UWorld* World)
         MenuMusicComp->Stop(); // Lvl-01 (u otro mapa): cortar la música del menú/lobby
         MenuMusicComp = nullptr;
         MusicEnergy = 0.f;     // sin música → el personaje deja de reaccionar
+        MusicHighEnergy = 0.f;
+        if (bSpectrumBound)
+        {
+            World->GetTimerManager().ClearTimer(SpectrumPollHandle);
+            if (MusicAnalysisSubmix) UAudioMixerBlueprintLibrary::StopAnalyzingOutput(World, MusicAnalysisSubmix);
+            bSpectrumBound = false;
+        }
     }
+}
+
+void UPTGameInstance::PollSpectrum()
+{
+    const UWorld* W = GetWorld();
+    if (!W || !MusicAnalysisSubmix) return;
+
+    // Magnitudes de la banda AGUDA (notas altas). Promedio × ganancia → 0..1, suavizado (ataque rápido,
+    // caída algo más lenta) para notar los golpes agudos sin temblar. En silencio cae a ~0.
+    static const TArray<float> HighFreqs = { 3000.f, 4500.f, 6500.f, 9000.f };
+    TArray<float> Mags;
+    UAudioMixerBlueprintLibrary::GetMagnitudeForFrequencies(W, HighFreqs, Mags, MusicAnalysisSubmix);
+
+    float Sum = 0.f;
+    for (float M : Mags) Sum += M;
+    const float Avg = Mags.Num() > 0 ? Sum / Mags.Num() : 0.f;
+    const float Target = FMath::Clamp(Avg * MusicHighGain, 0.f, 1.f);
+    // Ataque casi instantáneo (para que el "flujo" del golpe agudo sea marcado) y caída algo más suave.
+    const float Alpha = (Target > MusicHighEnergy) ? 0.9f : 0.4f;
+    MusicHighEnergy = FMath::Lerp(MusicHighEnergy, Target, Alpha);
 }
 
 float UPTGameInstance::GetMenuMusicBeats() const

@@ -131,6 +131,11 @@ public:
     UPROPERTY(EditAnywhere, Category="Audio") float MusicEnergyGain = 3.0f;
     // Energía actual de la música (0..1, suavizada). La lee el AnimInstance del lobby.
     UFUNCTION(BlueprintCallable, Category="Audio") float GetMusicEnergy() const { return MusicEnergy; }
+    // Energía SOLO de las frecuencias ALTAS (agudos/notas altas), 0..1. Es lo que usa el baile:
+    // reacciona a las notas altas y si se repiten rápido, el personaje se mueve rápido.
+    UFUNCTION(BlueprintCallable, Category="Audio") float GetMusicHighEnergy() const { return MusicHighEnergy; }
+    // Ganancia sobre la banda aguda (subir si reacciona poco).
+    UPROPERTY(EditAnywhere, Category="Audio") float MusicHighGain = 2.0f;
 
     // ── Sync por BPM (baile clavado al ritmo, sin latencia de detección) ────────────────────
     // Poné el BPM real de la canción. BeatOffset alinea el primer beat / compensa latencia constante.
@@ -144,10 +149,15 @@ public:
 private:
     UPROPERTY(Transient) class UAudioComponent* MenuMusicComp = nullptr;
     float MusicEnergy = 0.f;
+    float MusicHighEnergy = 0.f;
     bool  bEnvelopeBound = false;
+    bool  bSpectrumBound = false;
     double MusicStartWorldTime = 0.0; // instante (World time) en que arrancó la música, para la fase por BPM
     // Callback del envelope follower del submix de música → actualiza MusicEnergy.
     UFUNCTION() void OnMusicEnvelope(const TArray<float>& Envelope);
+    // Polling del análisis espectral (banda aguda) → actualiza MusicHighEnergy. Corre por timer.
+    void PollSpectrum();
+    FTimerHandle SpectrumPollHandle;
     // Arranca/corta la música del menú según el mapa cargado (lo llama OnPostLoadMap).
     void UpdateMenuMusic(UWorld* World);
 public:
