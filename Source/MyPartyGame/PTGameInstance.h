@@ -122,8 +122,32 @@ public:
     UPROPERTY(EditAnywhere, Category="Audio") FString MenuMusicMapName = TEXT("MainMenu");
     // Fade-in al arrancar la música: sube de 0 al volumen del settings en estos segundos (0 = sin fade).
     UPROPERTY(EditAnywhere, Category="Audio") float MenuMusicFadeInSeconds = 2.5f;
+
+    // ── Reacción del personaje a la música (envelope follower) ──────────────────────────────
+    // Submix dedicado para analizar la energía de la música (el personaje del lobby "baila" con ella).
+    // Creá un Sound Submix en el editor y asignalo acá; la música se rutea a él por código.
+    UPROPERTY(EditAnywhere, Category="Audio") class USoundSubmix* MusicAnalysisSubmix = nullptr;
+    // Ganancia sobre la amplitud cruda del envelope → 0..1. Subilo si el personaje reacciona poco.
+    UPROPERTY(EditAnywhere, Category="Audio") float MusicEnergyGain = 3.0f;
+    // Energía actual de la música (0..1, suavizada). La lee el AnimInstance del lobby.
+    UFUNCTION(BlueprintCallable, Category="Audio") float GetMusicEnergy() const { return MusicEnergy; }
+
+    // ── Sync por BPM (baile clavado al ritmo, sin latencia de detección) ────────────────────
+    // Poné el BPM real de la canción. BeatOffset alinea el primer beat / compensa latencia constante.
+    // LoopSeconds = duración del track (para re-alinear la fase en cada loop); 0 = fase continua.
+    UPROPERTY(EditAnywhere, Category="Audio") float MenuMusicBPM        = 120.f;
+    UPROPERTY(EditAnywhere, Category="Audio") float MenuMusicBeatOffset = 0.f;
+    UPROPERTY(EditAnywhere, Category="Audio") float MenuMusicLoopSeconds = 0.f;
+    // Beats transcurridos desde que arrancó la música (float, fase continua para el sway). -1 si no suena.
+    UFUNCTION(BlueprintCallable, Category="Audio") float GetMenuMusicBeats() const;
+
 private:
     UPROPERTY(Transient) class UAudioComponent* MenuMusicComp = nullptr;
+    float MusicEnergy = 0.f;
+    bool  bEnvelopeBound = false;
+    double MusicStartWorldTime = 0.0; // instante (World time) en que arrancó la música, para la fase por BPM
+    // Callback del envelope follower del submix de música → actualiza MusicEnergy.
+    UFUNCTION() void OnMusicEnvelope(const TArray<float>& Envelope);
     // Arranca/corta la música del menú según el mapa cargado (lo llama OnPostLoadMap).
     void UpdateMenuMusic(UWorld* World);
 public:

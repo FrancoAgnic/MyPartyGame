@@ -16,6 +16,7 @@
 #include "Sound/SoundBase.h"
 #include "Sound/SoundMix.h"
 #include "Sound/SoundClass.h"
+#include "Sound/SoundSubmix.h"
 #include "Components/AudioComponent.h"
 #include "PTGameUserSettings.h"
 #include "Multiplayer/MultiplayerSessionsSubsystem.h"
@@ -312,14 +313,51 @@ void UPTGameInstance::UpdateMenuMusic(UWorld* World)
                 World, MenuMusic, 1.f, 1.f, 0.f, nullptr,
                 /*bPersistAcrossLevelTransition=*/true, /*bAutoDestroy=*/true);
             if (MenuMusicComp)
+            {
+                MusicStartWorldTime = World->GetTimeSeconds(); // t0 para la fase por BPM
                 MenuMusicComp->FadeIn(FMath::Max(0.f, MenuMusicFadeInSeconds), 1.f, 0.f, EAudioFaderCurve::Linear);
+                // Envelope follower del submix de música → el personaje del lobby reacciona a la energía.
+                // La música se rutea POR este submix desde el asset (SoundWave → "Submix" = este), así
+                // que no hace falta SetSubmixSend (eso duplicaría el audio al master). Solo lo analizamos.
+                if (MusicAnalysisSubmix && !bEnvelopeBound)
+                {
+                    FOnSubmixEnvelopeBP Del; // single-cast (SoundSubmixSend.h)
+                    Del.BindDynamic(this, &UPTGameInstance::OnMusicEnvelope);
+                    MusicAnalysisSubmix->StartEnvelopeFollowing(World);
+                    MusicAnalysisSubmix->AddEnvelopeFollowerDelegate(World, Del);
+                    bEnvelopeBound = true;
+                }
+            }
         }
     }
     else if (MenuMusicComp)
     {
         MenuMusicComp->Stop(); // Lvl-01 (u otro mapa): cortar la música del menú/lobby
         MenuMusicComp = nullptr;
+        MusicEnergy = 0.f;     // sin música → el personaje deja de reaccionar
     }
+}
+
+float UPTGameInstance::GetMenuMusicBeats() const
+{
+    if (!MenuMusicComp || !MenuMusicComp->IsPlaying() || MenuMusicBPM <= 0.f) return -1.f;
+    const UWorld* W = GetWorld();
+    if (!W) return -1.f;
+    double Pos = W->GetTimeSeconds() - MusicStartWorldTime; // seg de reproducción
+    if (MenuMusicLoopSeconds > 0.f) Pos = FMath::Fmod(Pos, (double)MenuMusicLoopSeconds); // re-alinear cada loop
+    return (float)((Pos - MenuMusicBeatOffset) * (MenuMusicBPM / 60.0));
+}
+
+void UPTGameInstance::OnMusicEnvelope(const TArray<float>& Envelope)
+{
+    // Envelope trae la amplitud por canal (0..1). Promediamos, aplicamos ganancia y suavizamos.
+    float Sum = 0.f;
+    for (float E : Envelope) Sum += E;
+    const float Avg = Envelope.Num() > 0 ? Sum / Envelope.Num() : 0.f;
+    const float Target = FMath::Clamp(Avg * MusicEnergyGain, 0.f, 1.f);
+    // Suavizado exponencial simple (el delegate llega a ritmo fijo del mixer): ataque rápido, caída suave.
+    const float Alpha = (Target > MusicEnergy) ? 0.6f : 0.25f;
+    MusicEnergy = FMath::Lerp(MusicEnergy, Target, Alpha);
 }
 
 void UPTGameInstance::ApplyAudioMix()
