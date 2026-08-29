@@ -6,6 +6,7 @@
 #include "Components/TextBlock.h"
 #include "Components/Button.h"
 #include "Components/ProgressBar.h"
+#include "Styling/SlateColor.h"
 
 bool UPTInvitePopupWidget::Initialize()
 {
@@ -22,8 +23,16 @@ UMultiplayerSessionsSubsystem* UPTInvitePopupWidget::Sessions() const
 
 void UPTInvitePopupWidget::Setup(const FString& FromName, float TimeoutSeconds)
 {
-    if (MessageText)
+    if (NameText)
     {
+        // Nombre arriba (en color) + "te invitó a jugar" abajo.
+        NameText->SetText(FText::FromString(FromName));
+        NameText->SetColorAndOpacity(FSlateColor(NameColor));
+        if (MessageText) MessageText->SetText(PTText::Get(TEXT("INVITE_POPUP_MSG2")));
+    }
+    else if (MessageText)
+    {
+        // WBP viejo sin NameText → un solo texto con el nombre incluido.
         FFormatOrderedArguments Args;
         Args.Add(FText::FromString(FromName));
         MessageText->SetText(PTText::Format(TEXT("INVITE_POPUP_MSG"), Args));
