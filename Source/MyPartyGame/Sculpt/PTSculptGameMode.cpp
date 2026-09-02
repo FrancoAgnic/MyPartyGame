@@ -41,7 +41,7 @@ TArray<APTPlayerState*> APTSculptGameMode::GetActivePlayers() const
         {
             if (APTPlayerState* PT = Cast<APTPlayerState>(PS))
             {
-                if (!PT->IsInactive() && !PT->IsOnlyASpectator())
+                if (!PT->IsInactive() && !PT->IsOnlyASpectator() && !PT->bIsDevSpectator)
                     Out.Add(PT);
             }
         }
@@ -497,7 +497,7 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
     // Durante el dibujo: detectar aciertos y bloquear que la palabra aparezca en el chat.
     if (G && G->TurnPhase == EPTTurnPhase::Drawing && CurrentWord.IsValidEntry())
     {
-        const bool bEligibleGuesser = (Sender != G->CurrentSculptor && !Sender->bHasGuessedThisTurn);
+        const bool bEligibleGuesser = (Sender != G->CurrentSculptor && !Sender->bHasGuessedThisTurn && !Sender->bIsDevSpectator);
 
         if (bEligibleGuesser && DoesGuessMatch(Text))
         {

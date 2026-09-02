@@ -86,6 +86,19 @@ public:
     // Notifica a la UI que cambió el banco elegido (ver SelectWordPack/SelectDefaultWordBank).
     FPTOnSelectedWordPackChanged OnSelectedWordPackChanged;
 
+    // ── Modo captura / espectador dev (trailer/screenshots) ─────────────────────────────────
+    // Cuando está activo, la UI del juego reemplaza LOCALMENTE los nombres de Steam por "Player N"
+    // (no se replica; es solo para grabar sin exponer nicks). Lo prende/apaga el comando PTSpectate.
+    UFUNCTION(BlueprintCallable, Category="Capture") void SetCaptureMode(bool bOn) { bCaptureMode = bOn; }
+    UFUNCTION(BlueprintCallable, Category="Capture") bool IsCaptureMode() const { return bCaptureMode; }
+    // Oculta por completo los nombres flotantes (nametags) — comando PTHideNames. Independiente del
+    // modo captura: podés grabar con nombres "Player N" o directamente sin nombres.
+    UFUNCTION(BlueprintCallable, Category="Capture") void SetHideNames(bool bOn) { bHideNames = bOn; }
+    UFUNCTION(BlueprintCallable, Category="Capture") bool AreNamesHidden() const { return bHideNames; }
+    // Devuelve el nombre a mostrar respetando el modo captura: "Player N" (índice estable por orden en
+    // el PlayerArray del GameState) o, si no está en captura, cadena vacía (el llamador usa el real).
+    FString GetCaptureName(const class APlayerState* PS) const;
+
     // ── Sonidos globales de UI ──────────────────────────────────────────────
     // Se asignan UNA vez (en BP_GameInstance o los class defaults) y se aplican a TODOS los botones
     // que ya existen, sin tocar cada uno: ApplyUIButtonSounds recorre el árbol del widget y setea el
@@ -150,6 +163,8 @@ private:
     UPROPERTY(Transient) class UAudioComponent* MenuMusicComp = nullptr;
     float MusicEnergy = 0.f;
     float MusicHighEnergy = 0.f;
+    bool  bCaptureMode = false;
+    bool  bHideNames   = false;
     bool  bEnvelopeBound = false;
     bool  bSpectrumBound = false;
     double MusicStartWorldTime = 0.0; // instante (World time) en que arrancó la música, para la fase por BPM

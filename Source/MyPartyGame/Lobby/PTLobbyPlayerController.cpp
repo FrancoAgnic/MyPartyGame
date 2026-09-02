@@ -2,6 +2,7 @@
 
 #include "PTLobbyPlayerController.h"
 #include "../Sculpt/PTSculptSoundComponent.h"
+#include "../PTSpectatorComponent.h"
 #include "PTLobbyEscapeMenuWidget.h"
 #include "PTGameState.h"
 #include "PTPlayerState.h"
@@ -130,7 +131,60 @@ void APTLobbyPlayerController::BeginPlay()
                 &APTLobbyPlayerController::SetupDioramaView, 0.2f, true);
 
         ShowLobbyOverlay();
+
+        // Cámara espectador (dev-only): se maneja por comandos de consola.
+        Spectator = NewObject<UPTSpectatorComponent>(this, TEXT("SpectatorCam"));
+        if (Spectator) Spectator->RegisterComponent();
     }
+}
+
+// ── Comandos de consola dev (cámara espectador) ─────────────────────────────
+void APTLobbyPlayerController::PTSpectate()
+{
+    if (!Spectator) return;
+    Spectator->Toggle();
+    // El modo captura (nombres → "Player N") acompaña al vuelo libre.
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
+        GI->SetCaptureMode(Spectator->IsActive());
+    // Avisar al server para sacarme/reincorporarme a la partida (conteo, personaje visible).
+    Server_SetSpectator(Spectator->IsActive());
+    if (!Spectator->IsActive())
+    {
+        // Al salir del vuelo libre, volver al input diegético del lobby (cursor + look bloqueado)
+        // y re-fijar la cámara diorama.
+        ApplyDioramaInputMode();
+        SetIgnoreLookInput(true);
+        SetupDioramaView();
+    }
+}
+
+void APTLobbyPlayerController::PTHideUI()
+{
+    bHudHidden = !bHudHidden;
+    if (ActiveOverlay)
+        ActiveOverlay->SetVisibility(bHudHidden ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+}
+
+void APTLobbyPlayerController::PTHideNames()
+{
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
+        GI->SetHideNames(!GI->AreNamesHidden());
+}
+
+void APTLobbyPlayerController::Server_SetSpectator_Implementation(bool bInSpectator)
+{
+    if (APTPlayerState* PS = GetPlayerState<APTPlayerState>())
+        PS->bIsDevSpectator = bInSpectator;
+}
+
+void APTLobbyPlayerController::PTSpecSpeed(float N)
+{
+    if (Spectator) Spectator->SetSpeedScale(N);
+}
+
+void APTLobbyPlayerController::PTSpecSmooth(float N)
+{
+    if (Spectator) Spectator->SetSmoothSpeed(N);
 }
 
 void APTLobbyPlayerController::ApplyDioramaInputMode()
@@ -353,6 +407,15 @@ void APTLobbyPlayerController::SetupInputComponent()
 void APTLobbyPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
+
+    // Teclas toggle del modo espectador (dev): H=UI del lobby, N=nombres. Solo mientras espectás.
+    if (Spectator && Spectator->IsActive())
+    {
+        if (WasInputKeyJustPressed(EKeys::H)) PTHideUI();
+        if (WasInputKeyJustPressed(EKeys::N)) PTHideNames();
+    }
+    // F9 = screenshot en alta resolución (2x). Disponible siempre (para el trailer/capturas).
+    if (WasInputKeyJustPressed(EKeys::F9)) ConsoleCommand(TEXT("HighResShot 2"), true);
 
     // En el Locker (sin editar): la cámara sigue la POSICIÓN del personaje pero no rota (dirección fija).
     if (bLockerOpen && !bHeadSculptMode) UpdateLockerCam();

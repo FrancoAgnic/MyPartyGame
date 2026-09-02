@@ -51,6 +51,17 @@ public:
     UFUNCTION(Client, Reliable)
     void Client_KickedFromSession();
 
+    // ── Cámara espectador dev (trailer/capturas) ─────────────────────────────
+    // Comandos de consola (dev-only, todo local). Ver UPTSpectatorComponent.
+    UFUNCTION(Exec) void PTSpectate();          // vuelo libre WASD+mouse on/off (+ nombres → Player N)
+    UFUNCTION(Exec) void PTHideUI();            // oculta/muestra el overlay del lobby
+    UFUNCTION(Exec) void PTHideNames();         // oculta/muestra los nombres flotantes
+    UFUNCTION(Exec) void PTSpecSpeed(float N);  // multiplica la velocidad de la cámara
+    UFUNCTION(Exec) void PTSpecSmooth(float N); // suavizado/lag de la cámara (bajo = más suave)
+
+    // El cliente le avisa al server que entra/sale de espectador (para sacarlo de la partida).
+    UFUNCTION(Server, Reliable) void Server_SetSpectator(bool bInSpectator);
+
     // ── Estado del modo cabeza (lo lee la hotbar del modo G para resaltar la herramienta) ──
     bool          IsHeadSculptMode()      const { return bHeadSculptMode; }
     EPTEditMode   GetHeadEditMode()       const { return HeadEditMode; }
@@ -326,6 +337,10 @@ protected:
     // Overlay del lobby activo (MainMenu o LobbyHUD): se colapsa mientras esculpís la cabeza
     // para que el mouse no lo agarre la UI y llegue al esculpido (igual que el gameplay).
     UPROPERTY() UUserWidget* ActiveOverlay = nullptr;
+
+    // Cámara espectador dev (vuelo libre WASD+mouse) — se maneja por comandos de consola.
+    UPROPERTY() class UPTSpectatorComponent* Spectator = nullptr;
+    bool bHudHidden = false;
 
     // Input de esculpido (solo activo en modo cabeza). Igual que el gameplay: LMB esculpe en el
     // modo actual; 1/2/3 cambian el modo (Add/Erase/Paint). RMB queda para el color (paso siguiente).

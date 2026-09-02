@@ -28,6 +28,7 @@ void APTPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     // HeadBlob NO va acá a propósito: viaja troceado por RPC (ver UploadHead / SendHeadTo).
     DOREPLIFETIME(APTPlayerState, HeadVersion);
     DOREPLIFETIME(APTPlayerState, Language);
+    DOREPLIFETIME(APTPlayerState, bIsDevSpectator);
 }
 
 void APTPlayerState::CopyProperties(APlayerState* NewPlayerState)
@@ -40,6 +41,7 @@ void APTPlayerState::CopyProperties(APlayerState* NewPlayerState)
         PT->HeadBlob    = HeadBlob;    // la cabeza custom viaja al Lvl-01 (seamless travel)
         PT->HeadVersion = HeadVersion; // ...y su versión, para que el pawn nuevo la aplique
         PT->Language    = Language;    // el idioma también viaja (palabra por idioma en el juego)
+        PT->bIsDevSpectator = bIsDevSpectator; // si esculp/espectás en el lobby, seguís igual en el juego
         // bHasGuessedThisTurn NO se copia: es estado por-turno, arranca en false en el juego.
     }
 }
@@ -277,6 +279,12 @@ void APTPlayerState::Server_SetHost(bool bInHost)
 }
 
 void APTPlayerState::OnRep_DisplayName() { /* El HUD del lobby lee DisplayName por polling, no necesita reaccionar acá. */ }
+
+void APTPlayerState::OnRep_DevSpectator()
+{
+    // El personaje se oculta/aparece según el flag. El propio pawn del jugador lo aplica por polling
+    // (ver APTLobbyCharacter), así que acá no hace falta más: es solo el gancho de replicación.
+}
 
 void APTPlayerState::Server_SetLanguage_Implementation(const FString& InLanguage)
 {

@@ -209,12 +209,17 @@ void APTLobbyGameMode::CheckReadyState()
     APTGameState* PTGS = GetGameState<APTGameState>();
     if (!PTGS) return;
 
-    bool bAllReady = PTGS->PlayerArray.Num() >= MinPlayersToStart;
+    // Los espectadores dev no cuentan ni tienen que estar "listos".
+    int32 NumActive = 0;
+    bool bAllReady = true;
     for (APlayerState* PS : PTGS->PlayerArray)
     {
         const APTPlayerState* PTPS = Cast<APTPlayerState>(PS);
-        if (!PTPS || !PTPS->bIsReady) { bAllReady = false; break; }
+        if (PTPS && PTPS->bIsDevSpectator) continue;
+        ++NumActive;
+        if (!PTPS || !PTPS->bIsReady) { bAllReady = false; }
     }
+    if (NumActive < MinPlayersToStart) bAllReady = false;
 
     const bool bCounting = GetWorldTimerManager().IsTimerActive(CountdownTimerHandle);
 

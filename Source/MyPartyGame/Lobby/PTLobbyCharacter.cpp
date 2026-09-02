@@ -29,6 +29,7 @@
 #include "Engine/Engine.h" // GEngine->AddOnScreenDebugMessage (debug de tamaño del blob)
 #include "PTLockerSubsystem.h"
 #include "../Multiplayer/MultiplayerSessionsSubsystem.h" // nick local de Steam (fallback del nametag propio)
+#include "../PTGameInstance.h" // modo captura dev (Player N / ocultar nombres)
 #include "Engine/GameInstance.h"
 #include "Engine/SceneCapture2D.h"
 #include "Components/SceneCaptureComponent2D.h"
@@ -878,6 +879,14 @@ void APTLobbyCharacter::UpdateNameTag()
 {
     if (!NameTag) return;
 
+    // Modo captura dev: ocultar todos los nombres flotantes (PTHideNames).
+    UPTGameInstance* CapGI = GetGameInstance<UPTGameInstance>();
+    if (CapGI && CapGI->AreNamesHidden())
+    {
+        NameTag->SetVisibility(false);
+        return;
+    }
+
     // Globo de chat activo: mostrar el mensaje (a todos, incluso a uno mismo) sin pisarlo.
     if (GetWorld() && GetWorld()->GetTimeSeconds() < ChatBubbleUntil)
     {
@@ -911,6 +920,13 @@ void APTLobbyCharacter::UpdateNameTag()
             if (UMultiplayerSessionsSubsystem* S = GetGameInstance()
                     ? GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>() : nullptr)
                 N = S->GetLocalPlayerDisplayName();
+        // Modo captura: reemplazar el nick real por "Player N" (local, no se replica).
+        if (CapGI && CapGI->IsCaptureMode())
+            if (const APTPlayerState* PS = GetPlayerState<APTPlayerState>())
+            {
+                const FString CapName = CapGI->GetCaptureName(PS);
+                if (!CapName.IsEmpty()) N = CapName;
+            }
         W->SetPlayerName(N);
         W->SetHost(bHost); // corona del host, igual que en la lista de jugadores
     }
@@ -1058,6 +1074,19 @@ void APTLobbyCharacter::Tick(float DeltaSeconds)
     {
         NameTagAccum = 0.f;
         UpdateNameTag();
+
+        // Espectador dev: ocultar por completo el personaje (en TODAS las máquinas). El flag se
+        // replica en el PlayerState; polleamos acá para cubrir cualquier orden de llegada.
+        if (const APTPlayerState* SpecPS = GetPlayerState<APTPlayerState>())
+        {
+            const bool bSpec = SpecPS->bIsDevSpectator;
+            if (bSpec != bSpectatorHiddenApplied)
+            {
+                bSpectatorHiddenApplied = bSpec;
+                SetActorHiddenInGame(bSpec);
+                SetActorEnableCollision(!bSpec);
+            }
+        }
 
         // Cabeza custom: aplicarla si el PlayerState tiene una versión distinta a la puesta.
         // Cubre CUALQUIER orden de llegada (blob antes que el pawn, pawn antes que el blob,

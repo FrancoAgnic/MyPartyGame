@@ -24,6 +24,32 @@
 #include "Multiplayer/MultiplayerSessionsSubsystem.h"
 #include "UI/PTInvitePopupWidget.h"
 #include "Mods/PTWordPackSubsystem.h"
+#include "GameFramework/GameStateBase.h"
+#include "GameFramework/PlayerState.h"
+#include "Lobby/PTPlayerState.h"
+
+FString UPTGameInstance::GetCaptureName(const APlayerState* PS) const
+{
+    if (!bCaptureMode || !PS) return FString();
+    const UWorld* W = GetWorld();
+    const AGameStateBase* GS = W ? W->GetGameState() : nullptr;
+    if (!GS) return TEXT("Player 1");
+
+    // Índice estable por PlayerId (mismo orden en todos los frames de esta máquina). Los espectadores
+    // dev no se numeran (no son jugadores de la partida).
+    TArray<const APlayerState*> Players;
+    for (const APlayerState* P : GS->PlayerArray)
+        if (P)
+        {
+            const APTPlayerState* PT = Cast<APTPlayerState>(P);
+            if (!PT || !PT->bIsDevSpectator) Players.Add(P);
+        }
+    Players.Sort([](const APlayerState& A, const APlayerState& B)
+        { return A.GetPlayerId() < B.GetPlayerId(); });
+
+    const int32 Idx = Players.IndexOfByKey(PS);
+    return FString::Printf(TEXT("Player %d"), (Idx == INDEX_NONE ? 0 : Idx) + 1);
+}
 
 int32 UPTGameInstance::LoadCustomWordsFromCSVDialog()
 {

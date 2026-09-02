@@ -21,6 +21,13 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")
     bool bIsHost = false;
 
+    // Espectador DEV (trailer/capturas): NO participa de la partida. Se replica para que el server
+    // lo saque de la rotación de turnos y del conteo de jugadores, y para que su personaje se oculte
+    // en TODAS las máquinas. Lo prende/apaga el comando PTSpectate (por Server RPC del controller).
+    UPROPERTY(ReplicatedUsing=OnRep_DevSpectator, BlueprintReadOnly, Category="Game")
+    bool bIsDevSpectator = false;
+    UFUNCTION() void OnRep_DevSpectator();
+
     // Listo para arrancar (toggle en el HUD del lobby). El GameMode revisa esto en
     // APTLobbyGameMode::CheckReadyState para el countdown automatico.
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")

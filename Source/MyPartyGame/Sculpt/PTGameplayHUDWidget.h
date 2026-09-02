@@ -37,6 +37,13 @@ public:
      *  Llamar de nuevo tras un rebind y la UI queda actualizada. */
     void RebuildControls();
 
+    // ── Modo captura dev (trailer/screenshots) ──────────────────────────────
+    /** Alterna la palabra secreta entre visible y enmascarada (comando PTRevealWord). Para el escultor
+     *  la muestra/oculta; para el que ya adivinó, muestra su palabra. */
+    void ToggleRevealWord() { bForceRevealWord = !bForceRevealWord; }
+    /** Oculta/muestra la barra de herramientas (hotbar) sin tocar el resto del HUD (PTHideHotbar). */
+    void ToggleHotbar();
+
     /** Arma la barra de herramientas (una sola vez): tools 1/2/3/4 + formas (TAB). */
     void BuildToolbar();
     /** Actualiza qué está equipado y qué barras se ven según el modo. Se llama desde RefreshTick. */
@@ -184,6 +191,9 @@ private:
     bool         bChatOpen      = false;
     bool         bInputModeInit = false;
     bool         bWantsGameOnly = false;
+    // Modo captura dev: invierte la visibilidad de la palabra / oculta el hotbar.
+    bool         bForceRevealWord = false;
+    bool         bHideHotbar      = false;
 
     APTSculptGameState*        GetGS() const;
     APTSculptPlayerController* GetSculptPC() const;
@@ -192,6 +202,8 @@ private:
     void ChooseWord(int32 Index);
     void ApplyInputMode(bool bGameOnly);
     FString BuildScoreboard() const; // "Nombre: pts" ordenado por puntaje desc. (para resultados)
+    // Nombre a mostrar respetando el modo captura dev ("Player N" en vez del nick de Steam).
+    FString NameFor(class APTPlayerState* PT) const;
     void    RebuildScoreboard();     // rehace las filas del marcador en vivo (solo si cambió)
     FString CachedScoreSig;          // evita reconstruir cada tick si nada cambió
     bool    IsLocalPlayerHost() const;

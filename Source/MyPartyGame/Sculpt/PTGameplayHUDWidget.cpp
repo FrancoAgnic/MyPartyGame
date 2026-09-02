@@ -19,6 +19,7 @@
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "../PTNetStats.h"
+#include "../PTGameInstance.h" // modo captura dev (Player N)
 #include "TimerManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
@@ -142,14 +143,21 @@ void UPTGameplayHUDWidget::BuildToolbar()
     }
 }
 
+void UPTGameplayHUDWidget::ToggleHotbar()
+{
+    bHideHotbar = !bHideHotbar;
+    RefreshToolbar(); // aplicar de una (si no, tardaría hasta el próximo RefreshTick)
+}
+
 void UPTGameplayHUDWidget::RefreshToolbar()
 {
     APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(GetOwningPlayer());
     APTSculptGameState* G = GetGS();
     if (!PC) return;
 
-    // La barra es del escultor: solo se ve cuando te toca dibujar.
-    const bool bSculpting = G && G->TurnPhase == EPTTurnPhase::Drawing && G->IsLocalPlayerSculptor();
+    // La barra es del escultor: solo se ve cuando te toca dibujar. En modo captura (PTHideHotbar) se
+    // fuerza oculta aunque estés dibujando.
+    const bool bSculpting = !bHideHotbar && G && G->TurnPhase == EPTTurnPhase::Drawing && G->IsLocalPlayerSculptor();
     const ESlateVisibility Vis = bSculpting ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
     if (ToolsBox)  ToolsBox->SetVisibility(Vis);
     if (HintsBox)  HintsBox->SetVisibility(Vis);
@@ -313,6 +321,14 @@ void UPTGameplayHUDWidget::RefreshTick()
     APTSculptPlayerController* PC = GetSculptPC();
     const bool bSculptor = G->IsLocalPlayerSculptor();
 
+    // Modo captura dev: la palabra que ESTE cliente conoce (escultor = secreta; el que adivinó = la suya).
+    const FString FullKnownWord = (bSculptor && PC) ? PC->CurrentSecretWord
+                                : (bLocalGuessed ? LocalGuessedWord : FString());
+    // Quién ve normalmente la palabra completa; PTRevealWord invierte ese estado (si hay palabra que mostrar).
+    const bool bDefaultReveal = bSculptor || bLocalGuessed;
+    bool bRevealWord = bForceRevealWord ? !bDefaultReveal : bDefaultReveal;
+    if (bRevealWord && FullKnownWord.IsEmpty()) bRevealWord = false; // no podés revelar lo que no tenés
+
     // El "quién esculpe" ya NO va arriba: se muestra en el marcador con el emoji 🖌️.
     // Arriba queda solo el timer + la palabra. Limpiamos TxtSculptor si sigue en el WBP.
     if (TxtSculptor)
@@ -335,8 +351,7 @@ void UPTGameplayHUDWidget::RefreshTick()
         break;
     // (el contador de elección lo maneja el bloque del reloj de abajo)
     case EPTTurnPhase::Drawing:
-        if (bSculptor && PC)      WordText = PC->CurrentSecretWord;
-        else if (bLocalGuessed)   WordText = LocalGuessedWord; // ya adivinaste → palabra completa (verde)
+        if (bRevealWord)          WordText = FullKnownWord; // escultor / ya adivinaste (o PTRevealWord forzado)
         else if (UseDelayedReveal() && DisplayedMask.Len() == G->MaskedWord.Len())
             WordText = DisplayedMask; // que adivina: letra aparece recién cuando su animación aterriza
         else                      WordText = G->MaskedWord;
@@ -357,7 +372,7 @@ void UPTGameplayHUDWidget::RefreshTick()
     if (TxtWord)
     {
         FString Rich;
-        if (bSculptor && PC && G->TurnPhase == EPTTurnPhase::Drawing)
+        if (bSculptor && PC && bRevealWord && G->TurnPhase == EPTTurnPhase::Drawing)
         {
             // ESCULTOR: palabra completa; las letras ya reveladas a los que adivinan van en VERDE.
             // La máscara viene con un espacio entre cada letra ("_ N _ E ..."), así que la recorremos por
@@ -380,9 +395,9 @@ void UPTGameplayHUDWidget::RefreshTick()
                 ++mi; // consumir la celda
             }
         }
-        else if (bLocalGuessed && G->TurnPhase == EPTTurnPhase::Drawing)
+        else if (bRevealWord && G->TurnPhase == EPTTurnPhase::Drawing)
         {
-            Rich = FString::Printf(TEXT("<green>%s</>"), *WordText); // vos adivinaste → toda verde
+            Rich = FString::Printf(TEXT("<green>%s</>"), *WordText); // vos adivinaste / revelado → toda verde
         }
         else
         {
@@ -558,7 +573,25 @@ void UPTGameplayHUDWidget::OnChatTextChanged(const FText& Text)
 
 void UPTGameplayHUDWidget::OnChatLine(const FString& Name, const FString& Message, EPTChatType Type)
 {
-    const FString ShortName = Name.Left(10); // nombre máximo 10 caracteres
+    // Modo captura dev: reemplazar el nick del que escribió por "Player N" (local, no se replica).
+    FString DispName = Name;
+    if (const UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
+        if (GI->IsCaptureMode() && !Name.IsEmpty())
+            if (const APTSculptGameState* G = GetGS())
+                for (APlayerState* PS : G->PlayerArray)
+                {
+                    if (!PS) continue;
+                    const APTPlayerState* PT = Cast<APTPlayerState>(PS);
+                    const bool bMatch = PS->GetPlayerName() == Name
+                                     || (PT && PT->GetDisplayNameSafe() == Name);
+                    if (bMatch)
+                    {
+                        const FString Cap = GI->GetCaptureName(PS);
+                        if (!Cap.IsEmpty()) { DispName = Cap; break; }
+                    }
+                }
+
+    const FString ShortName = DispName.Left(10); // nombre máximo 10 caracteres
     // El nombre va en color (estilo "name" del RichTextBlock); el mensaje queda blanco.
     FString Line;
     switch (Type)
@@ -787,6 +820,18 @@ void UPTGameplayHUDWidget::OnBtnReturnLobby()
         PC->Server_RequestReturnToLobby();
 }
 
+FString UPTGameplayHUDWidget::NameFor(APTPlayerState* PT) const
+{
+    if (!PT) return FString();
+    if (const UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
+        if (GI->IsCaptureMode())
+        {
+            const FString Cap = GI->GetCaptureName(PT);
+            if (!Cap.IsEmpty()) return Cap;
+        }
+    return PT->GetDisplayNameSafe();
+}
+
 FString UPTGameplayHUDWidget::BuildScoreboard() const
 {
     APTSculptGameState* G = GetGS();
@@ -795,13 +840,14 @@ FString UPTGameplayHUDWidget::BuildScoreboard() const
     TArray<APTPlayerState*> Players;
     for (APlayerState* PS : G->PlayerArray)
         if (APTPlayerState* PT = Cast<APTPlayerState>(PS))
-            Players.Add(PT);
+            if (!PT->bIsDevSpectator) // los espectadores dev no van en el marcador
+                Players.Add(PT);
 
     Players.Sort([](const APTPlayerState& A, const APTPlayerState& B){ return A.GameScore > B.GameScore; });
 
     FString Out;
-    for (const APTPlayerState* PT : Players)
-        Out += FString::Printf(TEXT("%s: %d\n"), *PT->GetDisplayNameSafe().Left(10), PT->GameScore);
+    for (APTPlayerState* PT : Players)
+        Out += FString::Printf(TEXT("%s: %d\n"), *NameFor(PT).Left(10), PT->GameScore);
     return Out;
 }
 
@@ -814,7 +860,8 @@ void UPTGameplayHUDWidget::RebuildScoreboard()
     TArray<APTPlayerState*> Players;
     for (APlayerState* PS : G->PlayerArray)
         if (APTPlayerState* PT = Cast<APTPlayerState>(PS))
-            Players.Add(PT);
+            if (!PT->bIsDevSpectator) // los espectadores dev no van en el marcador
+                Players.Add(PT);
     Players.Sort([](const APTPlayerState& A, const APTPlayerState& B){ return A.GameScore > B.GameScore; });
 
     const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
@@ -828,7 +875,7 @@ void UPTGameplayHUDWidget::RebuildScoreboard()
     // flash "+N" para que el marcador se rearme cuando aparece Y cuando se vence (y así ocultarlo).
     FString Sig;
     for (APTPlayerState* PT : Players)
-        Sig += FString::Printf(TEXT("%s:%d:%d:%d|"), *PT->GetDisplayNameSafe(),
+        Sig += FString::Printf(TEXT("%s:%d:%d:%d|"), *NameFor(PT),
                                PT->GameScore, PT == G->CurrentSculptor ? 1 : 0, IsFlashing(PT) ? 1 : 0);
     if (Sig == CachedScoreSig) return;
     CachedScoreSig = Sig;
@@ -838,7 +885,7 @@ void UPTGameplayHUDWidget::RebuildScoreboard()
     {
         UPTScoreRowWidget* Row = CreateWidget<UPTScoreRowWidget>(GetOwningPlayer(), ScoreRowClass);
         if (!Row) continue;
-        Row->SetRow(PT->GetDisplayNameSafe(), PT->GameScore, PT == G->CurrentSculptor);
+        Row->SetRow(NameFor(PT), PT->GameScore, PT == G->CurrentSculptor);
         // "+N" al lado del nombre + conteo animado del puntaje si este jugador acaba de adivinar.
         if (IsFlashing(PT))
         {

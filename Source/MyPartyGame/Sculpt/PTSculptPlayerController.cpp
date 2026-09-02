@@ -29,6 +29,8 @@
 #include "PTSculptGameState.h"
 #include "PTGameplayHUDWidget.h"
 #include "PTSculptSoundComponent.h"
+#include "../PTSpectatorComponent.h"
+#include "../PTGameInstance.h"
 #include "Misc/Compression.h"
 
 APTSculptPlayerController::APTSculptPlayerController()
@@ -230,6 +232,62 @@ void APTSculptPlayerController::BeginPlay()
         GameplayHUD = CreateWidget<UPTGameplayHUDWidget>(this, GameplayHUDClass);
         if (GameplayHUD) GameplayHUD->ShowHUD();
     }
+
+    // Cámara espectador (dev-only): se maneja por comandos de consola.
+    if (IsLocalController())
+        Spectator = NewObject<UPTSpectatorComponent>(this, TEXT("SpectatorCam"));
+    if (Spectator) Spectator->RegisterComponent();
+}
+
+// ── Comandos de consola dev (cámara espectador) ─────────────────────────────
+void APTSculptPlayerController::PTSpectate()
+{
+    if (!Spectator) return;
+    Spectator->Toggle();
+    // El modo captura (nombres → "Player N") acompaña al vuelo libre.
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
+        GI->SetCaptureMode(Spectator->IsActive());
+    // Avisar al server para sacarme/reincorporarme a la partida (turnos, conteo, personaje visible).
+    Server_SetSpectator(Spectator->IsActive());
+}
+
+void APTSculptPlayerController::Server_SetSpectator_Implementation(bool bInSpectator)
+{
+    if (APTPlayerState* PS = GetPlayerState<APTPlayerState>())
+        PS->bIsDevSpectator = bInSpectator;
+}
+
+void APTSculptPlayerController::PTHideUI()
+{
+    bHudHidden = !bHudHidden;
+    if (GameplayHUD)
+        GameplayHUD->SetVisibility(bHudHidden ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+}
+
+void APTSculptPlayerController::PTHideNames()
+{
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
+        GI->SetHideNames(!GI->AreNamesHidden());
+}
+
+void APTSculptPlayerController::PTRevealWord()
+{
+    if (GameplayHUD) GameplayHUD->ToggleRevealWord();
+}
+
+void APTSculptPlayerController::PTHideHotbar()
+{
+    if (GameplayHUD) GameplayHUD->ToggleHotbar();
+}
+
+void APTSculptPlayerController::PTSpecSpeed(float N)
+{
+    if (Spectator) Spectator->SetSpeedScale(N);
+}
+
+void APTSculptPlayerController::PTSpecSmooth(float N)
+{
+    if (Spectator) Spectator->SetSmoothSpeed(N);
 }
 
 void APTSculptPlayerController::SetupInputComponent()
@@ -318,6 +376,17 @@ bool APTSculptPlayerController::IsEscapeMenuOpen() const
 void APTSculptPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
+
+    // Teclas toggle del modo espectador (dev): H=HUD, N=nombres, J=hotbar. Solo mientras espectás,
+    // para no pisar teclas del juego. Reusan las mismas funciones que los comandos de consola.
+    if (Spectator && Spectator->IsActive())
+    {
+        if (WasInputKeyJustPressed(EKeys::H)) PTHideUI();
+        if (WasInputKeyJustPressed(EKeys::N)) PTHideNames();
+        if (WasInputKeyJustPressed(EKeys::J)) PTHideHotbar();
+    }
+    // F9 = screenshot en alta resolución (2x). Disponible siempre (para el trailer/capturas).
+    if (WasInputKeyJustPressed(EKeys::F9)) ConsoleCommand(TEXT("HighResShot 2"), true);
 
     // Durante el seamless travel de vuelta al lobby, este PlayerController sigue tickeando mientras
     // el SculptVolume ya se está destruyendo. Aunque Volume es UPROPERTY, hay una ventana en la que

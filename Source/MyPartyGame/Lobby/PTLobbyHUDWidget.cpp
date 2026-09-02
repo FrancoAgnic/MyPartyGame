@@ -20,6 +20,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Engine/Engine.h"
 #include "../PTNetStats.h"
+#include "../PTGameInstance.h" // modo captura dev (Player N)
 #include "../PTGameInstance.h"
 #include "../PTWordBank.h"
 #include "../Multiplayer/MultiplayerSessionsSubsystem.h"
@@ -111,9 +112,22 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
         // (host y clientes) ven al host arriba de la lista.
         TArray<APTPlayerState*> Ordered;
         for (APlayerState* PS : PTGS->PlayerArray)
-            if (APTPlayerState* PTPS = Cast<APTPlayerState>(PS)) Ordered.Add(PTPS);
+            if (APTPlayerState* PTPS = Cast<APTPlayerState>(PS))
+                if (!PTPS->bIsDevSpectator) Ordered.Add(PTPS); // los espectadores dev no van en la lista
         Ordered.StableSort([](const APTPlayerState& A, const APTPlayerState& B)
             { return A.bIsHost && !B.bIsHost; }); // true si A (host) debe ir antes que B
+
+        // Modo captura dev: nombres → "Player N" (local, no se replica).
+        UPTGameInstance* CapGI = GetGameInstance<UPTGameInstance>();
+        auto NameFor = [&](APTPlayerState* PS) -> FString
+        {
+            if (CapGI && CapGI->IsCaptureMode())
+            {
+                const FString Cap = CapGI->GetCaptureName(PS);
+                if (!Cap.IsEmpty()) return Cap;
+            }
+            return PS->GetDisplayNameSafe();
+        };
 
         for (APTPlayerState* PTPS : Ordered)
         {
@@ -126,7 +140,7 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
                 {
                     // Kick: solo lo ve el host, en filas de OTROS (no en la del propio host).
                     const bool bCanKick = bLocalIsHost && !PTPS->bIsHost;
-                    Row->SetRow(PTPS->GetDisplayNameSafe(), PTPS->bIsHost, PTPS->bIsReady,
+                    Row->SetRow(NameFor(PTPS), PTPS->bIsHost, PTPS->bIsReady,
                                 ReadyColor, NotReadyColor, MaxNameChars, PTPS, bCanKick);
                     PlayersBox->AddChildToVerticalBox(Row);
                 }
@@ -135,7 +149,7 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
             {
                 // Fallback (sin WBP de fila asignado): texto plano como antes.
                 UTextBlock* Row = NewObject<UTextBlock>(this);
-                FString Label = PTPS->GetDisplayNameSafe();
+                FString Label = NameFor(PTPS);
                 if (PTPS->bIsHost) Label += TEXT(" (") + PTText::GetStr(TEXT("LOBBY_HOST")) + TEXT(")");
                 Label += TEXT(" — ") + PTText::GetStr(PTPS->bIsReady ? TEXT("LOBBY_READY") : TEXT("LOBBY_WAITING"));
                 Row->SetText(FText::FromString(Label));
@@ -146,8 +160,15 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
 
     if (PlayersCountText)
     {
+        // Contar sin los espectadores dev.
+        int32 NumActive = 0;
+        for (APlayerState* PS : PTGS->PlayerArray)
+        {
+            const APTPlayerState* PTPS = Cast<APTPlayerState>(PS);
+            if (!PTPS || !PTPS->bIsDevSpectator) ++NumActive;
+        }
         PlayersCountText->SetText(FText::FromString(
-            FString::Printf(TEXT("%d/%d"), PTGS->PlayerArray.Num(), PTGS->MaxPlayers)));
+            FString::Printf(TEXT("%d/%d"), NumActive, PTGS->MaxPlayers)));
     }
 
     if (LobbyStatusText)

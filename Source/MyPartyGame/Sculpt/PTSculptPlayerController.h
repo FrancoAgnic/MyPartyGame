@@ -284,6 +284,19 @@ public:
     UPROPERTY(BlueprintAssignable, Category="Game")
     FPTOnSecretWord OnSecretWordReceived;
 
+    // ── Cámara espectador dev (trailer/capturas) ─────────────────────────────
+    // Comandos de consola (dev-only, todo local). Ver UPTSpectatorComponent.
+    UFUNCTION(Exec) void PTSpectate();          // vuelo libre WASD+mouse on/off (+ nombres → Player N)
+    UFUNCTION(Exec) void PTHideUI();            // oculta/muestra todo el HUD
+    UFUNCTION(Exec) void PTHideNames();         // oculta/muestra los nombres flotantes
+    UFUNCTION(Exec) void PTRevealWord();        // alterna la palabra secreta visible/máscara
+    UFUNCTION(Exec) void PTHideHotbar();        // oculta/muestra la barra de herramientas
+    UFUNCTION(Exec) void PTSpecSpeed(float N);  // multiplica la velocidad de la cámara
+    UFUNCTION(Exec) void PTSpecSmooth(float N); // suavizado/lag de la cámara (bajo = más suave)
+
+    // El cliente le avisa al server que entra/sale de espectador (para sacarlo de la partida).
+    UFUNCTION(Server, Reliable) void Server_SetSpectator(bool bInSpectator);
+
 protected:
     virtual void BeginPlay()          override;
     virtual void SetupInputComponent() override;
@@ -400,6 +413,8 @@ private:
     bool CachedRingTint = false;
     UPROPERTY() UUserWidget*              ColorPicker       = nullptr;
     UPROPERTY() class UPTGameplayHUDWidget* GameplayHUD     = nullptr;
+    UPROPERTY() class UPTSpectatorComponent* Spectator      = nullptr;
+    bool bHudHidden = false;
     UPROPERTY() class UDecalComponent*    ShadowDecal       = nullptr;
     UPROPERTY() class UStaticMeshComponent* HeightStick     = nullptr;
     UPROPERTY() class UStaticMeshComponent* BoundaryMesh    = nullptr;

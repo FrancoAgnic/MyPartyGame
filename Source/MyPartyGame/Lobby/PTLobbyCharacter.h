@@ -286,6 +286,7 @@ private:
     void  UpdateNameTag();
     float NameTagAccum = 0.f;
     float ChatBubbleUntil = 0.f; // tiempo (world) hasta el que se muestra el globo de chat
+    bool  bSpectatorHiddenApplied = false; // último estado de ocultamiento por espectador dev aplicado
 
 public:
     // ── SPIKE: pintar la piel del personaje (Render Target por UV) ───────────
