@@ -218,14 +218,18 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
     RefreshSettingsView();
 
     // Botón Ready: refleja el estado propio. No listo → "Not Ready" en rojo pastel; listo →
-    // "Ready" en verde pastel. Clickearlo alterna (ver OnReadyClicked). SetBackgroundColor tiñe
-    // el brush del botón, así que conviene que en el WBP el botón tenga brushes blancos.
+    // "Ready" en verde pastel. Clickearlo alterna (ver OnReadyClicked). El color se aplica al
+    // texto (ReadyButtonText), no al botón.
     {
         const bool bReady = (LocalPS && LocalPS->bIsReady);
         if (ReadyButtonText)
+        {
+            // No listo → botón invita a ponerse "Ready" (verde). Listo → botón invita a
+            // "Not Ready" (rojo). El color sigue al texto, no al estado actual.
             ReadyButtonText->SetText(PTText::Get(bReady ? TEXT("LOBBY_BTN_READY") : TEXT("LOBBY_BTN_NOT_READY")));
-        if (ReadyButton)
-            ReadyButton->SetBackgroundColor(bReady ? ReadyColor : NotReadyColor); // mismos colores que los checks
+            ReadyButtonText->SetColorAndOpacity(bReady ? NotReadyColor : ReadyColor);
+            ReadyButtonText->SetShadowColorAndOpacity(bReady ? NotReadyTextShadowColor : ReadyTextShadowColor);
+        }
     }
 
     // (El texto de cuenta regresiva se unificó en LobbyStatusText; ya no se usa un CountdownText aparte.)

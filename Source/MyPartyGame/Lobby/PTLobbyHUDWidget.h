@@ -71,6 +71,9 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Lobby") int32 MaxNameChars = 14;
     UPROPERTY(EditAnywhere, Category = "Lobby") FLinearColor ReadyColor    = FLinearColor(0.10f, 0.80f, 0.12f, 1.f); // verde intenso
     UPROPERTY(EditAnywhere, Category = "Lobby") FLinearColor NotReadyColor = FLinearColor(0.90f, 0.10f, 0.10f, 1.f); // rojo intenso
+    // Shadow del texto de ReadyButtonText (configurable en el class default del widget).
+    UPROPERTY(EditAnywhere, Category = "Lobby") FLinearColor ReadyTextShadowColor    = FLinearColor(0.f, 0.f, 0.f, 1.f);
+    UPROPERTY(EditAnywhere, Category = "Lobby") FLinearColor NotReadyTextShadowColor = FLinearColor(0.f, 0.f, 0.f, 1.f);
 
     void RefreshPlayerList();
 
