@@ -76,4 +76,6 @@ private:
     UPTGameInstance* GetGI() const;
     void RefreshUI();
     void RefreshPackTexts(); // actualiza "Word:" / "Map:" (también en OnSelectedWordPackChanged)
+    // Empuja la config actual al APTGameState replicado (para que los clientes la vean). Solo el host.
+    void PushSettingsToState();
 };

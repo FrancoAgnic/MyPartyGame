@@ -4,6 +4,8 @@
 #include "../PTGameInstance.h"
 #include "../PTTextTable.h"
 #include "../Multiplayer/MultiplayerSessionsSubsystem.h"
+#include "PTLobbyGameMode.h"
+#include "Engine/World.h"
 #include "Components/Button.h"
 #include "Components/CheckBox.h"
 #include "Components/TextBlock.h"
@@ -44,11 +46,29 @@ void UPTGameSettingsWidget::ShowPanel()
             FriendsOnlyCheckbox->SetIsChecked(S->IsSessionFriendsOnly());
     RefreshUI();
     PlayPopIn();
+
+    // Avisar (host) que el panel quedó abierto → los clientes muestran su vista read-only en vivo.
+    if (UWorld* W = GetWorld())
+        if (APTLobbyGameMode* GM = W->GetAuthGameMode<APTLobbyGameMode>())
+            GM->SetHostSettingsPanelOpen(true);
 }
 
 void UPTGameSettingsWidget::OnCloseClicked()
 {
     SetVisibility(ESlateVisibility::Collapsed);
+
+    // Panel cerrado → ocultar la vista de los clientes.
+    if (UWorld* W = GetWorld())
+        if (APTLobbyGameMode* GM = W->GetAuthGameMode<APTLobbyGameMode>())
+            GM->SetHostSettingsPanelOpen(false);
+}
+
+void UPTGameSettingsWidget::PushSettingsToState()
+{
+    // Solo el host tiene GameMode con autoridad; en clientes GetAuthGameMode == null (no-op).
+    if (UWorld* W = GetWorld())
+        if (APTLobbyGameMode* GM = W->GetAuthGameMode<APTLobbyGameMode>())
+            GM->SyncMatchSettingsToState();
 }
 
 void UPTGameSettingsWidget::RefreshPackTexts()
@@ -67,12 +87,16 @@ void UPTGameSettingsWidget::RefreshPackTexts()
         FFormatOrderedArguments Args; Args.Add(Default);
         MapText->SetText(PTText::Format(TEXT("GS_MAP"), Args));
     }
+
+    // Replicar a los clientes (banco de palabras + valores numéricos, ya que RefreshUI pasa por acá).
+    PushSettingsToState();
 }
 
 void UPTGameSettingsWidget::OnFriendsOnlyChanged(bool bIsChecked)
 {
     if (UMultiplayerSessionsSubsystem* S = GetGameInstance() ? GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>() : nullptr)
         S->SetSessionFriendsOnly(bIsChecked);
+    PushSettingsToState(); // que los clientes vean el cambio de "Sala privada"
 }
 
 void UPTGameSettingsWidget::OnLibraryClicked()

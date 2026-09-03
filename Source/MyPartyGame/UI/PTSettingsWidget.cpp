@@ -9,6 +9,8 @@
 #include "Components/TextBlock.h"
 #include "Components/CheckBox.h"
 #include "Components/ComboBoxString.h"
+#include "Kismet/KismetSystemLibrary.h"
+#include "GenericPlatform/GenericApplication.h"
 #include "GameFramework/PlayerController.h"
 #include "../Lobby/PTPlayerState.h"
 #include "../Sculpt/PTSculptGameState.h"
@@ -47,6 +49,7 @@ bool UPTSettingsWidget::Initialize()
     if (TypingSoundCheckBox) TypingSoundCheckBox->OnCheckStateChanged.AddDynamic(this, &UPTSettingsWidget::OnTypingSoundChanged);
 
     if (LanguageCombo) LanguageCombo->OnSelectionChanged.AddDynamic(this, &UPTSettingsWidget::OnLanguageComboChanged);
+    if (ResolutionCombo) ResolutionCombo->OnSelectionChanged.AddDynamic(this, &UPTSettingsWidget::OnResolutionComboChanged);
 
     return true;
 }
@@ -73,6 +76,7 @@ void UPTSettingsWidget::ShowPanel()
     }
 
     BuildLanguageCombo();               // llena el desplegable con los idiomas del CSV
+    BuildResolutionCombo();             // llena el desplegable de resolución (Auto + soportadas)
     ApplyLanguageSectionAvailability(); // colapsa la sección si no estamos en el menú
     SetVisibility(ESlateVisibility::Visible);
     PlayPopIn();
@@ -117,6 +121,85 @@ void UPTSettingsWidget::OnLanguageComboChanged(FString SelectedItem, ESelectInfo
             break;
         }
     }
+}
+
+FIntPoint UPTSettingsWidget::GetDesktopResolution() const
+{
+    FDisplayMetrics Metrics;
+    FDisplayMetrics::RebuildDisplayMetrics(Metrics);
+    FIntPoint Desktop(Metrics.PrimaryDisplayWidth, Metrics.PrimaryDisplayHeight);
+    if (Desktop.X <= 0 || Desktop.Y <= 0) Desktop = FIntPoint(1920, 1080); // fallback defensivo
+    return Desktop;
+}
+
+void UPTSettingsWidget::BuildResolutionCombo()
+{
+    if (!ResolutionCombo) return;
+
+    UPTGameUserSettings* S = UPTGameUserSettings::Get();
+    if (!S) return;
+
+    const FIntPoint Desktop = GetDesktopResolution();
+
+    // Resoluciones soportadas por el monitor (solo hasta la del escritorio: no ofrecemos más grande).
+    ResolutionOptions.Reset();
+    TArray<FIntPoint> Supported;
+    UKismetSystemLibrary::GetSupportedFullscreenResolutions(Supported);
+    for (const FIntPoint& R : Supported)
+        if (R.X > 0 && R.Y > 0 && R.X <= Desktop.X && R.Y <= Desktop.Y)
+            ResolutionOptions.AddUnique(R);
+
+    // Aseguramos que la actual esté en la lista aunque el driver no la reporte.
+    const FIntPoint CurrentRes = S->GetScreenResolution();
+    if (CurrentRes.X > 0 && CurrentRes.Y > 0) ResolutionOptions.AddUnique(CurrentRes);
+    if (ResolutionOptions.Num() == 0) ResolutionOptions.Add(Desktop);
+    ResolutionOptions.Sort([](const FIntPoint& A, const FIntPoint& B){ return A.X * A.Y > B.X * B.Y; });
+
+    const FString AutoLabel = PTText::Get(TEXT("RES_AUTO")).ToString();
+
+    bUpdatingResCombo = true;
+    ResolutionCombo->ClearOptions();
+    ResolutionCombo->AddOption(AutoLabel); // opción 0 = seguir la resolución del escritorio
+    for (const FIntPoint& R : ResolutionOptions)
+        ResolutionCombo->AddOption(FString::Printf(TEXT("%d x %d"), R.X, R.Y));
+
+    // Seleccionar lo que corresponde: Auto si el usuario nunca fijó una, o la resolución actual.
+    if (S->IsAutoResolution())
+        ResolutionCombo->SetSelectedOption(AutoLabel);
+    else
+        ResolutionCombo->SetSelectedOption(FString::Printf(TEXT("%d x %d"), CurrentRes.X, CurrentRes.Y));
+    bUpdatingResCombo = false;
+}
+
+void UPTSettingsWidget::OnResolutionComboChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+    if (bUpdatingResCombo) return;                    // cambio programático (al abrir), no del usuario
+    if (SelectionType == ESelectInfo::Direct) return; // idem: no vino de un click
+
+    UPTGameUserSettings* S = UPTGameUserSettings::Get();
+    if (!S) return;
+
+    const FString AutoLabel = PTText::Get(TEXT("RES_AUTO")).ToString();
+
+    FIntPoint TargetRes;
+    if (SelectedItem == AutoLabel)
+    {
+        S->SetAutoResolution(true);
+        TargetRes = GetDesktopResolution();
+    }
+    else
+    {
+        // Parsear "W x H".
+        FString L, R;
+        if (!SelectedItem.Split(TEXT("x"), &L, &R)) return;
+        TargetRes = FIntPoint(FCString::Atoi(*L.TrimStartAndEnd()), FCString::Atoi(*R.TrimStartAndEnd()));
+        if (TargetRes.X <= 0 || TargetRes.Y <= 0) return;
+        S->SetAutoResolution(false);
+    }
+
+    S->SetScreenResolution(TargetRes);     // conserva el modo de pantalla actual
+    S->ApplyResolutionSettings(false);     // aplica en caliente
+    S->SaveSettings();                     // persiste (ResolutionSizeX/Y + bAutoResolution)
 }
 
 bool UPTSettingsWidget::IsInMainMenu() const

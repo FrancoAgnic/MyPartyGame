@@ -48,6 +48,15 @@ public:
 
     void TravelToGame();
 
+    /** (Host) Vuelca la config de partida del host (GameInstance + sesión) al APTGameState replicado
+     *  para que los clientes puedan verla read-only en el lobby. Lo llama el BeginPlay y el
+     *  GameSettings del host tras cada cambio. No-op fuera del servidor. */
+    void SyncMatchSettingsToState();
+
+    /** (Host) Marca si el host tiene abierto su panel de Game Settings, para que los clientes
+     *  muestren/oculten su vista read-only en vivo. No-op fuera del servidor. */
+    void SetHostSettingsPanelOpen(bool bOpen);
+
     // El self-travel de "Crear sesión" (MainMenu → MainMenu con ?listen, ver
     // PTMainMenuWidget::OnCreateSession) es un travel duro: al desconectar el mundo viejo,
     // el propio host pasa por Logout() con PlayersJoined llegando a 0, lo que sin este flag

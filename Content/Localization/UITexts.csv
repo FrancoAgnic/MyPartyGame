@@ -92,6 +92,7 @@ SHAPE_SPHERE,Esfera,Sphere,Esfera,Kugel,Sphère,Sfera
 SHAPE_CUBE,Cubo,Cube,Cubo,Würfel,Cube,Cubo
 SHAPE_CYLINDER,Cilindro,Cylinder,Cilindro,Zylinder,Cylindre,Cilindro
 SHAPE_CONE,Cono,Cone,Cone,Kegel,Cône,Cono
+SHAPE_HINT,Formas,Shapes,Formas,Formen,Formes,Forme
 HINT_SAVE_COLOR,Guardar color,Save Color,Salvar cor,Farbe speichern,Enregistrer la couleur,Salva colore
 HINT_PLANE_VERTICAL,Plano vertical,Vertical Plane,Plano vertical,Vertikale Ebene,Plan vertical,Piano verticale
 HINT_PLANE_HORIZONTAL,Plano horizontal,Horizontal Plane,Plano horizontal,Horizontale Ebene,Plan horizontal,Piano orizzontale
@@ -193,3 +194,11 @@ GS_WORD,Palabra: {0},Word: {0},Palavra: {0},Wort: {0},Mot : {0},Parola: {0}
 GS_MAP,Mapa: {0},Map: {0},Mapa: {0},Karte: {0},Carte : {0},Mappa: {0}
 GS_DEFAULT,Predeterminado,Default,Padrão,Standard,Défaut,Predefinito
 INVITE_POPUP_MSG2,te invitó a jugar,invited you to play,convidou você para jogar,hat dich zum Spielen eingeladen,t'a invité à jouer,ti ha invitato a giocare
+RES_AUTO,Automática (recomendada),Automatic (recommended),Automática (recomendada),Automatisch (empfohlen),Automatique (recommandée),Automatica (consigliata)
+SV_PRIVATE,Sala privada: {0},Private room: {0},Sala privada: {0},Privater Raum: {0},Salon privé : {0},Stanza privata: {0}
+SV_TURNTIME,Tiempo de turno: {0} s,Turn time: {0} s,Tempo do turno: {0} s,Zugzeit: {0} s,Temps du tour : {0} s,Tempo turno: {0} s
+SV_ROUNDS,Rondas: {0},Rounds: {0},Rodadas: {0},Runden: {0},Manches : {0},Round: {0}
+SV_REVEAL,Revelado: {0}%,Reveal: {0}%,Revelação: {0}%,Aufdeckung: {0}%,Révélation : {0}%,Rivelazione: {0}%
+SV_LIBRARY,Biblioteca: {0},Library: {0},Biblioteca: {0},Bibliothek: {0},Bibliothèque : {0},Libreria: {0}
+SV_YES,Sí,Yes,Sim,Ja,Oui,Sì
+SV_NO,No,No,Não,Nein,Non,No

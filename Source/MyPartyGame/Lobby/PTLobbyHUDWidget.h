@@ -88,6 +88,20 @@ protected:
     UFUNCTION() void OnGameSettingsClicked(); // abre el panel
     void OnLibraryRequested();                // abre LibraryPanel (lo pide el GameSettings)
 
+    // ── Vista read-only de la config del host (SOLO clientes, y SOLO mientras el host la edita) ──
+    // Contenedor del panelcito. Arranca colapsado; se muestra únicamente cuando el host tiene su
+    // panel de Game Settings abierto (APTGameState::bHostSettingsPanelOpen) y este jugador NO es host.
+    UPROPERTY(meta = (BindWidgetOptional)) UWidget* GameSettingsClientsPanel;
+    // Los TextBlock son opcionales: poné en el WBP solo los que quieras mostrar. Se rellenan desde el
+    // APTGameState replicado en cada refresco del timer.
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* SV_PrivateText;  // "Sala privada: Sí/No"
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* SV_TurnTimeText; // "Tiempo de turno: 90 s"
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* SV_RoundsText;   // "Rondas: 3"
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* SV_RevealText;   // "Revelado: 30%"
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* SV_WordPackText; // "Biblioteca: X / Default"
+
+    void RefreshSettingsView(); // rellena los SV_* desde APTGameState
+
 private:
     FTimerHandle RefreshTimerHandle;
     FString CachedRoomCode;

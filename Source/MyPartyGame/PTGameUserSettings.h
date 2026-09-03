@@ -58,6 +58,13 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void SetLanguageCode(const FString& InLanguageCode);
 
+    // ── Resolución ──────────────────────────────────────────────────────────
+    // La resolución real (ResolutionSizeX/Y + modo pantalla) la persiste UGameUserSettings base.
+    // Acá solo recordamos si el usuario eligió "Automática (recomendada)" para volver a seguir la
+    // resolución del escritorio en cada arranque si cambia de monitor.
+    UFUNCTION(BlueprintCallable, Category = "Settings") bool IsAutoResolution() const { return bAutoResolution; }
+    UFUNCTION(BlueprintCallable, Category = "Settings") void SetAutoResolution(bool b) { bAutoResolution = b; }
+
     /** Wrapper simple sobre la escalabilidad nativa: 0=Low .. 3=Epic. */
     UFUNCTION(BlueprintCallable, Category = "Settings")
     int32 GetGraphicsQuality() const;
@@ -91,6 +98,10 @@ private:
 
     UPROPERTY(Config)
     bool bLanguageChosen = false;
+
+    // true = seguir la resolución del escritorio (recomendada). false = el usuario fijó una manual.
+    UPROPERTY(Config)
+    bool bAutoResolution = true;
 
     UPROPERTY(Config)
     TMap<FName, FString> KeyOverrides;

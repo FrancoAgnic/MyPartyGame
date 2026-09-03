@@ -10,6 +10,7 @@
 
 class UImage;
 class UTextBlock;
+class UBorder;
 class UWidgetAnimation;
 class USoundBase;
 
@@ -20,8 +21,9 @@ class MYPARTYGAME_API UPTScoreRowWidget : public UUserWidget
 
 public:
     /** Llenar la fila. bSculptor = este jugador esculpe este turno (muestra la imagen
-     *  y le pone el contorno amarillo al nombre). */
-    void SetRow(const FString& Name, int32 Score, bool bSculptor);
+     *  y le pone el contorno amarillo al nombre). bGuessed = ya adivinó la palabra este
+     *  turno (tiñe el nombre de verde). */
+    void SetRow(const FString& Name, int32 Score, bool bSculptor, bool bGuessed = false);
 
     /** Muestra/oculta el "+N" al lado del nombre cuando este jugador acaba de adivinar.
      *  bShow=false lo oculta. Requiere el TextBlock opcional TxtGuessPlus en el WBP de la fila. */
@@ -44,6 +46,9 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* TxtScorePop;
     // "+N" que aparece unos segundos cuando el jugador adivina (opcional; ubicalo al lado del nombre).
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* TxtGuessPlus;
+    // Border que enmarca el nombre. Se tiñe de verde junto al nombre cuando el jugador adivina
+    // (y vuelve a su color de diseño si no). Opcional.
+    UPROPERTY(meta=(BindWidgetOptional)) UBorder* BorderBackgroundName;
 
     // Animación del rebote del puntaje (creala en la pestaña Animations del WBP con ESTE nombre:
     // "ScorePopAnim"). Si la asignás, se dispara en cada subida del conteo; si no, hay un rebote por
@@ -57,6 +62,12 @@ protected:
     UPROPERTY(EditAnywhere, Category="Score") FLinearColor SculptorOutlineColor = FLinearColor(1.f, 0.85f, 0.f, 1.f);
     UPROPERTY(EditAnywhere, Category="Score") int32        SculptorOutlineSize  = 2;
 
+    // Brush (imagen/material) que se le pone al border BorderBackgroundName cuando el jugador
+    // adivina la palabra. Configuralo en el WBP con la imagen verde. Al no haber adivinado se
+    // restaura el brush de diseño (cacheado en la primera SetRow). El NOMBRE no cambia de color:
+    // siempre conserva el color que le pusiste en el WBP.
+    UPROPERTY(EditAnywhere, Category="Score") FSlateBrush GuessedBorderBrush;
+
 private:
     // Nombre + puntaje "final" para poder repintar el texto durante la animación de conteo.
     FString RowName;
@@ -69,4 +80,9 @@ private:
     float AnimElapsed = 0.f, AnimDuration = 0.f;
     float NumScale = 1.f;   // escala actual del número (rebote por código → vuelve a 1)
     float LastPopAt = -1.f; // throttle para no reiniciar la animación UMG demasiado seguido
+
+    // Brush de diseño del border, cacheado en la primera SetRow para restaurarlo cuando el jugador
+    // NO adivinó (así se respeta el material/imagen original del WBP).
+    bool        bCachedBorder = false;
+    FSlateBrush CachedBorderBrush;
 };

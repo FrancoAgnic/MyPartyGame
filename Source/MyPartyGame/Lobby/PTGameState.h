@@ -41,5 +41,19 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")
     int32 CountdownSecondsRemaining = -1;
 
+    // ── Config de partida elegida por el host, replicada para que los clientes la VEAN (read-only) ──
+    // El host la edita en su GameSettings (vive en el GameInstance del servidor); el LobbyGameMode
+    // la vuelca acá con SyncMatchSettingsToState(). Los defaults matchean FPTMatchSettings.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") float   MatchTurnDuration   = 90.f;
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") int32   MatchNumRounds      = 3;
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") float   MatchRevealFraction = 0.3f;
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") bool    bMatchFriendsOnly   = false;
+    // Título del banco de palabras activo. Vacío = banco por defecto.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") FString MatchWordPackTitle;
+
+    // true mientras el host tiene ABIERTO su panel de Game Settings: los clientes muestran su
+    // panelcito read-only solo en ese lapso (lo ven cambiar en vivo mientras el host edita).
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") bool bHostSettingsPanelOpen = false;
+
     // La lista de jugadores vive en PlayerArray (heredado de AGameStateBase). No replicar aparte.
 };

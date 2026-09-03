@@ -146,6 +146,12 @@ public:
     UPROPERTY(EditAnywhere, Category="UI")
     TSubclassOf<UUserWidget> ColorPickerClass;
 
+    // ── Menú radial de formas (mantener la tecla de forma + arrastrar) ────────
+    /** WBP_ShapeRadial (parent PTShapeRadialWidget). Si queda sin asignar, la tecla vuelve al
+     *  comportamiento viejo (un toque cicla las formas). */
+    UPROPERTY(EditAnywhere, Category="UI")
+    TSubclassOf<class UPTShapeRadialWidget> ShapeRadialClass;
+
     /** Menú de pausa (asignar WBP_LobbyEscapeMenu). Esc maneja la navegación de dos niveles. */
     UPROPERTY(EditAnywhere, Category="UI")
     TSubclassOf<class UPTLobbyEscapeMenuWidget> PauseMenuClass;
@@ -412,6 +418,7 @@ private:
     // Paint a Ojos con el mismo mesh el MID tintado quedaba puesto y el ojo salía del color de Paint.
     bool CachedRingTint = false;
     UPROPERTY() UUserWidget*              ColorPicker       = nullptr;
+    UPROPERTY() class UPTShapeRadialWidget* ShapeRadial     = nullptr;
     UPROPERTY() class UPTGameplayHUDWidget* GameplayHUD     = nullptr;
     UPROPERTY() class UPTSpectatorComponent* Spectator      = nullptr;
     bool bHudHidden = false;
@@ -462,6 +469,8 @@ private:
 
     // Color rápido (Parte B): mantener RMB abre la rueda; arrastrar elige; soltar confirma.
     bool bQuickColorActive = false;
+    bool bShapeRadialActive = false;
+    bool bShapeRadialInputLocked = false; // transición balanceada del lock de cámara del radial
     void OnColorPickPressed();
     void OnColorPickReleased();
     void OnColorSavePressed();  // E con la rueda abierta: guarda el color en la paleta
@@ -514,7 +523,10 @@ private:
     float MinForMode() const { return (EditMode == EPTEditMode::Paint) ? PaintMinSize : MinSize; }
     void  ClampStampSize()   { StampSize = FMath::Clamp(StampSize, MinForMode(), MaxSize); }
     void SetShape(EPTStampShape S);
-    void CycleShapes();                                    // Tab: cicla Sphere→Cube→Cylinder→TriPrism
+    void CycleShapes();                                    // fallback (un toque) si no hay WBP radial
+    // Menú radial: mantener la tecla de forma abre el radial; soltar selecciona el slot bajo el cursor.
+    void OnShapeRadialPressed();
+    void OnShapeRadialReleased();
     void SetMode(EPTEditMode M);                           // 1/2/3: Add/Erase/Paint
     // bResetAxis=false lo usa el modo eje al auto-equipar Add (si no, se apagaría a sí mismo).
     void SetModeInternal(EPTEditMode M, bool bResetAxis);

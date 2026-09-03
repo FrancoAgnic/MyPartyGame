@@ -46,6 +46,10 @@ protected:
     /** Desplegable de idiomas. Crear un ComboBox (String) llamado "LanguageCombo". */
     UPROPERTY(meta = (BindWidgetOptional)) UComboBoxString* LanguageCombo;
 
+    /** Desplegable de resolución. Crear un ComboBox (String) llamado "ResolutionCombo".
+     *  La primera opción es "Automática (recomendada)" = la resolución del escritorio. */
+    UPROPERTY(meta = (BindWidgetOptional)) UComboBoxString* ResolutionCombo;
+
     /** Sección entera del idioma (título + combo): se COLAPSA en partida (solo se ve en el menú
      *  principal). Crear un contenedor llamado "HB_LanguagePanel" que envuelva todo lo del idioma. */
     UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* HB_LanguagePanel;
@@ -102,6 +106,9 @@ protected:
     /** El jugador eligió un idioma del desplegable. */
     UFUNCTION() void OnLanguageComboChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
 
+    /** El jugador eligió una resolución del desplegable. */
+    UFUNCTION() void OnResolutionComboChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
 private:
     void ApplyLanguage(const FString& Code);
     void ApplyGraphics(int32 Quality);
@@ -110,7 +117,18 @@ private:
     /** Llena el desplegable con los idiomas del CSV y selecciona el activo. */
     void BuildLanguageCombo();
 
+    /** Llena el desplegable de resolución (Auto + las soportadas) y selecciona la actual. */
+    void BuildResolutionCombo();
+
+    /** Resolución del escritorio (monitor primario), usada por la opción "Automática". */
+    FIntPoint GetDesktopResolution() const;
+
+    /** Índice→resolución de las opciones NO-auto del combo (la 0 es "Automática"). */
+    TArray<FIntPoint> ResolutionOptions;
+
     /** true mientras rellenamos el combo por código, para ignorar el OnSelectionChanged que dispara
      *  SetSelectedOption (si no, se re-aplicaría el idioma en un bucle al abrir el panel). */
     bool bUpdatingCombo = false;
+    /** Igual que bUpdatingCombo pero para el combo de resolución. */
+    bool bUpdatingResCombo = false;
 };

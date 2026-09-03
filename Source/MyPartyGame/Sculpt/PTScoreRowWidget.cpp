@@ -1,6 +1,7 @@
 #include "PTScoreRowWidget.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
+#include "Components/Border.h"
 #include "Animation/WidgetAnimation.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
@@ -22,20 +23,35 @@ void UPTScoreRowWidget::ApplyScoreText(int32 Value)
     }
 }
 
-void UPTScoreRowWidget::SetRow(const FString& Name, int32 Score, bool bSculptor)
+void UPTScoreRowWidget::SetRow(const FString& Name, int32 Score, bool bSculptor, bool bGuessed)
 {
     RowName    = Name.Left(10);
     FinalScore = Score;
+
+    // Cachear una vez el brush de diseño del border ANTES de pisarlo, para restaurarlo cuando el
+    // jugador no adivinó. Las filas se recrean en cada rebuild, así que en la primera SetRow el
+    // border todavía tiene su brush de diseño.
+    if (!bCachedBorder && BorderBackgroundName)
+    {
+        CachedBorderBrush = BorderBackgroundName->Background;
+        bCachedBorder = true;
+    }
+
     if (TxtName)
     {
         if (!bAnimating) ApplyScoreText(Score); // si está animando el conteo, no pisar el número en curso
 
-        // Contorno amarillo solo para el escultor (0 = sin contorno para el resto).
+        // Contorno amarillo solo para el escultor (0 = sin contorno para el resto). El COLOR del
+        // nombre no se toca: queda siempre el que definiste en el WBP.
         FSlateFontInfo Font = TxtName->GetFont();
         Font.OutlineSettings.OutlineSize  = bSculptor ? SculptorOutlineSize : 0;
         Font.OutlineSettings.OutlineColor = SculptorOutlineColor;
         TxtName->SetFont(Font);
     }
+
+    // El border cambia de IMAGEN (no de tinte): brush verde al adivinar, brush de diseño si no.
+    if (BorderBackgroundName)
+        BorderBackgroundName->SetBrush(bGuessed ? GuessedBorderBrush : CachedBorderBrush);
 
     // La imagen del pincel solo se ve en la fila del que esculpe.
     if (ImgBrush)

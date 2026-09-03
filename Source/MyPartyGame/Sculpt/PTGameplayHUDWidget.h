@@ -82,7 +82,10 @@ protected:
     // ── Barra de herramientas (esquina inferior derecha, estilo hotbar) ──────
     // Contenedores en el WBP (HorizontalBox): C++ los llena con cuadritos.
     UPROPERTY(meta=(BindWidgetOptional)) class UPanelWidget* ToolsBox;   // 1/2/3/4: Add/Erase/Paint/Ojos
-    UPROPERTY(meta=(BindWidgetOptional)) class UPanelWidget* ShapesBox;  // TAB: formas (solo en Add/Paint)
+    // Con el radial, ShapesBox ya no lleva 4 formas ciclables: C++ le spawnea UNA celda-hint
+    // ("mantener TAB → formas"), igual que se llenan las otras barras. Dejá el HorizontalBox
+    // ShapesBox en el WBP tal cual; el C++ se encarga del contenido.
+    UPROPERTY(meta=(BindWidgetOptional)) class UPanelWidget* ShapesBox;
     UPROPERTY(meta=(BindWidgetOptional)) class UPanelWidget* HintsBox;   // atajos contextuales (Z/X, E...)
     // Cuadrito de "borrar todo" (BACKSPACE mantenido): contenedor propio porque, a diferencia de
     // los hints, NO se rearma por contexto — se construye una vez y se le actualiza el progreso.
@@ -107,6 +110,7 @@ protected:
     UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconCube      = nullptr;
     UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconCylinder  = nullptr;
     UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconCone      = nullptr;
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconShapesHint = nullptr; // "mantener TAB → formas"
     UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconAxisVert  = nullptr;
     UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconAxisHoriz = nullptr;
     UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconSaveColor = nullptr;
@@ -115,7 +119,8 @@ protected:
 
     // Cuadritos creados (para actualizar el equipado sin reconstruir).
     UPROPERTY() TArray<class UPTToolSlotWidget*> ToolSlots;   // orden: Add, Erase, Paint, Ojos
-    UPROPERTY() TArray<class UPTToolSlotWidget*> ShapeSlots;  // orden: Sphere, Cube, Cylinder, Cono
+    UPROPERTY() TArray<class UPTToolSlotWidget*> ShapeSlots;  // (viejo) 4 formas; vacío con el radial
+    UPROPERTY() class UPTToolSlotWidget* ShapeHintSlot = nullptr; // celda-hint "mantener TAB → formas"
     UPROPERTY() TArray<class UPTToolSlotWidget*> HintSlots;
     UPROPERTY() class UPTToolSlotWidget* ClearSlot = nullptr; // BACKSPACE (con círculo de progreso)
     FString CachedHintSig; // los atajos contextuales solo se rearman si cambia el contexto

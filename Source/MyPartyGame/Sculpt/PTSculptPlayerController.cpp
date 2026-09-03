@@ -14,6 +14,7 @@
 #include "GameFramework/PlayerState.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "../UI/PTColorPickerWidget.h"
+#include "PTShapeRadialWidget.h"
 #include "../Lobby/PTLobbyEscapeMenuWidget.h"
 #include "../Lobby/PTLobbyCharacter.h"
 #include "PTSculptPlane.h"
@@ -314,8 +315,10 @@ void APTSculptPlayerController::SetupInputComponent()
     InputComponent->BindKey(K(TEXT("ModePaint")), IE_Pressed, this, &APTSculptPlayerController::SetModePaint);
     InputComponent->BindKey(K(TEXT("ModeEyes")),  IE_Pressed, this, &APTSculptPlayerController::SetModeEyes);
 
-    // Formas: cicla Sphere→Cube→Cylinder→TriPrism
-    InputComponent->BindKey(K(TEXT("CycleShape")), IE_Pressed, this, &APTSculptPlayerController::CycleShapes);
+    // Formas: MANTENER abre el menú radial; soltar selecciona el slot bajo el cursor (arrastrando).
+    // Si no hay WBP radial asignado, el Pressed cae al comportamiento viejo (un toque cicla).
+    InputComponent->BindKey(K(TEXT("CycleShape")), IE_Pressed,  this, &APTSculptPlayerController::OnShapeRadialPressed);
+    InputComponent->BindKey(K(TEXT("CycleShape")), IE_Released, this, &APTSculptPlayerController::OnShapeRadialReleased);
 
     // Modo eje (dibujo recto sobre plano congelado): vertical / horizontal.
     // Ejes = HOLD: Pressed activa el plano, Released vuelve a Add.
@@ -427,12 +430,25 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         SetIgnoreMoveInput(bPhaseWantsUILock);
     }
 
+    // Radial de formas abierto: congelar cámara y movimiento (mismo lock por transición balanceado)
+    // así arrastrar el mouse elige el slot sin girar la cámara — el foco queda en el radial.
+    if (bShapeRadialActive != bShapeRadialInputLocked)
+    {
+        bShapeRadialInputLocked = bShapeRadialActive;
+        SetIgnoreLookInput(bShapeRadialActive);
+        SetIgnoreMoveInput(bShapeRadialActive);
+    }
+
     // (La lista de controles con H ahora vive en la UI del HUD: ver UPTGameplayHUDWidget::SetControlsVisible.)
 
     // Rueda de color abierta (mantener RMB): seguir el cursor para elegir matiz/saturación.
     if (bQuickColorActive)
         if (UPTColorPickerWidget* CP = Cast<UPTColorPickerWidget>(ColorPicker))
             CP->QuickPickTick();
+
+    // Menú radial de formas abierto (mantener la tecla de forma): seguir el cursor para resaltar el slot.
+    if (bShapeRadialActive && ShapeRadial)
+        ShapeRadial->UpdateSelection();
 
     // Agregar el mapping context de movimiento acá (no en BeginPlay): en PIE el
     // LocalPlayer/subsistema puede no estar listo en BeginPlay, y entonces nunca se
@@ -1283,6 +1299,52 @@ void APTSculptPlayerController::CycleShapes()
     }
     bPreviewDirty = true;
     UE_LOG(LogTemp, Log, TEXT("[Sculpt] Shape: %d"), (int32)StampShape);
+}
+
+void APTSculptPlayerController::OnShapeRadialPressed()
+{
+    if (bShapeRadialActive) return;
+
+    // Sin WBP radial asignado: mantener el comportamiento viejo (un toque cicla la forma).
+    if (!ShapeRadialClass)
+    {
+        CycleShapes();
+        return;
+    }
+
+    ShapeRadial = CreateWidget<UPTShapeRadialWidget>(this, ShapeRadialClass);
+    if (!ShapeRadial) { CycleShapes(); return; } // si falla, no dejar al jugador sin poder cambiar
+
+    ShapeRadial->AddToViewport(20);
+    SetInputMode(FInputModeGameAndUI());
+    bShowMouseCursor = true;
+
+    // Centrar el cursor: el radial se dibuja centrado y el arrastre define la dirección de elección.
+    int32 VX = 0, VY = 0;
+    GetViewportSize(VX, VY);
+    if (VX > 0 && VY > 0) SetMouseLocation(VX / 2, VY / 2);
+
+    bShapeRadialActive = true;
+}
+
+void APTSculptPlayerController::OnShapeRadialReleased()
+{
+    if (!bShapeRadialActive) return;
+    bShapeRadialActive = false;
+
+    if (ShapeRadial)
+    {
+        // Soltar sobre un slot → esa forma; soltar en el centro (zona muerta) → mantener la actual.
+        EPTStampShape Selected;
+        if (ShapeRadial->GetSelectedShape(Selected)) SetShape(Selected);
+
+        ShapeRadial->RemoveFromParent();
+        ShapeRadial = nullptr;
+    }
+
+    // Volver al modo de juego normal del esculpido (sin cursor), igual que la rueda de color.
+    SetInputMode(FInputModeGameOnly());
+    bShowMouseCursor = false;
 }
 
 void APTSculptPlayerController::SetMode(EPTEditMode M)

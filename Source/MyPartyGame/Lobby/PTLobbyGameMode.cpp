@@ -6,6 +6,7 @@
 #include "PTPlayerState.h"
 #include "PTGameState.h"
 #include "MultiplayerSessionsSubsystem.h"
+#include "../PTGameInstance.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 
@@ -39,6 +40,36 @@ void APTLobbyGameMode::BeginPlay()
             PTGS->MaxPlayers         = (M > 0) ? M : 10; // sin sesión (PIE/local) → mostrar /10 igual
         }
     }
+
+    // Volcar la config de partida por defecto ya al arrancar, así los clientes la ven aunque el
+    // host nunca abra el panel de ajustes.
+    SyncMatchSettingsToState();
+}
+
+void APTLobbyGameMode::SyncMatchSettingsToState()
+{
+    if (!HasAuthority()) return;
+    APTGameState* PTGS = GetGameState<APTGameState>();
+    if (!PTGS) return;
+
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
+    {
+        const FPTMatchSettings& S = GI->PendingMatchSettings;
+        PTGS->MatchTurnDuration   = S.TurnDuration;
+        PTGS->MatchNumRounds      = S.NumRounds;
+        PTGS->MatchRevealFraction = S.RevealFraction;
+        PTGS->MatchWordPackTitle  = GI->SelectedWordPackTitle;
+    }
+    if (UMultiplayerSessionsSubsystem* Sessions =
+            GetGameInstance() ? GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>() : nullptr)
+        PTGS->bMatchFriendsOnly = Sessions->IsSessionFriendsOnly();
+}
+
+void APTLobbyGameMode::SetHostSettingsPanelOpen(bool bOpen)
+{
+    if (!HasAuthority()) return;
+    if (APTGameState* PTGS = GetGameState<APTGameState>())
+        PTGS->bHostSettingsPanelOpen = bOpen;
 }
 
 void APTLobbyGameMode::PreLogin(const FString& Options, const FString& Address,

@@ -121,16 +121,15 @@ void UPTGameplayHUDWidget::BuildToolbar()
         ToolSlots.Add(MakeSlot(ToolsBox, IconEyes,  PTInput::GetKey(TEXT("ModeEyes")),  PTText::Get(TEXT("TOOL_EYES"))));
     }
 
-    // Formas: todas muestran la tecla de ciclar (TAB), y se resalta la equipada.
+    // Formas: con el radial, ShapesBox lleva UNA sola celda-hint ("mantener TAB → formas"), spawneada
+    // igual que las demás barras. La forma ya no se cicla acá: se elige en el menú radial.
     if (ShapesBox)
     {
         ShapesBox->ClearChildren();
-        ShapeSlots.Reset();
+        ShapeSlots.Reset(); // ya no hay 4 celdas por forma
         const FKey TabKey = PTInput::GetKey(TEXT("CycleShape"));
-        ShapeSlots.Add(MakeSlot(ShapesBox, IconSphere,   TabKey, PTText::Get(TEXT("SHAPE_SPHERE"))));
-        ShapeSlots.Add(MakeSlot(ShapesBox, IconCube,     TabKey, PTText::Get(TEXT("SHAPE_CUBE"))));
-        ShapeSlots.Add(MakeSlot(ShapesBox, IconCylinder, TabKey, PTText::Get(TEXT("SHAPE_CYLINDER"))));
-        ShapeSlots.Add(MakeSlot(ShapesBox, IconCone,     TabKey, PTText::Get(TEXT("SHAPE_CONE"))));
+        ShapeHintSlot = MakeSlot(ShapesBox, IconShapesHint ? IconShapesHint : IconSphere,
+                                 TabKey, PTText::Get(TEXT("SHAPE_HINT")));
     }
 
     // Borrar todo (BACKSPACE mantenido): cuadrito fijo con círculo de progreso + contador.
@@ -180,15 +179,11 @@ void UPTGameplayHUDWidget::RefreshToolbar()
         if (ToolSlots[i]) ToolSlots[i]->SetSelected(i == ToolIdx);
 
     // ── Formas: Agregar, Borrar y Pintar usan la forma elegida (Ojos siempre es esfera) ──
+    // ShapesBox ahora contiene la celda-hint (mantener TAB → radial): visible solo con herramientas
+    // que usan formas. No hay "forma equipada" que resaltar (se elige en el radial).
     const bool bShowShapes = PC->ToolUsesShapes();
     if (ShapesBox) ShapesBox->SetVisibility(bShowShapes ? ESlateVisibility::HitTestInvisible
                                                         : ESlateVisibility::Collapsed);
-    if (bShowShapes)
-    {
-        const int32 ShapeIdx = (int32)PC->StampShape; // Sphere, Cube, Cylinder, TriPrism
-        for (int32 i = 0; i < ShapeSlots.Num(); ++i)
-            if (ShapeSlots[i]) ShapeSlots[i]->SetSelected(i == ShapeIdx);
-    }
 
     // ── Atajos contextuales: cambian según lo que tengas equipado ──
     if (!HintsBox || !ToolSlotClass) return;
@@ -875,8 +870,9 @@ void UPTGameplayHUDWidget::RebuildScoreboard()
     // flash "+N" para que el marcador se rearme cuando aparece Y cuando se vence (y así ocultarlo).
     FString Sig;
     for (APTPlayerState* PT : Players)
-        Sig += FString::Printf(TEXT("%s:%d:%d:%d|"), *NameFor(PT),
-                               PT->GameScore, PT == G->CurrentSculptor ? 1 : 0, IsFlashing(PT) ? 1 : 0);
+        Sig += FString::Printf(TEXT("%s:%d:%d:%d:%d|"), *NameFor(PT),
+                               PT->GameScore, PT == G->CurrentSculptor ? 1 : 0, IsFlashing(PT) ? 1 : 0,
+                               PT->bHasGuessedThisTurn ? 1 : 0);
     if (Sig == CachedScoreSig) return;
     CachedScoreSig = Sig;
 
@@ -885,7 +881,9 @@ void UPTGameplayHUDWidget::RebuildScoreboard()
     {
         UPTScoreRowWidget* Row = CreateWidget<UPTScoreRowWidget>(GetOwningPlayer(), ScoreRowClass);
         if (!Row) continue;
-        Row->SetRow(NameFor(PT), PT->GameScore, PT == G->CurrentSculptor);
+        // El nombre se tiñe de verde si ya adivinó (nunca el escultor, que no adivina).
+        Row->SetRow(NameFor(PT), PT->GameScore, PT == G->CurrentSculptor,
+                    PT != G->CurrentSculptor && PT->bHasGuessedThisTurn);
         // "+N" al lado del nombre + conteo animado del puntaje si este jugador acaba de adivinar.
         if (IsFlashing(PT))
         {

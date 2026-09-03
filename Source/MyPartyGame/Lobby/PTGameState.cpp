@@ -11,4 +11,10 @@ void APTGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
     DOREPLIFETIME(APTGameState, SessionCode);
     DOREPLIFETIME(APTGameState, MaxPlayers);
     DOREPLIFETIME(APTGameState, CountdownSecondsRemaining);
+    DOREPLIFETIME(APTGameState, MatchTurnDuration);
+    DOREPLIFETIME(APTGameState, MatchNumRounds);
+    DOREPLIFETIME(APTGameState, MatchRevealFraction);
+    DOREPLIFETIME(APTGameState, bMatchFriendsOnly);
+    DOREPLIFETIME(APTGameState, MatchWordPackTitle);
+    DOREPLIFETIME(APTGameState, bHostSettingsPanelOpen);
 }

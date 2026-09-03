@@ -214,6 +214,9 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
     if (GameSettingsButton)
         GameSettingsButton->SetVisibility(bLocalIsHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 
+    // Vista read-only de la config elegida por el host (la ven todos).
+    RefreshSettingsView();
+
     // Botón Ready: refleja el estado propio. No listo → "Not Ready" en rojo pastel; listo →
     // "Ready" en verde pastel. Clickearlo alterna (ver OnReadyClicked). SetBackgroundColor tiñe
     // el brush del botón, así que conviene que en el WBP el botón tenga brushes blancos.
@@ -235,6 +238,51 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
         const PTNetStats::FLine NS = PTNetStats::Build(GetOwningPlayer());
         if (!NS.Text.IsEmpty())
             GEngine->AddOnScreenDebugMessage(987710, 1.5f, NS.Color, NS.Text);
+    }
+}
+
+void UPTLobbyHUDWidget::RefreshSettingsView()
+{
+    const APTGameState* PTGS = GetWorld() ? GetWorld()->GetGameState<APTGameState>() : nullptr;
+    if (!PTGS) return;
+
+    // El panel de los clientes solo se ve mientras el host tiene su Game Settings abierto (y este
+    // jugador no es el host, que ya tiene su propio panel editable).
+    const APTPlayerState* LocalPS = GetOwningPlayer() ? GetOwningPlayer()->GetPlayerState<APTPlayerState>() : nullptr;
+    const bool bLocalIsHost = LocalPS && LocalPS->bIsHost;
+    const bool bShowClientPanel = PTGS->bHostSettingsPanelOpen && !bLocalIsHost;
+    if (GameSettingsClientsPanel)
+        GameSettingsClientsPanel->SetVisibility(bShowClientPanel ? ESlateVisibility::Visible
+                                                                  : ESlateVisibility::Collapsed);
+    if (!bShowClientPanel) return; // nada que rellenar si está oculto
+
+    if (SV_PrivateText)
+    {
+        const FText YesNo = PTText::Get(PTGS->bMatchFriendsOnly ? TEXT("SV_YES") : TEXT("SV_NO"));
+        FFormatOrderedArguments Args; Args.Add(YesNo);
+        SV_PrivateText->SetText(PTText::Format(TEXT("SV_PRIVATE"), Args));
+    }
+    if (SV_TurnTimeText)
+    {
+        FFormatOrderedArguments Args; Args.Add(FText::AsNumber(FMath::RoundToInt(PTGS->MatchTurnDuration)));
+        SV_TurnTimeText->SetText(PTText::Format(TEXT("SV_TURNTIME"), Args));
+    }
+    if (SV_RoundsText)
+    {
+        FFormatOrderedArguments Args; Args.Add(FText::AsNumber(PTGS->MatchNumRounds));
+        SV_RoundsText->SetText(PTText::Format(TEXT("SV_ROUNDS"), Args));
+    }
+    if (SV_RevealText)
+    {
+        FFormatOrderedArguments Args; Args.Add(FText::AsNumber(FMath::RoundToInt(PTGS->MatchRevealFraction * 100.f)));
+        SV_RevealText->SetText(PTText::Format(TEXT("SV_REVEAL"), Args));
+    }
+    if (SV_WordPackText)
+    {
+        const FText Pack = PTGS->MatchWordPackTitle.IsEmpty()
+            ? PTText::Get(TEXT("GS_DEFAULT")) : FText::FromString(PTGS->MatchWordPackTitle);
+        FFormatOrderedArguments Args; Args.Add(Pack);
+        SV_WordPackText->SetText(PTText::Format(TEXT("SV_LIBRARY"), Args));
     }
 }
 
