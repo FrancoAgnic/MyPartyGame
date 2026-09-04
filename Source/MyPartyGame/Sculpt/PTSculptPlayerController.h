@@ -3,6 +3,7 @@
 #include "GameFramework/PlayerController.h"
 #include "ProceduralMeshComponent.h"
 #include "PTSculptVolume.h"
+#include "../UI/PTEyedropperSource.h"
 #include "PTSculptPlayerController.generated.h"
 
 class UInputMappingContext;
@@ -14,11 +15,14 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FPTOnWordChoices, const TArray<FStri
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FPTOnSecretWord,  const FString&,         Word);
 
 UCLASS()
-class MYPARTYGAME_API APTSculptPlayerController : public APlayerController
+class MYPARTYGAME_API APTSculptPlayerController : public APlayerController, public IPTEyedropperSource
 {
     GENERATED_BODY()
 public:
     APTSculptPlayerController();
+
+    /** Gotero: color pintado exacto bajo el cursor (raymarch + atlas). Ver IPTEyedropperSource. */
+    virtual bool EyedropColorUnderCursor(FLinearColor& OutColor) const override;
 
     // Sonidos de esculpido (loops de herramienta + one-shots). Los assets viven en el GameInstance.
     UPROPERTY(VisibleAnywhere, Category="Sculpt|Sound") class UPTSculptSoundComponent* SculptSounds = nullptr;

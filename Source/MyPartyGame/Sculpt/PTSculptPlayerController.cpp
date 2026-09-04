@@ -811,6 +811,61 @@ bool APTSculptPlayerController::GetCameraRay(FVector& Start, FVector& Dir) const
     return DeprojectScreenPositionToWorld(W * 0.5f, H * 0.5f, Start, Dir);
 }
 
+bool APTSculptPlayerController::EyedropColorUnderCursor(FLinearColor& OutColor) const
+{
+    if (!Volume) return false;
+
+    // Rayo por el CURSOR (mientras el picker está abierto el cursor es libre; no vale el centro).
+    FVector Start, Dir;
+    float MX = 0.f, MY = 0.f;
+    if (!(const_cast<APTSculptPlayerController*>(this)->GetMousePosition(MX, MY)
+          && const_cast<APTSculptPlayerController*>(this)->DeprojectScreenPositionToWorld(MX, MY, Start, Dir)))
+    {
+        if (!GetCameraRay(Start, Dir)) return false;
+    }
+
+    // Raymarch a la superficie de la arcilla (mismo enfoque que GetStampPoint) y leer el color del atlas.
+    static constexpr float StepSize = 8.f;
+    static constexpr int32 MaxSteps = 700;
+    float prevD = Volume->SampleWorldDensity(Start);
+    for (int32 i = 1; i <= MaxSteps; ++i)
+    {
+        const FVector P = Start + Dir * (StepSize * i);
+        const float   d = Volume->SampleWorldDensity(P);
+        if (prevD <= 0.f && d > 0.f)
+        {
+            FVector lo = P - Dir * StepSize, hi = P;
+            for (int32 j = 0; j < 6; ++j)
+            {
+                const FVector mid = (lo + hi) * 0.5f;
+                (Volume->SampleWorldDensity(mid) > 0.f ? hi : lo) = mid;
+            }
+            const FVector Surf = (lo + hi) * 0.5f;
+            const float CV = FMath::Max(4.f, Volume->VoxelSize);
+
+            // 1) PAINT (atlas): la textura es sRGB → el material la DECODIFICA al renderizar, así que
+            //    lo que se ve = FromSRGBColor(bytes). La pintura es una cáscara fina, así que probamos
+            //    varios offsets a lo largo del rayo (afuera/adentro) para no perder el trazo.
+            bool bPainted = false; FLinearColor RawPaint;
+            for (float Off : { 0.f, -CV, CV, -2.f * CV, 2.f * CV, -3.f * CV, 3.f * CV })
+            {
+                RawPaint = Volume->SampleWorldPaintColor(Surf + Dir * Off, bPainted);
+                if (bPainted) break;
+            }
+            if (bPainted) { OutColor = FLinearColor::FromSRGBColor(RawPaint.ToFColor(false)); OutColor.A = 1.f; return true; }
+
+            // 2) Sin Paint → COLOR BASE del campo (Add+color). La arcilla lo renderiza con los bytes
+            //    reinterpretados como lineales (SIN decodificar) → devolvemos el color CRUDO tal cual
+            //    (decodificarlo lo oscurecería). Se muestrea un poco ADENTRO para caer en arcilla sólida.
+            FLinearColor Base = Volume->SampleWorldColor(Surf + Dir * CV);
+            Base.A = 1.f; OutColor = Base;
+            return true;
+        }
+        prevD = d;
+    }
+    return false;
+}
+
 FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
 {
     FVector Start, Dir;

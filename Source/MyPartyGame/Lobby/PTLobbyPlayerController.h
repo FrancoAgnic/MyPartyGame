@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "../Sculpt/PTSculptVolume.h" // EPTEditMode / EPTStampShape para el modo esculpir-cabeza
+#include "../UI/PTEyedropperSource.h"
 #include "PTLobbyPlayerController.generated.h"
 
 class UInputMappingContext;
@@ -24,11 +25,14 @@ class UAnimationAsset;
 struct FInputActionValue;
 
 UCLASS()
-class MYPARTYGAME_API APTLobbyPlayerController : public APlayerController
+class MYPARTYGAME_API APTLobbyPlayerController : public APlayerController, public IPTEyedropperSource
 {
     GENERATED_BODY()
 
 public:
+    /** Gotero: color pintado exacto bajo el cursor (raymarch + atlas de la cabeza). Ver IPTEyedropperSource. */
+    virtual bool EyedropColorUnderCursor(FLinearColor& OutColor) const override;
+
     /**
      * Hook de arranque del template: solo flippea APTGameState::LobbyState a Starting si quien
      * llama es el host. El template no decide qué pasa después de eso — eso es trabajo de cada

@@ -177,6 +177,54 @@ void APTLobbyPlayerController::Server_SetSpectator_Implementation(bool bInSpecta
         PS->bIsDevSpectator = bInSpectator;
 }
 
+bool APTLobbyPlayerController::EyedropColorUnderCursor(FLinearColor& OutColor) const
+{
+    if (!HeadVolume) return false;
+
+    // Rayo por el CURSOR (con el picker abierto el cursor es libre).
+    FVector Start, Dir;
+    float MX = 0.f, MY = 0.f;
+    APTLobbyPlayerController* Self = const_cast<APTLobbyPlayerController*>(this);
+    if (!(Self->GetMousePosition(MX, MY) && Self->DeprojectScreenPositionToWorld(MX, MY, Start, Dir)))
+        return false;
+
+    // Raymarch a la superficie de la cabeza y leer el color exacto del atlas de pintura.
+    static constexpr float StepSize = 4.f; // la cabeza es chica: pasos más finos
+    static constexpr int32 MaxSteps = 800;
+    float prevD = HeadVolume->SampleWorldDensity(Start);
+    for (int32 i = 1; i <= MaxSteps; ++i)
+    {
+        const FVector P = Start + Dir * (StepSize * i);
+        const float   d = HeadVolume->SampleWorldDensity(P);
+        if (prevD <= 0.f && d > 0.f)
+        {
+            FVector lo = P - Dir * StepSize, hi = P;
+            for (int32 j = 0; j < 6; ++j)
+            {
+                const FVector mid = (lo + hi) * 0.5f;
+                (HeadVolume->SampleWorldDensity(mid) > 0.f ? hi : lo) = mid;
+            }
+            // Ver la nota en APTSculptPlayerController::EyedropColorUnderCursor: Paint (atlas sRGB) se
+            // decodifica; el campo base (Add) se devuelve crudo (así matchea la arcilla que se ve).
+            const FVector Surf = (lo + hi) * 0.5f;
+            const float CV = FMath::Max(2.f, HeadVolume->VoxelSize);
+            bool bPainted = false; FLinearColor RawPaint;
+            for (float Off : { 0.f, -CV, CV, -2.f * CV, 2.f * CV, -3.f * CV, 3.f * CV })
+            {
+                RawPaint = HeadVolume->SampleWorldPaintColor(Surf + Dir * Off, bPainted);
+                if (bPainted) break;
+            }
+            if (bPainted) { OutColor = FLinearColor::FromSRGBColor(RawPaint.ToFColor(false)); OutColor.A = 1.f; return true; }
+
+            FLinearColor Base = HeadVolume->SampleWorldColor(Surf + Dir * CV);
+            Base.A = 1.f; OutColor = Base;
+            return true;
+        }
+        prevD = d;
+    }
+    return false;
+}
+
 void APTLobbyPlayerController::PTSpecSpeed(float N)
 {
     if (Spectator) Spectator->SetSpeedScale(N);

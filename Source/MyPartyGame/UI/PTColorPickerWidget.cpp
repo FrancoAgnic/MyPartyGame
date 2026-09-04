@@ -9,10 +9,16 @@
 #include "Misc/ConfigCacheIni.h"
 #include "Framework/Application/SlateApplication.h"
 #include "../Sculpt/PTSculptPlayerController.h"
+#include "PTEyedropperSource.h"
 #include "../PTGameInstance.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
 #include "Engine/World.h"
+#include "Engine/GameViewportClient.h"
+#include "UnrealClient.h" // FViewport::ReadPixels (gotero)
+#include "GameFramework/PlayerController.h"
+#include "Components/CanvasPanelSlot.h" // posicionar el cursor custom
+#include "Engine/Texture2D.h"
 
 void UPTColorPickerWidget::NativeConstruct()
 {
@@ -39,6 +45,18 @@ void UPTColorPickerWidget::NativeConstruct()
         SetColor(PC->CurrentPaintColor);
     else
         RefreshUI();
+
+    // El cursor custom arranca oculto (se muestra/posiciona en el primer QuickPickTick).
+    if (CursorIcon) CursorIcon->SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UPTColorPickerWidget::NativeDestruct()
+{
+    // Restaurar el cursor de hardware que ocultamos (forma None) mientras el picker estaba abierto.
+    SetCursor(EMouseCursor::Default);
+    if (APlayerController* PC = GetOwningPlayer())
+        PC->CurrentMouseCursor = PC->DefaultMouseCursor;
+    Super::NativeDestruct();
 }
 
 // ─── Paleta persistente ───────────────────────────────────────────────────────
@@ -137,6 +155,49 @@ void UPTColorPickerWidget::QuickPickTick()
     if (!FSlateApplication::IsInitialized()) return;
     const FVector2D CursorPos = FSlateApplication::Get().GetCursorPos();
 
+    // Cursor custom (picker adentro / gotero afuera). Se calcula una vez el "adentro/afuera".
+    const bool bOverPicker = IsCursorOverPicker(CursorPos);
+    UpdateCustomCursor(CursorPos, bOverPicker);
+
+    // ── GOTERO: si el cursor salió del widget del picker, muestrear el color de la pantalla ──
+    // (para recuperar un color exacto de algo ya pintado en la escena). Se throttlea el ReadPixels
+    // porque fuerza un flush de GPU; con ~20 Hz alcanza para que se sienta en vivo sin trabar.
+    if (!bOverPicker)
+    {
+        if (SwatchRing) SwatchRing->SetHovered(-1); // no resaltar swatches mientras usás el gotero
+
+        // 1) EXACTO: si el cursor apunta a arcilla PINTADA, tomar el color original del atlas (sin luz
+        //    ni tonemapping). Es CPU puro (raymarch) → se puede cada frame, da el color idéntico.
+        FLinearColor Exact;
+        if (IPTEyedropperSource* Src = Cast<IPTEyedropperSource>(GetOwningPlayer()))
+        {
+            if (Src->EyedropColorUnderCursor(Exact))
+            {
+                EditingSeg = -1; bSwatchEdited = false;
+                SetColor(Exact);
+                PushLiveColorToPC();
+                return;
+            }
+        }
+
+        // 2) FALLBACK: si no apunta a pintura (fondo, arcilla sin pintar, cuerpo), muestrear la pantalla
+        //    (aproximado). Throttleado porque ReadPixels fuerza flush de GPU.
+        const UWorld* W = GetWorld();
+        const float Now = W ? W->GetRealTimeSeconds() : 0.f;
+        if (Now - LastEyedropTime >= 0.05f)
+        {
+            LastEyedropTime = Now;
+            FLinearColor Sampled;
+            if (SampleScreenColorAtCursor(Sampled))
+            {
+                EditingSeg = -1; bSwatchEdited = false;
+                SetColor(Sampled);
+            }
+        }
+        PushLiveColorToPC(); // aplicar el color muestreado a la brocha en vivo
+        return;
+    }
+
     // Si el cursor está sobre un segmento del anillo: resaltarlo y mostrar ESE color
     // guardado en la brocha. Si no, muestrear la rueda (color más cercano).
     const int32 Seg = SwatchRing ? SwatchRing->SegmentAt(CursorPos) : -1;
@@ -215,6 +276,91 @@ void UPTColorPickerWidget::PushLiveColorToPC()
     // el cambio de modo Erase→Paint recién ocurre al soltar, en OnColorConfirmed).
     if (APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(GetOwningPlayer()))
         PC->CurrentPaintColor = CurrentColor;
+}
+
+bool UPTColorPickerWidget::IsCursorOverPicker(FVector2D CursorAbs) const
+{
+    // Si hay un Border de fondo que contiene todo el picker, estar sobre él = "adentro" (así el gotero
+    // NO se activa a través del fondo del panel). Es la definición preferida del "panel".
+    if (Border && Border->GetCachedGeometry().IsUnderLocation(CursorAbs)) return true;
+
+    // Fallback (sin Border asignado): sobre cualquiera de los elementos interactivos. No uso la
+    // geometría del widget raíz porque suele ser full-screen y nunca daría "afuera".
+    if (Wheel       && Wheel->GetCachedGeometry().IsUnderLocation(CursorAbs))       return true;
+    if (SwatchRing  && SwatchRing->GetCachedGeometry().IsUnderLocation(CursorAbs))  return true;
+    if (ValueSlider && ValueSlider->GetCachedGeometry().IsUnderLocation(CursorAbs)) return true;
+    if (PreviewSwatch && PreviewSwatch->GetCachedGeometry().IsUnderLocation(CursorAbs)) return true;
+    return false;
+}
+
+void UPTColorPickerWidget::UpdateCustomCursor(FVector2D CursorAbs, bool bOverPicker)
+{
+    if (!CursorIcon) return;
+    APlayerController* PC = GetOwningPlayer();
+
+    // Textura según dentro (picker) / fuera (gotero).
+    UTexture2D* Tex = bOverPicker ? PickerCursorTexture : EyedropperCursorTexture;
+    if (!Tex)
+    {
+        // Sin textura para este estado → cursor de hardware normal y ocultar el custom.
+        CursorIcon->SetVisibility(ESlateVisibility::Collapsed);
+        SetCursor(EMouseCursor::Default);
+        if (PC) PC->CurrentMouseCursor = EMouseCursor::Default;
+        return;
+    }
+
+    // Ocultar el cursor de HARDWARE sin parpadeo: en vez de togglear bShowMouseCursor (que pelea con
+    // el HUD y hace parpadear el cursor de Windows sobre los widgets), forzamos la FORMA del cursor a
+    // None — tanto sobre los widgets del picker (SetCursor) como en las áreas vacías del viewport
+    // (CurrentMouseCursor). Así el único cursor visible es nuestra textura.
+    SetCursor(EMouseCursor::None);
+    if (PC) PC->CurrentMouseCursor = EMouseCursor::None;
+
+    CursorIcon->SetBrushFromTexture(Tex, false);
+    CursorIcon->SetDesiredSizeOverride(CursorIconSize);
+    // AMBOS cursores (picker y gotero) se tiñen con el color que estás seleccionando.
+    CursorIcon->SetColorAndOpacity(CurrentColor);
+    CursorIcon->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+    // Posicionar el icono en el mouse (menos el hotspot) dentro del canvas del widget.
+    const FVector2D Local   = GetCachedGeometry().AbsoluteToLocal(CursorAbs);
+    const FVector2D Hotspot = bOverPicker ? PickerCursorHotspot : EyedropperCursorHotspot;
+    if (UCanvasPanelSlot* CSlot = Cast<UCanvasPanelSlot>(CursorIcon->Slot))
+    {
+        CSlot->SetSize(CursorIconSize);
+        CSlot->SetPosition(Local - Hotspot);
+    }
+}
+
+bool UPTColorPickerWidget::SampleScreenColorAtCursor(FLinearColor& OutColor) const
+{
+    APlayerController* PC = GetOwningPlayer();
+    UWorld* W = GetWorld();
+    if (!PC || !W) return false;
+    UGameViewportClient* GVC = W->GetGameViewport();
+    if (!GVC || !GVC->Viewport) return false;
+    FViewport* VP = GVC->Viewport;
+
+    float MX = 0.f, MY = 0.f;
+    if (!PC->GetMousePosition(MX, MY)) return false; // posición del mouse en coords del viewport (lógicas)
+
+    int32 LVX = 0, LVY = 0;
+    PC->GetViewportSize(LVX, LVY);
+    const FIntPoint BB = VP->GetSizeXY(); // tamaño real del backbuffer (puede diferir por DPI/resolución)
+    if (LVX <= 0 || LVY <= 0 || BB.X <= 0 || BB.Y <= 0) return false;
+
+    // Mapear coords lógicas → pixel del backbuffer.
+    const int32 X = FMath::Clamp(FMath::RoundToInt(MX * (float)BB.X / (float)LVX), 0, BB.X - 1);
+    const int32 Y = FMath::Clamp(FMath::RoundToInt(MY * (float)BB.Y / (float)LVY), 0, BB.Y - 1);
+
+    TArray<FColor> Pixels;
+    if (!VP->ReadPixels(Pixels, FReadSurfaceDataFlags(), FIntRect(X, Y, X + 1, Y + 1))) return false;
+    if (Pixels.Num() == 0) return false;
+
+    // El backbuffer está en sRGB: convertir a lineal para que matchee el pipeline de pintura.
+    OutColor = FLinearColor::FromSRGBColor(Pixels[0]);
+    OutColor.A = 1.f;
+    return true;
 }
 
 void UPTColorPickerWidget::SetColor(FLinearColor NewColor)
