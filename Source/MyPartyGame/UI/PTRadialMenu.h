@@ -53,6 +53,40 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Radial|Layout")
     bool bClockwise = true;
 
+    // ── Porciones tipo "pizza" (fondo de cada slot) ───────────────────────────
+    // Cada slot es una porción (sector anular) con el centro hueco (para ver el preview de la
+    // herramienta). Se dibujan DETRÁS de los iconos, con degradado del centro hacia afuera.
+    /** Dibujar las porciones de fondo. Si es false, solo se ven los iconos (comportamiento viejo). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Radial|Slices")
+    bool bDrawSlices = true;
+    /** Radio INTERIOR de las porciones (el hueco central donde se ve el preview). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Radial|Slices")
+    float SliceInnerRadius = 70.f;
+    /** Radio EXTERIOR de las porciones (borde de afuera de la pizza). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Radial|Slices")
+    float SliceOuterRadius = 240.f;
+    /** Separación entre porciones, en grados (el "corte" de la pizza). 0 = pegadas. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Radial|Slices")
+    float SliceGapDegrees = 4.f;
+    /** Color de la porción en el CENTRO (inicio del degradado). El alpha controla la transparencia. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Radial|Slices")
+    FLinearColor SliceColorInner = FLinearColor(0.05f, 0.05f, 0.08f, 0.55f);
+    /** Color de la porción AFUERA (fin del degradado). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Radial|Slices")
+    FLinearColor SliceColorOuter = FLinearColor(0.15f, 0.15f, 0.22f, 0.85f);
+    /** Color central de la porción cuando está resaltada (hover). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Radial|Slices")
+    FLinearColor SliceHoverColorInner = FLinearColor(0.20f, 0.35f, 0.55f, 0.70f);
+    /** Color externo de la porción cuando está resaltada (hover). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Radial|Slices")
+    FLinearColor SliceHoverColorOuter = FLinearColor(0.35f, 0.55f, 0.85f, 0.95f);
+    /** Color del contorno (outline) que aparece en la porción bajo el cursor. Alpha 0 lo apaga. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Radial|Slices")
+    FLinearColor OutlineColor = FLinearColor(1.f, 0.9f, 0.3f, 1.f);
+    /** Grosor del contorno de hover (px). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Radial|Slices")
+    float OutlineThickness = 2.5f;
+
     // ── Selección / resaltado ─────────────────────────────────────────────────
     /** Radio muerto central (px): dentro de él, HitTest devuelve -1 (ningún slot). */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Radial|Selection")

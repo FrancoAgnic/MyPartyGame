@@ -447,8 +447,21 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
             CP->QuickPickTick();
 
     // Menú radial de formas abierto (mantener la tecla de forma): seguir el cursor para resaltar el slot.
+    // Además, aplicar la forma resaltada EN VIVO para que el preview de la herramienta cambie mientras
+    // hacés hover sobre cada slot (sin esperar a soltar). En la zona muerta se vuelve a la forma previa.
     if (bShapeRadialActive && ShapeRadial)
+    {
         ShapeRadial->UpdateSelection();
+        EPTStampShape HoverShape;
+        if (ShapeRadial->GetSelectedShape(HoverShape))
+        {
+            if (StampShape != HoverShape) SetShape(HoverShape);
+        }
+        else if (StampShape != ShapeBeforeRadial)
+        {
+            SetShape(ShapeBeforeRadial); // cursor en el centro → preview vuelve a la forma actual
+        }
+    }
 
     // Agregar el mapping context de movimiento acá (no en BeginPlay): en PIE el
     // LocalPlayer/subsistema puede no estar listo en BeginPlay, y entonces nunca se
@@ -1305,6 +1318,10 @@ void APTSculptPlayerController::OnShapeRadialPressed()
 {
     if (bShapeRadialActive) return;
 
+    // El radial de formas SOLO tiene sentido con herramientas que usan formas (Agregar/Borrar/Pintar).
+    // Con Ojos (u otra tool sin formas) la tecla no hace nada.
+    if (!ToolUsesShapes()) return;
+
     // Sin WBP radial asignado: mantener el comportamiento viejo (un toque cicla la forma).
     if (!ShapeRadialClass)
     {
@@ -1314,6 +1331,9 @@ void APTSculptPlayerController::OnShapeRadialPressed()
 
     ShapeRadial = CreateWidget<UPTShapeRadialWidget>(this, ShapeRadialClass);
     if (!ShapeRadial) { CycleShapes(); return; } // si falla, no dejar al jugador sin poder cambiar
+
+    // Recordar la forma actual: el hover la cambia en vivo y si soltás en el centro se restaura.
+    ShapeBeforeRadial = StampShape;
 
     ShapeRadial->AddToViewport(20);
     SetInputMode(FInputModeGameAndUI());
@@ -1334,9 +1354,11 @@ void APTSculptPlayerController::OnShapeRadialReleased()
 
     if (ShapeRadial)
     {
-        // Soltar sobre un slot → esa forma; soltar en el centro (zona muerta) → mantener la actual.
+        // Soltar sobre un slot → esa forma; soltar en el centro (zona muerta) → volver a la de antes
+        // (el hover la había cambiado en vivo).
         EPTStampShape Selected;
         if (ShapeRadial->GetSelectedShape(Selected)) SetShape(Selected);
+        else                                         SetShape(ShapeBeforeRadial);
 
         ShapeRadial->RemoveFromParent();
         ShapeRadial = nullptr;
