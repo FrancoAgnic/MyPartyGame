@@ -155,7 +155,24 @@ void UPTGameInstance::SelectDefaultWordBank()
     OnSelectedWordPackChanged.Broadcast();
 }
 
-void UPTGameInstance::PublishWordPackFromDialog()
+// "titulos_peliculas" / "titulos-peliculas" → "Titulos Peliculas" (fallback de título si no lo escriben).
+static FString PT_PrettifyTitle(const FString& In)
+{
+    FString S = In;
+    S.ReplaceInline(TEXT("_"), TEXT(" "));
+    S.ReplaceInline(TEXT("-"), TEXT(" "));
+    S.TrimStartAndEndInline();
+    // Capitalizar la primera letra de cada palabra.
+    bool bStart = true;
+    for (int32 i = 0; i < S.Len(); ++i)
+    {
+        if (FChar::IsWhitespace(S[i])) { bStart = true; continue; }
+        if (bStart) { S[i] = FChar::ToUpper(S[i]); bStart = false; }
+    }
+    return S;
+}
+
+void UPTGameInstance::PublishWordPackFromDialog(const FString& InTitle, const FString& InDescription)
 {
     IDesktopPlatform* DP = FDesktopPlatformModule::Get();
     if (!DP) return;
@@ -163,18 +180,38 @@ void UPTGameInstance::PublishWordPackFromDialog()
     const void* ParentHandle = FSlateApplication::IsInitialized()
         ? FSlateApplication::Get().FindBestParentWindowHandleForDialogs(nullptr) : nullptr;
 
+    // 1) Elegir el CSV del banco.
     TArray<FString> Files;
     const bool bPicked = DP->OpenFileDialog(
         ParentHandle, TEXT("Elegir CSV para publicar al Workshop"), FPaths::ProjectDir(), TEXT(""),
         TEXT("CSV (*.csv)|*.csv|Texto (*.txt)|*.txt|Todos (*.*)|*.*"),
         EFileDialogFlags::None, Files);
-
     if (!bPicked || Files.Num() == 0) return;
+    const FString Path = Files[0];
 
-    const FString Path  = Files[0];
-    const FString Title = FPaths::GetBaseFilename(Path); // nombre del archivo como título inicial
+    // 2) Título: el que escribió el jugador; si vino vacío, el nombre del archivo prettificado.
+    FString Title = InTitle;
+    Title.TrimStartAndEndInline();
+    if (Title.IsEmpty()) Title = PT_PrettifyTitle(FPaths::GetBaseFilename(Path));
+
+    // 3) Imagen (foto grande + miniatura): segundo diálogo, OPCIONAL. Si se cancela, PublishWordPack
+    //    usa una imagen por defecto (branded si existe, o de relleno). La foto elegida se achica y
+    //    re-encoda adentro de PublishWordPack para cumplir el límite de <1MB de Steam.
+    FString PreviewPath;
+    {
+        TArray<FString> ImgFiles;
+        const bool bImg = DP->OpenFileDialog(
+            ParentHandle, TEXT("Elegir imagen del banco (opcional — Cancelar usa una por defecto)"),
+            FPaths::ProjectDir(), TEXT(""),
+            TEXT("Imágenes (*.png;*.jpg;*.jpeg)|*.png;*.jpg;*.jpeg|Todos (*.*)|*.*"),
+            EFileDialogFlags::None, ImgFiles);
+        if (bImg && ImgFiles.Num() > 0) PreviewPath = ImgFiles[0];
+    }
+
+    FString Desc = InDescription;
+    Desc.TrimStartAndEndInline();
     if (UPTWordPackSubsystem* WP = GetSubsystem<UPTWordPackSubsystem>())
-        WP->PublishWordPack(Path, Title, FString(), FString());
+        WP->PublishWordPack(Path, Title, Desc, PreviewPath);
 }
 
 void UPTGameInstance::ApplyUIButtonSounds(UUserWidget* Root) const

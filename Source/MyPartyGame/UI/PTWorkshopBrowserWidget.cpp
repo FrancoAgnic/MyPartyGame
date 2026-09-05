@@ -200,9 +200,12 @@ void UPTWorkshopBrowserWidget::OnGuideClicked()
 void UPTWorkshopBrowserWidget::OnUploadCsvClicked()
 {
     if (PublishPopup) PublishPopup->SetVisibility(ESlateVisibility::Collapsed);
-    // Elegir un .csv y subirlo al Workshop como banco de palabras (el resultado llega por OnPublished).
+    // Título + descripción que escribió el jugador en el popup (si los campos existen). Vacío → el
+    // GameInstance cae al nombre del CSV prettificado. Después abre los diálogos de CSV e imagen.
+    const FString Title = PublishTitleBox ? PublishTitleBox->GetText().ToString() : FString();
+    const FString Desc  = PublishDescBox  ? PublishDescBox->GetText().ToString()  : FString();
     if (UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance()))
-        GI->PublishWordPackFromDialog();
+        GI->PublishWordPackFromDialog(Title, Desc);
 }
 
 void UPTWorkshopBrowserWidget::OnPublished(bool bOk, const FString& Info)

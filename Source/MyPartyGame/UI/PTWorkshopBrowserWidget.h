@@ -53,6 +53,10 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UButton*          PublishButton;
     // Popup (Border/Overlay) que agrupa Upload/Template. Arranca oculto; lo abre PublishButton.
     UPROPERTY(meta = (BindWidgetOptional)) UWidget*          PublishPopup;
+    // Dentro del popup: campos para el TÍTULO (obligatorio-ish) y la DESCRIPCIÓN (opcional) del banco.
+    // Si faltan o van vacíos, el título cae al nombre del CSV prettificado. Nombrarlos así en el WBP.
+    UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* PublishTitleBox;
+    UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* PublishDescBox;
     // Dentro del popup: subir tu .csv al Workshop (resultado en StatusText).
     UPROPERTY(meta = (BindWidgetOptional)) UButton*          UploadCsvButton;
     // Abre la guía (página web) de cómo crear/subir el CSV, en el navegador.

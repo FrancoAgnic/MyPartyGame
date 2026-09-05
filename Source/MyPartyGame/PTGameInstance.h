@@ -78,9 +78,11 @@ public:
     UFUNCTION(BlueprintCallable, Category="WordPack") void SelectWordPack(const FString& PackId);
     // Vuelve al banco por defecto del juego.
     UFUNCTION(BlueprintCallable, Category="WordPack") void SelectDefaultWordBank();
-    // Abre el diálogo "Examinar", elige un CSV y lo publica al Workshop como banco de palabras
-    // (título = nombre del archivo). El resultado llega por UPTWordPackSubsystem::OnWordPackPublished.
-    UFUNCTION(BlueprintCallable, Category="WordPack") void PublishWordPackFromDialog();
+    // Abre el diálogo "Examinar" para elegir un CSV y (segundo diálogo) una imagen opcional, y lo publica
+    // al Workshop. InTitle = título que escribió el jugador (si va vacío, se usa el nombre del CSV
+    // prettificado); InDescription = descripción opcional. El resultado llega por OnWordPackPublished.
+    UFUNCTION(BlueprintCallable, Category="WordPack")
+    void PublishWordPackFromDialog(const FString& InTitle, const FString& InDescription);
     // Título del banco elegido (vacío = default), para mostrarlo en el lobby.
     UPROPERTY(BlueprintReadOnly, Category="WordPack") FString SelectedWordPackTitle;
     // Notifica a la UI que cambió el banco elegido (ver SelectWordPack/SelectDefaultWordBank).

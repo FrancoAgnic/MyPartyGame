@@ -348,6 +348,81 @@ void UPTWordPackSubsystem::ScanWorkshopPacks()
 #endif
 }
 
+// ── Procesado de la imagen de preview (foto elegida por el jugador) ───────────────────────────────
+// Steam exige preview VÁLIDO y < 1 MB, si no rebota con InvalidParam(8). Una foto grande cruda no
+// entra, así que la achicamos (box-filter) a máx 512px y la re-encodeamos a PNG en %TEMP%. Reintenta
+// a 256 si el PNG saliera grande. Sin dependencias externas (resize manual) para no romper el build.
+namespace
+{
+    void PT_DownscaleBGRA(const TArray<FColor>& Src, int32 SW, int32 SH,
+                          TArray<FColor>& Dst, int32 DW, int32 DH)
+    {
+        Dst.SetNumUninitialized(DW * DH);
+        for (int32 y = 0; y < DH; ++y)
+            for (int32 x = 0; x < DW; ++x)
+            {
+                const int32 sx0 = (x * SW) / DW;
+                const int32 sy0 = (y * SH) / DH;
+                int32 sx1 = ((x + 1) * SW) / DW; if (sx1 <= sx0) sx1 = sx0 + 1; sx1 = FMath::Min(sx1, SW);
+                int32 sy1 = ((y + 1) * SH) / DH; if (sy1 <= sy0) sy1 = sy0 + 1; sy1 = FMath::Min(sy1, SH);
+                uint32 r = 0, g = 0, b = 0, a = 0, n = 0;
+                for (int32 sy = sy0; sy < sy1; ++sy)
+                    for (int32 sx = sx0; sx < sx1; ++sx)
+                    { const FColor& c = Src[sy * SW + sx]; r += c.R; g += c.G; b += c.B; a += c.A; ++n; }
+                if (n == 0) n = 1;
+                Dst[y * DW + x] = FColor((uint8)(r / n), (uint8)(g / n), (uint8)(b / n), (uint8)(a / n));
+            }
+    }
+
+    bool PT_ProcessPreviewImage(const FString& InPath, const FString& OutDir, FString& OutFile)
+    {
+        TArray<uint8> Raw;
+        if (!FFileHelper::LoadFileToArray(Raw, *InPath) || Raw.Num() == 0) return false;
+
+        IImageWrapperModule& IW = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
+        const EImageFormat Fmt = IW.DetectImageFormat(Raw.GetData(), Raw.Num());
+        if (Fmt == EImageFormat::Invalid) return false;
+        TSharedPtr<IImageWrapper> Dec = IW.CreateImageWrapper(Fmt);
+        if (!Dec.IsValid() || !Dec->SetCompressed(Raw.GetData(), Raw.Num())) return false;
+
+        TArray64<uint8> RawBGRA;
+        if (!Dec->GetRaw(ERGBFormat::BGRA, 8, RawBGRA)) return false;
+        const int32 SW = Dec->GetWidth();
+        const int32 SH = Dec->GetHeight();
+        if (SW <= 0 || SH <= 0 || RawBGRA.Num() < (int64)SW * SH * 4) return false;
+
+        TArray<FColor> Src; Src.SetNumUninitialized(SW * SH);
+        FMemory::Memcpy(Src.GetData(), RawBGRA.GetData(), (SIZE_T)SW * SH * sizeof(FColor));
+
+        auto EncodeAt = [&](int32 MaxDim) -> bool
+        {
+            int32 DW = SW, DH = SH;
+            const int32 MaxSide = FMath::Max(SW, SH);
+            if (MaxSide > MaxDim)
+            {
+                const float S = (float)MaxDim / (float)MaxSide;
+                DW = FMath::Max(1, FMath::RoundToInt(SW * S));
+                DH = FMath::Max(1, FMath::RoundToInt(SH * S));
+            }
+            TArray<FColor> Dst;
+            if (DW == SW && DH == SH) Dst = Src; else PT_DownscaleBGRA(Src, SW, SH, Dst, DW, DH);
+
+            TSharedPtr<IImageWrapper> Enc = IW.CreateImageWrapper(EImageFormat::PNG);
+            if (!Enc.IsValid() ||
+                !Enc->SetRaw(Dst.GetData(), (int64)Dst.Num() * sizeof(FColor), DW, DH, ERGBFormat::BGRA, 8))
+                return false;
+            const TArray64<uint8>& Png = Enc->GetCompressed(100);
+            if (Png.Num() == 0 || Png.Num() > 950 * 1024) return false; // grande: probar más chico
+            const FString Path = FPaths::Combine(OutDir, TEXT("preview.png"));
+            if (!FFileHelper::SaveArrayToFile(TArray<uint8>(Png), *Path)) return false;
+            OutFile = Path;
+            return true;
+        };
+
+        return EncodeAt(512) || EncodeAt(256);
+    }
+}
+
 void UPTWordPackSubsystem::PublishWordPack(const FString& CsvPath, const FString& Title,
                                            const FString& Description, const FString& PreviewPath)
 {
@@ -383,9 +458,26 @@ void UPTWordPackSubsystem::PublishWordPack(const FString& CsvPath, const FString
     const FString PackTxt = Title + LINE_TERMINATOR;
     const bool bTxt = FFileHelper::SaveStringToFile(PackTxt, *FPaths::Combine(Content, TEXT("pack.txt")));
 
-    // Preview: Steam RECHAZA el primer SubmitItemUpdate de un item nuevo sin imagen válida (InvalidParam=8).
-    // Si el caller no pasó una, generamos un PNG sólido 256x256 (dimensiones válidas) FUERA de content.
-    FString UsePreview = PreviewPath;
+    // Preview (foto grande + miniatura): Steam RECHAZA el primer SubmitItemUpdate sin imagen válida
+    // (InvalidParam=8) y exige < 1 MB. Prioridad:
+    //   1) la foto que eligió el jugador → se achica a ≤512 y se re-encoda a PNG (garantiza <1MB);
+    //   2) imagen branded por defecto (opcional): Content/UI/Workshop/DefaultWorkshopPreview.png;
+    //   3) último recurso: PNG sólido de relleno (dimensiones válidas), FUERA de content.
+    FString UsePreview;
+    if (!PreviewPath.IsEmpty())
+    {
+        FString Processed;
+        if (PT_ProcessPreviewImage(PreviewPath, Base, Processed)) UsePreview = Processed;
+    }
+    if (UsePreview.IsEmpty())
+    {
+        const FString Branded = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("UI/Workshop/DefaultWorkshopPreview.png"));
+        if (FPaths::FileExists(Branded))
+        {
+            FString Processed;
+            if (PT_ProcessPreviewImage(Branded, Base, Processed)) UsePreview = Processed;
+        }
+    }
     if (UsePreview.IsEmpty())
     {
         const int32 Sz = 256;
