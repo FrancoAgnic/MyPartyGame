@@ -71,6 +71,8 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UImage*           ThumbnailImage;
     // Botón APLICAR: recién acá se publica el item al Workshop (con el CSV + imagen + título elegidos).
     UPROPERTY(meta = (BindWidgetOptional)) UButton*          ApplyPublishButton;
+    // Texto de aviso DENTRO del popup (validación: "Faltan: ..."). Si falta, cae a StatusText.
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*       PublishStatusText;
     // Abre la guía (página web) de cómo crear/subir el CSV, en el navegador.
     UPROPERTY(meta = (BindWidgetOptional)) UButton*          GuideButton;
     // URL de la guía. Editable por si cambia el repo/usuario.

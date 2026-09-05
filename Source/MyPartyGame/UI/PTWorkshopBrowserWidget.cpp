@@ -204,7 +204,8 @@ void UPTWorkshopBrowserWidget::ResetPublishForm()
     if (CsvButtonLabel)  CsvButtonLabel->SetText(PTText::Get(TEXT("WORDPACK_CHOOSE_CSV")));
     if (ThumbnailImage)  ThumbnailImage->SetVisibility(ESlateVisibility::Collapsed);
     if (ApplyPublishButton) ApplyPublishButton->SetIsEnabled(true);
-    if (StatusText)      StatusText->SetVisibility(ESlateVisibility::Collapsed);
+    if (StatusText)        StatusText->SetVisibility(ESlateVisibility::Collapsed);
+    if (PublishStatusText) PublishStatusText->SetVisibility(ESlateVisibility::Collapsed);
 }
 
 void UPTWorkshopBrowserWidget::OnPopupCloseClicked()
@@ -230,7 +231,7 @@ void UPTWorkshopBrowserWidget::OnUploadCsvClicked()
     if (!GI->PickCsvFile(Path)) return;
     PendingCsvPath = Path;
     if (CsvButtonLabel) CsvButtonLabel->SetText(FText::FromString(FPaths::GetBaseFilename(Path)));
-    if (StatusText) StatusText->SetVisibility(ESlateVisibility::Collapsed);
+    if (PublishStatusText) PublishStatusText->SetVisibility(ESlateVisibility::Collapsed);
 }
 
 void UPTWorkshopBrowserWidget::OnThumbnailClicked()
@@ -250,22 +251,36 @@ void UPTWorkshopBrowserWidget::OnThumbnailClicked()
             ThumbnailImage->SetVisibility(ESlateVisibility::Visible);
         }
     }
+    if (PublishStatusText) PublishStatusText->SetVisibility(ESlateVisibility::Collapsed);
 }
 
 void UPTWorkshopBrowserWidget::OnApplyPublishClicked()
 {
     // Paso 3: APLICAR → recién acá se publica al Workshop, con feedback de "Subiendo archivo...".
     if (bUploading) return;
-    if (PendingCsvPath.IsEmpty())
+
+    const FString Title = PublishTitleBox ? PublishTitleBox->GetText().ToString().TrimStartAndEnd() : FString();
+    const FString Desc  = PublishDescBox  ? PublishDescBox->GetText().ToString().TrimStartAndEnd()  : FString();
+
+    // TODOS obligatorios: título, miniatura, descripción y banco (CSV). Si falta alguno, avisar
+    // (dentro del popup si hay PublishStatusText; si no, en StatusText) y NO publicar.
+    TArray<FString> Missing;
+    if (Title.IsEmpty())            Missing.Add(PTText::GetStr(TEXT("WORDPACK_F_TITLE")));
+    if (PendingImagePath.IsEmpty()) Missing.Add(PTText::GetStr(TEXT("WORDPACK_F_THUMB")));
+    if (Desc.IsEmpty())             Missing.Add(PTText::GetStr(TEXT("WORDPACK_F_DESC")));
+    if (PendingCsvPath.IsEmpty())   Missing.Add(PTText::GetStr(TEXT("WORDPACK_F_CSV")));
+    if (Missing.Num() > 0)
     {
-        if (StatusText) { StatusText->SetText(PTText::Get(TEXT("WORDPACK_NO_CSV"))); StatusText->SetVisibility(ESlateVisibility::Visible); }
-        return;
+        FFormatOrderedArguments Args;
+        Args.Add(FText::FromString(FString::Join(Missing, TEXT(", "))));
+        UTextBlock* Msg = PublishStatusText ? PublishStatusText : StatusText;
+        if (Msg) { Msg->SetText(PTText::Format(TEXT("WORDPACK_MISSING"), Args)); Msg->SetVisibility(ESlateVisibility::Visible); }
+        return; // popup queda abierto para completar
     }
-    const FString Title = PublishTitleBox ? PublishTitleBox->GetText().ToString() : FString();
-    const FString Desc  = PublishDescBox  ? PublishDescBox->GetText().ToString()  : FString();
 
     // Validación OK → cerrar el popup. La animación "Subiendo archivo..." se ve igual porque StatusText
     // vive a nivel del browser (fuera del popup).
+    if (PublishStatusText) PublishStatusText->SetVisibility(ESlateVisibility::Collapsed);
     if (PublishPopup) PublishPopup->SetVisibility(ESlateVisibility::Collapsed);
 
     bUploading = true;

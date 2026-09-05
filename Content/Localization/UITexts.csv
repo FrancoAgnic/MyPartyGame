@@ -188,6 +188,11 @@ WORDPACK_NO_CSV,Elegí un banco (CSV) primero,Choose a bank (CSV) first,Escolha 
 WORDPACK_CHOOSE_CSV,Elegir banco (CSV),Choose bank (CSV),Escolher banco (CSV),Bank wählen (CSV),Choisir banque (CSV),Scegli banca (CSV)
 WORDPACK_LOAD_THUMB,Cargar miniatura,Load thumbnail,Carregar miniatura,Miniatur laden,Charger vignette,Carica miniatura
 WORDPACK_APPLY,Aplicar,Apply,Aplicar,Anwenden,Appliquer,Applica
+WORDPACK_MISSING,Faltan: {0},Missing: {0},Faltam: {0},Fehlt: {0},Manquant : {0},Mancano: {0}
+WORDPACK_F_TITLE,título,title,título,Titel,titre,titolo
+WORDPACK_F_THUMB,miniatura,thumbnail,miniatura,Miniatur,vignette,miniatura
+WORDPACK_F_DESC,descripción,description,descrição,Beschreibung,description,descrizione
+WORDPACK_F_CSV,banco (CSV),bank (CSV),banco (CSV),Bank (CSV),banque (CSV),banca (CSV)
 WORKSHOP_TITLE,Workshop,Workshop,Workshop,Workshop,Workshop,Workshop
 WORKSHOP_ADD,Añadir,Add,Adicionar,Hinzufügen,Ajouter,Aggiungi
 WORKSHOP_ADDED,Añadido,Added,Adicionado,Hinzugefügt,Ajouté,Aggiunto
