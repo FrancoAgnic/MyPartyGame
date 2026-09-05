@@ -476,6 +476,7 @@ private:
     bool bShapeRadialActive = false;
     bool bShapeRadialInputLocked = false; // transición balanceada del lock de cámara del radial
     EPTStampShape ShapeBeforeRadial = EPTStampShape::Sphere; // forma antes de abrir el radial (para el preview en vivo / cancelar en zona muerta)
+    int32 LastShapePage = 0; // última página del radial (se reabre ahí, no siempre en la 1)
     void OnColorPickPressed();
     void OnColorPickReleased();
     void OnColorSavePressed();  // E con la rueda abierta: guarda el color en la paleta

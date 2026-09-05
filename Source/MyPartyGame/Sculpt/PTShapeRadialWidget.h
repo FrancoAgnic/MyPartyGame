@@ -22,6 +22,8 @@
 #include "PTShapeRadialWidget.generated.h"
 
 class UPTRadialMenu;
+class UImage;
+class UTexture2D;
 
 /** Una forma configurable del radial: su primitiva, su icono y un nombre para identificarla. */
 USTRUCT(BlueprintType)
@@ -53,8 +55,11 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="ShapeRadial")
     float DeadZonePixels = 40.f;
 
-    /** Prepara la primera página. Lo llama el PlayerController al abrir el radial. */
-    void BeginRadial();
+    /** Prepara el radial abriendo en StartPage (para reabrir en la última página usada). */
+    void BeginRadial(int32 StartPage = 0);
+
+    /** Página actual (para que el PlayerController la recuerde entre aperturas). */
+    int32 GetCurrentPage() const { return CurrentPage; }
 
     /** Recalcula qué slot (cardinal) está bajo el cursor. Lo llama el PlayerController cada tick. */
     void UpdateSelection();
@@ -75,9 +80,19 @@ public:
     void OnSelectionChanged(int32 NewIndex);
 
 protected:
+    virtual void NativeDestruct() override; // restaura el cursor del SO al cerrar
+
     /** UPTRadialMenu nativo dentro del WBP (recomendado): se le cargan los iconos de la página actual
      *  y se le maneja el resaltado. */
     UPROPERTY(meta=(BindWidgetOptional)) UPTRadialMenu* Radial = nullptr;
+
+    /** Cursor custom (un DOT) que sigue al mouse mientras el radial está abierto. Ponelo dentro de un
+     *  Canvas Panel en el WBP. Si está, se oculta el cursor del SO y se muestra solo este dot. */
+    UPROPERTY(meta=(BindWidgetOptional)) UImage* CursorDot = nullptr;
+    /** Textura del dot (asigná el dot BLANCO del color picker). */
+    UPROPERTY(EditAnywhere, Category="ShapeRadial|Cursor") UTexture2D* CursorDotTexture = nullptr;
+    /** Tamaño del dot en px. */
+    UPROPERTY(EditAnywhere, Category="ShapeRadial|Cursor") FVector2D CursorDotSize = FVector2D(22.f, 22.f);
 
     /** Formas por página (cardinales). No tocar: la selección cardinal asume 4. */
     static constexpr int32 SlotsPerPage = 4;

@@ -2,6 +2,10 @@
 
 #include "PTShapeRadialWidget.h"
 #include "../UI/PTRadialMenu.h"
+#include "Components/Image.h"
+#include "Components/CanvasPanelSlot.h"
+#include "Engine/Texture2D.h"
+#include "GameFramework/PlayerController.h"
 #include "Framework/Application/SlateApplication.h"
 
 int32 UPTShapeRadialWidget::NumPages() const
@@ -9,11 +13,39 @@ int32 UPTShapeRadialWidget::NumPages() const
     return FMath::Max(1, FMath::DivideAndRoundUp(ShapeSlots.Num(), SlotsPerPage));
 }
 
-void UPTShapeRadialWidget::BeginRadial()
+void UPTShapeRadialWidget::BeginRadial(int32 StartPage)
 {
-    CurrentPage   = 0;
+    CurrentPage   = FMath::Clamp(StartPage, 0, NumPages() - 1);
     SelectedIndex = -1;
     BuildPage();
+
+    // Cursor DOT: si el WBP tiene un CursorDot, lo preparamos (blanco, sin tinte) y OCULTAMOS el cursor
+    // del SO (EMouseCursor::None) para que se vea solo el dot — igual que el gotero del color picker.
+    if (CursorDot && CursorDotTexture)
+    {
+        CursorDot->SetBrushFromTexture(CursorDotTexture);
+        CursorDot->SetBrushSize(CursorDotSize);
+        CursorDot->SetColorAndOpacity(FLinearColor::White); // sin tinte
+        CursorDot->SetVisibility(ESlateVisibility::HitTestInvisible);
+        if (APlayerController* PC = GetOwningPlayer())
+        {
+            SetCursor(EMouseCursor::None);
+            PC->CurrentMouseCursor = EMouseCursor::None; // solo se ve el dot
+        }
+    }
+    else if (CursorDot)
+    {
+        CursorDot->SetVisibility(ESlateVisibility::Collapsed); // sin textura → no mostrar caja vacía
+    }
+}
+
+void UPTShapeRadialWidget::NativeDestruct()
+{
+    // Restaurar el cursor del SO al cerrar el radial.
+    if (CursorDot)
+        if (APlayerController* PC = GetOwningPlayer())
+            PC->CurrentMouseCursor = EMouseCursor::Default;
+    Super::NativeDestruct();
 }
 
 void UPTShapeRadialWidget::BuildPage()
@@ -70,6 +102,11 @@ void UPTShapeRadialWidget::UpdateSelection()
     const FVector2D Center      = LocalSize * 0.5f;
     const FVector2D CursorLocal = Geo.AbsoluteToLocal(FSlateApplication::Get().GetCursorPos());
     const FVector2D Delta       = CursorLocal - Center;
+
+    // Mover el dot custom a la posición del cursor (centrado en la punta).
+    if (CursorDot)
+        if (UCanvasPanelSlot* CS = Cast<UCanvasPanelSlot>(CursorDot->Slot))
+            CS->SetPosition(CursorLocal - CursorDotSize * 0.5f);
 
     // Selección CARDINAL por eje dominante (nada de diagonales): rapidísima y sin ambigüedad.
     //   0 = arriba, 1 = derecha, 2 = abajo, 3 = izquierda (matchea StartAngle -90 + horario).

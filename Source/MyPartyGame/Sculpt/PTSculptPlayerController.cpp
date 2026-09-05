@@ -1391,13 +1391,9 @@ void APTSculptPlayerController::OnShapeRadialPressed()
     ShapeBeforeRadial = StampShape;
 
     ShapeRadial->AddToViewport(20);
-    ShapeRadial->BeginRadial(); // arma la primera página (4 formas) con sus iconos
+    ShapeRadial->BeginRadial(LastShapePage); // reabre en la ÚLTIMA página que dejaste, no siempre la 1
     SetInputMode(FInputModeGameAndUI());
     bShowMouseCursor = true;
-    // Cursor de puntería del radial: un DOT blanco (hardware cursor), sin tinte.
-    if (UGameViewportClient* VP = GetWorld() ? GetWorld()->GetGameViewport() : nullptr)
-        VP->SetHardwareCursor(EMouseCursor::Default,
-            FName(TEXT("UI/Cursors/WhiteDotCursor_Centered_64")), FVector2D(0.5f, 0.5f));
 
     // Centrar el cursor: el radial se dibuja centrado y el arrastre define la dirección de elección.
     int32 VX = 0, VY = 0;
@@ -1414,20 +1410,18 @@ void APTSculptPlayerController::OnShapeRadialReleased()
 
     if (ShapeRadial)
     {
+        // Recordar la página en la que quedó, para reabrir ahí la próxima vez.
+        LastShapePage = ShapeRadial->GetCurrentPage();
+
         // Soltar sobre un slot → esa forma; soltar en el centro (zona muerta) → volver a la de antes
         // (el hover la había cambiado en vivo).
         EPTStampShape Selected;
         if (ShapeRadial->GetSelectedShape(Selected)) SetShape(Selected);
         else                                         SetShape(ShapeBeforeRadial);
 
-        ShapeRadial->RemoveFromParent();
+        ShapeRadial->RemoveFromParent(); // NativeDestruct restaura el cursor
         ShapeRadial = nullptr;
     }
-
-    // Restaurar el cursor por defecto del juego (arrow) por si vuelve a mostrarse el cursor.
-    if (UGameViewportClient* VP = GetWorld() ? GetWorld()->GetGameViewport() : nullptr)
-        VP->SetHardwareCursor(EMouseCursor::Default,
-            FName(TEXT("UI/Cursors/SculpturilloDefaultCursor")), FVector2D(0.5f, 0.5f));
 
     // Volver al modo de juego normal del esculpido (sin cursor), igual que la rueda de color.
     SetInputMode(FInputModeGameOnly());
