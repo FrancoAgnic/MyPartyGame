@@ -12,6 +12,7 @@
 #include "IImageWrapper.h"
 #include "IImageWrapperModule.h"
 #include "Modules/ModuleManager.h"
+#include "UObject/WeakObjectPtr.h"
 
 #if PT_WITH_STEAM
 #include "steam/steam_api.h"
@@ -108,6 +109,31 @@ struct FPTWorkshopPublish
     }
 };
 
+// ===== Watcher de descargas (DownloadItemResult_t) ==========================
+// Suscribirse a un item NO garantiza que Steam baje su contenido; hay que llamar
+// SteamUGC()->DownloadItem() y esperar este callback. Cuando un item de ESTA app termina de
+// descargarse, re-escaneamos para que aparezca en la pestaña de suscritos.
+struct FPTWorkshopDownloadWatcher
+{
+    TWeakObjectPtr<UPTWordPackSubsystem> Owner;
+    CCallback<FPTWorkshopDownloadWatcher, DownloadItemResult_t> DownloadedCb;
+
+    explicit FPTWorkshopDownloadWatcher(UPTWordPackSubsystem* InOwner)
+        : Owner(InOwner)
+        , DownloadedCb(this, &FPTWorkshopDownloadWatcher::OnDownloaded) {}
+
+    void OnDownloaded(DownloadItemResult_t* p)
+    {
+        if (!p) return;
+        if (SteamUtils() && p->m_unAppID != SteamUtils()->GetAppID()) return; // otra app
+        UE_LOG(LogPTWordPacks, Log, TEXT("[Workshop] Descarga terminada item=%llu res=%d → rescan"),
+            (uint64)p->m_nPublishedFileId, (int32)p->m_eResult);
+        // El callback puede correr fuera del GameThread → marshalear (RescanPacks toca UPROPERTY + UI).
+        TWeakObjectPtr<UPTWordPackSubsystem> W = Owner;
+        AsyncTask(ENamedThreads::GameThread, [W]() { if (UPTWordPackSubsystem* O = W.Get()) O->RescanPacks(); });
+    }
+};
+
 // ===== Búsqueda del catálogo del Workshop ===================================
 struct FPTWorkshopQuery
 {
@@ -170,14 +196,18 @@ struct FPTWorkshopQuery
 void UPTWordPackSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);
+#if PT_WITH_STEAM
+    if (SteamUGC()) DownloadWatcher = new FPTWorkshopDownloadWatcher(this);
+#endif
     RescanPacks();
 }
 
 void UPTWordPackSubsystem::Deinitialize()
 {
 #if PT_WITH_STEAM
-    delete Publisher; Publisher = nullptr;
-    delete Query;     Query     = nullptr;
+    delete Publisher;       Publisher       = nullptr;
+    delete Query;           Query           = nullptr;
+    delete DownloadWatcher; DownloadWatcher = nullptr;
 #endif
     Super::Deinitialize();
 }
@@ -207,7 +237,13 @@ void UPTWordPackSubsystem::SubscribeItem(const FString& Id)
 #if PT_WITH_STEAM
     if (!SteamUGC()) return;
     const uint64 FileId = FCString::Strtoui64(*Id, nullptr, 10);
-    if (FileId != 0) SteamUGC()->SubscribeItem(FileId); // Steam descarga el item; luego aparece en GetPacks
+    if (FileId != 0)
+    {
+        SteamUGC()->SubscribeItem(FileId);
+        // Suscribirse NO baja el contenido solo → forzamos la descarga (alta prioridad). Cuando
+        // termina, el DownloadItemResult_t re-escanea y el banco aparece en la pestaña de suscritos.
+        SteamUGC()->DownloadItem(FileId, /*bHighPriority=*/true);
+    }
 #endif
 }
 
@@ -284,11 +320,20 @@ void UPTWordPackSubsystem::ScanWorkshopPacks()
     Ids.SetNumZeroed(Num);
     const uint32 Got = SteamUGC()->GetSubscribedItems(Ids.GetData(), Num);
 
+    int32 Pending = 0;
     for (uint32 i = 0; i < Got; ++i)
     {
         const PublishedFileId_t Id = Ids[i];
         const uint32 State = SteamUGC()->GetItemState(Id);
-        if (!(State & k_EItemStateInstalled)) continue; // todavía descargando o sin instalar
+
+        // Si está suscrito pero NO instalado (o necesita update), disparamos la descarga. Cuando
+        // termine, el DownloadItemResult_t vuelve a llamar RescanPacks y acá ya entrará como instalado.
+        if (!(State & k_EItemStateInstalled) || (State & k_EItemStateNeedsUpdate))
+        {
+            SteamUGC()->DownloadItem(Id, /*bHighPriority=*/true);
+            ++Pending;
+            if (!(State & k_EItemStateInstalled)) continue; // aún sin carpeta en disco
+        }
 
         uint64 SizeOnDisk = 0; uint32 Timestamp = 0;
         char FolderBuf[2048] = { 0 };
@@ -298,6 +343,8 @@ void UPTWordPackSubsystem::ScanWorkshopPacks()
             AddPackFromFolder(Folder, FString::Printf(TEXT("%llu"), Id), /*bWorkshop=*/true);
         }
     }
+    if (Pending > 0)
+        UE_LOG(LogPTWordPacks, Log, TEXT("[Workshop] %d item(s) suscritos descargándose; aparecerán al terminar."), Pending);
 #endif
 }
 

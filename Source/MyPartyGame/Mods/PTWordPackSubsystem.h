@@ -90,5 +90,8 @@ private:
 #if PT_WITH_STEAM
     struct FPTWorkshopPublish* Publisher = nullptr; // puntero opaco (steam headers fuera de UHT)
     struct FPTWorkshopQuery*   Query     = nullptr;
+    // Escucha DownloadItemResult_t: cuando Steam termina de bajar un item suscrito, re-escanea
+    // (suscribirse NO baja el contenido solo; hay que llamar DownloadItem y esperar este callback).
+    struct FPTWorkshopDownloadWatcher* DownloadWatcher = nullptr;
 #endif
 };
