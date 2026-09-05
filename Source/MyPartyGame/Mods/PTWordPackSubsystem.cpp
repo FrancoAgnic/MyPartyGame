@@ -58,7 +58,13 @@ struct FPTWorkshopPublish
     {
         if (bIOFailure || !p || p->m_eResult != k_EResultOK)
         {
-            if (Cb) Cb(false, FString::Printf(TEXT("CreateItem falló (%d)"), p ? (int32)p->m_eResult : -1));
+            // Los CallResult de Steam corren en el hilo de tareas del OSS, NO en el GameThread. El Cb
+            // toca Slate (la UI del Workshop) → hay que marshalear al GameThread, si no crashea con
+            // "Assertion failed: IsInGameThread()". (El OnSubmit ya lo hacía; este camino de error no.)
+            const int32 Res = p ? (int32)p->m_eResult : -1;
+            TFunction<void(bool, FString)> CB = MoveTemp(Cb);
+            AsyncTask(ENamedThreads::GameThread, [CB = MoveTemp(CB), Res]() mutable
+                { if (CB) CB(false, FString::Printf(TEXT("CreateItem falló (%d)"), Res)); });
             return;
         }
         ItemId = p->m_nPublishedFileId;
