@@ -322,10 +322,20 @@ void UPTGameInstance::UpdateMenuMusic(UWorld* World)
 {
     if (!World) return;
 
-    // Nombre del mapa cargado (sin el prefijo de PIE tipo "UEDPIE_0_"). El lobby corre sobre el mismo
-    // mapa MainMenu, así que con chequear MainMenu cubrimos menú + lobby; Lvl-01 queda afuera.
+    // Nombre del mapa cargado (sin el prefijo de PIE tipo "UEDPIE_0_"). El lobby corre sobre el mapa
+    // MainMenu; ahora la música suena TAMBIÉN en los ExtraMusicMapNames (Lvl-01 + TransitionMap), así
+    // el viaje lobby→Lvl-01 no la corta y el gameplay tiene la misma música que el lobby.
     const FString MapName = World->GetMapName();
-    const bool bWantMusic = MapName.Contains(MenuMusicMapName);
+    bool bWantMusic = MapName.Contains(MenuMusicMapName);
+    for (const FString& M : ExtraMusicMapNames)
+        if (!M.IsEmpty() && MapName.Contains(M)) { bWantMusic = true; break; }
+
+    // El envelope follower, el analizador espectral y su timer se atan al WORLD (mueren con él al viajar).
+    // Como esta función corre en CADA carga de mapa (world nuevo), los de-marcamos para RE-ATARLOS al
+    // world actual más abajo. Si no, al viajar lobby→Lvl-01 el timer del espectro queda muerto y el
+    // baile se congela aunque la música siga sonando. Lo del world viejo se fue con él (no se acumula).
+    bEnvelopeBound = false;
+    bSpectrumBound = false;
 
     const bool bPlaying = MenuMusicComp && MenuMusicComp->IsPlaying();
 
@@ -333,10 +343,10 @@ void UPTGameInstance::UpdateMenuMusic(UWorld* World)
     {
         if (!bPlaying && MenuMusic)
         {
-            // Persiste entre transiciones (menú→lobby es un ServerTravel sobre el mismo mapa) para que
-            // NO se reinicie. bAutoDestroy: al hacer Stop() en Lvl-01 se limpia solo. El loop lo da el asset.
-            // CreateSound2D (no auto-play) + FadeIn: arranca en 0 y sube al volumen del settings de forma
-            // progresiva, siempre (incluso la primera vez que abrís el juego).
+            // Persiste entre transiciones (menú→lobby y lobby→Lvl-01) para que NO se reinicie: la misma
+            // canción sigue sonando de corrido al entrar al gameplay. bAutoDestroy: al hacer Stop() en un
+            // mapa sin música se limpia solo. El loop lo da el asset. CreateSound2D + FadeIn: arranca en 0
+            // y sube al volumen del settings de forma progresiva.
             MenuMusicComp = UGameplayStatics::CreateSound2D(
                 World, MenuMusic, 1.f, 1.f, 0.f, nullptr,
                 /*bPersistAcrossLevelTransition=*/true, /*bAutoDestroy=*/true);
@@ -344,42 +354,42 @@ void UPTGameInstance::UpdateMenuMusic(UWorld* World)
             {
                 MusicStartWorldTime = World->GetTimeSeconds(); // t0 para la fase por BPM
                 MenuMusicComp->FadeIn(FMath::Max(0.f, MenuMusicFadeInSeconds), 1.f, 0.f, EAudioFaderCurve::Linear);
-                // Envelope follower del submix de música → el personaje del lobby reacciona a la energía.
-                // La música se rutea POR este submix desde el asset (SoundWave → "Submix" = este), así
-                // que no hace falta SetSubmixSend (eso duplicaría el audio al master). Solo lo analizamos.
-                if (MusicAnalysisSubmix && !bEnvelopeBound)
-                {
-                    FOnSubmixEnvelopeBP Del; // single-cast (SoundSubmixSend.h)
-                    Del.BindDynamic(this, &UPTGameInstance::OnMusicEnvelope);
-                    MusicAnalysisSubmix->StartEnvelopeFollowing(World);
-                    MusicAnalysisSubmix->AddEnvelopeFollowerDelegate(World, Del);
-                    bEnvelopeBound = true;
-                }
-                // Análisis ESPECTRAL de la banda aguda (notas altas) → MusicHighEnergy, que maneja el baile.
-                // Por POLLING (StartAnalyzingOutput + GetMagnitudeForFrequencies): más robusto que el
-                // delegate por bandas (que en 5.8 tira un ensure de "band extractor inválido").
-                if (MusicAnalysisSubmix && !bSpectrumBound)
-                {
-                    UAudioMixerBlueprintLibrary::StartAnalyzingOutput(World, MusicAnalysisSubmix);
-                    World->GetTimerManager().SetTimer(SpectrumPollHandle, this,
-                        &UPTGameInstance::PollSpectrum, 1.f / 60.f, /*bLoop=*/true);
-                    bSpectrumBound = true;
-                }
+            }
+        }
+
+        // (Re)atar el análisis al WORLD ACTUAL — sea música recién creada o persistida del lobby. En el
+        // caso persistido, el timer/analyzer del world viejo ya murió al viajar, así que hay que rearmarlo
+        // acá o el personaje deja de bailar en Lvl-01.
+        if (MenuMusicComp && MusicAnalysisSubmix)
+        {
+            // Envelope follower del submix de música → el personaje reacciona a la energía. La música se
+            // rutea POR este submix desde el asset (SoundWave → "Submix" = este), no hace falta SetSubmixSend.
+            if (!bEnvelopeBound)
+            {
+                FOnSubmixEnvelopeBP Del; // single-cast (SoundSubmixSend.h)
+                Del.BindDynamic(this, &UPTGameInstance::OnMusicEnvelope);
+                MusicAnalysisSubmix->StartEnvelopeFollowing(World);
+                MusicAnalysisSubmix->AddEnvelopeFollowerDelegate(World, Del);
+                bEnvelopeBound = true;
+            }
+            // Análisis ESPECTRAL de la banda aguda (notas altas) → MusicHighEnergy, que maneja el baile.
+            // Por POLLING (StartAnalyzingOutput + GetMagnitudeForFrequencies): más robusto que el delegate
+            // por bandas (que en 5.8 tira un ensure de "band extractor inválido"). El timer es POR-WORLD.
+            if (!bSpectrumBound)
+            {
+                UAudioMixerBlueprintLibrary::StartAnalyzingOutput(World, MusicAnalysisSubmix);
+                World->GetTimerManager().SetTimer(SpectrumPollHandle, this,
+                    &UPTGameInstance::PollSpectrum, 1.f / 60.f, /*bLoop=*/true);
+                bSpectrumBound = true;
             }
         }
     }
     else if (MenuMusicComp)
     {
-        MenuMusicComp->Stop(); // Lvl-01 (u otro mapa): cortar la música del menú/lobby
+        MenuMusicComp->Stop(); // mapa sin música: cortar
         MenuMusicComp = nullptr;
         MusicEnergy = 0.f;     // sin música → el personaje deja de reaccionar
         MusicHighEnergy = 0.f;
-        if (bSpectrumBound)
-        {
-            World->GetTimerManager().ClearTimer(SpectrumPollHandle);
-            if (MusicAnalysisSubmix) UAudioMixerBlueprintLibrary::StopAnalyzingOutput(World, MusicAnalysisSubmix);
-            bSpectrumBound = false;
-        }
     }
 }
 

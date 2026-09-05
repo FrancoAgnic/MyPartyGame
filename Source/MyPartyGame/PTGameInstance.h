@@ -133,6 +133,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Audio") USoundBase* MenuMusic = nullptr;
     // Nombre del mapa donde suena la música (el lobby corre sobre este mismo mapa). Editable por si cambia.
     UPROPERTY(EditAnywhere, Category="Audio") FString MenuMusicMapName = TEXT("MainMenu");
+    // Mapas EXTRA donde TAMBIÉN suena la misma música (además de MenuMusicMapName). Por defecto Lvl-01
+    // (gameplay) y TransitionMap, para que el viaje lobby→Lvl-01 no corte la música. Match por Contains().
+    UPROPERTY(EditAnywhere, Category="Audio") TArray<FString> ExtraMusicMapNames = { TEXT("Lvl-01"), TEXT("TransitionMap") };
     // Fade-in al arrancar la música: sube de 0 al volumen del settings en estos segundos (0 = sin fade).
     UPROPERTY(EditAnywhere, Category="Audio") float MenuMusicFadeInSeconds = 2.5f;
 
