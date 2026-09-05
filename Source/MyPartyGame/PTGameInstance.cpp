@@ -172,6 +172,36 @@ static FString PT_PrettifyTitle(const FString& In)
     return S;
 }
 
+bool UPTGameInstance::PickCsvFile(FString& OutPath)
+{
+    IDesktopPlatform* DP = FDesktopPlatformModule::Get();
+    if (!DP) return false;
+    const void* ParentHandle = FSlateApplication::IsInitialized()
+        ? FSlateApplication::Get().FindBestParentWindowHandleForDialogs(nullptr) : nullptr;
+    TArray<FString> Files;
+    const bool bPicked = DP->OpenFileDialog(
+        ParentHandle, TEXT("Elegir CSV del banco de palabras"), FPaths::ProjectDir(), TEXT(""),
+        TEXT("CSV (*.csv)|*.csv|Texto (*.txt)|*.txt|Todos (*.*)|*.*"), EFileDialogFlags::None, Files);
+    if (!bPicked || Files.Num() == 0) return false;
+    OutPath = Files[0];
+    return true;
+}
+
+bool UPTGameInstance::PickImageFile(FString& OutPath)
+{
+    IDesktopPlatform* DP = FDesktopPlatformModule::Get();
+    if (!DP) return false;
+    const void* ParentHandle = FSlateApplication::IsInitialized()
+        ? FSlateApplication::Get().FindBestParentWindowHandleForDialogs(nullptr) : nullptr;
+    TArray<FString> Files;
+    const bool bPicked = DP->OpenFileDialog(
+        ParentHandle, TEXT("Elegir miniatura (imagen)"), FPaths::ProjectDir(), TEXT(""),
+        TEXT("Imágenes (*.png;*.jpg;*.jpeg)|*.png;*.jpg;*.jpeg|Todos (*.*)|*.*"), EFileDialogFlags::None, Files);
+    if (!bPicked || Files.Num() == 0) return false;
+    OutPath = Files[0];
+    return true;
+}
+
 void UPTGameInstance::PublishWordPackFromDialog(const FString& InTitle, const FString& InDescription)
 {
     IDesktopPlatform* DP = FDesktopPlatformModule::Get();

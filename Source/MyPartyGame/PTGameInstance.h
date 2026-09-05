@@ -83,6 +83,11 @@ public:
     // prettificado); InDescription = descripción opcional. El resultado llega por OnWordPackPublished.
     UFUNCTION(BlueprintCallable, Category="WordPack")
     void PublishWordPackFromDialog(const FString& InTitle, const FString& InDescription);
+
+    // Abre SOLO el diálogo para elegir un CSV (banco). Devuelve true y la ruta si eligió algo. No publica.
+    UFUNCTION(BlueprintCallable, Category="WordPack") bool PickCsvFile(FString& OutPath);
+    // Abre SOLO el diálogo para elegir una imagen (PNG/JPG). Devuelve true y la ruta si eligió algo.
+    UFUNCTION(BlueprintCallable, Category="WordPack") bool PickImageFile(FString& OutPath);
     // Título del banco elegido (vacío = default), para mostrarlo en el lobby.
     UPROPERTY(BlueprintReadOnly, Category="WordPack") FString SelectedWordPackTitle;
     // Notifica a la UI que cambió el banco elegido (ver SelectWordPack/SelectDefaultWordBank).

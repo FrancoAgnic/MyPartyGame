@@ -183,6 +183,11 @@ WORDPACK_BY,por {0},by {0},por {0},von {0},par {0},di {0}
 WORDPACK_SELECTED,En uso: {0},In use: {0},Em uso: {0},In Verwendung: {0},Utilisé : {0},In uso: {0}
 WORDPACK_PUB_OK,¡Banco publicado al Workshop!,Bank published to Workshop!,Banco publicado no Workshop!,Bank im Workshop veröffentlicht!,Banque publiée sur le Workshop !,Banca pubblicata nel Workshop!
 WORDPACK_PUB_FAIL,No se pudo publicar: {0},Could not publish: {0},Não foi possível publicar: {0},Veröffentlichung fehlgeschlagen: {0},Échec de la publication : {0},Impossibile pubblicare: {0}
+WORDPACK_UPLOADING,Subiendo archivo,Uploading file,Enviando arquivo,Datei wird hochgeladen,Envoi du fichier,Caricamento file
+WORDPACK_NO_CSV,Elegí un banco (CSV) primero,Choose a bank (CSV) first,Escolha um banco (CSV) primeiro,Wähle zuerst eine Bank (CSV),Choisis d'abord une banque (CSV),Scegli prima una banca (CSV)
+WORDPACK_CHOOSE_CSV,Elegir banco (CSV),Choose bank (CSV),Escolher banco (CSV),Bank wählen (CSV),Choisir banque (CSV),Scegli banca (CSV)
+WORDPACK_LOAD_THUMB,Cargar miniatura,Load thumbnail,Carregar miniatura,Miniatur laden,Charger vignette,Carica miniatura
+WORDPACK_APPLY,Aplicar,Apply,Aplicar,Anwenden,Appliquer,Applica
 WORKSHOP_TITLE,Workshop,Workshop,Workshop,Workshop,Workshop,Workshop
 WORKSHOP_ADD,Añadir,Add,Adicionar,Hinzufügen,Ajouter,Aggiungi
 WORKSHOP_ADDED,Añadido,Added,Adicionado,Hinzugefügt,Ajouté,Aggiunto

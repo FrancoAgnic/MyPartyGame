@@ -9,6 +9,12 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/EditableTextBox.h"
+#include "Components/Image.h"
+#include "ImageUtils.h"              // ImportFileAsTexture2D (preview de la miniatura)
+#include "Engine/Texture2D.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
+#include "Misc/Paths.h"          // GetBaseFilename
 #include "HAL/PlatformProcess.h" // LaunchURL
 
 // Tag del catálogo para cada sección.
@@ -26,6 +32,9 @@ void UPTWorkshopBrowserWidget::NativeConstruct()
     if (SearchButton)       SearchButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnSearchClicked);
     if (PublishButton)      PublishButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnPublishClicked);
     if (UploadCsvButton)    UploadCsvButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnUploadCsvClicked);
+    if (ThumbnailButton)    ThumbnailButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnThumbnailClicked);
+    if (ApplyPublishButton) ApplyPublishButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnApplyPublishClicked);
+    if (ThumbnailImage)     ThumbnailImage->SetVisibility(ESlateVisibility::Collapsed); // hasta que elijan una
     if (GuideButton)        GuideButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnGuideClicked);
     if (PopupCloseButton)   PopupCloseButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnPopupCloseClicked);
     if (PublishPopup)       PublishPopup->SetVisibility(ESlateVisibility::Collapsed);
@@ -51,6 +60,7 @@ void UPTWorkshopBrowserWidget::NativeConstruct()
 
 void UPTWorkshopBrowserWidget::NativeDestruct()
 {
+    if (UWorld* W = GetWorld()) W->GetTimerManager().ClearTimer(UploadAnimTimer);
     if (UPTWordPackSubsystem* P = Packs())
     {
         if (bBound)
@@ -175,14 +185,25 @@ void UPTWorkshopBrowserWidget::AddItem(const FString& ItemId)
 
 void UPTWorkshopBrowserWidget::OnPublishClicked()
 {
-    // Abre el popup con Upload/Template. Si el WBP no tiene popup, cae al flujo directo de subir.
+    // Abre el popup (elegir CSV → miniatura → Aplicar). Arranca con el formulario limpio.
     if (PublishPopup)
     {
+        ResetPublishForm();
         PublishPopup->SetVisibility(ESlateVisibility::Visible);
         PlayPopInOn(PublishPopup);
         return;
     }
-    OnUploadCsvClicked();
+    OnUploadCsvClicked(); // WBP sin popup: al menos deja elegir el CSV
+}
+
+void UPTWorkshopBrowserWidget::ResetPublishForm()
+{
+    PendingCsvPath.Reset();
+    PendingImagePath.Reset();
+    if (CsvButtonLabel)  CsvButtonLabel->SetText(PTText::Get(TEXT("WORDPACK_CHOOSE_CSV")));
+    if (ThumbnailImage)  ThumbnailImage->SetVisibility(ESlateVisibility::Collapsed);
+    if (ApplyPublishButton) ApplyPublishButton->SetIsEnabled(true);
+    if (StatusText)      StatusText->SetVisibility(ESlateVisibility::Collapsed);
 }
 
 void UPTWorkshopBrowserWidget::OnPopupCloseClicked()
@@ -199,27 +220,100 @@ void UPTWorkshopBrowserWidget::OnGuideClicked()
 
 void UPTWorkshopBrowserWidget::OnUploadCsvClicked()
 {
-    if (PublishPopup) PublishPopup->SetVisibility(ESlateVisibility::Collapsed);
-    // Título + descripción que escribió el jugador en el popup (si los campos existen). Vacío → el
-    // GameInstance cae al nombre del CSV prettificado. Después abre los diálogos de CSV e imagen.
+    // Paso 1: elegir el CSV del banco. NO publica: solo guarda la selección y pone el nombre del
+    // archivo en el botón. Publicar es después, con "Aplicar".
+    if (bUploading) return;
+    UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance());
+    if (!GI) return;
+    FString Path;
+    if (!GI->PickCsvFile(Path)) return;
+    PendingCsvPath = Path;
+    if (CsvButtonLabel) CsvButtonLabel->SetText(FText::FromString(FPaths::GetBaseFilename(Path)));
+    if (StatusText) StatusText->SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UPTWorkshopBrowserWidget::OnThumbnailClicked()
+{
+    // Paso 2: elegir la miniatura (imagen). La mostramos en el popup como preview.
+    if (bUploading) return;
+    UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance());
+    if (!GI) return;
+    FString Path;
+    if (!GI->PickImageFile(Path)) return;
+    PendingImagePath = Path;
+    if (ThumbnailImage)
+    {
+        if (UTexture2D* Tex = FImageUtils::ImportFileAsTexture2D(Path))
+        {
+            ThumbnailImage->SetBrushFromTexture(Tex, /*bMatchSize=*/false);
+            ThumbnailImage->SetVisibility(ESlateVisibility::Visible);
+        }
+    }
+}
+
+void UPTWorkshopBrowserWidget::OnApplyPublishClicked()
+{
+    // Paso 3: APLICAR → recién acá se publica al Workshop, con feedback de "Subiendo archivo...".
+    if (bUploading) return;
+    if (PendingCsvPath.IsEmpty())
+    {
+        if (StatusText) { StatusText->SetText(PTText::Get(TEXT("WORDPACK_NO_CSV"))); StatusText->SetVisibility(ESlateVisibility::Visible); }
+        return;
+    }
     const FString Title = PublishTitleBox ? PublishTitleBox->GetText().ToString() : FString();
     const FString Desc  = PublishDescBox  ? PublishDescBox->GetText().ToString()  : FString();
-    if (UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance()))
-        GI->PublishWordPackFromDialog(Title, Desc);
+
+    bUploading = true;
+    UploadDots = 0;
+    if (ApplyPublishButton) ApplyPublishButton->SetIsEnabled(false); // evita doble click
+    if (StatusText) StatusText->SetVisibility(ESlateVisibility::Visible);
+    TickUploadingText(); // pinta "Subiendo archivo" ya mismo
+    if (UWorld* W = GetWorld())
+        W->GetTimerManager().SetTimer(UploadAnimTimer, this, &UPTWorkshopBrowserWidget::TickUploadingText, 0.35f, /*loop=*/true);
+
+    if (UPTWordPackSubsystem* WP = Packs())
+        WP->PublishWordPack(PendingCsvPath, Title, Desc, PendingImagePath);
+}
+
+void UPTWorkshopBrowserWidget::TickUploadingText()
+{
+    if (!StatusText) return;
+    UploadDots = (UploadDots + 1) % 4;
+    FString Dots;
+    for (int32 i = 0; i < UploadDots; ++i) Dots += TEXT(".");
+    StatusText->SetText(FText::FromString(PTText::GetStr(TEXT("WORDPACK_UPLOADING")) + Dots));
 }
 
 void UPTWorkshopBrowserWidget::OnPublished(bool bOk, const FString& Info)
 {
-    if (!StatusText) return;
+    // Terminó la subida: cortar el texto animado y reactivar Aplicar.
+    bUploading = false;
+    if (UWorld* W = GetWorld()) W->GetTimerManager().ClearTimer(UploadAnimTimer);
+    if (ApplyPublishButton) ApplyPublishButton->SetIsEnabled(true);
+
+    if (StatusText)
+    {
+        if (bOk)
+        {
+            StatusText->SetText(PTText::Get(TEXT("WORDPACK_PUB_OK")));
+        }
+        else
+        {
+            FFormatOrderedArguments Args;
+            Args.Add(FText::FromString(Info));
+            StatusText->SetText(PTText::Format(TEXT("WORDPACK_PUB_FAIL"), Args));
+        }
+        StatusText->SetVisibility(ESlateVisibility::Visible);
+    }
+
+    // En éxito, limpiar la selección (CSV/imagen/preview) para dejar el popup listo para otro banco.
     if (bOk)
     {
-        StatusText->SetText(PTText::Get(TEXT("WORDPACK_PUB_OK")));
+        PendingCsvPath.Reset();
+        PendingImagePath.Reset();
+        if (CsvButtonLabel) CsvButtonLabel->SetText(PTText::Get(TEXT("WORDPACK_CHOOSE_CSV")));
+        if (ThumbnailImage) ThumbnailImage->SetVisibility(ESlateVisibility::Collapsed);
+        if (PublishTitleBox) PublishTitleBox->SetText(FText::GetEmpty());
+        if (PublishDescBox)  PublishDescBox->SetText(FText::GetEmpty());
     }
-    else
-    {
-        FFormatOrderedArguments Args;
-        Args.Add(FText::FromString(Info));
-        StatusText->SetText(PTText::Format(TEXT("WORDPACK_PUB_FAIL"), Args));
-    }
-    StatusText->SetVisibility(ESlateVisibility::Visible);
 }

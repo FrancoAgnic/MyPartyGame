@@ -354,6 +354,22 @@ void UPTWordPackSubsystem::ScanWorkshopPacks()
 // a 256 si el PNG saliera grande. Sin dependencias externas (resize manual) para no romper el build.
 namespace
 {
+    // "titulos_peliculas" → "Titulos Peliculas" (título por defecto si el jugador no escribió uno).
+    FString PT_PrettifyName(const FString& In)
+    {
+        FString S = In;
+        S.ReplaceInline(TEXT("_"), TEXT(" "));
+        S.ReplaceInline(TEXT("-"), TEXT(" "));
+        S.TrimStartAndEndInline();
+        bool bStart = true;
+        for (int32 i = 0; i < S.Len(); ++i)
+        {
+            if (FChar::IsWhitespace(S[i])) { bStart = true; continue; }
+            if (bStart) { S[i] = FChar::ToUpper(S[i]); bStart = false; }
+        }
+        return S;
+    }
+
     void PT_DownscaleBGRA(const TArray<FColor>& Src, int32 SW, int32 SH,
                           TArray<FColor>& Dst, int32 DW, int32 DH)
     {
@@ -502,9 +518,14 @@ void UPTWordPackSubsystem::PublishWordPack(const FString& CsvPath, const FString
         return;
     }
 
+    // Título: el que pasó el caller; si va vacío, se deriva del nombre del CSV prettificado.
+    FString EffectiveTitle = Title;
+    EffectiveTitle.TrimStartAndEndInline();
+    if (EffectiveTitle.IsEmpty()) EffectiveTitle = PT_PrettifyName(FPaths::GetBaseFilename(CsvPath));
+
     delete Publisher;
     Publisher = new FPTWorkshopPublish();
-    Publisher->Start(Content, UsePreview, Title, Description,
+    Publisher->Start(Content, UsePreview, EffectiveTitle, Description,
         [this](bool bOk, FString Info)
         {
             UE_LOG(LogPTWordPacks, Log, TEXT("PublishWordPack: %s (%s)"),

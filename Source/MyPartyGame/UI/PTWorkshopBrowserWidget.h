@@ -27,6 +27,7 @@ class UPanelWidget;
 class UButton;
 class UTextBlock;
 class UEditableTextBox;
+class UImage;
 class UWidget;
 class UPTWorkshopItemRowWidget;
 class UPTWordPackSubsystem;
@@ -57,8 +58,17 @@ protected:
     // Si faltan o van vacíos, el título cae al nombre del CSV prettificado. Nombrarlos así en el WBP.
     UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* PublishTitleBox;
     UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* PublishDescBox;
-    // Dentro del popup: subir tu .csv al Workshop (resultado en StatusText).
+    // Dentro del popup: elegir el CSV del banco (NO publica; guarda la selección). Al elegir, si hay
+    // CsvButtonLabel, se le pone el nombre del archivo. (Se sigue llamando UploadCsvButton por compat.)
     UPROPERTY(meta = (BindWidgetOptional)) UButton*          UploadCsvButton;
+    // TextBlock DENTRO del botón del CSV: su texto pasa a ser el nombre del archivo elegido. Opcional.
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*       CsvButtonLabel;
+    // Botón para elegir la MINIATURA (imagen). Al elegir, se muestra en ThumbnailImage.
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*          ThumbnailButton;
+    // Preview de la miniatura elegida (Image). Arranca oculta hasta que se elige una.
+    UPROPERTY(meta = (BindWidgetOptional)) UImage*           ThumbnailImage;
+    // Botón APLICAR: recién acá se publica el item al Workshop (con el CSV + imagen + título elegidos).
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*          ApplyPublishButton;
     // Abre la guía (página web) de cómo crear/subir el CSV, en el navegador.
     UPROPERTY(meta = (BindWidgetOptional)) UButton*          GuideButton;
     // URL de la guía. Editable por si cambia el repo/usuario.
@@ -84,10 +94,13 @@ protected:
     UFUNCTION() void OnWordBanksTabClicked();
     UFUNCTION() void OnMapsTabClicked();
     UFUNCTION() void OnBackClicked();
-    UFUNCTION() void OnPublishClicked();     // abre el popup
-    UFUNCTION() void OnUploadCsvClicked();   // sube el .csv (dentro del popup)
+    UFUNCTION() void OnPublishClicked();     // abre el popup (y resetea la selección)
+    UFUNCTION() void OnUploadCsvClicked();   // elige el CSV (no publica); pone el nombre en el botón
+    UFUNCTION() void OnThumbnailClicked();   // elige la imagen; la muestra en ThumbnailImage
+    UFUNCTION() void OnApplyPublishClicked();// APLICAR → publica el item al Workshop
     UFUNCTION() void OnGuideClicked();       // abre la guía web
     UFUNCTION() void OnPopupCloseClicked();
+    UFUNCTION() void TickUploadingText();    // anima "Subiendo archivo..." mientras publica
 
 private:
     void SwitchTab(int32 Tab);           // 0 = bancos (funcional), 1 = mapas (bloqueado)
@@ -99,4 +112,12 @@ private:
 
     int32 ActiveTab = 0;
     bool  bBound = false;
+
+    // ── Estado del publish en 3 pasos (elegir CSV → elegir imagen → aplicar) ──
+    FString      PendingCsvPath;    // banco elegido (vacío = no eligió)
+    FString      PendingImagePath;  // miniatura elegida (vacío = usa la por defecto)
+    bool         bUploading = false;// true mientras se publica (para el texto animado)
+    int32        UploadDots = 0;    // cuántos puntos mostrar en "Subiendo archivo..."
+    FTimerHandle UploadAnimTimer;   // anima el texto de carga
+    void ResetPublishForm();        // limpia selección/preview/labels del popup
 };
