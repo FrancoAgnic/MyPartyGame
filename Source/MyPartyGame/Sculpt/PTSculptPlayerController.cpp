@@ -5,6 +5,7 @@
 #include "Camera/CameraComponent.h"
 #include "GameFramework/Character.h"
 #include "Engine/World.h"
+#include "Engine/GameViewportClient.h" // SetHardwareCursor (cursor dot del radial)
 #include "Blueprint/UserWidget.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/DecalComponent.h"
@@ -1070,14 +1071,7 @@ void APTSculptPlayerController::UpdatePreviewVisual()
         return;
     }
 
-    UStaticMesh* ToolMesh = nullptr;
-    switch (EditMode)
-    {
-    case EPTEditMode::Add:    ToolMesh = PreviewToolMeshAdd;    break;
-    case EPTEditMode::Erase:  ToolMesh = PreviewToolMeshErase;  break;
-    case EPTEditMode::Smooth: ToolMesh = PreviewToolMeshSmooth; break;
-    case EPTEditMode::Paint:  ToolMesh = PreviewToolMeshPaint;  break;
-    }
+    // Mesh estático DEDICADO a la forma (opcional). Solo las 4 clásicas pueden tener uno asignado.
     UStaticMesh* ShapeMesh = nullptr;
     switch (EffectiveShape())
     {
@@ -1085,10 +1079,12 @@ void APTSculptPlayerController::UpdatePreviewVisual()
     case EPTStampShape::Cube:     ShapeMesh = PreviewMeshCube;     break;
     case EPTStampShape::Cylinder: ShapeMesh = PreviewMeshCylinder; break;
     case EPTStampShape::TriPrism: ShapeMesh = PreviewMeshTriPrism; break;
+    default: break; // formas nuevas (Pyramid/Torus/Capsule/HexPrism/Octahedron) → procedural
     }
-    // Prioridad SHAPE > TOOL: así al cambiar de shape el preview cambia (bug fix).
-    // Si no hay mesh por shape ni por tool, se usa el procedural (también por shape).
-    UStaticMesh* Chosen = ShapeMesh ? ShapeMesh : ToolMesh;
+    // El preview debe MATCHEAR la forma. Si hay mesh dedicado a esa forma se usa; si no (formas nuevas),
+    // va el PROCEDURAL (generado del SDF, siempre coincide). NO se usa un mesh genérico por-tool porque
+    // haría que el preview no cambie entre formas (era el bug: las nuevas mostraban el mesh del tool).
+    UStaticMesh* Chosen = ShapeMesh;
 
     if (Chosen && PreviewStaticMesh)
     {
@@ -1398,6 +1394,10 @@ void APTSculptPlayerController::OnShapeRadialPressed()
     ShapeRadial->BeginRadial(); // arma la primera página (4 formas) con sus iconos
     SetInputMode(FInputModeGameAndUI());
     bShowMouseCursor = true;
+    // Cursor de puntería del radial: un DOT blanco (hardware cursor), sin tinte.
+    if (UGameViewportClient* VP = GetWorld() ? GetWorld()->GetGameViewport() : nullptr)
+        VP->SetHardwareCursor(EMouseCursor::Default,
+            FName(TEXT("UI/Cursors/WhiteDotCursor_Centered_64")), FVector2D(0.5f, 0.5f));
 
     // Centrar el cursor: el radial se dibuja centrado y el arrastre define la dirección de elección.
     int32 VX = 0, VY = 0;
@@ -1423,6 +1423,11 @@ void APTSculptPlayerController::OnShapeRadialReleased()
         ShapeRadial->RemoveFromParent();
         ShapeRadial = nullptr;
     }
+
+    // Restaurar el cursor por defecto del juego (arrow) por si vuelve a mostrarse el cursor.
+    if (UGameViewportClient* VP = GetWorld() ? GetWorld()->GetGameViewport() : nullptr)
+        VP->SetHardwareCursor(EMouseCursor::Default,
+            FName(TEXT("UI/Cursors/SculpturilloDefaultCursor")), FVector2D(0.5f, 0.5f));
 
     // Volver al modo de juego normal del esculpido (sin cursor), igual que la rueda de color.
     SetInputMode(FInputModeGameOnly());
