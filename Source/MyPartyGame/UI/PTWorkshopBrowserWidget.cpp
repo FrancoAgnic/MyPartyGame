@@ -36,6 +36,7 @@ void UPTWorkshopBrowserWidget::NativeConstruct()
     if (ThumbnailButton)    ThumbnailButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnThumbnailClicked);
     if (ApplyPublishButton) ApplyPublishButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnApplyPublishClicked);
     if (ThumbnailImage)     ThumbnailImage->SetVisibility(ESlateVisibility::Collapsed); // hasta que elijan una
+    if (PublishStatusText)  PublishStatusText->SetVisibility(ESlateVisibility::Collapsed); // solo aparece en error
     if (GuideButton)        GuideButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnGuideClicked);
     if (PopupCloseButton)   PopupCloseButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnPopupCloseClicked);
     if (PublishPopup)       PublishPopup->SetVisibility(ESlateVisibility::Collapsed);
@@ -61,7 +62,11 @@ void UPTWorkshopBrowserWidget::NativeConstruct()
 
 void UPTWorkshopBrowserWidget::NativeDestruct()
 {
-    if (UWorld* W = GetWorld()) W->GetTimerManager().ClearTimer(UploadAnimTimer);
+    if (UWorld* W = GetWorld())
+    {
+        W->GetTimerManager().ClearTimer(UploadAnimTimer);
+        W->GetTimerManager().ClearTimer(PublishMsgHideTimer);
+    }
     if (UPTWordPackSubsystem* P = Packs())
     {
         if (bBound)
@@ -273,8 +278,7 @@ void UPTWorkshopBrowserWidget::OnApplyPublishClicked()
     {
         FFormatOrderedArguments Args;
         Args.Add(FText::FromString(FString::Join(Missing, TEXT(", "))));
-        UTextBlock* Msg = PublishStatusText ? PublishStatusText : StatusText;
-        if (Msg) { Msg->SetText(PTText::Format(TEXT("WORDPACK_MISSING"), Args)); Msg->SetVisibility(ESlateVisibility::Visible); }
+        ShowPublishMsg(PTText::Format(TEXT("WORDPACK_MISSING"), Args)); // aparece unos seg y se oculta
         return; // popup queda abierto para completar
     }
 
@@ -293,6 +297,22 @@ void UPTWorkshopBrowserWidget::OnApplyPublishClicked()
 
     if (UPTWordPackSubsystem* WP = Packs())
         WP->PublishWordPack(PendingCsvPath, Title, Desc, PendingImagePath);
+}
+
+void UPTWorkshopBrowserWidget::ShowPublishMsg(const FText& Msg)
+{
+    // Aviso dentro del popup (o StatusText si no hay). Aparece y se auto-oculta a los ~3s.
+    UTextBlock* Where = PublishStatusText ? PublishStatusText : StatusText;
+    if (!Where) return;
+    Where->SetText(Msg);
+    Where->SetVisibility(ESlateVisibility::Visible);
+    if (UWorld* W = GetWorld())
+        W->GetTimerManager().SetTimer(PublishMsgHideTimer, this, &UPTWorkshopBrowserWidget::HidePublishMsg, 3.0f, /*loop=*/false);
+}
+
+void UPTWorkshopBrowserWidget::HidePublishMsg()
+{
+    if (PublishStatusText) PublishStatusText->SetVisibility(ESlateVisibility::Collapsed);
 }
 
 void UPTWorkshopBrowserWidget::TickUploadingText()

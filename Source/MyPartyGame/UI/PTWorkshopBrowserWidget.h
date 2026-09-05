@@ -124,4 +124,9 @@ private:
     int32        UploadDots = 0;    // cuántos puntos mostrar en "Subiendo archivo..."
     FTimerHandle UploadAnimTimer;   // anima el texto de carga
     void ResetPublishForm();        // limpia selección/preview/labels del popup
+
+    // Aviso de validación ("Faltan: ..."): aparece unos segundos y se oculta solo.
+    FTimerHandle     PublishMsgHideTimer;
+    void ShowPublishMsg(const FText& Msg);
+    UFUNCTION() void HidePublishMsg();
 };
