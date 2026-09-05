@@ -487,7 +487,7 @@ void UPTWordPackSubsystem::PublishWordPack(const FString& CsvPath, const FString
     }
     if (UsePreview.IsEmpty())
     {
-        const FString Branded = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("UI/Workshop/DefaultWorkshopPreview.png"));
+        const FString Branded = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("UI/Workshop/DefaultWordBankThumbnail.png"));
         if (FPaths::FileExists(Branded))
         {
             FString Processed;
