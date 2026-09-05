@@ -18,6 +18,7 @@ public class MyPartyGame : ModuleRules
 			"RHI",
 			"RenderCore",
 			"ImageWrapper", // PNG encode/decode de las texturas de pintura (cabeza + cuerpo)
+			"HTTP",         // descargar las miniaturas (preview) de los items del Workshop Browser
 			"AIModule",
 			"StateTreeModule",
 			"GameplayStateTreeModule",

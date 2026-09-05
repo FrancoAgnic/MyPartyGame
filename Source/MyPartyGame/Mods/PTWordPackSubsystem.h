@@ -40,6 +40,9 @@ struct FPTWorkshopItem
     UPROPERTY(BlueprintReadOnly, Category="Workshop") FString Id;    // published file id (string)
     UPROPERTY(BlueprintReadOnly, Category="Workshop") FString Title;
     UPROPERTY(BlueprintReadOnly, Category="Workshop") bool    bSubscribed = false;
+    UPROPERTY(BlueprintReadOnly, Category="Workshop") FString Description; // descripción del autor
+    UPROPERTY(BlueprintReadOnly, Category="Workshop") FString PreviewURL;  // URL de la miniatura (se baja por HTTP)
+    UPROPERTY(BlueprintReadOnly, Category="Workshop") FString Tags;        // tags de Steam (coma-separados): "WordBank", "Map"...
 };
 
 DECLARE_MULTICAST_DELEGATE(FPTOnWordPacksUpdated);

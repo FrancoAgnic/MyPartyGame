@@ -154,6 +154,8 @@ struct FPTWorkshopQuery
         Handle = SteamUGC()->CreateQueryAllUGCRequest(QueryType, k_EUGCMatchingUGCType_Items, App, App, 1);
         if (!SearchText.IsEmpty()) SteamUGC()->SetSearchText(Handle, TCHAR_TO_UTF8(*SearchText));
         if (!Tag.IsEmpty())        SteamUGC()->AddRequiredTag(Handle, TCHAR_TO_UTF8(*Tag));
+        // Que el resultado traiga la descripción completa (si no, m_rgchDescription viene vacío/cortado).
+        SteamUGC()->SetReturnLongDescription(Handle, true);
 
         const SteamAPICall_t h = SteamUGC()->SendQueryUGCRequest(Handle);
         QueryCR.Set(h, this, &FPTWorkshopQuery::OnComplete);
@@ -171,8 +173,14 @@ struct FPTWorkshopQuery
                 if (SteamUGC()->GetQueryUGCResult(Handle, i, &D))
                 {
                     FPTWorkshopItem It;
-                    It.Id    = FString::Printf(TEXT("%llu"), D.m_nPublishedFileId);
-                    It.Title = UTF8_TO_TCHAR(D.m_rgchTitle);
+                    It.Id          = FString::Printf(TEXT("%llu"), D.m_nPublishedFileId);
+                    It.Title       = UTF8_TO_TCHAR(D.m_rgchTitle);
+                    It.Description = UTF8_TO_TCHAR(D.m_rgchDescription);
+                    It.Tags        = UTF8_TO_TCHAR(D.m_rgchTags);
+                    // URL de la miniatura (se baja por HTTP en la fila del browser).
+                    char PrevUrl[1024] = { 0 };
+                    if (SteamUGC()->GetQueryUGCPreviewURL(Handle, i, PrevUrl, sizeof(PrevUrl)))
+                        It.PreviewURL = UTF8_TO_TCHAR(PrevUrl);
                     const uint32 St = SteamUGC()->GetItemState(D.m_nPublishedFileId);
                     It.bSubscribed = (St & k_EItemStateSubscribed) != 0;
                     Out.Add(MoveTemp(It));

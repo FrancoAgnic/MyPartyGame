@@ -198,6 +198,8 @@ WORKSHOP_ADD,Añadir,Add,Adicionar,Hinzufügen,Ajouter,Aggiungi
 WORKSHOP_ADDED,Añadido,Added,Adicionado,Hinzugefügt,Ajouté,Aggiunto
 WORKSHOP_SEARCHING,Buscando...,Searching...,Procurando...,Suche...,Recherche...,Ricerca...
 WORKSHOP_EMPTY,No se encontraron mods,No mods found,Nenhum mod encontrado,Keine Mods gefunden,Aucun mod trouvé,Nessun mod trovato
+WORKSHOP_TAG_WORDBANK,Banco de palabras,Word bank,Banco de palavras,Wortbank,Banque de mots,Banca di parole
+WORKSHOP_TAG_MAP,Mapa,Map,Mapa,Karte,Carte,Mappa
 MAPS_SOON,Mapas — Próximamente,Maps — Coming soon,Mapas — Em breve,Karten — Demnächst,Cartes — Bientôt,Mappe — Prossimamente
 LIBRARY_TITLE,Biblioteca,Library,Biblioteca,Bibliothek,Bibliothèque,Libreria
 GS_WORD,Palabra: {0},Word: {0},Palavra: {0},Wort: {0},Mot : {0},Parola: {0}
