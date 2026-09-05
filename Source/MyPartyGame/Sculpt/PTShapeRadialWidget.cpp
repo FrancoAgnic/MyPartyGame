@@ -26,7 +26,15 @@ void UPTShapeRadialWidget::BeginRadial(int32 StartPage)
         CursorDot->SetBrushFromTexture(CursorDotTexture);
         CursorDot->SetBrushSize(CursorDotSize);
         CursorDot->SetColorAndOpacity(FLinearColor::White); // sin tinte
-        CursorDot->SetVisibility(ESlateVisibility::HitTestInvisible);
+        // Anchor/alineación top-left para que la posición sea en coords locales absolutas.
+        if (UCanvasPanelSlot* CS = Cast<UCanvasPanelSlot>(CursorDot->Slot))
+        {
+            CS->SetAnchors(FAnchors(0.f, 0.f));
+            CS->SetAlignment(FVector2D(0.f, 0.f));
+            CS->SetSize(CursorDotSize);
+        }
+        // Oculto hasta que UpdateSelection lo posicione (evita el flash abajo-derecha del primer frame).
+        CursorDot->SetVisibility(ESlateVisibility::Collapsed);
         if (APlayerController* PC = GetOwningPlayer())
         {
             SetCursor(EMouseCursor::None);
@@ -103,10 +111,17 @@ void UPTShapeRadialWidget::UpdateSelection()
     const FVector2D CursorLocal = Geo.AbsoluteToLocal(FSlateApplication::Get().GetCursorPos());
     const FVector2D Delta       = CursorLocal - Center;
 
-    // Mover el dot custom a la posición del cursor (centrado en la punta).
-    if (CursorDot)
+    // Mover el dot custom a la posición del cursor (centrado). Forzamos anchor/alineación top-left para
+    // que SetPosition sea en coords locales absolutas (si el slot está anclado al centro, se iría abajo-der).
+    if (CursorDot && CursorDotTexture)
         if (UCanvasPanelSlot* CS = Cast<UCanvasPanelSlot>(CursorDot->Slot))
+        {
+            CS->SetAnchors(FAnchors(0.f, 0.f));
+            CS->SetAlignment(FVector2D(0.f, 0.f));
+            CS->SetSize(CursorDotSize);
             CS->SetPosition(CursorLocal - CursorDotSize * 0.5f);
+            CursorDot->SetVisibility(ESlateVisibility::HitTestInvisible); // ya posicionado → mostrar
+        }
 
     // Selección CARDINAL por eje dominante (nada de diagonales): rapidísima y sin ambigüedad.
     //   0 = arriba, 1 = derecha, 2 = abajo, 3 = izquierda (matchea StartAngle -90 + horario).
