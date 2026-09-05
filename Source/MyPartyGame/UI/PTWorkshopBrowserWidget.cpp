@@ -264,6 +264,10 @@ void UPTWorkshopBrowserWidget::OnApplyPublishClicked()
     const FString Title = PublishTitleBox ? PublishTitleBox->GetText().ToString() : FString();
     const FString Desc  = PublishDescBox  ? PublishDescBox->GetText().ToString()  : FString();
 
+    // Validación OK → cerrar el popup. La animación "Subiendo archivo..." se ve igual porque StatusText
+    // vive a nivel del browser (fuera del popup).
+    if (PublishPopup) PublishPopup->SetVisibility(ESlateVisibility::Collapsed);
+
     bUploading = true;
     UploadDots = 0;
     if (ApplyPublishButton) ApplyPublishButton->SetIsEnabled(false); // evita doble click
@@ -316,5 +320,14 @@ void UPTWorkshopBrowserWidget::OnPublished(bool bOk, const FString& Info)
         if (ThumbnailImage) ThumbnailImage->SetVisibility(ESlateVisibility::Collapsed);
         if (PublishTitleBox) PublishTitleBox->SetText(FText::GetEmpty());
         if (PublishDescBox)  PublishDescBox->SetText(FText::GetEmpty());
+
+        // Que el banco recién publicado quede USABLE sin reiniciar: auto-suscribirse a él (Info trae el
+        // item id en el éxito) → Steam lo descarga (ver el fix de DownloadItem) y aparece en la Biblioteca.
+        // Además refrescamos la búsqueda para que salga en la lista (best-effort: Steam puede tardar en
+        // indexarlo para las queries, pero suscrito ya lo tenés).
+        const FString ItemId = Info.TrimStartAndEnd();
+        if (!ItemId.IsEmpty() && ItemId.IsNumeric())
+            if (UPTWordPackSubsystem* P = Packs()) P->SubscribeItem(ItemId);
+        RunSearch();
     }
 }
