@@ -116,20 +116,26 @@ private:
     int32         PendingChunks  = 0;
 
     // ── Envío TROTTLEADO de chunks (evita desbordar el buffer confiable de UE) ──
-    // En vez de mandar todos los chunks de golpe (lo que tiraba a los clientes con pintura pesada),
-    // se encolan y se mandan de a pocos por tick. Sirve para cualquier tamaño y cualquier cantidad.
+    // CLAVE con MUCHOS jugadores: la cola vive en el PlayerState RECEPTOR (target), NO en el emisor.
+    // El buffer confiable de UE es POR CONEXIÓN (256 bunches/canal); si N emisores bombean a la vez al
+    // mismo cliente (p.ej. al entrar alguien y pedir TODAS las cabezas), su canal desborda y el server
+    // corta la conexión → colapsa la sala. Con la cola en el receptor, cada cliente tiene UN SOLO stream
+    // serial en su canal (una cabeza por vez), sin importar cuántas cabezas haya para mandarle.
+    // (El upload cliente→server sí vive en el PlayerState del que sube: cada cliente sube solo la suya.)
     struct FHeadSendJob
     {
-        TWeakObjectPtr<APTPlayerState> Target;   // destino (server→cliente); inválido = cliente→server
-        TSharedPtr<TArray<uint8>>      Data;     // blob a mandar (compartido entre destinos del broadcast)
+        TWeakObjectPtr<APTPlayerState> Source;   // (download) de quién es la cabeza; se manda al cliente dueño de ESTE PlayerState
+        TSharedPtr<TArray<uint8>>      Data;     // blob a mandar (compartido entre receptores del broadcast)
         int32 Version = 0;
         int32 Next    = 0;
         int32 Total   = 0;
-        bool  bToServer = false;
+        bool  bToServer = false;                 // true = upload (MI cabeza al server); Source no se usa
     };
     TArray<FHeadSendJob> OutHeadJobs;
     FTimerHandle         HeadSendTimer;
-    void EnqueueHeadJob(APTPlayerState* Target, const TSharedPtr<TArray<uint8>>& Data, int32 Version, bool bToServer);
+    // Encola en ESTE PlayerState. Download: llamarlo en el TARGET con Source = dueño de la cabeza.
+    // Upload: llamarlo en el propio PlayerState del que sube, con Source=nullptr y bToServer=true.
+    void EnqueueHeadJob(APTPlayerState* Source, const TSharedPtr<TArray<uint8>>& Data, int32 Version, bool bToServer);
     void EnsureHeadPump();
     void PumpHeadSend();
 
