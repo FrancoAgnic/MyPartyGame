@@ -9,6 +9,7 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/EditableTextBox.h"
+#include "Components/MultiLineEditableTextBox.h"
 #include "Components/Image.h"
 #include "ImageUtils.h"              // ImportFileAsTexture2D (preview de la miniatura)
 #include "Engine/Texture2D.h"

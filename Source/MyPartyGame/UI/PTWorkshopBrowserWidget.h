@@ -27,6 +27,7 @@ class UPanelWidget;
 class UButton;
 class UTextBlock;
 class UEditableTextBox;
+class UMultiLineEditableTextBox;
 class UImage;
 class UWidget;
 class UPTWorkshopItemRowWidget;
@@ -56,8 +57,9 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UWidget*          PublishPopup;
     // Dentro del popup: campos para el TÍTULO (obligatorio-ish) y la DESCRIPCIÓN (opcional) del banco.
     // Si faltan o van vacíos, el título cae al nombre del CSV prettificado. Nombrarlos así en el WBP.
-    UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* PublishTitleBox;
-    UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* PublishDescBox;
+    UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox*          PublishTitleBox;
+    // Descripción: Multi Line Editable Text Box (envuelve el texto en varias filas, tipo párrafo).
+    UPROPERTY(meta = (BindWidgetOptional)) UMultiLineEditableTextBox* PublishDescBox;
     // Dentro del popup: elegir el CSV del banco (NO publica; guarda la selección). Al elegir, si hay
     // CsvButtonLabel, se le pone el nombre del archivo. (Se sigue llamando UploadCsvButton por compat.)
     UPROPERTY(meta = (BindWidgetOptional)) UButton*          UploadCsvButton;
