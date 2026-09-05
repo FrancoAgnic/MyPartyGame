@@ -1,22 +1,41 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-// Menú radial para elegir la forma del sello al esculpir. Se abre MANTENIENDO la tecla de forma
-// (antes "Tab" que ciclaba): mientras se mantiene, se arrastra el mouse hacia un slot y al soltar
-// se selecciona esa forma. Toda la lógica (qué slot está bajo el cursor) vive acá en C++; el WBP
-// solo aporta los visuales de los slots y dibuja el resaltado en OnSelectionChanged.
+// Menú radial para elegir la forma del sello al esculpir. Se abre MANTENIENDO la tecla de forma;
+// mientras se mantiene, se mueve el mouse hacia un slot (arriba/abajo/izquierda/derecha) y al soltar
+// se selecciona esa forma. Con la RUEDA del mouse se cambia de PÁGINA (grupos de 4 formas).
+//
+// Selección CARDINAL (no diagonal): el slot se elige por el EJE DOMINANTE del cursor respecto al
+// centro (|dx|>|dy| → izq/der; si no → arriba/abajo). Es mucho más rápido/directo que los sectores.
+//
+// Config data-driven: llená ShapeSlots en el WBP con {Shape, Icono, Nombre}. El radial arma las
+// páginas de a 4 solo y le pone los iconos al UPTRadialMenu en runtime.
 //
 // En el WBP derivado (parent PTShapeRadialWidget):
-//   - Ubicá los slots en círculo. El slot 0 va ARRIBA y el orden es HORARIO (0=arriba, 1=derecha,
-//     2=abajo, 3=izquierda para 4 formas). Hacé que el widget ocupe el centro de la pantalla.
-//   - Implementá el evento OnSelectionChanged(Index) para resaltar el slot Index (-1 = ninguno).
-//   - Ajustá SlotShapes para que el orden matchee cómo pusiste los slots en pantalla.
+//   - Poné un UPTRadialMenu (Palette → "Party Game") llamado "Radial", centrado. NO hace falta cargarle
+//     los slots a mano: los pone el código desde ShapeSlots (4 por página).
+//   - Layout recomendado del Radial: StartAngle -90 (slot 0 arriba), Clockwise (0=arriba,1=der,2=abajo,3=izq).
 
 #pragma once
 #include "CoreMinimal.h"
 #include "../UI/PTUserWidget.h"
+#include "Styling/SlateBrush.h"
 #include "PTSculptVolume.h" // EPTStampShape
 #include "PTShapeRadialWidget.generated.h"
 
 class UPTRadialMenu;
+
+/** Una forma configurable del radial: su primitiva, su icono y un nombre para identificarla. */
+USTRUCT(BlueprintType)
+struct FPTShapeSlotDef
+{
+    GENERATED_BODY()
+
+    /** Primitiva a esculpir (esfera, cubo, cono, pirámide, toroide, cápsula, prisma hex, octaedro...). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="ShapeRadial") EPTStampShape Shape = EPTStampShape::Sphere;
+    /** Icono del slot (textura/material vía brush). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="ShapeRadial") FSlateBrush   Icon;
+    /** Nombre opcional (solo para identificar en el editor). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="ShapeRadial") FText         Name;
+};
 
 UCLASS()
 class MYPARTYGAME_API UPTShapeRadialWidget : public UPTUserWidget
@@ -24,38 +43,49 @@ class MYPARTYGAME_API UPTShapeRadialWidget : public UPTUserWidget
     GENERATED_BODY()
 
 public:
-    /** Formas por slot, en orden horario desde arriba. Editable en el WBP para matchear el layout. */
+    /** Todas las formas disponibles. Se agrupan en PÁGINAS de 4 (cardinales). Editá esta lista en el WBP:
+     *  agregá una entrada por forma con su icono. Se navega entre páginas con la rueda del mouse. */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="ShapeRadial")
-    TArray<EPTStampShape> SlotShapes = { EPTStampShape::Sphere, EPTStampShape::Cube,
-                                         EPTStampShape::Cylinder, EPTStampShape::TriPrism };
+    TArray<FPTShapeSlotDef> ShapeSlots;
 
-    /** Radio muerto central (en px locales): si el cursor está más cerca que esto del centro no se
+    /** Radio muerto central (px locales): si el cursor está más cerca que esto del centro no se
      *  selecciona nada (soltar ahí = mantener la forma actual). */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="ShapeRadial")
-    float DeadZonePixels = 45.f;
+    float DeadZonePixels = 40.f;
 
-    /** Recalcula qué slot está bajo el cursor. Lo llama el PlayerController en cada tick mientras
-     *  el radial está abierto. */
+    /** Prepara la primera página. Lo llama el PlayerController al abrir el radial. */
+    void BeginRadial();
+
+    /** Recalcula qué slot (cardinal) está bajo el cursor. Lo llama el PlayerController cada tick. */
     void UpdateSelection();
 
-    /** Índice del slot resaltado (-1 = ninguno / zona muerta). */
+    /** Cambia de página (rueda del mouse). Envuelve al llegar a los extremos. */
+    void NextPage();
+    void PrevPage();
+
+    /** Índice del slot resaltado dentro de la página (-1 = ninguno / zona muerta). */
     UFUNCTION(BlueprintPure, Category="ShapeRadial")
     int32 GetSelectedIndex() const { return SelectedIndex; }
 
     /** Devuelve la forma seleccionada. false si está en zona muerta (→ mantener la forma actual). */
     bool GetSelectedShape(EPTStampShape& OutShape) const;
 
-    /** El BP dibuja el resaltado del slot (Index = -1 → ninguno). Si usás un UPTRadialMenu (abajo)
-     *  no hace falta implementarlo: el resaltado lo maneja ese widget solo. */
+    /** El BP puede resaltar el slot si no usa el UPTRadialMenu (Index = -1 → ninguno). */
     UFUNCTION(BlueprintImplementableEvent, Category="ShapeRadial")
     void OnSelectionChanged(int32 NewIndex);
 
 protected:
-    /** OPCIONAL: si ponés un UPTRadialMenu (widget nativo del Palette) llamado "Radial" dentro del
-     *  WBP, se usa su geometría y hit-test, y se le maneja el resaltado automáticamente. El orden de
-     *  sus slots debe matchear SlotShapes (slot 0 = SlotShapes[0], etc.). */
+    /** UPTRadialMenu nativo dentro del WBP (recomendado): se le cargan los iconos de la página actual
+     *  y se le maneja el resaltado. */
     UPROPERTY(meta=(BindWidgetOptional)) UPTRadialMenu* Radial = nullptr;
 
+    /** Formas por página (cardinales). No tocar: la selección cardinal asume 4. */
+    static constexpr int32 SlotsPerPage = 4;
+
 private:
-    int32 SelectedIndex = -1;
+    int32 SelectedIndex = -1; // slot dentro de la página (0=arriba,1=der,2=abajo,3=izq)
+    int32 CurrentPage   = 0;
+
+    int32 NumPages() const;
+    void  BuildPage();        // vuelca los 4 iconos de la página actual al UPTRadialMenu
 };

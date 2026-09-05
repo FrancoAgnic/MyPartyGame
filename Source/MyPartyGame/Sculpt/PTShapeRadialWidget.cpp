@@ -4,59 +4,102 @@
 #include "../UI/PTRadialMenu.h"
 #include "Framework/Application/SlateApplication.h"
 
+int32 UPTShapeRadialWidget::NumPages() const
+{
+    return FMath::Max(1, FMath::DivideAndRoundUp(ShapeSlots.Num(), SlotsPerPage));
+}
+
+void UPTShapeRadialWidget::BeginRadial()
+{
+    CurrentPage   = 0;
+    SelectedIndex = -1;
+    BuildPage();
+}
+
+void UPTShapeRadialWidget::BuildPage()
+{
+    if (!Radial) return;
+
+    // Cargar en el radial los (hasta 4) iconos de la página actual, en orden cardinal.
+    Radial->Slots.Reset();
+    const int32 Base = CurrentPage * SlotsPerPage;
+    for (int32 i = 0; i < SlotsPerPage; ++i)
+    {
+        const int32 G = Base + i;
+        if (!ShapeSlots.IsValidIndex(G)) break;
+        FPTRadialSlot S;
+        S.Icon = ShapeSlots[G].Icon;
+        S.Tag  = FName(*ShapeSlots[G].Name.ToString());
+        Radial->Slots.Add(S);
+    }
+    // Layout cardinal: slot 0 arriba, horario (0=arriba,1=der,2=abajo,3=izq).
+    Radial->StartAngleDegrees = -90.f;
+    Radial->bClockwise        = true;
+    Radial->SetHighlightedIndex(-1);
+    Radial->SynchronizeProperties(); // reconstruye los visuales con los nuevos slots
+    SelectedIndex = -1;
+    OnSelectionChanged(-1);
+}
+
+void UPTShapeRadialWidget::NextPage()
+{
+    if (NumPages() <= 1) return;
+    CurrentPage = (CurrentPage + 1) % NumPages();
+    BuildPage();
+}
+
+void UPTShapeRadialWidget::PrevPage()
+{
+    if (NumPages() <= 1) return;
+    CurrentPage = (CurrentPage - 1 + NumPages()) % NumPages();
+    BuildPage();
+}
+
 void UPTShapeRadialWidget::UpdateSelection()
 {
-    const int32 N = SlotShapes.Num();
-    if (N <= 0) return;
+    // Cuántos slots tiene la página actual (la última puede tener menos de 4).
+    const int32 Base       = CurrentPage * SlotsPerPage;
+    const int32 SlotsHere  = FMath::Clamp(ShapeSlots.Num() - Base, 0, SlotsPerPage);
+    if (SlotsHere <= 0) return;
 
-    // Si hay un UPTRadialMenu nativo dentro del WBP, delegamos en él (usa su propia geometría,
-    // deadzone y ángulos) y le manejamos el resaltado. El orden de slots debe matchear SlotShapes.
-    if (Radial)
-    {
-        const int32 NewIndex = Radial->HitTestAbsolute(FSlateApplication::Get().GetCursorPos());
-        Radial->SetHighlightedIndex(NewIndex);
-        if (NewIndex != SelectedIndex)
-        {
-            SelectedIndex = NewIndex;
-            OnSelectionChanged(SelectedIndex);
-        }
-        return;
-    }
-
-    // Cursor y centro del widget en el MISMO espacio (local del widget, sin escala DPI): así el
-    // DeadZonePixels es consistente sin importar la resolución. Mismo enfoque que la rueda de color.
+    // Centro y cursor en espacio LOCAL del widget (sin DPI) para un deadzone consistente.
     const FGeometry& Geo = GetCachedGeometry();
     const FVector2D LocalSize = Geo.GetLocalSize();
-    if (LocalSize.X <= 0.f || LocalSize.Y <= 0.f) return; // todavía sin geometría (primer frame)
+    if (LocalSize.X <= 0.f || LocalSize.Y <= 0.f) return; // sin geometría aún (primer frame)
 
     const FVector2D Center      = LocalSize * 0.5f;
-    const FVector2D CursorAbs   = FSlateApplication::Get().GetCursorPos();
-    const FVector2D CursorLocal = Geo.AbsoluteToLocal(CursorAbs);
-    const FVector2D Delta        = CursorLocal - Center;
+    const FVector2D CursorLocal = Geo.AbsoluteToLocal(FSlateApplication::Get().GetCursorPos());
+    const FVector2D Delta       = CursorLocal - Center;
 
+    // Selección CARDINAL por eje dominante (nada de diagonales): rapidísima y sin ambigüedad.
+    //   0 = arriba, 1 = derecha, 2 = abajo, 3 = izquierda (matchea StartAngle -90 + horario).
     int32 NewIndex = -1;
     if (Delta.Size() >= DeadZonePixels)
     {
-        // Ángulo con "arriba" = 0 y sentido HORARIO positivo (Y crece hacia abajo en pantalla).
-        float A = FMath::Atan2(Delta.Y, Delta.X) + HALF_PI;
-        A = FMath::Fmod(A + 2.f * PI, 2.f * PI);          // normalizar a [0, 2π)
-        const float Sector = 2.f * PI / static_cast<float>(N);
-        NewIndex = FMath::RoundToInt(A / Sector) % N;     // slot centrado en cada sector
+        if (FMath::Abs(Delta.X) > FMath::Abs(Delta.Y))
+            NewIndex = (Delta.X > 0.f) ? 1 : 3;   // derecha / izquierda
+        else
+            NewIndex = (Delta.Y < 0.f) ? 0 : 2;   // arriba / abajo
     }
+    // Si esa dirección no tiene slot en esta página (página incompleta), no seleccionar.
+    if (NewIndex >= SlotsHere) NewIndex = -1;
 
+    if (Radial) Radial->SetHighlightedIndex(NewIndex);
     if (NewIndex != SelectedIndex)
     {
         SelectedIndex = NewIndex;
-        OnSelectionChanged(SelectedIndex); // el BP resalta el slot
+        OnSelectionChanged(SelectedIndex);
     }
 }
 
 bool UPTShapeRadialWidget::GetSelectedShape(EPTStampShape& OutShape) const
 {
-    if (SlotShapes.IsValidIndex(SelectedIndex))
+    if (SelectedIndex < 0) return false; // zona muerta → mantener la forma actual
+    const int32 G = CurrentPage * SlotsPerPage + SelectedIndex;
+    if (ShapeSlots.IsValidIndex(G))
     {
-        OutShape = SlotShapes[SelectedIndex];
+        OutShape = ShapeSlots[G].Shape;
         return true;
     }
-    return false; // zona muerta → mantener la forma actual
+    return false;
 }

@@ -451,6 +451,10 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
     // hacés hover sobre cada slot (sin esperar a soltar). En la zona muerta se vuelve a la forma previa.
     if (bShapeRadialActive && ShapeRadial)
     {
+        // Rueda del mouse → cambiar de PÁGINA de formas (arriba = anterior, abajo = siguiente).
+        if (WasInputKeyJustPressed(EKeys::MouseScrollUp))   ShapeRadial->PrevPage();
+        if (WasInputKeyJustPressed(EKeys::MouseScrollDown)) ShapeRadial->NextPage();
+
         ShapeRadial->UpdateSelection();
         EPTStampShape HoverShape;
         if (ShapeRadial->GetSelectedShape(HoverShape))
@@ -1391,6 +1395,7 @@ void APTSculptPlayerController::OnShapeRadialPressed()
     ShapeBeforeRadial = StampShape;
 
     ShapeRadial->AddToViewport(20);
+    ShapeRadial->BeginRadial(); // arma la primera página (4 formas) con sus iconos
     SetInputMode(FInputModeGameAndUI());
     bShowMouseCursor = true;
 

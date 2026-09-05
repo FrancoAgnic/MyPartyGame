@@ -14,7 +14,9 @@ class UNiagaraSystem;
 class UNiagaraComponent;
 
 UENUM(BlueprintType)
-enum class EPTStampShape : uint8 { Sphere, Cube, Cylinder, TriPrism };
+// OJO: agregar SIEMPRE al final (los valores se serializan/replican; mover rompe saves y red).
+// TriPrism es en realidad un CONO (histórico). Las de abajo son primitivas nuevas para el radial.
+enum class EPTStampShape : uint8 { Sphere, Cube, Cylinder, TriPrism, Pyramid, Torus, Capsule, HexPrism, Octahedron };
 
 UENUM(BlueprintType)
 enum class EPTEditMode : uint8 { Add, Erase, Paint, Smooth };

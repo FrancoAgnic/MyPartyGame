@@ -911,6 +911,42 @@ float APTSculptVolume::StampSDF(EPTStampShape Shape, FVector P, float HalfSize)
         return FMath::Min(radial, axial);
     }
 
+    case EPTStampShape::Pyramid: // pirámide de base cuadrada (eje Z, punta +Z)
+    {
+        const float h = HalfSize;
+        const float rAllow = HalfSize * FMath::Clamp((h - P.Z) / (2.f * h), 0.f, 1.f);
+        const float radial = rAllow - FMath::Max(FMath::Abs(P.X), FMath::Abs(P.Y));
+        const float axial  = FMath::Min(P.Z + h, h - P.Z);
+        return FMath::Min(radial, axial);
+    }
+
+    case EPTStampShape::Torus: // dona en el plano XY
+    {
+        const float R = HalfSize * 0.62f; // radio mayor
+        const float t = HalfSize * 0.36f; // radio del tubo
+        const float q = FVector2D(FVector2D(P.X, P.Y).Size() - R, P.Z).Size();
+        return t - q;
+    }
+
+    case EPTStampShape::Capsule: // cápsula (eje Z)
+    {
+        const float r  = HalfSize * 0.5f;
+        const float zc = FMath::Clamp(P.Z, -(HalfSize - r), (HalfSize - r));
+        return r - FVector(P.X, P.Y, P.Z - zc).Size();
+    }
+
+    case EPTStampShape::HexPrism: // prisma hexagonal (eje Z)
+    {
+        const float k = 0.8660254f; // sqrt(3)/2
+        const float hx = FMath::Max(FMath::Abs(P.X) * k + FMath::Abs(P.Y) * 0.5f, FMath::Abs(P.Y));
+        const float radial = HalfSize - hx;
+        const float axial  = HalfSize - FMath::Abs(P.Z);
+        return FMath::Min(radial, axial);
+    }
+
+    case EPTStampShape::Octahedron:
+        return HalfSize - (FMath::Abs(P.X) + FMath::Abs(P.Y) + FMath::Abs(P.Z));
+
     default:
         return HalfSize - P.Size();
     }
