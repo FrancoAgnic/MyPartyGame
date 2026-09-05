@@ -195,6 +195,58 @@ struct FPTWorkshopQuery
             [CB = MoveTemp(CB), Out = MoveTemp(Out), bOk]() mutable { if (CB) CB(MoveTemp(Out), bOk); });
     }
 };
+
+// ===== Detalles de items concretos (por id) — para los suscritos de la Biblioteca ==============
+// Los packs suscritos se arman de la carpeta descargada (sin descripción/preview/tags). Esta query
+// (CreateQueryUGCDetailsRequest por ids) trae esos metadatos para que la lista de suscritos se vea
+// IGUAL que el browser. Devuelve id → FPTWorkshopItem.
+struct FPTWorkshopDetailsQuery
+{
+    TFunction<void(const TMap<uint64, FPTWorkshopItem>&)> Cb;
+    UGCQueryHandle_t Handle = k_UGCQueryHandleInvalid;
+    CCallResult<FPTWorkshopDetailsQuery, SteamUGCQueryCompleted_t> QueryCR;
+
+    void Start(const TArray<PublishedFileId_t>& Ids, TFunction<void(const TMap<uint64, FPTWorkshopItem>&)> InCb)
+    {
+        Cb = MoveTemp(InCb);
+        if (!SteamUGC() || Ids.Num() == 0) { if (Cb) Cb({}); return; }
+        Handle = SteamUGC()->CreateQueryUGCDetailsRequest(const_cast<PublishedFileId_t*>(Ids.GetData()), Ids.Num());
+        SteamUGC()->SetReturnLongDescription(Handle, true);
+        const SteamAPICall_t h = SteamUGC()->SendQueryUGCRequest(Handle);
+        QueryCR.Set(h, this, &FPTWorkshopDetailsQuery::OnComplete);
+    }
+
+    void OnComplete(SteamUGCQueryCompleted_t* p, bool bIOFailure)
+    {
+        TMap<uint64, FPTWorkshopItem> Out;
+        const bool bOk = !bIOFailure && p && p->m_eResult == k_EResultOK;
+        if (bOk && SteamUGC())
+        {
+            for (uint32 i = 0; i < p->m_unNumResultsReturned; ++i)
+            {
+                SteamUGCDetails_t D;
+                if (SteamUGC()->GetQueryUGCResult(Handle, i, &D))
+                {
+                    FPTWorkshopItem It;
+                    It.Id          = FString::Printf(TEXT("%llu"), D.m_nPublishedFileId);
+                    It.Title       = UTF8_TO_TCHAR(D.m_rgchTitle);
+                    It.Description = UTF8_TO_TCHAR(D.m_rgchDescription);
+                    It.Tags        = UTF8_TO_TCHAR(D.m_rgchTags);
+                    char PrevUrl[1024] = { 0 };
+                    if (SteamUGC()->GetQueryUGCPreviewURL(Handle, i, PrevUrl, sizeof(PrevUrl)))
+                        It.PreviewURL = UTF8_TO_TCHAR(PrevUrl);
+                    Out.Add((uint64)D.m_nPublishedFileId, MoveTemp(It));
+                }
+            }
+        }
+        if (SteamUGC() && Handle != k_UGCQueryHandleInvalid)
+            SteamUGC()->ReleaseQueryUGCRequest(Handle);
+
+        TFunction<void(const TMap<uint64, FPTWorkshopItem>&)> CB = MoveTemp(Cb);
+        AsyncTask(ENamedThreads::GameThread,
+            [CB = MoveTemp(CB), Out = MoveTemp(Out)]() mutable { if (CB) CB(Out); });
+    }
+};
 #endif // PT_WITH_STEAM
 
 // ==========================================================================
@@ -215,6 +267,7 @@ void UPTWordPackSubsystem::Deinitialize()
 #if PT_WITH_STEAM
     delete Publisher;       Publisher       = nullptr;
     delete Query;           Query           = nullptr;
+    delete Details;         Details         = nullptr;
     delete DownloadWatcher; DownloadWatcher = nullptr;
 #endif
     Super::Deinitialize();
@@ -276,6 +329,45 @@ void UPTWordPackSubsystem::RescanPacks()
     ScanWorkshopPacks();
     UE_LOG(LogPTWordPacks, Log, TEXT("RescanPacks: %d banco(s) de palabras."), Packs.Num());
     OnWordPacksUpdated.Broadcast();
+    // Traer descripción/preview/tags de los packs del Workshop (async → re-broadcast al llegar).
+    FetchWorkshopDetails();
+}
+
+void UPTWordPackSubsystem::FetchWorkshopDetails()
+{
+#if PT_WITH_STEAM
+    if (!SteamUGC()) return;
+    // Ids de los packs del Workshop a los que aún les falta el preview (evita re-pedir lo ya traído).
+    TArray<PublishedFileId_t> Ids;
+    for (const FPTWordPack& P : Packs)
+        if (P.bFromWorkshop && P.PreviewURL.IsEmpty())
+        {
+            const uint64 Fid = FCString::Strtoui64(*P.Id, nullptr, 10);
+            if (Fid != 0) Ids.Add((PublishedFileId_t)Fid);
+        }
+    if (Ids.Num() == 0) return;
+
+    delete Details;
+    Details = new FPTWorkshopDetailsQuery();
+    Details->Start(Ids, [this](const TMap<uint64, FPTWorkshopItem>& M)
+    {
+        delete Details; Details = nullptr;
+        bool bAny = false;
+        for (FPTWordPack& P : Packs)
+        {
+            if (!P.bFromWorkshop) continue;
+            const uint64 Fid = FCString::Strtoui64(*P.Id, nullptr, 10);
+            if (const FPTWorkshopItem* It = M.Find(Fid))
+            {
+                P.Description = It->Description;
+                P.PreviewURL  = It->PreviewURL;
+                P.Tags        = It->Tags;
+                bAny = true;
+            }
+        }
+        if (bAny) OnWordPacksUpdated.Broadcast(); // refresca la lista con miniatura/desc/tag
+    });
+#endif
 }
 
 void UPTWordPackSubsystem::AddPackFromFolder(const FString& Folder, const FString& Id, bool bWorkshop)

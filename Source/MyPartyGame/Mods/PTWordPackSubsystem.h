@@ -29,6 +29,11 @@ struct FPTWordPack
     UPROPERTY(BlueprintReadOnly, Category="WordPack") FString Author;
     UPROPERTY(BlueprintReadOnly, Category="WordPack") FString CsvPath;  // ruta absoluta a words.csv
     UPROPERTY(BlueprintReadOnly, Category="WordPack") bool    bFromWorkshop = false;
+    // Metadatos del Workshop (se piden a Steam por el id; vacíos en packs locales) — para que la lista
+    // de suscritos muestre lo MISMO que el browser: miniatura, descripción y tag de tipo.
+    UPROPERTY(BlueprintReadOnly, Category="WordPack") FString Description;
+    UPROPERTY(BlueprintReadOnly, Category="WordPack") FString PreviewURL;
+    UPROPERTY(BlueprintReadOnly, Category="WordPack") FString Tags;
 };
 
 // Un item del catálogo del Workshop (resultado de una búsqueda), para el Browser.
@@ -87,12 +92,15 @@ private:
     void AddPackFromFolder(const FString& Folder, const FString& Id, bool bWorkshop);
     void ScanLocalPacks();
     void ScanWorkshopPacks();
+    // Pide a Steam (por los ids) descripción/preview/tags de los packs del Workshop y re-broadcast.
+    void FetchWorkshopDetails();
 
     UPROPERTY() TArray<FPTWordPack> Packs;
 
 #if PT_WITH_STEAM
     struct FPTWorkshopPublish* Publisher = nullptr; // puntero opaco (steam headers fuera de UHT)
     struct FPTWorkshopQuery*   Query     = nullptr;
+    struct FPTWorkshopDetailsQuery* Details = nullptr; // query de detalles de los suscritos
     // Escucha DownloadItemResult_t: cuando Steam termina de bajar un item suscrito, re-escanea
     // (suscribirse NO baja el contenido solo; hay que llamar DownloadItem y esperar este callback).
     struct FPTWorkshopDownloadWatcher* DownloadWatcher = nullptr;

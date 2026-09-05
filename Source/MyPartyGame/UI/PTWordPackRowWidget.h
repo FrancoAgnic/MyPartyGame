@@ -16,6 +16,7 @@
 
 class UTextBlock;
 class UButton;
+class UImage;
 class UPTWordPackWidget;
 
 UCLASS()
@@ -34,10 +35,16 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* AuthorText;
     UPROPERTY(meta = (BindWidget))         UButton*    UseButton;
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* UseButtonText;
+    // Mismos datos que el browser (opcionales): miniatura, descripción y tag de tipo.
+    UPROPERTY(meta = (BindWidgetOptional)) UImage*     ThumbnailImage;
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* DescText;
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* TypeTagText;
 
     UFUNCTION() void OnUseClicked();
 
 private:
     FString PackId;
     UPROPERTY() UPTWordPackWidget* Owner = nullptr;
+
+    void DownloadThumbnail(const FString& Url); // baja el preview por HTTP → ThumbnailImage
 };
