@@ -1447,10 +1447,13 @@ void APTSculptVolume::ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float
 
     const FTransform Xf(LocalQ, LocalPos);
     FPTVoxelOctree& F = ActiveSVO ? *ActiveSVO : SVOField; // base o capa de detalle activa
+    // ToFColor(false) = SIN gamma: el nodo Vertex Color del material lee byte/255 como lineal, así el
+    // color del vértice coincide con el del picker/preview (con true quedaba más claro).
+    const FColor Col = PaintColor.ToFColor(false);
     if (Mode == EPTEditMode::Paint)
-        F.PaintShape(Xf, S, HalfExtent, PaintColor.ToFColor(true)); // recolorea la superficie
+        F.PaintShape(Xf, S, HalfExtent, Col); // recolorea la superficie
     else
-        F.EditShape(Xf, S, HalfExtent, /*bAdd=*/Mode == EPTEditMode::Add, PaintColor.ToFColor(true));
+        F.EditShape(Xf, S, HalfExtent, /*bAdd=*/Mode == EPTEditMode::Add, Col);
     bSVODirty = true;
 }
 
@@ -1504,6 +1507,9 @@ void APTSculptVolume::Multicast_ApplyStamp_Implementation(FVector WorldPos, EPTS
             for (const TSharedPtr<FPTVoxelOctree>& L : SVODetailFields)
                 if (L.IsValid()) { ActiveSVO = L.Get(); ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot, StampScale); }
             ActiveSVO = &SVOField;
+            // También borrar los ojos que caen bajo la brocha.
+            const float MaxSc = FMath::Max3(StampScale.X, StampScale.Y, StampScale.Z);
+            EraseEyesNear(WorldPos, Size * 0.5f * MaxSc);
         }
         else
         {
@@ -2074,6 +2080,19 @@ void APTSculptVolume::AddEye(FVector WorldPos, float Radius)
 void APTSculptVolume::OnRep_Eyes()
 {
     RebuildEyesMesh();
+}
+
+void APTSculptVolume::EraseEyesNear(const FVector& WorldPos, float Radius)
+{
+    if (!HasAuthority() || Eyes.Num() == 0) return; // Eyes es autoritativo del servidor (se replica)
+    const FVector Local = GetActorTransform().InverseTransformPosition(WorldPos);
+    bool bChanged = false;
+    for (int32 i = Eyes.Num() - 1; i >= 0; --i)
+    {
+        const FVector EC(Eyes[i].X, Eyes[i].Y, Eyes[i].Z);
+        if (FVector::Dist(EC, Local) <= Radius + Eyes[i].W) { Eyes.RemoveAt(i); bChanged = true; }
+    }
+    if (bChanged) RebuildEyesMesh();
 }
 
 void APTSculptVolume::RebuildEyesMesh()

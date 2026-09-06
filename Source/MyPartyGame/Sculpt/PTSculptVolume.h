@@ -246,6 +246,7 @@ protected:
 
     UFUNCTION() void OnRep_Eyes();
     void RebuildEyesMesh(); // reconstruye EyesMesh desde Eyes (usa EyeMesh/EyeMaterial)
+    void EraseEyesNear(const FVector& WorldPos, float Radius); // saca los ojos bajo la brocha (servidor)
 
     // ── Fuente de partículas al esculpir (Borrar/Pintar) ─────────────────────
     // Componente único reusado: se lo reubica en cada sello, se le setea el sistema según la
