@@ -1,0 +1,43 @@
+# Sculpturillo — Esculpido adaptativo tipo SculptrVR (Sparse Voxel Octree)
+
+Objetivo: "grande = pocos triángulos, chico = detalle infinito" + escenarios grandes,
+tiempo real y multiplayer. Basado en cómo lo hace SculptrVR (SVO + mallado adaptativo).
+
+Se desarrolla en la rama `svo-sculpt`, POR INCREMENTOS chicos que compilan y se testean
+uno por uno, SIN tocar el esculpido actual (uniforme) hasta que el nuevo esté validado.
+
+## Fases
+
+### Fase 1 — Núcleo SVO + mallado (single-player, offline)
+- [ ] 1.1  Estructura del octree esparso (`FPTVoxelOctree`): nodos, subdivisión adaptativa,
+           sample SDF trilineal, edición CSG de esfera (add/erase). ← ESTE INCREMENTO
+- [ ] 1.2  Dual Contouring por nodo hoja + hermite data (posición+normal en cruces de arista)
+           → malla con menos tris en zonas grandes y detalle en zonas subdivididas.
+- [ ] 1.3  Costura entre niveles distintos SIN grietas (caras de transición / minimal-edge).
+- [ ] 1.4  Un Actor de prueba (`APTSVOTest`) que edita y mallar en un ProceduralMesh, con
+           comandos de consola, para validar calidad/seams/perf aislado del gameplay.
+
+### Fase 2 — Paridad de features sobre el SVO
+- [ ] 2.1  Color/pintura por voxel en el octree.
+- [ ] 2.2  Undo por trazo (copy-on-write de nodos tocados).
+- [ ] 2.3  Baking a Static Mesh (para la cabeza custom / escenografía).
+- [ ] 2.4  Formas del sello (las primitivas actuales) + escala no-uniforme + rotación.
+
+### Fase 3 — Integración al juego + multiplayer
+- [ ] 3.1  Reemplazar `FPTSculptField` por el SVO en `APTSculptVolume` (detrás de un flag).
+- [ ] 3.2  Replicación de OPERACIONES (reusar el patrón `Server/Multicast_ApplyStamp`):
+           se manda la operación, cada cliente la aplica a su octree → determinismo.
+- [ ] 3.3  Tests multiplayer (2+ máquinas): consistencia, sin desync.
+
+### Fase 4 — UX de escala tipo SculptrVR
+- [ ] 4.1  Escalar el mundo / al jugador para editar a distintos niveles del octree
+           (achicarse = detalle fino; agrandarse = trabajar en grande).
+
+## Riesgos
+- El mallado adaptativo SIN costuras (1.3) es la parte difícil (dual contouring + transiciones).
+- Performance del re-mallado incremental (solo re-mallar nodos tocados, async).
+- Determinismo en la replicación de operaciones (3.2).
+
+## Regla
+Cada casilla = un incremento que COMPILA y se TESTEA antes de seguir. Nada se mergea a `main`
+hasta que la Fase 1 esté validada (calidad + perf).
