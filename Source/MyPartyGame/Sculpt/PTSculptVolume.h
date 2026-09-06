@@ -351,7 +351,8 @@ private:
     // Rango de celdas del lienzo (definido por el BoundsBox).
     void    CellBounds(FIntVector& OutMin, FIntVector& OutMax) const;
 
-    // ── Preview (marching cubes sobre un grid chico aislado) ────────────────
+public:
+    // ── Preview (marching cubes sobre un grid chico aislado). PÚBLICO: lo reusa el mallado del SVO. ──
     static void RunMarchingCubes(const TArray<float>& G, const TArray<FLinearColor>& CG,
                                  int32 GS, float VoxSz,
                                  int32 X0, int32 Y0, int32 Z0, int32 X1, int32 Y1, int32 Z1,
@@ -359,6 +360,7 @@ private:
                                  TArray<FVector>& OutNormals, TArray<FColor>& OutColors);
     static FVector Interp     (FVector P1, FVector P2, float V1, float V2);
     static FColor  InterpColor(FLinearColor C1, FLinearColor C2, float V1, float V2);
+protected:
 
     static const int32 EdgeTable[256];
     static const int32 TriTable[256][16];

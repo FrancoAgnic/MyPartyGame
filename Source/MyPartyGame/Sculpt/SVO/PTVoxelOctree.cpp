@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "PTVoxelOctree.h"
+#include "PTSculptVolume.h" // APTSculptVolume::RunMarchingCubes (reuso del MC del proyecto)
 
 namespace
 {
@@ -173,6 +174,37 @@ float FPTVoxelOctree::SampleNode(const FPTOctreeNode& Node, const FVector& NodeM
     if (!Node.Children[idx].IsValid()) return -1.f; // octante vacío = aire
     const FVector ChildMin = NodeMin + FVector((float)ix, (float)iy, (float)iz) * Half;
     return SampleNode(*Node.Children[idx], ChildMin, Half, P);
+}
+
+// ── Mallado (Fase 1.2) ──────────────────────────────────────────────────────────
+void FPTVoxelOctree::BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris, TArray<FVector>& OutNormals) const
+{
+    OutVerts.Reset(); OutTris.Reset(); OutNormals.Reset();
+    if (Root.IsValid()) MeshRec(*Root, Origin, RootSize, OutVerts, OutTris, OutNormals);
+}
+
+void FPTVoxelOctree::MeshRec(const FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize,
+                             TArray<FVector>& V, TArray<int32>& T, TArray<FVector>& N)
+{
+    if (Node.IsLeaf())
+    {
+        const int32 GS = FPTOctreeNode::LeafSamp;         // muestras por eje (stride del grid)
+        const float Cell = NodeSize / (float)FPTOctreeNode::LeafCells; // tamaño de celda de esta hoja
+        TArray<FVector> LV, LN; TArray<int32> LT;
+        TArray<FColor>  LC; TArray<FLinearColor> NoCol;
+        // La hoja usa el MISMO layout de grid que espera RunMarchingCubes (x + y*GS + z*GS^2).
+        APTSculptVolume::RunMarchingCubes(Node.LeafSDF, NoCol, GS, Cell,
+                                          0, 0, 0, GS - 1, GS - 1, GS - 1, LV, LT, LN, LC);
+        const int32 Base = V.Num();
+        for (const FVector& P : LV) V.Add(NodeMin + P); // local de hoja → local del octree
+        N.Append(LN);
+        for (int32 Idx : LT) T.Add(Base + Idx);
+        return;
+    }
+    const float Half = NodeSize * 0.5f;
+    for (int32 i = 0; i < 8; ++i)
+        if (Node.Children[i].IsValid())
+            MeshRec(*Node.Children[i], NodeMin + OctantOffset(i) * Half, Half, V, T, N);
 }
 
 // ── Métricas ──────────────────────────────────────────────────────────────────

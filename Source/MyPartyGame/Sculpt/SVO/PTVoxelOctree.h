@@ -52,6 +52,12 @@ public:
     // según el RADIO: radio grande → nodos grandes (pocos tris), radio chico → subdivide fino (detalle).
     void EditSphere(const FVector& Center, float Radius, bool bAdd);
 
+    // Fase 1.2 — Mallado: recorre las hojas y mallar cada una con Marching Cubes (reusa el MC del
+    // proyecto). Verts en espacio LOCAL. Zonas grandes = hojas grandes = pocos tris; zonas finas =
+    // muchas hojas chicas = detalle. NOTA: por ahora cada hoja se mallar por separado → puede haber
+    // costuras finas entre hojas de DISTINTO nivel (se cose en el incremento 1.3).
+    void BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris, TArray<FVector>& OutNormals) const;
+
     // ── Métricas / debug ────────────────────────────────────────────────────
     int32 CountLeaves() const;   // hojas allocadas (≈ cuánto detalle hay)
     int32 CountNodes()  const;   // nodos totales
@@ -87,6 +93,10 @@ private:
 
     // Descenso recursivo de sample.
     float SampleNode(const FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize, const FVector& P) const;
+
+    // Descenso recursivo de mallado (una hoja = un MC).
+    static void MeshRec(const FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize,
+                        TArray<FVector>& V, TArray<int32>& T, TArray<FVector>& N);
 
     static int32 CountLeavesRec(const FPTOctreeNode* N);
     static int32 CountNodesRec(const FPTOctreeNode* N);
