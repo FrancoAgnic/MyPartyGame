@@ -422,6 +422,149 @@ TSharedPtr<FPTVoxelOctree> FPTVoxelOctree::CloneRegion(const FBox& Region) const
     return C;
 }
 
+// ── Dual Contouring RECURSIVO (Ju et al.) — watertight ───────────────────────────────
+namespace DCR
+{
+    static const int32 H2M[8] = { 0, 4, 2, 6, 1, 5, 3, 7 }; // convención tablas (x=bit2) → la nuestra (x=bit0)
+    FORCEINLINE FVector HOffset(int32 h) { return FVector((h >> 2) & 1, (h >> 1) & 1, h & 1); }
+
+    static const int32 edgevmap[12][2] = {
+        {0,4},{1,5},{2,6},{3,7}, {0,2},{1,3},{4,6},{5,7}, {0,1},{2,3},{4,5},{6,7} };
+    static const int32 cellProcFaceMask[12][3] = {
+        {0,4,0},{1,5,0},{2,6,0},{3,7,0},{0,2,1},{4,6,1},{1,3,1},{5,7,1},{0,1,2},{2,3,2},{4,5,2},{6,7,2} };
+    static const int32 cellProcEdgeMask[6][5] = {
+        {0,1,2,3,0},{4,5,6,7,0},{0,4,1,5,1},{2,6,3,7,1},{0,2,4,6,2},{1,3,5,7,2} };
+    static const int32 faceProcFaceMask[3][4][3] = {
+        {{4,0,0},{5,1,0},{6,2,0},{7,3,0}},
+        {{2,0,1},{6,4,1},{3,1,1},{7,5,1}},
+        {{1,0,2},{3,2,2},{5,4,2},{7,6,2}} };
+    static const int32 faceProcEdgeMask[3][4][6] = {
+        {{1,4,0,5,1,1},{1,6,2,7,3,1},{0,4,6,0,2,2},{0,5,7,1,3,2}},
+        {{0,2,3,0,1,0},{0,6,7,4,5,0},{1,2,0,6,4,2},{1,3,1,7,5,2}},
+        {{1,1,0,3,2,0},{1,5,4,7,6,0},{0,1,5,0,4,1},{0,3,7,2,6,1}} };
+    static const int32 edgeProcEdgeMask[3][2][5] = {
+        {{3,2,1,0,0},{7,6,5,4,0}},
+        {{5,1,4,0,1},{7,3,6,2,1}},
+        {{6,4,2,0,2},{7,5,3,1,2}} };
+    static const int32 processEdgeMask[3][4] = { {3,2,1,0},{7,5,6,4},{11,10,9,8} };
+
+    struct FNode
+    {
+        const FPTOctreeNode* N = nullptr; FVector Min = FVector::ZeroVector; float Size = 0.f;
+        bool IsLeaf() const { return !N || N->IsLeaf(); }
+    };
+    FORCEINLINE FNode Child(const FNode& P, int32 h)
+    {
+        const float hs = P.Size * 0.5f;
+        FNode c; c.N = P.N->Children[H2M[h]].Get(); c.Min = P.Min + HOffset(h) * hs; c.Size = hs; return c;
+    }
+    FORCEINLINE float Corner(const FPTOctreeNode* N, int32 c) { return N->Corner[H2M[c]]; }
+    using FVertMap = TMap<const FPTOctreeNode*, int32>;
+
+    void ProcessEdge(const FNode n[4], int32 dir, const FVertMap& V, TArray<int32>& T)
+    {
+        float minSize = FLT_MAX; bool flip = false; bool sign = false; int32 idx[4];
+        for (int32 i = 0; i < 4; ++i)
+        {
+            const int32 e = processEdgeMask[dir][i];
+            const bool m1 = Corner(n[i].N, edgevmap[e][0]) > 0.f;
+            const bool m2 = Corner(n[i].N, edgevmap[e][1]) > 0.f;
+            if (n[i].Size < minSize) { minSize = n[i].Size; flip = m1; sign = (m1 != m2); }
+            const int32* f = V.Find(n[i].N); idx[i] = f ? *f : -1;
+        }
+        if (!sign) return;
+        const bool bAll = (idx[0] >= 0 && idx[1] >= 0 && idx[2] >= 0 && idx[3] >= 0);
+        if (bAll)
+        {
+            if (!flip) { T.Add(idx[0]); T.Add(idx[1]); T.Add(idx[3]); T.Add(idx[0]); T.Add(idx[3]); T.Add(idx[2]); }
+            else       { T.Add(idx[0]); T.Add(idx[3]); T.Add(idx[1]); T.Add(idx[0]); T.Add(idx[2]); T.Add(idx[3]); }
+            return;
+        }
+        // Fallback (alguna hoja sin vértice por inconsistencia): triángulo con los que existan.
+        int32 o[4]; int32 nv = 0;
+        for (int32 i = 0; i < 4; ++i) if (idx[i] >= 0) o[nv++] = idx[i];
+        if (nv < 3) return;
+        if (!flip) { T.Add(o[0]); T.Add(o[1]); T.Add(o[2]); }
+        else       { T.Add(o[0]); T.Add(o[2]); T.Add(o[1]); }
+    }
+
+    void EdgeProc(const FNode n[4], int32 dir, const FVertMap& V, TArray<int32>& T)
+    {
+        for (int32 i = 0; i < 4; ++i) if (!n[i].N) return;
+        if (n[0].IsLeaf() && n[1].IsLeaf() && n[2].IsLeaf() && n[3].IsLeaf()) { ProcessEdge(n, dir, V, T); return; }
+        for (int32 i = 0; i < 2; ++i)
+        {
+            FNode en[4];
+            for (int32 j = 0; j < 4; ++j) en[j] = n[j].IsLeaf() ? n[j] : Child(n[j], edgeProcEdgeMask[dir][i][j]);
+            EdgeProc(en, edgeProcEdgeMask[dir][i][4], V, T);
+        }
+    }
+
+    void FaceProc(const FNode& a, const FNode& b, int32 dir, const FVertMap& V, TArray<int32>& T)
+    {
+        if (!a.N || !b.N) return;
+        if (a.IsLeaf() && b.IsLeaf()) return;
+        for (int32 i = 0; i < 4; ++i)
+        {
+            const FNode fa = a.IsLeaf() ? a : Child(a, faceProcFaceMask[dir][i][0]);
+            const FNode fb = b.IsLeaf() ? b : Child(b, faceProcFaceMask[dir][i][1]);
+            FaceProc(fa, fb, faceProcFaceMask[dir][i][2], V, T);
+        }
+        static const int32 orders[2][4] = { {0,0,1,1}, {0,1,0,1} };
+        for (int32 i = 0; i < 4; ++i)
+        {
+            const int32* ord = orders[faceProcEdgeMask[dir][i][0]];
+            const int32 cc[4] = { faceProcEdgeMask[dir][i][1], faceProcEdgeMask[dir][i][2],
+                                  faceProcEdgeMask[dir][i][3], faceProcEdgeMask[dir][i][4] };
+            FNode en[4];
+            for (int32 j = 0; j < 4; ++j)
+            { const FNode& src = (ord[j] == 0) ? a : b; en[j] = src.IsLeaf() ? src : Child(src, cc[j]); }
+            EdgeProc(en, faceProcEdgeMask[dir][i][5], V, T);
+        }
+    }
+
+    void CellProc(const FNode& c, const FVertMap& V, TArray<int32>& T)
+    {
+        if (!c.N || c.N->IsLeaf()) return;
+        FNode ch[8];
+        for (int32 i = 0; i < 8; ++i) ch[i] = Child(c, i);
+        for (int32 i = 0; i < 8; ++i) CellProc(ch[i], V, T);
+        for (int32 i = 0; i < 12; ++i)
+            FaceProc(ch[cellProcFaceMask[i][0]], ch[cellProcFaceMask[i][1]], cellProcFaceMask[i][2], V, T);
+        for (int32 i = 0; i < 6; ++i)
+        {
+            const FNode en[4] = { ch[cellProcEdgeMask[i][0]], ch[cellProcEdgeMask[i][1]],
+                                  ch[cellProcEdgeMask[i][2]], ch[cellProcEdgeMask[i][3]] };
+            EdgeProc(en, cellProcEdgeMask[i][4], V, T);
+        }
+    }
+}
+
+void FPTVoxelOctree::BuildMeshDC(TArray<FVector>& OutVerts, TArray<int32>& OutTris,
+                                 TArray<FVector>& OutNormals, TArray<FColor>& OutColors) const
+{
+    OutVerts.Reset(); OutTris.Reset(); OutNormals.Reset(); OutColors.Reset();
+    if (!Root.IsValid()) return;
+
+    // 1) Un vértice por hoja de superficie (Surface Nets) + normal por gradiente + color.
+    TArray<FLeafRef> Leaves;
+    CollectLeaves(Root.Get(), Origin, RootSize, Leaves);
+    DCR::FVertMap VertOf; VertOf.Reserve(Leaves.Num());
+    for (const FLeafRef& L : Leaves)
+    {
+        FVector VP; FColor VC;
+        if (!LeafVertex(*L.Node, L.Min, L.Size, VP, VC)) continue;
+        const int32 Idx = OutVerts.Add(VP);
+        OutNormals.Add(FieldNormal(VP));
+        OutColors.Add(VC);
+        VertOf.Add(L.Node, Idx);
+    }
+
+    // 2) Conectividad recursiva (watertight): cellProc → faceProc → edgeProc.
+    DCR::FNode RootN; RootN.N = Root.Get(); RootN.Min = Origin; RootN.Size = RootSize;
+    DCR::CellProc(RootN, VertOf, OutTris);
+}
+
 // ── Undo (snapshots por clon) ──────────────────────────────────────────────────────
 TUniquePtr<FPTOctreeNode> FPTVoxelOctree::CloneNode(const FPTOctreeNode* N)
 {

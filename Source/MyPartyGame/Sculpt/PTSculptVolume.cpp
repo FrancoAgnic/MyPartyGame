@@ -1589,24 +1589,9 @@ void APTSculptVolume::RebuildSVOMesh()
     if (bSVOCoarseDirty || DirtySVOChunks.Num() > 0) SVOField.Balance(&RefinedBounds);
     for (const FBox& Bounds : RefinedBounds) MarkSVODirtyLocalBounds(Bounds.Min, Bounds.Max);
 
-    // Sección 0 = hojas GRANDES (pocas → barato, se rehace SINCRÓNICO en el game thread).
-    if (bSVOCoarseDirty)
-    {
-        const FBox Whole(SVOField.GetOrigin() - FVector(1.f),
-                         SVOField.GetOrigin() + FVector(SVOField.GetRootSize() + 1.f));
-        TArray<FVector> V, N; TArray<int32> T; TArray<FColor> C;
-        SVOField.BuildMeshFiltered(Whole, SVOFineThreshold(), FLT_MAX, V, T, N, C);
-        UMaterialInterface* Mat = ClayMaterialOverride ? ClayMaterialOverride
-                                : (ClayMID ? (UMaterialInterface*)ClayMID : ClayMaterial);
-        if (V.Num() == 0) Mesh->ClearMeshSection(0);
-        else
-        {
-            TArray<FVector2D> UV; TArray<FProcMeshTangent> Tan;
-            Mesh->CreateMeshSection(0, V, T, N, UV, C, Tan, false);
-            if (Mat) Mesh->SetMaterial(0, Mat);
-        }
-        bSVOCoarseDirty = false;
-    }
+    // Con DC recursivo, TODA la geometría (grande y chica) se reparte por chunks → la vieja "sección
+    // gruesa" del Mesh base ya no se usa: la vaciamos una vez.
+    if (bSVOCoarseDirty) { Mesh->ClearMeshSection(0); bSVOCoarseDirty = false; }
 
     // Capas de detalle: enteras (son chicas, sync).
     for (int32 i : DirtySVODetailLayers)
@@ -1638,19 +1623,45 @@ void APTSculptVolume::RebuildSVOMesh()
     bSVOMeshing = true;
     const uint32 Gen = SVOMeshGen;
     TWeakObjectPtr<APTSculptVolume> WeakThis(this);
-    Async(EAsyncExecution::ThreadPool, [WeakThis, Clone, Chunks, Origin, CS, Fine, D, Gen]()
+    Async(EAsyncExecution::ThreadPool, [WeakThis, Clone, Chunks, Origin, CS, D, Gen]()
     {
-        struct FChunkRes { int32 Idx; TArray<FVector> V, N; TArray<int32> T; TArray<FColor> C; };
+        struct FChunkRes { int32 Idx; TArray<FVector> V, N; TArray<int32> T; TArray<FColor> C; TMap<int32,int32> Remap; };
         TSharedPtr<TArray<FChunkRes>, ESPMode::ThreadSafe> Results = MakeShared<TArray<FChunkRes>, ESPMode::ThreadSafe>();
-        Results->Reserve(Chunks.Num());
-        for (int32 Idx : Chunks)
+
+        // 1) Malla WATERTIGHT del clon completo (DC recursivo).
+        TArray<FVector> AV, AN; TArray<int32> AT; TArray<FColor> AC;
+        Clone->BuildMeshDC(AV, AT, AN, AC);
+
+        // 2) Repartir triángulos por chunk según el centroide; solo se quedan los chunks sucios.
+        //    (cada triángulo va a UN chunk → sin duplicar; DC garantiza que no falta ninguno).
+        TSet<int32> Keep(Chunks);
+        TMap<int32, int32> ChunkToRes; // idx de chunk → índice en Results
+        auto GetRes = [&](int32 ci) -> FChunkRes&
         {
-            const int32 cx = Idx % D, cy = (Idx / D) % D, cz = Idx / (D * D);
-            const FBox ChunkBox(Origin + FVector(cx, cy, cz) * CS, Origin + FVector(cx + 1, cy + 1, cz + 1) * CS);
-            FChunkRes R; R.Idx = Idx;
-            Clone->BuildMeshFiltered(ChunkBox, 0.f, Fine, R.V, R.T, R.N, R.C);
-            Results->Add(MoveTemp(R));
+            if (int32* p = ChunkToRes.Find(ci)) return (*Results)[*p];
+            const int32 at = Results->Add(FChunkRes{ ci, {}, {}, {}, {}, {} });
+            ChunkToRes.Add(ci, at); return (*Results)[at];
+        };
+        for (int32 t = 0; t + 2 < AT.Num(); t += 3)
+        {
+            const int32 i0 = AT[t], i1 = AT[t + 1], i2 = AT[t + 2];
+            const FVector Ctr = (AV[i0] + AV[i1] + AV[i2]) / 3.f;
+            const int32 cx = FMath::FloorToInt((Ctr.X - Origin.X) / CS);
+            const int32 cy = FMath::FloorToInt((Ctr.Y - Origin.Y) / CS);
+            const int32 cz = FMath::FloorToInt((Ctr.Z - Origin.Z) / CS);
+            if (cx < 0 || cy < 0 || cz < 0 || cx >= D || cy >= D || cz >= D) continue;
+            const int32 ci = cx + cy * D + cz * D * D;
+            if (!Keep.Contains(ci)) continue;
+            FChunkRes& R = GetRes(ci);
+            auto Local = [&](int32 g) -> int32
+            {
+                if (int32* p = R.Remap.Find(g)) return *p;
+                const int32 li = R.V.Add(AV[g]); R.N.Add(AN[g]); R.C.Add(AC[g]); R.Remap.Add(g, li); return li;
+            };
+            R.T.Add(Local(i0)); R.T.Add(Local(i1)); R.T.Add(Local(i2));
         }
+        // 3) Chunks sucios que quedaron SIN triángulos → resultado vacío (para limpiar su sección).
+        for (int32 ci : Chunks) if (!ChunkToRes.Contains(ci)) Results->Add(FChunkRes{ ci, {}, {}, {}, {}, {} });
         AsyncTask(ENamedThreads::GameThread, [WeakThis, Results, Gen]()
         {
             if (APTSculptVolume* Self = WeakThis.Get())

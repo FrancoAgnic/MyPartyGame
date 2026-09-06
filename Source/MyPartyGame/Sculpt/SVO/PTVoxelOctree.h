@@ -96,6 +96,12 @@ public:
     // Barato: cuesta ~ tamaño de la región editada, no del modelo.
     TSharedPtr<FPTVoxelOctree> CloneRegion(const FBox& Region) const;
 
+    // Mallado por DUAL CONTOURING RECURSIVO (Ju et al.): WATERTIGHT por construcción — cada arista mínima
+    // se procesa exactamente una vez, sin importar el salto de resolución → SIN grietas nunca. Malla plana
+    // (el llamador reparte por chunks). Pensado para correr sobre un CloneRegion en un hilo de fondo.
+    void BuildMeshDC(TArray<FVector>& OutVerts, TArray<int32>& OutTris,
+                     TArray<FVector>& OutNormals, TArray<FColor>& OutColors) const;
+
     // ── Baking / persistencia (serialización del octree a bytes) ─────────────
     // Snapshot compacto del árbol para guardar (SaveGame), bakear escenografía o mandar por red.
     void Serialize(TArray<uint8>& OutBytes) const;
