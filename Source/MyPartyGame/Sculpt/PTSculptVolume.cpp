@@ -844,23 +844,25 @@ void APTSculptVolume::DebugDrawLOD()
     const FVector Half = FVector(BS * VoxelSize * 0.5f) * 0.96f; // caja por brick (un pelín menor)
     const FTransform X = GetActorTransform();
     int32 nFine = 0, nCoarse = 0;
+    // Color por paso: 1=verde (fino), 2=amarillo, 3=naranja, 4=rojo (más grueso = menos triángulos).
+    auto StepColor = [](int32 s) -> FColor {
+        switch (s) { case 1: return FColor::Green; case 2: return FColor::Yellow;
+                     case 3: return FColor::Orange; default: return FColor::Red; } };
 
     for (const TPair<FPTBrickKey, int32>& P : DebugBrickStep)
     {
         // Centro del brick en mundo: (brick*BrickSize + BrickSize/2) celdas × VoxelSize → local → mundo.
         const FVector CellCenter = (FVector(P.Key) * BS + FVector(BS * 0.5f)) * VoxelSize;
         const FVector WC = X.TransformPosition(CellCenter);
-        const bool bCoarse = (P.Value >= 2);
-        bCoarse ? ++nCoarse : ++nFine;
-        DrawDebugBox(W, WC, Half, X.GetRotation(),
-                     bCoarse ? FColor::Red : FColor::Green, /*bPersistent=*/false,
+        (P.Value >= 2) ? ++nCoarse : ++nFine;
+        DrawDebugBox(W, WC, Half, X.GetRotation(), StepColor(P.Value), /*bPersistent=*/false,
                      /*LifeTime=*/-1.f, /*DepthPriority=*/0, /*Thickness=*/1.5f);
     }
 
     if (GEngine)
         GEngine->AddOnScreenDebugMessage((uint64)((PTRINT)this), 0.f, FColor::Yellow,
-            FString::Printf(TEXT("[LOD] fino/verde=%d  grueso-paso2/rojo=%d  BigBrushLODMinSize=%.0f (0=off)"),
-                            nFine, nCoarse, BigBrushLODMinSize));
+            FString::Printf(TEXT("[LOD] fino(verde)=%d  grueso(amar/naran/rojo)=%d  Step=%d  MinSize=%.0f"),
+                            nFine, nCoarse, BigBrushLODStep, BigBrushLODMinSize));
 }
 
 void APTSculptVolume::CellBounds(FIntVector& OutMin, FIntVector& OutMax) const
@@ -1385,6 +1387,7 @@ void APTSculptVolume::RebuildDirty()
     auto Collect = [&](FPTSculptField& F, UProceduralMeshComponent* MComp)
     {
         if (!MComp || !F.HasDirty()) return;
+        F.BigBrushStep = FMath::Clamp(BigBrushLODStep, 1, 4); // knob de reducción de tris (brocha grande)
         TArray<FPTBrickKey> Keys;
         F.TakeDirty(Keys);
         const int32 Base = Jobs->Num();

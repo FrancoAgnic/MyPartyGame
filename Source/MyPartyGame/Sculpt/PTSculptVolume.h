@@ -37,6 +37,12 @@ public:
     // resolución (más perf, menos detalle); SUBIRLO = solo brochas muy grandes bajan resolución.
     // 0 = desactivado (comportamiento anterior: solo LOD por planitud).
     UPROPERTY(EditAnywhere, Category="Sculpt|LOD") float BigBrushLODMinSize = 300.f;
+
+    // Cuán GRUESO se malla lo esculpido con brocha grande. Es el knob de reducción de triángulos.
+    // Valores efectivos por la grilla (BrickSize=16, solo pasos divisores): 1 = sin reducción,
+    // 2 ≈ -75% tris, 4 ≈ -94% (3 se comporta como 2). Subilo lo máximo posible hasta donde la calidad
+    // te siga gustando. OJO: a 4 puede notarse un pelín el borde entre la zona gruesa y el detalle fino.
+    UPROPERTY(EditAnywhere, Category="Sculpt|LOD", meta=(ClampMin="1", ClampMax="4")) int32 BigBrushLODStep = 2;
     UPROPERTY(EditAnywhere, Category="Sculpt") UMaterialInterface* ClayMaterial = nullptr;
     // Override opcional del material de la malla de arcilla. Si se asigna, el volumen lo usa en vez del
     // ClayMID (atlas) al crear/re-crear las secciones. Lo usa la CABEZA del modo G (material de pintura

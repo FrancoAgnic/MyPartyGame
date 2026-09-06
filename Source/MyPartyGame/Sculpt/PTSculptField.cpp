@@ -220,8 +220,8 @@ float FPTSculptField::SampleSDF(float X, float Y, float Z) const
 //
 // SNMargin = MaxStep para que el muestreo grueso tenga su celda fantasma.
 
-static constexpr int32 SNMaxStep = 2;          // paso de mallado más grueso (zonas lisas)
-static constexpr int32 SNMargin  = SNMaxStep;  // borde fantasma en celdas finas
+static constexpr int32 SNMaxStep = 4;          // paso de mallado más grueso permitido (1=fino..4=muy grueso)
+static constexpr int32 SNMargin  = SNMaxStep;  // borde fantasma en celdas finas (= MaxStep)
 static constexpr float SNFlatThreshold = 0.985f;
 
 static float BrickFlatness(const FPTSculptField::FBrickSnapshot& Snap, int32 SS);
@@ -274,18 +274,25 @@ void FPTSculptField::SnapshotBrick(const FPTBrickKey& Key, FBrickSnapshot& Out)
 int32 FPTSculptField::DecideStep(const FPTBrickKey& Key) const
 {
     if (SNMaxStep < 2) return 1;
-    // Un brick es elegible para paso grueso (2) si es LISO o si fue esculpido con brocha GRANDE.
-    auto Elig = [&](const FPTBrickKey& K) -> bool {
-        if (CoarseBricks.Contains(K)) return true;      // brocha grande → media resolución
+    // Paso OBJETIVO de cada brick: brocha grande → BigBrushStep (configurable); liso → 2; detalle → 1.
+    auto Target = [&](const FPTBrickKey& K) -> int32 {
+        if (CoarseBricks.Contains(K)) return FMath::Clamp(BigBrushStep, 1, SNMaxStep); // brocha grande
         const float* p = Flatness.Find(K);
-        return (p ? *p : 1.f) > SNFlatThreshold;        // liso → media resolución
+        return ((p ? *p : 1.f) > SNFlatThreshold) ? 2 : 1; // liso=2, detalle=1
     };
-    if (!Elig(Key)) return 1;
+    int32 s = Target(Key);
+    if (s <= 1) return 1;
+    // Constraint de vecinos: el paso es el MÍNIMO del brick y sus 6 vecinos (así el borde con zonas
+    // finas baja de a poco y se minimizan costuras). A pasos altos igual puede notarse un pelín el borde.
     static const FIntVector N6[6] = {
         {1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1} };
     for (const FIntVector& d : N6)
-        if (!Elig(Key + d)) return 1; // constraint de vecinos → sin costuras (igual que antes)
-    return 2;
+        s = FMath::Min(s, Target(Key + d));
+    s = FMath::Clamp(s, 1, SNMaxStep);
+    // BrickSize=16 solo malla bien en pasos DIVISORES (1,2,4); 3 caería a fino. Redondear hacia abajo.
+    if (s >= 4) return 4;
+    if (s >= 2) return 2;
+    return 1;
 }
 
 // ─── Surface Nets ─────────────────────────────────────────────────────────────

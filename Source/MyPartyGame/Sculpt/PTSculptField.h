@@ -93,6 +93,10 @@ public:
     void SetBrickCoarse(const FPTBrickKey& Key, bool bCoarse)
     { if (bCoarse) CoarseBricks.Add(Key); else CoarseBricks.Remove(Key); }
 
+    // Paso de mallado para las zonas de brocha grande (2..4). Lo setea el volumen desde BigBrushLODStep.
+    // 2 ≈ -75% triángulos, 3 ≈ -89%, 4 ≈ -94% (más perf, más grueso). Lo usa DecideStep.
+    int32 BigBrushStep = 2;
+
     // Índice de sección del ProceduralMesh para un brick (estable por key).
     int32 SectionIndex(const FPTBrickKey& Key);
 
