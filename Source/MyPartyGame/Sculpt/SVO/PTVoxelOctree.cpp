@@ -419,6 +419,15 @@ void FPTVoxelOctree::Balance()
     static const FVector FaceN[6] = {
         FVector(1,0,0), FVector(-1,0,0), FVector(0,1,0), FVector(0,-1,0), FVector(0,0,1), FVector(0,0,-1) };
 
+    // Solo importan para las costuras las hojas de SUPERFICIE (cambio de signo). Las macizas del
+    // interior y las de aire no generan triángulos → no hace falta balancearlas (gran ahorro).
+    auto HasSurface = [](const FPTOctreeNode* Nd)
+    {
+        bool bIn = false, bOut = false;
+        for (int32 k = 0; k < 8; ++k) { if (Nd->Corner[k] > 0.f) bIn = true; else bOut = true; }
+        return bIn && bOut;
+    };
+
     for (int32 iter = 0; iter <= MaxDepth; ++iter)
     {
         TArray<FLeafRef> Leaves;
@@ -428,6 +437,7 @@ void FPTVoxelOctree::Balance()
         for (const FLeafRef& L : Leaves)
         {
             if (L.Size <= MinCell + KINDA_SMALL_NUMBER) continue; // ya en el máximo detalle
+            if (!HasSurface(L.Node)) continue;                    // no es superficie → no afecta costuras
             const float probe = MinCell * 0.5f;
             bool bNeeds = false;
             for (int32 f = 0; f < 6 && !bNeeds; ++f)
