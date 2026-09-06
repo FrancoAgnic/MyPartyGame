@@ -30,6 +30,14 @@ static FAutoConsoleCommand GCmdSVOAdd(
         A->AddSphere(R);
     }));
 
+static FAutoConsoleCommand GCmdSVOBake(
+    TEXT("PTSVO.Bake"), TEXT("Serializa el octree a un blob de bytes (persistencia)."),
+    FConsoleCommandDelegate::CreateLambda([] { if (APTSVOTest* A = APTSVOTest::Instance.Get()) A->Bake(); }));
+
+static FAutoConsoleCommand GCmdSVORestore(
+    TEXT("PTSVO.Restore"), TEXT("Recarga el octree desde el ultimo PTSVO.Bake (verifica round-trip)."),
+    FConsoleCommandDelegate::CreateLambda([] { if (APTSVOTest* A = APTSVOTest::Instance.Get()) A->Restore(); }));
+
 static FAutoConsoleCommand GCmdSVOShape(
     TEXT("PTSVO.Shape"),
     TEXT("PTSVO.Shape <box|cyl|torus|cone|ellip> <hx> <hy> <hz> [yawGrados] — shape con escala no-uniforme y rotacion."),
@@ -142,6 +150,21 @@ void APTSVOTest::Undo()
 {
     if (Octree.Undo()) { Rebuild(); UE_LOG(LogTemp, Log, TEXT("[SVO] Undo (quedan %d)."), Octree.UndoDepth()); }
     else               UE_LOG(LogTemp, Log, TEXT("[SVO] Nada para deshacer."));
+}
+
+void APTSVOTest::Bake()
+{
+    Octree.Serialize(BakedBlob);
+    UE_LOG(LogTemp, Log, TEXT("[SVO] Bake: %d bytes."), BakedBlob.Num());
+    if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green,
+        FString::Printf(TEXT("[SVO] Bake: %d bytes"), BakedBlob.Num()));
+}
+
+void APTSVOTest::Restore()
+{
+    if (BakedBlob.Num() == 0) { UE_LOG(LogTemp, Warning, TEXT("[SVO] No hay blob bakeado.")); return; }
+    if (Octree.LoadFromBytes(BakedBlob)) { Rebuild(); UE_LOG(LogTemp, Log, TEXT("[SVO] Restore OK.")); }
+    else UE_LOG(LogTemp, Warning, TEXT("[SVO] Restore fallo."));
 }
 
 void APTSVOTest::Rebuild()

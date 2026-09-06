@@ -45,6 +45,8 @@ public:
     // Shape genérica en el centro con semiejes (hx,hy,hz) y rotación YawDeg (para ver no-uniforme+rotación).
     void AddShape(EPTSVOShape Shape, const FVector& HalfExtent, float YawDeg);
     void Undo();                    // deshace el último Add
+    void Bake();                    // serializa el octree a un blob (bytes) + loguea tamaño
+    void Restore();                 // limpia y recarga desde el blob bakeado
     void Rebuild();                 // re-mallar + loguear stats
 
     // Instancia activa (para los comandos de consola). Weak: puede no existir.
@@ -52,5 +54,6 @@ public:
 
 private:
     FPTVoxelOctree Octree;
+    TArray<uint8>  BakedBlob; // último bake (para probar el round-trip)
     void EnsureInit();
 };

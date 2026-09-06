@@ -67,6 +67,11 @@ public:
     void BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris, TArray<FVector>& OutNormals,
                    TArray<FColor>& OutColors) const;
 
+    // ── Baking / persistencia (serialización del octree a bytes) ─────────────
+    // Snapshot compacto del árbol para guardar (SaveGame), bakear escenografía o mandar por red.
+    void Serialize(TArray<uint8>& OutBytes) const;
+    bool LoadFromBytes(const TArray<uint8>& InBytes);
+
     // ── Undo por trazo (snapshots) ──────────────────────────────────────────
     // Llamá PushUndoSnapshot() ANTES de cada trazo; Undo() vuelve al estado previo.
     void PushUndoSnapshot();
@@ -91,6 +96,8 @@ private:
     TArray<TUniquePtr<FPTOctreeNode>> UndoStack; // snapshots (clones) para deshacer
 
     static TUniquePtr<FPTOctreeNode> CloneNode(const FPTOctreeNode* N);
+    static void SerializeNode(FArchive& Ar, FPTOctreeNode& N);
+    static TUniquePtr<FPTOctreeNode> DeserializeNode(FArchive& Ar);
 
     // Profundidad objetivo para un radio dado (adaptativo). Celda ≈ Radius/CellsPerRadius.
     int32 DepthForRadius(float Radius) const;

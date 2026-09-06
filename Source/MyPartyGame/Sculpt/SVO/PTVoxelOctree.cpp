@@ -1,6 +1,8 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "PTVoxelOctree.h"
+#include "Serialization/MemoryWriter.h"
+#include "Serialization/MemoryReader.h"
 
 namespace
 {
@@ -218,6 +220,67 @@ void FPTVoxelOctree::EditFieldNode(FPTOctreeNode& Node, const FVector& NodeMin, 
         const FVector ChildMin = NodeMin + OctantOffset(i) * Half;
         EditFieldNode(*Node.Children[i], ChildMin, Half, Depth + 1, WorldBounds, TargetDepth, bAdd, PaintColor, SDF);
     }
+}
+
+// ── Serialización / baking ──────────────────────────────────────────────────────────
+void FPTVoxelOctree::SerializeNode(FArchive& Ar, FPTOctreeNode& N)
+{
+    Ar << N.bLeaf;
+    if (N.bLeaf)
+    {
+        for (int32 k = 0; k < 8; ++k) { Ar << N.Corner[k]; Ar << N.Col[k]; }
+    }
+    else
+    {
+        uint8 Mask = 0;
+        for (int32 i = 0; i < 8; ++i) if (N.Children[i].IsValid()) Mask |= (1 << i);
+        Ar << Mask;
+        for (int32 i = 0; i < 8; ++i)
+            if (Mask & (1 << i)) SerializeNode(Ar, *N.Children[i]);
+    }
+}
+
+TUniquePtr<FPTOctreeNode> FPTVoxelOctree::DeserializeNode(FArchive& Ar)
+{
+    TUniquePtr<FPTOctreeNode> N = MakeUnique<FPTOctreeNode>();
+    Ar << N->bLeaf;
+    if (N->bLeaf)
+    {
+        for (int32 k = 0; k < 8; ++k) { Ar << N->Corner[k]; Ar << N->Col[k]; }
+    }
+    else
+    {
+        uint8 Mask = 0;
+        Ar << Mask;
+        for (int32 i = 0; i < 8; ++i)
+            if (Mask & (1 << i)) N->Children[i] = DeserializeNode(Ar);
+    }
+    return N;
+}
+
+void FPTVoxelOctree::Serialize(TArray<uint8>& OutBytes) const
+{
+    OutBytes.Reset();
+    if (!Root.IsValid()) return;
+    FMemoryWriter Ar(OutBytes, /*bIsPersistent=*/true);
+    int32 Version = 1;
+    Ar << Version;
+    FVector O = Origin; float RS = RootSize; int32 MD = MaxDepth;
+    Ar << O; Ar << RS; Ar << MD;
+    SerializeNode(Ar, *Root);
+}
+
+bool FPTVoxelOctree::LoadFromBytes(const TArray<uint8>& InBytes)
+{
+    if (InBytes.Num() == 0) return false;
+    FMemoryReader Ar(InBytes, /*bIsPersistent=*/true);
+    int32 Version = 0;
+    Ar << Version;
+    if (Version != 1) return false;
+    Ar << Origin; Ar << RootSize; Ar << MaxDepth;
+    Root = DeserializeNode(Ar);
+    UndoStack.Empty();
+    return Root.IsValid();
 }
 
 // ── Undo (snapshots por clon) ──────────────────────────────────────────────────────

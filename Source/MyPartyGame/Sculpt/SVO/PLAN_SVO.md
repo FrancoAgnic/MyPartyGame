@@ -17,10 +17,10 @@ uno por uno, SIN tocar el esculpido actual (uniforme) hasta que el nuevo esté v
 - [x] 1.4  Actor de prueba (`APTSVOTest`) + comandos `PTSVO.Demo/Clear/Stats/Add`.
 
 ### Fase 2 — Paridad de features sobre el SVO
-- [ ] 2.1  Color/pintura por voxel en el octree.
-- [ ] 2.2  Undo por trazo (copy-on-write de nodos tocados).
-- [ ] 2.3  Baking a Static Mesh (para la cabeza custom / escenografía).
-- [ ] 2.4  Formas del sello (las primitivas actuales) + escala no-uniforme + rotación.
+- [x] 2.1  Color/pintura por voxel (vertex colors en el DC).  ✅
+- [x] 2.2  Undo por trazo (snapshots por clon; se optimiza a copy-on-write en Fase 3).  ✅
+- [x] 2.3  Baking/persistencia: Serialize/LoadFromBytes del octree (blob de bytes).  ✅
+- [x] 2.4  Shapes (Box/Elipsoide/Cilindro/Toro/Cono) + escala no-uniforme + rotacion (EditShape).  ✅
 
 ### Fase 3 — Integración al juego + multiplayer
 - [ ] 3.1  Reemplazar `FPTSculptField` por el SVO en `APTSculptVolume` (detrás de un flag).
