@@ -1,11 +1,10 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "PTVoxelOctree.h"
-#include "PTSculptVolume.h" // APTSculptVolume::RunMarchingCubes (reuso del MC del proyecto)
 
 namespace
 {
-    // Offset del octante i (bits: x=1, y=2, z=4) en [0,1] por eje.
+    // Offset del octante/esquina i (bits: x=1, y=2, z=4) en [0,1] por eje.
     FORCEINLINE FVector OctantOffset(int32 i)
     {
         return FVector((i & 1) ? 1.f : 0.f, (i & 2) ? 1.f : 0.f, (i & 4) ? 1.f : 0.f);
@@ -21,15 +20,24 @@ namespace
             FMath::Clamp(Center.Z, Min.Z, Max.Z));
         return FVector::DistSquared(Closest, Center) <= R * R;
     }
+
+    FORCEINLINE bool Inside(float V) { return V > 0.f; } // POSITIVO = dentro
+
+    // Las 12 aristas del cubo como pares de esquinas (numeración x=1,y=2,z=4).
+    static const int32 EdgeCorners[12][2] = {
+        {0,1},{2,3},{4,5},{6,7}, // aristas en X
+        {0,2},{1,3},{4,6},{5,7}, // aristas en Y
+        {0,4},{1,5},{2,6},{3,7}  // aristas en Z
+    };
 }
 
+// ── Init / Reset ─────────────────────────────────────────────────────────────────
 void FPTVoxelOctree::Init(const FVector& InOrigin, float InRootSize, int32 InMaxDepth)
 {
     Origin   = InOrigin;
     RootSize = FMath::Max(InRootSize, 1.f);
     MaxDepth = FMath::Clamp(InMaxDepth, 0, 12);
-    Root = MakeUnique<FPTOctreeNode>();
-    MakeLeaf(*Root); // raíz = hoja gruesa, todo aire
+    Root = MakeUnique<FPTOctreeNode>(); // hoja gruesa, todo aire
 }
 
 void FPTVoxelOctree::Reset()
@@ -37,64 +45,48 @@ void FPTVoxelOctree::Reset()
     Root.Reset();
 }
 
+// ── Profundidad adaptativa por radio ──────────────────────────────────────────────
 int32 FPTVoxelOctree::DepthForRadius(float Radius) const
 {
-    // Queremos que la celda de la hoja sea ~ Radius / CellsPerRadius (más celdas = más redondo).
-    const float CellsPerRadius = 3.0f;
+    // Queremos varias celdas por radio (más celdas = más redondo). cell(d) = RootSize / 2^d.
+    const float CellsPerRadius = 2.5f;
     const float TargetCell = FMath::Max(Radius / CellsPerRadius, KINDA_SMALL_NUMBER);
-    // cellSize(d) = RootSize / (2^d * LeafCells) = TargetCell  →  2^d = RootSize / (LeafCells * TargetCell)
-    const float Ratio = RootSize / (float)(FPTOctreeNode::LeafCells) / TargetCell;
+    const float Ratio = RootSize / TargetCell; // = 2^d
     const int32 d = (Ratio > 1.f) ? FMath::RoundToInt(FMath::Log2(Ratio)) : 0;
     return FMath::Clamp(d, 0, MaxDepth);
 }
 
-// ── Hojas ──────────────────────────────────────────────────────────────────────
-void FPTVoxelOctree::MakeLeaf(FPTOctreeNode& Node)
+// ── Trilineal sobre 8 esquinas ─────────────────────────────────────────────────────
+float FPTVoxelOctree::TrilinearCorners(const float C[8], float fx, float fy, float fz)
 {
-    Node.LeafSDF.Init(-1.f, FPTOctreeNode::LeafCount); // todo aire (fuera del material)
+    const float c00 = FMath::Lerp(C[0], C[1], fx);
+    const float c10 = FMath::Lerp(C[2], C[3], fx);
+    const float c01 = FMath::Lerp(C[4], C[5], fx);
+    const float c11 = FMath::Lerp(C[6], C[7], fx);
+    const float c0  = FMath::Lerp(c00, c10, fy);
+    const float c1  = FMath::Lerp(c01, c11, fy);
+    return FMath::Lerp(c0, c1, fz);
 }
 
-float FPTVoxelOctree::SampleLeaf(const FPTOctreeNode& Leaf, const FVector& CellCoord)
-{
-    const int32 N = FPTOctreeNode::LeafCells;
-    const FVector C(
-        FMath::Clamp(CellCoord.X, 0.f, (float)N),
-        FMath::Clamp(CellCoord.Y, 0.f, (float)N),
-        FMath::Clamp(CellCoord.Z, 0.f, (float)N));
-    const int32 x0 = FMath::Min((int32)C.X, N - 1);
-    const int32 y0 = FMath::Min((int32)C.Y, N - 1);
-    const int32 z0 = FMath::Min((int32)C.Z, N - 1);
-    const float fx = C.X - x0, fy = C.Y - y0, fz = C.Z - z0;
-    auto S = [&](int32 x, int32 y, int32 z) { return Leaf.LeafSDF[FPTOctreeNode::SampIdx(x, y, z)]; };
-    return FMath::Lerp(
-        FMath::Lerp(FMath::Lerp(S(x0,y0,z0),   S(x0+1,y0,z0),   fx), FMath::Lerp(S(x0,y0+1,z0),   S(x0+1,y0+1,z0),   fx), fy),
-        FMath::Lerp(FMath::Lerp(S(x0,y0,z0+1), S(x0+1,y0,z0+1), fx), FMath::Lerp(S(x0,y0+1,z0+1), S(x0+1,y0+1,z0+1), fx), fy),
-        fz);
-}
-
+// ── Refinar hoja → 8 hijos-hoja (preserva lo esculpido por interpolación) ───────────
 void FPTVoxelOctree::RefineLeaf(FPTOctreeNode& Node)
 {
     if (!Node.IsLeaf()) return;
-    const int32 N = FPTOctreeNode::LeafCells;
-    const FPTOctreeNode Parent = MoveTemp(Node); // copia del contenido (LeafSDF) para resamplear
-    // Node queda vacío tras el move; reconstruimos como interno con 8 hijos hoja.
-    Node.LeafSDF.Empty();
-    for (int32 i = 0; i < 8; ++i)
+    float P[8];
+    for (int32 i = 0; i < 8; ++i) P[i] = Node.Corner[i];
+
+    for (int32 c = 0; c < 8; ++c)
     {
         TUniquePtr<FPTOctreeNode> Child = MakeUnique<FPTOctreeNode>();
-        MakeLeaf(*Child);
-        const FVector Base = OctantOffset(i) * 0.5f; // fracción [0..1] del padre donde arranca el hijo
-        for (int32 z = 0; z <= N; ++z)
-        for (int32 y = 0; y <= N; ++y)
-        for (int32 x = 0; x <= N; ++x)
+        const FVector Off = OctantOffset(c) * 0.5f; // esquina mínima del hijo dentro del padre [0..1]
+        for (int32 k = 0; k < 8; ++k)
         {
-            // Muestra (x,y,z) del hijo → fracción en el padre → coord de celda del padre [0..N].
-            const FVector Frac = Base + FVector((float)x, (float)y, (float)z) / (float)N * 0.5f;
-            const FVector ParentCell = Frac * (float)N;
-            Child->LeafSDF[FPTOctreeNode::SampIdx(x, y, z)] = SampleLeaf(Parent, ParentCell);
+            const FVector KF = Off + OctantOffset(k) * 0.5f; // esquina k del hijo en fracción del padre
+            Child->Corner[k] = TrilinearCorners(P, KF.X, KF.Y, KF.Z);
         }
-        Node.Children[i] = MoveTemp(Child);
+        Node.Children[c] = MoveTemp(Child);
     }
+    Node.bLeaf = false;
 }
 
 // ── Edición ─────────────────────────────────────────────────────────────────────
@@ -105,42 +97,43 @@ void FPTVoxelOctree::EditSphere(const FVector& Center, float Radius, bool bAdd)
     EditNode(*Root, Origin, RootSize, 0, Center, Radius, bAdd, TargetDepth);
 }
 
+void FPTVoxelOctree::WriteSphereCorners(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize,
+                                        const FVector& Center, float Radius, bool bAdd) const
+{
+    for (int32 k = 0; k < 8; ++k)
+    {
+        const FVector P = NodeMin + OctantOffset(k) * NodeSize;
+        const float Dist = FVector::Dist(P, Center);
+        // SDF de la esfera normalizado por el tamaño de celda (>0 dentro de la esfera). El SIGNO es
+        // consistente entre niveles (no depende del tamaño) → topología coherente = crack-free.
+        const float SphereSDF = FMath::Clamp((Radius - Dist) / NodeSize, -1.f, 1.f);
+        float& V = Node.Corner[k];
+        V = bAdd ? FMath::Max(V, SphereSDF)   // unión (agregar)
+                 : FMath::Min(V, -SphereSDF); // resta  (borrar)
+        V = FMath::Clamp(V, -1.f, 1.f);
+    }
+}
+
 void FPTVoxelOctree::EditNode(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize, int32 Depth,
-                              const FVector& Center, float Radius, bool bAdd, int32 TargetDepth)
+                              const FVector& Center, float Radius, bool bAdd, int32 TargetDepth) const
 {
     if (!SphereHitsBox(Center, Radius, NodeMin, NodeSize)) return;
 
-    // Si llegamos a la profundidad objetivo (o más) y el nodo no está subdividido → escribir en la hoja.
-    if (Depth >= TargetDepth && !Node.HasChildren())
+    if (Node.IsLeaf())
     {
-        if (!Node.IsLeaf()) MakeLeaf(Node);
-        const int32 N = FPTOctreeNode::LeafCells;
-        const float CellSize = NodeSize / (float)N;
-        for (int32 z = 0; z <= N; ++z)
-        for (int32 y = 0; y <= N; ++y)
-        for (int32 x = 0; x <= N; ++x)
+        if (Depth >= TargetDepth || Depth >= MaxDepth)
         {
-            const FVector P = NodeMin + FVector((float)x, (float)y, (float)z) * CellSize;
-            const float Dist = FVector::Dist(P, Center);
-            const float SphereSDF = FMath::Clamp((Radius - Dist) / CellSize, -1.f, 1.f); // >0 dentro de la esfera
-            float& V = Node.LeafSDF[FPTOctreeNode::SampIdx(x, y, z)];
-            V = bAdd ? FMath::Max(V, SphereSDF)   // unión (agregar)
-                     : FMath::Min(V, -SphereSDF); // resta  (borrar)
-            V = FMath::Clamp(V, -1.f, 1.f);
+            WriteSphereCorners(Node, NodeMin, NodeSize, Center, Radius, bAdd);
+            return;
         }
-        return;
+        RefineLeaf(Node); // hay que bajar más: subdividir preservando lo esculpido
     }
 
-    // Hay que bajar más: si era hoja, refinarla (preserva lo esculpido); si estaba vacía, crear hijos.
-    if (Node.IsLeaf()) RefineLeaf(Node);
+    // Interno: recursión a los 8 hijos (siempre existen tras RefineLeaf).
     const float Half = NodeSize * 0.5f;
     for (int32 i = 0; i < 8; ++i)
     {
-        if (!Node.Children[i].IsValid())
-        {
-            Node.Children[i] = MakeUnique<FPTOctreeNode>();
-            MakeLeaf(*Node.Children[i]); // hijo vacío (aire) que la recursión puede refinar/escribir
-        }
+        if (!Node.Children[i].IsValid()) continue;
         const FVector ChildMin = NodeMin + OctantOffset(i) * Half;
         EditNode(*Node.Children[i], ChildMin, Half, Depth + 1, Center, Radius, bAdd, TargetDepth);
     }
@@ -150,64 +143,215 @@ void FPTVoxelOctree::EditNode(FPTOctreeNode& Node, const FVector& NodeMin, float
 float FPTVoxelOctree::Sample(const FVector& LocalPos) const
 {
     if (!Root.IsValid()) return -1.f;
-    return SampleNode(*Root, Origin, RootSize, LocalPos);
+    const FLeafInfo LI = FindLeaf(LocalPos);
+    if (!LI.Node) return -1.f; // región aire
+    const FVector F = (LocalPos - LI.Min) / LI.Size; // [0..1] dentro de la hoja
+    return TrilinearCorners(LI.Node->Corner,
+                            FMath::Clamp((float)F.X, 0.f, 1.f),
+                            FMath::Clamp((float)F.Y, 0.f, 1.f),
+                            FMath::Clamp((float)F.Z, 0.f, 1.f));
 }
 
-float FPTVoxelOctree::SampleNode(const FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize, const FVector& P) const
+FPTVoxelOctree::FLeafInfo FPTVoxelOctree::FindLeaf(const FVector& P) const
 {
-    const FVector Max = NodeMin + FVector(NodeSize);
-    if (P.X < NodeMin.X || P.Y < NodeMin.Y || P.Z < NodeMin.Z ||
-        P.X > Max.X || P.Y > Max.Y || P.Z > Max.Z)
-        return -1.f; // fuera del nodo = aire
+    FLeafInfo Out;
+    if (!Root.IsValid()) return Out;
+    const FVector Max = Origin + FVector(RootSize);
+    if (P.X < Origin.X || P.Y < Origin.Y || P.Z < Origin.Z || P.X >= Max.X || P.Y >= Max.Y || P.Z >= Max.Z)
+        return Out; // fuera de la raíz = aire
 
-    if (Node.IsLeaf())
+    const FPTOctreeNode* N = Root.Get();
+    FVector Min = Origin;
+    float Size = RootSize;
+    while (N && !N->IsLeaf())
     {
-        const FVector CellCoord = (P - NodeMin) / NodeSize * (float)FPTOctreeNode::LeafCells;
-        return SampleLeaf(Node, CellCoord);
+        const float Half = Size * 0.5f;
+        const int32 ix = (P.X >= Min.X + Half) ? 1 : 0;
+        const int32 iy = (P.Y >= Min.Y + Half) ? 1 : 0;
+        const int32 iz = (P.Z >= Min.Z + Half) ? 1 : 0;
+        const int32 idx = ix | (iy << 1) | (iz << 2);
+        Min += FVector((float)ix, (float)iy, (float)iz) * Half;
+        Size = Half;
+        const FPTOctreeNode* Child = N->Children[idx].Get();
+        if (!Child) { Out.Min = Min; Out.Size = Size; return Out; } // octante aire (no allocado)
+        N = Child;
     }
-    // Interno: bajar al hijo que contiene el punto.
-    const float Half = NodeSize * 0.5f;
-    const int32 ix = (P.X >= NodeMin.X + Half) ? 1 : 0;
-    const int32 iy = (P.Y >= NodeMin.Y + Half) ? 1 : 0;
-    const int32 iz = (P.Z >= NodeMin.Z + Half) ? 1 : 0;
-    const int32 idx = ix | (iy << 1) | (iz << 2);
-    if (!Node.Children[idx].IsValid()) return -1.f; // octante vacío = aire
-    const FVector ChildMin = NodeMin + FVector((float)ix, (float)iy, (float)iz) * Half;
-    return SampleNode(*Node.Children[idx], ChildMin, Half, P);
+    Out.Node = N; Out.Min = Min; Out.Size = Size;
+    return Out;
 }
 
-// ── Mallado (Fase 1.2) ──────────────────────────────────────────────────────────
+// ── Vértice Surface Nets de una hoja ───────────────────────────────────────────────
+bool FPTVoxelOctree::LeafVertex(const FPTOctreeNode& Leaf, const FVector& Min, float Size, FVector& OutLocal)
+{
+    FVector Sum(0.f);
+    int32 Count = 0;
+    for (int32 e = 0; e < 12; ++e)
+    {
+        const int32 a = EdgeCorners[e][0];
+        const int32 b = EdgeCorners[e][1];
+        const float va = Leaf.Corner[a];
+        const float vb = Leaf.Corner[b];
+        if (Inside(va) == Inside(vb)) continue; // sin cruce en esta arista
+        float t = va / (va - vb); // cruce cero (va + t*(vb-va) = 0)
+        t = FMath::Clamp(t, 0.f, 1.f);
+        const FVector Pa = Min + FPTOctreeNode::CornerOffset(a) * Size;
+        const FVector Pb = Min + FPTOctreeNode::CornerOffset(b) * Size;
+        Sum += FMath::Lerp(Pa, Pb, t);
+        ++Count;
+    }
+    if (Count == 0) return false;
+    OutLocal = Sum / (float)Count;
+    return true;
+}
+
+FVector FPTVoxelOctree::FieldNormal(const FVector& P) const
+{
+    const float e = FMath::Max(MinCellSize() * 0.5f, 0.01f);
+    const float gx = Sample(P + FVector(e, 0, 0)) - Sample(P - FVector(e, 0, 0));
+    const float gy = Sample(P + FVector(0, e, 0)) - Sample(P - FVector(0, e, 0));
+    const float gz = Sample(P + FVector(0, 0, e)) - Sample(P - FVector(0, 0, e));
+    FVector G(gx, gy, gz);
+    // grad apunta hacia MÁS material (dentro); la normal exterior es -grad.
+    if (!G.Normalize()) return FVector::UpVector;
+    return -G;
+}
+
+// ── Recolección de hojas ───────────────────────────────────────────────────────────
+void FPTVoxelOctree::CollectLeaves(const FPTOctreeNode* N, const FVector& NodeMin, float NodeSize,
+                                   TArray<FLeafRef>& Out) const
+{
+    if (!N) return;
+    if (N->IsLeaf()) { Out.Add({ N, NodeMin, NodeSize }); return; }
+    const float Half = NodeSize * 0.5f;
+    for (int32 i = 0; i < 8; ++i)
+        if (N->Children[i].IsValid())
+            CollectLeaves(N->Children[i].Get(), NodeMin + OctantOffset(i) * Half, Half, Out);
+}
+
+// ── Mallado: Dual Contouring por aristas mínimas ────────────────────────────────────
 void FPTVoxelOctree::BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris, TArray<FVector>& OutNormals) const
 {
     OutVerts.Reset(); OutTris.Reset(); OutNormals.Reset();
-    if (Root.IsValid()) MeshRec(*Root, Origin, RootSize, OutVerts, OutTris, OutNormals);
-}
+    if (!Root.IsValid()) return;
 
-void FPTVoxelOctree::MeshRec(const FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize,
-                             TArray<FVector>& V, TArray<int32>& T, TArray<FVector>& N)
-{
-    if (Node.IsLeaf())
+    // 1) Un vértice por hoja con cambio de signo.
+    TArray<FLeafRef> Leaves;
+    CollectLeaves(Root.Get(), Origin, RootSize, Leaves);
+
+    TMap<const FPTOctreeNode*, int32> VertOf;
+    VertOf.Reserve(Leaves.Num());
+    for (const FLeafRef& L : Leaves)
     {
-        const int32 GS = FPTOctreeNode::LeafSamp;         // muestras por eje (stride del grid)
-        const float Cell = NodeSize / (float)FPTOctreeNode::LeafCells; // tamaño de celda de esta hoja
-        TArray<FVector> LV, LN; TArray<int32> LT;
-        TArray<FColor>  LC; TArray<FLinearColor> NoCol;
-        // La hoja usa el MISMO layout de grid que espera RunMarchingCubes (x + y*GS + z*GS^2).
-        APTSculptVolume::RunMarchingCubes(Node.LeafSDF, NoCol, GS, Cell,
-                                          0, 0, 0, GS - 1, GS - 1, GS - 1, LV, LT, LN, LC);
-        const int32 Base = V.Num();
-        for (const FVector& P : LV) V.Add(NodeMin + P); // local de hoja → local del octree
-        N.Append(LN);
-        for (int32 Idx : LT) T.Add(Base + Idx);
-        return;
+        FVector VLocal;
+        if (!LeafVertex(*L.Node, L.Min, L.Size, VLocal)) continue;
+        const int32 Idx = OutVerts.Add(VLocal);
+        OutNormals.Add(FieldNormal(VLocal));
+        VertOf.Add(L.Node, Idx);
     }
-    const float Half = NodeSize * 0.5f;
-    for (int32 i = 0; i < 8; ++i)
-        if (Node.Children[i].IsValid())
-            MeshRec(*Node.Children[i], NodeMin + OctantOffset(i) * Half, Half, V, T, N);
+
+    // 2) Conectividad: por cada "arista mínima" con cambio de signo, unir los vértices de las hojas
+    //    que la rodean. La hoja "dueña" (la más fina; a igualdad, la de esquina menor) la emite una vez.
+    for (const FLeafRef& L : Leaves)
+    {
+        if (!VertOf.Contains(L.Node)) continue; // hoja sin superficie
+        const float s = L.Size;
+
+        for (int32 axis = 0; axis < 3; ++axis)
+        {
+            const int32 u = (axis + 1) % 3;
+            const int32 v = (axis + 2) % 3;
+
+            for (int32 cv = 0; cv < 2; ++cv)
+            for (int32 cu = 0; cu < 2; ++cu)
+            {
+                // Recta de la arista (paralela a 'axis') en (pu,pv); extremos en axis = [min, min+s].
+                FVector A0 = L.Min, A1 = L.Min;
+                A0[u] = A1[u] = L.Min[u] + cu * s;
+                A0[v] = A1[v] = L.Min[v] + cv * s;
+                A0[axis] = L.Min[axis];
+                A1[axis] = L.Min[axis] + s;
+
+                const float f0 = Sample(A0);
+                const float f1 = Sample(A1);
+                if (Inside(f0) == Inside(f1)) continue; // sin cruce → no hay quad
+
+                // Las 4 hojas alrededor de la recta, en orden CCW mirando hacia +axis:
+                // (σu,σv) = (-,-),(+,-),(+,+),(-,+).
+                static const int32 SU[4] = { -1, +1, +1, -1 };
+                static const int32 SV[4] = { -1, -1, +1, +1 };
+                const float aMid = L.Min[axis] + 0.5f * s;
+                const float eps  = 0.25f * s;
+
+                const FPTOctreeNode* Ring[4] = { nullptr, nullptr, nullptr, nullptr };
+                FVector RingMin[4];
+                float   RingSize[4] = { 0,0,0,0 };
+                bool    bValid = true;
+                float   finest = s;
+                for (int32 q = 0; q < 4; ++q)
+                {
+                    FVector Q; Q[axis] = aMid;
+                    Q[u] = L.Min[u] + cu * s + SU[q] * eps;
+                    Q[v] = L.Min[v] + cv * s + SV[q] * eps;
+                    const FLeafInfo LI = FindLeaf(Q);
+                    if (!LI.Node) { bValid = false; break; }
+                    Ring[q] = LI.Node; RingMin[q] = LI.Min; RingSize[q] = LI.Size;
+                    finest = FMath::Min(finest, LI.Size);
+                }
+                if (!bValid) continue;
+
+                // Sólo la hoja MÁS FINA de la arista la procesa (evita duplicados). Si hay un vecino más
+                // fino que L, esta arista no es mínima para L → la emitirá el vecino fino.
+                if (finest < s - KINDA_SMALL_NUMBER) continue;
+
+                // A igualdad de tamaño (== s), dueña = la de esquina (min) menor lexicográfica.
+                const FPTOctreeNode* Owner = nullptr;
+                FVector OwnerMin(FLT_MAX);
+                for (int32 q = 0; q < 4; ++q)
+                {
+                    if (FMath::Abs(RingSize[q] - s) > KINDA_SMALL_NUMBER) continue; // sólo las de tamaño s
+                    const FVector& M = RingMin[q];
+                    if (M.X < OwnerMin.X - KINDA_SMALL_NUMBER ||
+                        (FMath::IsNearlyEqual(M.X, OwnerMin.X) && (M.Y < OwnerMin.Y - KINDA_SMALL_NUMBER ||
+                        (FMath::IsNearlyEqual(M.Y, OwnerMin.Y) && M.Z < OwnerMin.Z - KINDA_SMALL_NUMBER))))
+                    {
+                        OwnerMin = M; Owner = Ring[q];
+                    }
+                }
+                if (Owner != L.Node) continue; // no soy la dueña
+
+                // Vértices únicos alrededor del anillo (una hoja grande puede ocupar 2 cuadrantes).
+                int32 Ord[4]; int32 NUnique = 0;
+                for (int32 q = 0; q < 4; ++q)
+                {
+                    const FPTOctreeNode* Nd = Ring[q];
+                    if (NUnique > 0 && Nd == Ring[(q + 3) % 4]) continue; // igual al anterior en el anillo
+                    const int32* Found = VertOf.Find(Nd);
+                    if (!Found) { NUnique = -1; break; }
+                    Ord[NUnique++] = *Found;
+                }
+                if (NUnique < 3) continue;
+                // dedup cierre del anillo (primer == último)
+                if (NUnique == 4 && Ord[0] == Ord[3]) NUnique = 3;
+                if (NUnique < 3) continue;
+
+                // Orientación: si el material está del lado -axis (f0 dentro, f1 fuera) la normal va +axis
+                // y el anillo CCW ya es correcto; si no, invertimos.
+                const bool bFlip = !(Inside(f0) && !Inside(f1));
+
+                auto EmitTri = [&](int32 i0, int32 i1, int32 i2)
+                {
+                    if (bFlip) { OutTris.Add(i0); OutTris.Add(i2); OutTris.Add(i1); }
+                    else       { OutTris.Add(i0); OutTris.Add(i1); OutTris.Add(i2); }
+                };
+
+                EmitTri(Ord[0], Ord[1], Ord[2]);
+                if (NUnique == 4) EmitTri(Ord[0], Ord[2], Ord[3]);
+            }
+        }
+    }
 }
 
-// ── Métricas ──────────────────────────────────────────────────────────────────
+// ── Métricas ──────────────────────────────────────────────────────────────────────
 int32 FPTVoxelOctree::CountLeavesRec(const FPTOctreeNode* N)
 {
     if (!N) return 0;

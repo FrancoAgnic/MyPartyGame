@@ -1,10 +1,13 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 // Sparse Voxel Octree para esculpido ADAPTATIVO (tipo SculptrVR): la resolución depende del tamaño
-// de la edición → brocha grande escribe en nodos grandes (pocas muestras → pocos tris), brocha chica
+// de la edición → brocha grande escribe en nodos grandes (pocos vértices → pocos tris), brocha chica
 // subdivide a nodos finos (detalle alto). Solo se allocan nodos que se tocan (esparso).
 //
-// Fase 1.1 (este archivo): estructura + subdivisión adaptativa + sample SDF trilineal + CSG de esfera.
-// El mallado (dual contouring) va en el incremento siguiente. NO está conectado al juego todavía.
+// Mallado: DUAL CONTOURING (variante Surface Nets). Cada HOJA con cambio de signo aporta UN vértice
+// (promedio de los cruces cero de sus 12 aristas). La conectividad se arma recorriendo las "aristas
+// mínimas" del árbol: por cada arista con cambio de signo se conecta el vértice de las (hasta 4) hojas
+// que la rodean. Como los vértices se COMPARTEN entre hojas de distinto nivel, la malla es
+// CRACK-FREE por construcción: no hay costuras aunque una hoja grande toque una chica.
 //
 // Convención SDF: POSITIVO = dentro del material, 0 = superficie (igual que FPTSculptField).
 // Es un struct plano C++ (sin UObject) para poder mesharlo en el ThreadPool más adelante.
@@ -12,27 +15,25 @@
 #pragma once
 #include "CoreMinimal.h"
 
-// Un nodo del octree: INTERNO (tiene hijos) u HOJA (tiene una grilla densa de SDF). Nunca ambos.
+// Un nodo del octree. HOJA = una sola celda cúbica con 8 valores SDF en las esquinas.
+// INTERNO = 8 hijos (octantes) y sin esquinas propias. Nunca ambos.
 struct FPTOctreeNode
 {
-    // Celdas por eje dentro de una hoja (8 celdas → 9 muestras de esquina por eje).
-    static constexpr int32 LeafCells = 8;
-    static constexpr int32 LeafSamp  = LeafCells + 1;                 // muestras por eje (esquinas)
-    static constexpr int32 LeafCount = LeafSamp * LeafSamp * LeafSamp; // muestras totales de una hoja
+    TUniquePtr<FPTOctreeNode> Children[8]; // hijos (octantes) si es interno
+    float Corner[8];                        // SDF en las 8 esquinas si es hoja
+    bool  bLeaf = true;
 
-    TUniquePtr<FPTOctreeNode> Children[8]; // hijos (octantes). Interno si alguno es válido.
-    TArray<float>             LeafSDF;      // grilla de esquinas si es HOJA; vacía si es interno.
-
-    bool IsLeaf() const { return LeafSDF.Num() == LeafCount; }
-    bool HasChildren() const
+    FPTOctreeNode()
     {
-        for (int32 i = 0; i < 8; ++i) if (Children[i].IsValid()) return true;
-        return false;
+        for (int32 i = 0; i < 8; ++i) Corner[i] = -1.f; // todo aire por defecto
     }
 
-    static FORCEINLINE int32 SampIdx(int32 x, int32 y, int32 z)
+    bool IsLeaf() const { return bLeaf; }
+
+    // Esquina c: x=bit0, y=bit1, z=bit2. Posición = NodeMin + (x,y,z)*NodeSize.
+    static FORCEINLINE FVector CornerOffset(int32 c)
     {
-        return x + y * LeafSamp + z * LeafSamp * LeafSamp;
+        return FVector((c & 1) ? 1.f : 0.f, (c & 2) ? 1.f : 0.f, (c & 4) ? 1.f : 0.f);
     }
 };
 
@@ -40,7 +41,7 @@ class FPTVoxelOctree
 {
 public:
     // Origin = esquina mínima del cubo raíz; RootSize = lado del cubo (UU local); MaxDepth = profundidad
-    // máxima de subdivisión (define el detalle más fino: celda mínima = RootSize / (2^MaxDepth * LeafCells)).
+    // máxima (celda mínima = RootSize / 2^MaxDepth). Hojas de UNA celda: el detalle lo da la profundidad.
     void Init(const FVector& InOrigin, float InRootSize, int32 InMaxDepth);
     void Reset();
     bool IsInit() const { return Root.IsValid(); }
@@ -52,22 +53,17 @@ public:
     // según el RADIO: radio grande → nodos grandes (pocos tris), radio chico → subdivide fino (detalle).
     void EditSphere(const FVector& Center, float Radius, bool bAdd);
 
-    // Fase 1.2 — Mallado: recorre las hojas y mallar cada una con Marching Cubes (reusa el MC del
-    // proyecto). Verts en espacio LOCAL. Zonas grandes = hojas grandes = pocos tris; zonas finas =
-    // muchas hojas chicas = detalle. NOTA: por ahora cada hoja se mallar por separado → puede haber
-    // costuras finas entre hojas de DISTINTO nivel (se cose en el incremento 1.3).
+    // Mallado por Dual Contouring (crack-free entre niveles). Verts en espacio LOCAL.
     void BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris, TArray<FVector>& OutNormals) const;
 
     // ── Métricas / debug ────────────────────────────────────────────────────
     int32 CountLeaves() const;   // hojas allocadas (≈ cuánto detalle hay)
     int32 CountNodes()  const;   // nodos totales
 
-    // Geometría útil para el mesher (más adelante) y tests.
     FVector GetOrigin()   const { return Origin; }
     float   GetRootSize() const { return RootSize; }
     int32   GetMaxDepth() const { return MaxDepth; }
-    // Tamaño de celda de una hoja a profundidad d.
-    float   LeafCellSize(int32 Depth) const { return RootSize / (float)((1 << Depth) * FPTOctreeNode::LeafCells); }
+    float   MinCellSize() const { return RootSize / (float)(1 << MaxDepth); }
 
 private:
     FVector Origin = FVector::ZeroVector;
@@ -78,25 +74,31 @@ private:
     // Profundidad objetivo para un radio dado (adaptativo). Celda ≈ Radius/CellsPerRadius.
     int32 DepthForRadius(float Radius) const;
 
-    // Descenso recursivo de edición. NodeMin/NodeSize = cubo del nodo. Devuelve nada; muta el árbol.
+    // Descenso recursivo de edición.
     void EditNode(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize, int32 Depth,
-                  const FVector& Center, float Radius, bool bAdd, int32 TargetDepth);
+                  const FVector& Center, float Radius, bool bAdd, int32 TargetDepth) const;
+    void WriteSphereCorners(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize,
+                            const FVector& Center, float Radius, bool bAdd) const;
 
-    // Convierte un nodo (vacío/hoja) en HOJA con SDF inicializado. Si venía de un padre, se puede
-    // resamplear desde su SDF (para no perder lo ya esculpido al refinar).
-    static void MakeLeaf(FPTOctreeNode& Node);
-    // Refina una HOJA en 8 hijos-hoja, resampleando su SDF a cada hijo (trilineal), y la vuelve interna.
+    // Refina una HOJA en 8 hijos-hoja, resampleando (trilineal) sus esquinas a cada hijo.
     static void RefineLeaf(FPTOctreeNode& Node);
+    static float TrilinearCorners(const float C[8], float fx, float fy, float fz);
 
-    // Sample trilineal DENTRO de una hoja, en coords locales de celda [0..LeafCells].
-    static float SampleLeaf(const FPTOctreeNode& Leaf, const FVector& CellCoord);
+    // ── Consulta espacial ────────────────────────────────────────────────────
+    struct FLeafInfo
+    {
+        const FPTOctreeNode* Node = nullptr; // null si la región es aire (no allocada)
+        FVector Min = FVector::ZeroVector;
+        float   Size = 0.f;
+    };
+    FLeafInfo FindLeaf(const FVector& P) const;
 
-    // Descenso recursivo de sample.
-    float SampleNode(const FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize, const FVector& P) const;
-
-    // Descenso recursivo de mallado (una hoja = un MC).
-    static void MeshRec(const FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize,
-                        TArray<FVector>& V, TArray<int32>& T, TArray<FVector>& N);
+    // ── Mallado ───────────────────────────────────────────────────────────────
+    struct FLeafRef { const FPTOctreeNode* Node; FVector Min; float Size; };
+    void CollectLeaves(const FPTOctreeNode* N, const FVector& NodeMin, float NodeSize, TArray<FLeafRef>& Out) const;
+    // Vértice Surface Nets de una hoja (promedio de cruces de sus 12 aristas). Devuelve false si no hay cruce.
+    static bool LeafVertex(const FPTOctreeNode& Leaf, const FVector& Min, float Size, FVector& OutLocal);
+    FVector FieldNormal(const FVector& P) const; // normal = -grad(SDF)
 
     static int32 CountLeavesRec(const FPTOctreeNode* N);
     static int32 CountNodesRec(const FPTOctreeNode* N);
