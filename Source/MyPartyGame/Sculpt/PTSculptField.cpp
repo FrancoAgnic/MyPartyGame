@@ -220,7 +220,7 @@ float FPTSculptField::SampleSDF(float X, float Y, float Z) const
 //
 // SNMargin = MaxStep para que el muestreo grueso tenga su celda fantasma.
 
-static constexpr int32 SNMaxStep = 4;          // paso de mallado más grueso permitido (1=fino..4=muy grueso)
+static constexpr int32 SNMaxStep = 8;          // paso de mallado más grueso permitido (1=fino..8=muy grueso)
 static constexpr int32 SNMargin  = SNMaxStep;  // borde fantasma en celdas finas (= MaxStep)
 static constexpr float SNFlatThreshold = 0.985f;
 
@@ -289,7 +289,8 @@ int32 FPTSculptField::DecideStep(const FPTBrickKey& Key) const
     for (const FIntVector& d : N6)
         s = FMath::Min(s, Target(Key + d));
     s = FMath::Clamp(s, 1, SNMaxStep);
-    // BrickSize=16 solo malla bien en pasos DIVISORES (1,2,4); 3 caería a fino. Redondear hacia abajo.
+    // BrickSize=16 solo malla bien en pasos DIVISORES (1,2,4,8); otros caerían a fino. Redondear abajo.
+    if (s >= 8) return 8;
     if (s >= 4) return 4;
     if (s >= 2) return 2;
     return 1;

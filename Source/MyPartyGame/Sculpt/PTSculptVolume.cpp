@@ -847,7 +847,8 @@ void APTSculptVolume::DebugDrawLOD()
     // Color por paso: 1=verde (fino), 2=amarillo, 3=naranja, 4=rojo (más grueso = menos triángulos).
     auto StepColor = [](int32 s) -> FColor {
         switch (s) { case 1: return FColor::Green; case 2: return FColor::Yellow;
-                     case 3: return FColor::Orange; default: return FColor::Red; } };
+                     case 3: return FColor::Orange; case 4: return FColor::Red;
+                     default: return FColor::Magenta; } }; // 8 = magenta (más grueso)
 
     for (const TPair<FPTBrickKey, int32>& P : DebugBrickStep)
     {
@@ -1387,7 +1388,7 @@ void APTSculptVolume::RebuildDirty()
     auto Collect = [&](FPTSculptField& F, UProceduralMeshComponent* MComp)
     {
         if (!MComp || !F.HasDirty()) return;
-        F.BigBrushStep = FMath::Clamp(BigBrushLODStep, 1, 4); // knob de reducción de tris (brocha grande)
+        F.BigBrushStep = FMath::Clamp(BigBrushLODStep, 1, 8); // knob de reducción de tris (brocha grande)
         TArray<FPTBrickKey> Keys;
         F.TakeDirty(Keys);
         const int32 Base = Jobs->Num();
