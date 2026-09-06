@@ -170,6 +170,7 @@ void APTSVOTest::Restore()
 void APTSVOTest::Rebuild()
 {
     if (!Mesh) return;
+    Octree.Balance(); // 2:1 antes de mallar (sin artefactos en saltos grandes)
     TArray<FVector> V, N;
     TArray<int32>   T;
     TArray<FColor>  C;

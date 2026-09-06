@@ -410,6 +410,49 @@ void FPTVoxelOctree::CollectLeaves(const FPTOctreeNode* N, const FVector& NodeMi
             CollectLeaves(N->Children[i].Get(), NodeMin + OctantOffset(i) * Half, Half, Out);
 }
 
+// ── Balance 2:1 ─────────────────────────────────────────────────────────────────────
+void FPTVoxelOctree::Balance()
+{
+    if (!Root.IsValid()) return;
+    const float MinCell = MinCellSize();
+    // Direcciones de las 6 caras (normal saliente).
+    static const FVector FaceN[6] = {
+        FVector(1,0,0), FVector(-1,0,0), FVector(0,1,0), FVector(0,-1,0), FVector(0,0,1), FVector(0,0,-1) };
+
+    for (int32 iter = 0; iter <= MaxDepth; ++iter)
+    {
+        TArray<FLeafRef> Leaves;
+        CollectLeaves(Root.Get(), Origin, RootSize, Leaves);
+
+        TArray<FPTOctreeNode*> ToRefine;
+        for (const FLeafRef& L : Leaves)
+        {
+            if (L.Size <= MinCell + KINDA_SMALL_NUMBER) continue; // ya en el máximo detalle
+            const float probe = MinCell * 0.5f;
+            bool bNeeds = false;
+            for (int32 f = 0; f < 6 && !bNeeds; ++f)
+            {
+                // 4 puntos sobre la cara (a 1/4 y 3/4) empujados apenas hacia afuera.
+                const int32 ax = (f / 2); // 0=X,1=Y,2=Z
+                const int32 u = (ax + 1) % 3, v = (ax + 2) % 3;
+                for (int32 j = 0; j < 4 && !bNeeds; ++j)
+                {
+                    FVector P = L.Min;
+                    P[ax] += (FaceN[f][ax] > 0 ? L.Size + probe : -probe);
+                    P[u]  += ((j & 1) ? 0.75f : 0.25f) * L.Size;
+                    P[v]  += ((j & 2) ? 0.75f : 0.25f) * L.Size;
+                    const FLeafInfo N = FindLeaf(P);
+                    if (N.Node && N.Size <= L.Size * 0.25f + KINDA_SMALL_NUMBER) bNeeds = true; // ≥2 niveles más fino
+                }
+            }
+            if (bNeeds) ToRefine.Add(const_cast<FPTOctreeNode*>(L.Node));
+        }
+
+        if (ToRefine.Num() == 0) break;
+        for (FPTOctreeNode* N : ToRefine) RefineLeaf(*N);
+    }
+}
+
 // ── Mallado: Dual Contouring por aristas mínimas ────────────────────────────────────
 void FPTVoxelOctree::BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris, TArray<FVector>& OutNormals,
                                TArray<FColor>& OutColors) const
@@ -503,20 +546,27 @@ void FPTVoxelOctree::BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris
                 }
                 if (Owner != L.Node) continue; // no soy la dueña
 
-                // Vértices únicos alrededor del anillo (una hoja grande puede ocupar 2 cuadrantes).
-                int32 Ord[4]; int32 NUnique = 0;
+                // Hojas DISTINTAS alrededor del anillo (una hoja grande puede ocupar 2 cuadrantes
+                // consecutivos → se dedupea). Orden CCW preservado.
+                const FPTOctreeNode* RingU[4]; int32 NR = 0;
                 for (int32 q = 0; q < 4; ++q)
                 {
                     const FPTOctreeNode* Nd = Ring[q];
-                    if (NUnique > 0 && Nd == Ring[(q + 3) % 4]) continue; // igual al anterior en el anillo
-                    const int32* Found = VertOf.Find(Nd);
-                    if (!Found) { NUnique = -1; break; }
-                    Ord[NUnique++] = *Found;
+                    if (NR > 0 && Nd == RingU[NR - 1]) continue;
+                    RingU[NR++] = Nd;
                 }
-                if (NUnique < 3) continue;
-                // dedup cierre del anillo (primer == último)
-                if (NUnique == 4 && Ord[0] == Ord[3]) NUnique = 3;
-                if (NUnique < 3) continue;
+                if (NR > 1 && RingU[NR - 1] == RingU[0]) --NR; // cierre del anillo
+
+                // Mapear a vértices. Si a una hoja le FALTA vértice (p.ej. quedó sólida por un salto
+                // grande de nivel), se la salta y se cierra la arista con los que sí existen (triángulo)
+                // en vez de dejar un HUECO. Así no hay grietas en las transiciones grande↔chico.
+                int32 Ord[4]; int32 NV = 0;
+                for (int32 i = 0; i < NR; ++i)
+                {
+                    const int32* Found = VertOf.Find(RingU[i]);
+                    if (Found) Ord[NV++] = *Found;
+                }
+                if (NV < 3) continue;
 
                 // Orientación: si el material está del lado -axis (f0 dentro, f1 fuera) la normal va +axis
                 // y el anillo CCW ya es correcto; si no, invertimos.
@@ -529,7 +579,7 @@ void FPTVoxelOctree::BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris
                 };
 
                 EmitTri(Ord[0], Ord[1], Ord[2]);
-                if (NUnique == 4) EmitTri(Ord[0], Ord[2], Ord[3]);
+                if (NV == 4) EmitTri(Ord[0], Ord[2], Ord[3]);
             }
         }
     }

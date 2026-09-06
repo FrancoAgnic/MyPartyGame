@@ -63,6 +63,11 @@ public:
     void EditShape(const FTransform& Xf, EPTSVOShape Shape, const FVector& HalfExtent,
                    bool bAdd, const FColor& PaintColor = FColor::White);
 
+    // Balancea el árbol a 2:1 (hojas vecinas difieren máx. 1 nivel). Reduce muchísimo los artefactos
+    // en transiciones con saltos grandes de nivel (brocha chica y después grande encima). Llamar
+    // antes de BuildMesh.
+    void Balance();
+
     // Mallado por Dual Contouring (crack-free entre niveles). Verts en espacio LOCAL.
     void BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris, TArray<FVector>& OutNormals,
                    TArray<FColor>& OutColors) const;

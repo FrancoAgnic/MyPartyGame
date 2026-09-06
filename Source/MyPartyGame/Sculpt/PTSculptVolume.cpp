@@ -1441,6 +1441,7 @@ void APTSculptVolume::ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float
 void APTSculptVolume::RebuildSVOMesh()
 {
     if (!Mesh) return;
+    SVOField.Balance(); // 2:1 → sin artefactos en saltos grandes de nivel
     TArray<FVector> V, N; TArray<int32> T; TArray<FColor> C;
     SVOField.BuildMesh(V, T, N, C);
 
