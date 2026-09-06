@@ -274,15 +274,17 @@ void FPTSculptField::SnapshotBrick(const FPTBrickKey& Key, FBrickSnapshot& Out)
 int32 FPTSculptField::DecideStep(const FPTBrickKey& Key) const
 {
     if (SNMaxStep < 2) return 1;
-    auto F = [&](const FPTBrickKey& K) -> float {
+    // Un brick es elegible para paso grueso (2) si es LISO o si fue esculpido con brocha GRANDE.
+    auto Elig = [&](const FPTBrickKey& K) -> bool {
+        if (CoarseBricks.Contains(K)) return true;      // brocha grande → media resolución
         const float* p = Flatness.Find(K);
-        return p ? *p : 1.f; // desconocido/vacío = liso
+        return (p ? *p : 1.f) > SNFlatThreshold;        // liso → media resolución
     };
-    if (F(Key) <= SNFlatThreshold) return 1;
+    if (!Elig(Key)) return 1;
     static const FIntVector N6[6] = {
         {1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1} };
     for (const FIntVector& d : N6)
-        if (F(Key + d) <= SNFlatThreshold) return 1;
+        if (!Elig(Key + d)) return 1; // constraint de vecinos → sin costuras (igual que antes)
     return 2;
 }
 

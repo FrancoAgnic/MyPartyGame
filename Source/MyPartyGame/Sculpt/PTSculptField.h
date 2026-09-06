@@ -86,6 +86,13 @@ public:
     void TakeDirty(TArray<FPTBrickKey>& Out) { Out = DirtyBricks.Array(); DirtyBricks.Reset(); }
     void MarkDirty(const FPTBrickKey& Key)   { DirtyBricks.Add(Key); }
 
+    // LOD por brocha: marca un brick como "grueso" (esculpido con brocha grande) → se malla a media
+    // resolución (paso 2) aunque no sea liso, para bajar triángulos/costo. Se limpia al esculpirlo con
+    // brocha chica (así el detalle fino que agregues después se ve). DecideStep respeta el constraint de
+    // vecinos, así que no genera costuras (reusa el camino 1↔2 existente).
+    void SetBrickCoarse(const FPTBrickKey& Key, bool bCoarse)
+    { if (bCoarse) CoarseBricks.Add(Key); else CoarseBricks.Remove(Key); }
+
     // Índice de sección del ProceduralMesh para un brick (estable por key).
     int32 SectionIndex(const FPTBrickKey& Key);
 
@@ -137,6 +144,7 @@ private:
     TSet<FPTBrickKey>                       DirtyBricks;
     TMap<FPTBrickKey, int32>                SectionOf;  // key → sección estable
     TMap<FPTBrickKey, float>                Flatness;   // key → coherencia [0,1]
+    TSet<FPTBrickKey>                       CoarseBricks; // bricks esculpidos con brocha grande → LOD grueso
     int32                                   NextSection = 0;
 
     const FPTBrick* FindBrick(const FPTBrickKey& Key) const;

@@ -30,6 +30,13 @@ public:
 
     // Resolución del campo (tamaño de celda en UU). Menor = más geometría/detalle.
     UPROPERTY(EditAnywhere, Category="Sculpt") float VoxelSize = 5.f;
+
+    // LOD por brocha (rendimiento): al AGREGAR con una brocha de tamaño >= esto, esa zona se malla a
+    // MEDIA resolución (paso 2) → ~1/8 de triángulos ahí → mucho menos costo con brochas grandes. Es
+    // seam-safe (reusa el LOD liso 1↔2 con constraint de vecinos). BAJARLO = más zonas en baja
+    // resolución (más perf, menos detalle); SUBIRLO = solo brochas muy grandes bajan resolución.
+    // 0 = desactivado (comportamiento anterior: solo LOD por planitud).
+    UPROPERTY(EditAnywhere, Category="Sculpt|LOD") float BigBrushLODMinSize = 300.f;
     UPROPERTY(EditAnywhere, Category="Sculpt") UMaterialInterface* ClayMaterial = nullptr;
     // Override opcional del material de la malla de arcilla. Si se asigna, el volumen lo usa en vez del
     // ClayMID (atlas) al crear/re-crear las secciones. Lo usa la CABEZA del modo G (material de pintura

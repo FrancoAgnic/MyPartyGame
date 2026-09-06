@@ -1011,6 +1011,21 @@ bool APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
     // detalle no se fusiona con la arcilla base ni con otras capas (cada una es un campo aparte).
     FPTSculptField& F = *ActiveField;
 
+    // LOD por brocha (rendimiento): al AGREGAR, marcar los bricks de la región como "gruesos" si la
+    // brocha es grande (>= BigBrushLODMinSize) → se mallan a media resolución. Con brocha chica se
+    // limpia el flag (así el detalle fino que agregues después se ve fino). Determinístico (mismo
+    // umbral en todos) → LOD consistente entre clientes sin replicar nada extra.
+    if (Mode == EPTEditMode::Add && BigBrushLODMinSize > 0.f)
+    {
+        const bool  bCoarse = (Size >= BigBrushLODMinSize);
+        const int32 BS = FPTBrick::BrickSize;
+        auto FloorDiv = [BS](int32 c){ return (c >= 0) ? c / BS : -(((-c) + BS - 1) / BS); };
+        for (int32 bz = FloorDiv(z0); bz <= FloorDiv(z1); ++bz)
+        for (int32 by = FloorDiv(y0); by <= FloorDiv(y1); ++by)
+        for (int32 bx = FloorDiv(x0); bx <= FloorDiv(x1); ++bx)
+            F.SetBrickCoarse(FPTBrickKey(bx, by, bz), bCoarse);
+    }
+
     // ── Smooth: Laplaciano suave de dos pasos con falloff radial y leve empuje
     //    hacia afuera (SmoothBias) para que suavice sin encoger el modelo. ────
     if (Mode == EPTEditMode::Smooth)
