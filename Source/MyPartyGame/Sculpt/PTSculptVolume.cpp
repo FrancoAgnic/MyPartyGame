@@ -1609,7 +1609,6 @@ void APTSculptVolume::RebuildSVOMesh()
 
     const FVector Origin = SVOField.GetOrigin();
     const float   CS   = SVOChunkSize();
-    const float   Fine = SVOFineThreshold();
     const int32   D    = SVOChunkDim;
     FBox Region(ForceInit);
     for (int32 Idx : Chunks)
@@ -1617,7 +1616,9 @@ void APTSculptVolume::RebuildSVOMesh()
         const int32 cx = Idx % D, cy = (Idx / D) % D, cz = Idx / (D * D);
         Region += FBox(Origin + FVector(cx, cy, cz) * CS, Origin + FVector(cx + 1, cy + 1, cz + 1) * CS);
     }
-    Region = Region.ExpandBy(Fine); // halo: cubre los vecinos de las hojas finas para cerrar las costuras
+    // Halo generoso (2 chunks): el clon debe contener TODA hoja que aporte triángulos a los chunks sucios,
+    // incluidas hojas GRANDES cuyo vértice cae lejos → si no, el triángulo queda incompleto = hueco.
+    Region = Region.ExpandBy(CS * 2.f);
     TSharedPtr<FPTVoxelOctree> Clone = SVOField.CloneRegion(Region);
 
     bSVOMeshing = true;
