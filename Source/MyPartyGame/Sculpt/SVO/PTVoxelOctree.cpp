@@ -581,6 +581,54 @@ void FPTVoxelOctree::BuildMeshDC(TArray<FVector>& OutVerts, TArray<int32>& OutTr
     // Conectividad recursiva (watertight): cellProc → faceProc → edgeProc.
     DCR::FNode RootN; RootN.N = Root.Get(); RootN.Min = Origin; RootN.Size = RootSize;
     DCR::CellProc(RootN, GetVert, OutTris);
+
+    // Red de seguridad 100%: cerrar cualquier borde abierto que haya dejado el DC (en malla única, todo
+    // borde abierto = hueco real). Corre en el hilo de fondo → sin costo de FPS.
+    FillAllHoles(OutVerts, OutTris);
+}
+
+void FPTVoxelOctree::FillAllHoles(const TArray<FVector>& V, TArray<int32>& T)
+{
+    (void)V;
+    if (T.Num() < 3) return;
+    auto Key = [](int32 a, int32 b) -> uint64 { return ((uint64)(uint32)a << 32) | (uint64)(uint32)b; };
+
+    TSet<uint64> Dir; Dir.Reserve(T.Num());
+    for (int32 i = 0; i + 2 < T.Num(); i += 3)
+    { Dir.Add(Key(T[i], T[i+1])); Dir.Add(Key(T[i+1], T[i+2])); Dir.Add(Key(T[i+2], T[i])); }
+
+    // Bordes abiertos: arista dirigida sin opuesta.
+    TMap<int32, int32> Next; Next.Reserve(256);
+    for (int32 i = 0; i + 2 < T.Num(); i += 3)
+    {
+        const int32 e[3][2] = { {T[i],T[i+1]}, {T[i+1],T[i+2]}, {T[i+2],T[i]} };
+        for (int32 k = 0; k < 3; ++k)
+            if (!Dir.Contains(Key(e[k][1], e[k][0]))) Next.Add(e[k][0], e[k][1]);
+    }
+    if (Next.Num() == 0) return;
+
+    TSet<int32> Visited;
+    for (const TPair<int32, int32>& Start : Next)
+    {
+        if (Visited.Contains(Start.Key)) continue;
+        TArray<int32> Loop; int32 Cur = Start.Key;
+        for (int32 guard = 0; guard < 100000; ++guard)
+        {
+            if (Visited.Contains(Cur)) break;
+            Visited.Add(Cur); Loop.Add(Cur);
+            const int32* Nx = Next.Find(Cur);
+            if (!Nx) break;
+            Cur = *Nx;
+            if (Cur == Start.Key) break;
+        }
+        if (Loop.Num() < 3) continue;
+        // Fan DOBLE CARA (ambos windings): el tapón se ve de los dos lados → nunca queda oscuro/invertido.
+        for (int32 i = 1; i + 1 < Loop.Num(); ++i)
+        {
+            T.Add(Loop[0]); T.Add(Loop[i]);   T.Add(Loop[i+1]);
+            T.Add(Loop[0]); T.Add(Loop[i+1]); T.Add(Loop[i]);
+        }
+    }
 }
 
 // ── Undo (snapshots por clon) ──────────────────────────────────────────────────────

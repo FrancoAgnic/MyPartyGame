@@ -102,6 +102,10 @@ public:
     void BuildMeshDC(TArray<FVector>& OutVerts, TArray<int32>& OutTris,
                      TArray<FVector>& OutNormals, TArray<FColor>& OutColors) const;
 
+    // Cierra TODOS los bordes abiertos de una malla (en una malla única, todo borde abierto = hueco real).
+    // Enlaza los bordes en bucles y los rellena (fan). Garantiza malla topológicamente cerrada.
+    static void FillAllHoles(const TArray<FVector>& V, TArray<int32>& T);
+
     // ── Baking / persistencia (serialización del octree a bytes) ─────────────
     // Snapshot compacto del árbol para guardar (SaveGame), bakear escenografía o mandar por red.
     void Serialize(TArray<uint8>& OutBytes) const;
