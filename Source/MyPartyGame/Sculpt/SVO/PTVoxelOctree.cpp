@@ -597,65 +597,6 @@ void FPTVoxelOctree::BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris
             }
         }
     }
-
-    // 3) CIERRE DE HUECOS: cualquier arista que quede en un solo triángulo (borde abierto) es un hueco.
-    //    Se enlazan los bordes en bucles y se tapan (fan). Garantiza malla cerrada aunque la conectividad
-    //    del DC falle en fusiones con saltos de nivel extremos.
-    CloseHoles(OutVerts, OutTris, OutNormals, OutColors);
-}
-
-void FPTVoxelOctree::CloseHoles(TArray<FVector>& V, TArray<int32>& T, TArray<FVector>& N, TArray<FColor>& C)
-{
-    if (T.Num() == 0) return;
-
-    // Aristas dirigidas de todos los triángulos. Una arista es de BORDE si no existe su opuesta.
-    auto Key = [](int32 a, int32 b) -> uint64 { return ((uint64)(uint32)a << 32) | (uint64)(uint32)b; };
-    TSet<uint64> Dir;
-    Dir.Reserve(T.Num());
-    for (int32 i = 0; i + 2 < T.Num(); i += 3)
-    {
-        Dir.Add(Key(T[i],   T[i+1]));
-        Dir.Add(Key(T[i+1], T[i+2]));
-        Dir.Add(Key(T[i+2], T[i]));
-    }
-
-    // Bordes: arista dirigida (a→b) sin opuesta (b→a). Mapa a→b para caminar los bucles.
-    TMap<int32, int32> Next;
-    Next.Reserve(64);
-    for (int32 i = 0; i + 2 < T.Num(); i += 3)
-    {
-        const int32 e[3][2] = { {T[i],T[i+1]}, {T[i+1],T[i+2]}, {T[i+2],T[i]} };
-        for (int32 k = 0; k < 3; ++k)
-            if (!Dir.Contains(Key(e[k][1], e[k][0])))
-                Next.Add(e[k][0], e[k][1]); // borde: solido a la izquierda
-    }
-    if (Next.Num() == 0) return;
-
-    // Caminar bucles y taparlos con un fan. El triángulo del tapón usa el orden INVERSO del borde
-    // (b,a) para mirar hacia afuera (el borde tenía el sólido a la izquierda → el hueco a la derecha).
-    TSet<int32> Visited;
-    for (const TPair<int32,int32>& Start : Next)
-    {
-        if (Visited.Contains(Start.Key)) continue;
-        TArray<int32> Loop;
-        int32 cur = Start.Key;
-        for (int32 guard = 0; guard < 4096; ++guard)
-        {
-            if (Visited.Contains(cur)) break;
-            Visited.Add(cur);
-            Loop.Add(cur);
-            const int32* nx = Next.Find(cur);
-            if (!nx) break;
-            cur = *nx;
-            if (cur == Start.Key) break; // bucle cerrado
-        }
-        // Fan sobre el bucle (invertido para orientar hacia afuera).
-        for (int32 i = 1; i + 1 < Loop.Num(); ++i)
-        {
-            T.Add(Loop[0]); T.Add(Loop[i+1]); T.Add(Loop[i]);
-        }
-    }
-    (void)V; (void)N; (void)C; // el tapón reusa vértices/normales/colores existentes
 }
 
 // ── Métricas ──────────────────────────────────────────────────────────────────────
