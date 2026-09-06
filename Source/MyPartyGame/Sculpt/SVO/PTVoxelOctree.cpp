@@ -476,16 +476,16 @@ namespace DCR
         const bool bAll = (idx[0] >= 0 && idx[1] >= 0 && idx[2] >= 0 && idx[3] >= 0);
         if (bAll)
         {
-            if (!flip) { T.Add(idx[0]); T.Add(idx[1]); T.Add(idx[3]); T.Add(idx[0]); T.Add(idx[3]); T.Add(idx[2]); }
-            else       { T.Add(idx[0]); T.Add(idx[3]); T.Add(idx[1]); T.Add(idx[0]); T.Add(idx[2]); T.Add(idx[3]); }
+            if (flip) { T.Add(idx[0]); T.Add(idx[1]); T.Add(idx[3]); T.Add(idx[0]); T.Add(idx[3]); T.Add(idx[2]); }
+            else      { T.Add(idx[0]); T.Add(idx[3]); T.Add(idx[1]); T.Add(idx[0]); T.Add(idx[2]); T.Add(idx[3]); }
             return;
         }
         // Fallback (alguna hoja sin vértice por inconsistencia): triángulo con los que existan.
         int32 o[4]; int32 nv = 0;
         for (int32 i = 0; i < 4; ++i) if (idx[i] >= 0) o[nv++] = idx[i];
         if (nv < 3) return;
-        if (!flip) { T.Add(o[0]); T.Add(o[1]); T.Add(o[2]); }
-        else       { T.Add(o[0]); T.Add(o[2]); T.Add(o[1]); }
+        if (flip) { T.Add(o[0]); T.Add(o[1]); T.Add(o[2]); }
+        else      { T.Add(o[0]); T.Add(o[2]); T.Add(o[1]); }
     }
 
     void EdgeProc(const FNode n[4], int32 dir, const FVertMap& V, TArray<int32>& T)
