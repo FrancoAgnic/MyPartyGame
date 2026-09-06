@@ -553,6 +553,17 @@ void FPTVoxelOctree::Balance(TArray<FBox>* OutRefinedBounds, bool bForceFull)
         return bIn && bOut;
     };
 
+    // ¿La hoja toca la pared del box de recorte? Ahí forzamos 1:1 (en vez de 2:1) para que la tapa
+    // contra la pared no tenga T-junctions (grietas en el borde con saltos de resolución).
+    auto TouchesClamp = [&](const FVector& Min, float Size) -> bool
+    {
+        if (!bClamp) return false;
+        const float t = MinCell * 0.5f;
+        const FVector Max = Min + FVector(Size);
+        return (Min.X <= ClampBox.Min.X + t || Min.Y <= ClampBox.Min.Y + t || Min.Z <= ClampBox.Min.Z + t ||
+                Max.X >= ClampBox.Max.X - t || Max.Y >= ClampBox.Max.Y - t || Max.Z >= ClampBox.Max.Z - t);
+    };
+
     for (int32 iter = 0; iter <= MaxDepth; ++iter)
     {
         TArray<FLeafRef> Leaves;
@@ -567,6 +578,9 @@ void FPTVoxelOctree::Balance(TArray<FBox>* OutRefinedBounds, bool bForceFull)
             if (L.Size <= MinCell + KINDA_SMALL_NUMBER) continue; // ya en el máximo detalle
             if (!HasSurface(L.Node)) continue;                    // no es superficie → no afecta costuras
             const float probe = MinCell * 0.5f;
+            // Interior: 2:1 (vecino ≥2 niveles más fino). Contra la pared: 1:1 (vecino ≥1 nivel más fino)
+            // → tapa uniforme, sin grietas en el borde.
+            const float FinerFactor = TouchesClamp(L.Min, L.Size) ? 0.5f : 0.25f;
             bool bNeeds = false;
             for (int32 f = 0; f < 6 && !bNeeds; ++f)
             {
@@ -582,7 +596,7 @@ void FPTVoxelOctree::Balance(TArray<FBox>* OutRefinedBounds, bool bForceFull)
                     P[u]  += (ju + 0.5f) / 3.f * L.Size;
                     P[v]  += (jv + 0.5f) / 3.f * L.Size;
                     const FLeafInfo N = FindLeaf(P);
-                    if (N.Node && N.Size <= L.Size * 0.25f + KINDA_SMALL_NUMBER) bNeeds = true; // ≥2 niveles más fino
+                    if (N.Node && N.Size <= L.Size * FinerFactor + KINDA_SMALL_NUMBER) bNeeds = true; // vecino más fino
                 }
             }
             if (bNeeds)
