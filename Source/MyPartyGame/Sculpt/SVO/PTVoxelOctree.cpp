@@ -336,7 +336,7 @@ void FPTVoxelOctree::BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris
 
                 // Orientación: si el material está del lado -axis (f0 dentro, f1 fuera) la normal va +axis
                 // y el anillo CCW ya es correcto; si no, invertimos.
-                const bool bFlip = !(Inside(f0) && !Inside(f1));
+                const bool bFlip = (Inside(f0) && !Inside(f1));
 
                 auto EmitTri = [&](int32 i0, int32 i1, int32 i2)
                 {
