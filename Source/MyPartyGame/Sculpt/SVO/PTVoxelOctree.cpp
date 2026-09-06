@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "PTVoxelOctree.h"
+#include "PTSculptVolume.h" // APTSculptVolume::RunMarchingCubes (MC probado del proyecto)
 #include "Serialization/MemoryWriter.h"
 #include "Serialization/MemoryReader.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
@@ -585,6 +586,64 @@ void FPTVoxelOctree::BuildMeshDC(TArray<FVector>& OutVerts, TArray<int32>& OutTr
     // Red de seguridad 100%: cerrar cualquier borde abierto que haya dejado el DC (en malla única, todo
     // borde abierto = hueco real). Corre en el hilo de fondo → sin costo de FPS.
     FillAllHoles(OutVerts, OutTris);
+}
+
+FLinearColor FPTVoxelOctree::SampleColorLinear(const FVector& P) const
+{
+    const FLeafInfo LI = FindLeaf(P);
+    if (!LI.Node) return FLinearColor(0.6f, 0.55f, 0.5f); // aire → color base
+    const FVector F((P.X - LI.Min.X) / LI.Size, (P.Y - LI.Min.Y) / LI.Size, (P.Z - LI.Min.Z) / LI.Size);
+    const float fx = FMath::Clamp((float)F.X, 0.f, 1.f), fy = FMath::Clamp((float)F.Y, 0.f, 1.f), fz = FMath::Clamp((float)F.Z, 0.f, 1.f);
+    auto C = [&](int32 k) { return FLinearColor(LI.Node->Col[k]); };
+    const FLinearColor c00 = FMath::Lerp(C(0), C(1), fx), c10 = FMath::Lerp(C(2), C(3), fx);
+    const FLinearColor c01 = FMath::Lerp(C(4), C(5), fx), c11 = FMath::Lerp(C(6), C(7), fx);
+    return FMath::Lerp(FMath::Lerp(c00, c10, fy), FMath::Lerp(c01, c11, fy), fz);
+}
+
+void FPTVoxelOctree::BuildMeshMC(TArray<FVector>& OutVerts, TArray<int32>& OutTris,
+                                 TArray<FVector>& OutNormals, TArray<FColor>& OutColors) const
+{
+    OutVerts.Reset(); OutTris.Reset(); OutNormals.Reset(); OutColors.Reset();
+    if (!Root.IsValid()) return;
+
+    // 1) Caja de la superficie (hojas con cambio de signo).
+    TArray<FLeafRef> Leaves;
+    CollectLeaves(Root.Get(), Origin, RootSize, Leaves);
+    FBox BB(ForceInit);
+    for (const FLeafRef& L : Leaves)
+    {
+        bool bIn = false, bOut = false;
+        for (int32 k = 0; k < 8; ++k) { if (L.Node->Corner[k] > 0.f) bIn = true; else bOut = true; }
+        if (bIn && bOut) BB += FBox(L.Min, L.Min + FVector(L.Size));
+    }
+    if (!BB.IsValid) return;
+
+    // 2) Grilla uniforme a la resolución más fina, con 2 celdas de aire de margen (para que cierre).
+    const float Cell = FMath::Max(MinCellSize(), 0.5f);
+    const FVector GMin = BB.Min - FVector(Cell * 2.f);
+    const int32 Nx = FMath::CeilToInt((BB.Max.X + Cell * 2.f - GMin.X) / Cell) + 1;
+    const int32 Ny = FMath::CeilToInt((BB.Max.Y + Cell * 2.f - GMin.Y) / Cell) + 1;
+    const int32 Nz = FMath::CeilToInt((BB.Max.Z + Cell * 2.f - GMin.Z) / Cell) + 1;
+    const int32 GS = FMath::Max3(Nx, Ny, Nz);
+    if (GS < 2 || (int64)GS * GS * GS > 60'000'000) return; // guarda de memoria
+
+    // 3) Muestrear SDF + color en la grilla (esto es lo pesado; corre en el hilo de fondo).
+    TArray<float> G; G.Init(-1.f, GS * GS * GS);
+    TArray<FLinearColor> CG; CG.Init(FLinearColor(0.6f, 0.55f, 0.5f), GS * GS * GS);
+    for (int32 z = 0; z < Nz; ++z)
+    for (int32 y = 0; y < Ny; ++y)
+    for (int32 x = 0; x < Nx; ++x)
+    {
+        const FVector P = GMin + FVector(x, y, z) * Cell;
+        const int32 Idx = x + y * GS + z * GS * GS;
+        G[Idx]  = Sample(P);
+        CG[Idx] = SampleColorLinear(P);
+    }
+
+    // 4) Marching Cubes probado del proyecto (watertight). Verts locales a la grilla → offset a GMin.
+    APTSculptVolume::RunMarchingCubes(G, CG, GS, Cell, 0, 0, 0, Nx - 1, Ny - 1, Nz - 1,
+                                     OutVerts, OutTris, OutNormals, OutColors);
+    for (FVector& Vx : OutVerts) Vx += GMin;
 }
 
 void FPTVoxelOctree::FillAllHoles(const TArray<FVector>& V, TArray<int32>& T)

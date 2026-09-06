@@ -106,6 +106,12 @@ public:
     // Enlaza los bordes en bucles y los rellena (fan). Garantiza malla topológicamente cerrada.
     static void FillAllHoles(const TArray<FVector>& V, TArray<int32>& T);
 
+    // Mallado por MARCHING CUBES sobre una grilla UNIFORME muestreada del octree (reusa el MC probado del
+    // proyecto). Uniforme = sin T-junctions = WATERTIGHT garantizado (sin grietas, en ningún caso). Pierde
+    // la ventaja adaptativa de "grande = pocos triángulos", pero cierra siempre. Verts en espacio LOCAL.
+    void BuildMeshMC(TArray<FVector>& OutVerts, TArray<int32>& OutTris,
+                     TArray<FVector>& OutNormals, TArray<FColor>& OutColors) const;
+
     // ── Baking / persistencia (serialización del octree a bytes) ─────────────
     // Snapshot compacto del árbol para guardar (SaveGame), bakear escenografía o mandar por red.
     void Serialize(TArray<uint8>& OutBytes) const;
@@ -188,6 +194,7 @@ private:
     // OutColor = color interpolado en los cruces.
     static bool LeafVertex(const FPTOctreeNode& Leaf, const FVector& Min, float Size, FVector& OutLocal, FColor& OutColor);
     FVector FieldNormal(const FVector& P) const; // normal = -grad(SDF)
+    FLinearColor SampleColorLinear(const FVector& P) const; // color interpolado del campo (para MC)
 
     static int32 CountLeavesRec(const FPTOctreeNode* N);
     static int32 CountNodesRec(const FPTOctreeNode* N);

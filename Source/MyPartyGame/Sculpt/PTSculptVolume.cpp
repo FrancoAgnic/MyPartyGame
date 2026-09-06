@@ -1611,7 +1611,7 @@ void APTSculptVolume::RebuildSVOMesh()
     {
         struct FRes { TArray<FVector> V, N; TArray<int32> T; TArray<FColor> C; };
         TSharedPtr<FRes, ESPMode::ThreadSafe> R = MakeShared<FRes, ESPMode::ThreadSafe>();
-        Clone->BuildMeshDC(R->V, R->T, R->N, R->C); // watertight, whole model
+        Clone->BuildMeshMC(R->V, R->T, R->N, R->C); // Marching Cubes uniforme = watertight garantizado
 
         AsyncTask(ENamedThreads::GameThread, [WeakThis, R, Gen]()
         {
