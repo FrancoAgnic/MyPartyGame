@@ -1941,6 +1941,8 @@ void APTSculptVolume::BackupAtlas(int32 AIdx, int32 Slot)
 
 void APTSculptVolume::Multicast_BeginStroke_Implementation()
 {
+    if (bUseSVO) { if (!bSVOInit) InitSVO(); SVOField.PushUndoSnapshot(); return; } // snapshot de la base
+
     Field.BeginStroke();
     CurrentVolumeUndo = FPTVolumeUndo();
     CurrentVolumeUndo.EyesCount = Eyes.Num();
@@ -1949,6 +1951,8 @@ void APTSculptVolume::Multicast_BeginStroke_Implementation()
 
 void APTSculptVolume::Multicast_EndStroke_Implementation()
 {
+    if (bUseSVO) { UndoOrder.Add(0); return; }   // 0 = trazo de la BASE (el snapshot ya se guardó en BeginStroke)
+
     Field.PushStroke();                          // la pila del campo y esta van 1:1
     VolumeUndoStack.Add(MoveTemp(CurrentVolumeUndo));
     CurrentVolumeUndo = FPTVolumeUndo();
@@ -1965,6 +1969,26 @@ void APTSculptVolume::Multicast_EndStroke_Implementation()
 
 void APTSculptVolume::Multicast_Undo_Implementation()
 {
+    // Modo SVO: LIFO igual que el clásico — última capa entera, o último trazo de la base (snapshot).
+    if (bUseSVO)
+    {
+        if (UndoOrder.Num() > 0 && UndoOrder.Last() == 1)
+        {
+            UndoOrder.Pop();
+            if (SVODetailFields.Num() > 0) SVODetailFields.Pop();
+            if (DetailMeshes.Num() > 0)
+            {
+                if (UProceduralMeshComponent* M = DetailMeshes.Last()) M->DestroyComponent();
+                DetailMeshes.Pop();
+            }
+            bSVODirty = true; TimeSinceRebuild = RebuildInterval;
+            return;
+        }
+        if (UndoOrder.Num() > 0 && UndoOrder.Last() == 0) UndoOrder.Pop();
+        if (SVOField.Undo()) { bSVODirty = true; TimeSinceRebuild = RebuildInterval; }
+        return;
+    }
+
     // El undo es LIFO sobre TODAS las operaciones: si lo último fue una CAPA de detalle, se saca la
     // capa entera (su campo + su mesh); si fue un trazo de la base, se deshace ese trazo.
     if (UndoOrder.Num() > 0 && UndoOrder.Last() == 1)
