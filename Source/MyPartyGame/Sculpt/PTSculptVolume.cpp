@@ -1398,7 +1398,7 @@ void APTSculptVolume::RebuildDirty()
 }
 
 // ─── SVO (modo experimental detrás de flag) ────────────────────────────────────
-void APTSculptVolume::InitSVO()
+void APTSculptVolume::InitSVOOctree(FPTVoxelOctree& F) const
 {
     // Octree cúbico en ACTOR-LOCAL (UU) que cubre el BoundsBox del lienzo.
     const FVector Center = BoundsBox ? BoundsBox->GetRelativeLocation() : FVector::ZeroVector;
@@ -1407,7 +1407,13 @@ void APTSculptVolume::InitSVO()
     // Profundidad tal que la celda mínima ≈ VoxelSize (mismo detalle que el campo clásico).
     const float Ratio = RootSize / FMath::Max(VoxelSize, 0.5f);
     const int32 MaxDepth = FMath::Clamp(FMath::CeilToInt(FMath::Log2(Ratio)), 0, 12);
-    SVOField.Init(Center - FVector(RootSize * 0.5f), RootSize, MaxDepth);
+    F.Init(Center - FVector(RootSize * 0.5f), RootSize, MaxDepth);
+}
+
+void APTSculptVolume::InitSVO()
+{
+    InitSVOOctree(SVOField);
+    ActiveSVO = &SVOField;
     bSVOInit  = true;
     bSVODirty = true;
 }
@@ -1440,25 +1446,34 @@ void APTSculptVolume::ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float
     const FVector HalfExtent = (Size * 0.5f) * SafeScale; // radio en UU por eje
 
     const FTransform Xf(LocalQ, LocalPos);
+    FPTVoxelOctree& F = ActiveSVO ? *ActiveSVO : SVOField; // base o capa de detalle activa
     if (Mode == EPTEditMode::Paint)
-        SVOField.PaintShape(Xf, S, HalfExtent, PaintColor.ToFColor(true)); // recolorea la superficie
+        F.PaintShape(Xf, S, HalfExtent, PaintColor.ToFColor(true)); // recolorea la superficie
     else
-        SVOField.EditShape(Xf, S, HalfExtent, /*bAdd=*/Mode == EPTEditMode::Add, PaintColor.ToFColor(true));
+        F.EditShape(Xf, S, HalfExtent, /*bAdd=*/Mode == EPTEditMode::Add, PaintColor.ToFColor(true));
     bSVODirty = true;
 }
 
-void APTSculptVolume::RebuildSVOMesh()
+void APTSculptVolume::RebuildSVOInto(FPTVoxelOctree& F, UProceduralMeshComponent* M)
 {
-    if (!Mesh) return;
-    SVOField.Balance(); // 2:1 → sin artefactos en saltos grandes de nivel
+    if (!M) return;
+    F.Balance(); // 2:1 → sin artefactos en saltos grandes de nivel
     TArray<FVector> V, N; TArray<int32> T; TArray<FColor> C;
-    SVOField.BuildMesh(V, T, N, C);
+    F.BuildMesh(V, T, N, C);
 
     UMaterialInterface* Mat = ClayMaterialOverride ? ClayMaterialOverride
                             : (ClayMID ? (UMaterialInterface*)ClayMID : ClayMaterial);
     TArray<FVector2D> UV; TArray<FProcMeshTangent> Tan;
-    Mesh->CreateMeshSection(0, V, T, N, UV, C, Tan, /*collision=*/false);
-    if (Mat) Mesh->SetMaterial(0, Mat);
+    M->CreateMeshSection(0, V, T, N, UV, C, Tan, /*collision=*/false);
+    if (Mat) M->SetMaterial(0, Mat);
+}
+
+void APTSculptVolume::RebuildSVOMesh()
+{
+    RebuildSVOInto(SVOField, Mesh); // base
+    for (int32 i = 0; i < SVODetailFields.Num(); ++i)
+        if (SVODetailFields[i].IsValid() && DetailMeshes.IsValidIndex(i))
+            RebuildSVOInto(*SVODetailFields[i], DetailMeshes[i]); // capas de detalle
 }
 
 // ─── RPCs de replicación ──────────────────────────────────────────────────────
@@ -1479,6 +1494,26 @@ void APTSculptVolume::Multicast_ApplyStamp_Implementation(FVector WorldPos, EPTS
                                                            float Size, EPTEditMode Mode, FLinearColor PaintColor,
                                                            FRotator StampRot, bool bDetail, FVector StampScale)
 {
+    // Modo SVO: base + capas de detalle sobre octrees paralelos.
+    if (bUseSVO)
+    {
+        if (Mode == EPTEditMode::Erase)
+        {
+            ActiveSVO = &SVOField;
+            ApplyStampAndFX(WorldPos, Shape, Size, Mode, PaintColor, StampRot, StampScale); // base + FX
+            for (const TSharedPtr<FPTVoxelOctree>& L : SVODetailFields)
+                if (L.IsValid()) { ActiveSVO = L.Get(); ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot, StampScale); }
+            ActiveSVO = &SVOField;
+        }
+        else
+        {
+            ActiveSVO = (bDetail && SVODetailFields.Num() > 0) ? SVODetailFields.Last().Get() : &SVOField;
+            ApplyStampAndFX(WorldPos, Shape, Size, Mode, PaintColor, StampRot, StampScale);
+            ActiveSVO = &SVOField;
+        }
+        return;
+    }
+
     // BORRAR afecta la BASE y TODAS las capas de detalle: saca arcilla de todo lo que haya bajo la
     // brocha (si no, no se podrían borrar los lentes/bigote de una capa). La FX sale una sola vez.
     if (Mode == EPTEditMode::Erase)
@@ -1517,6 +1552,19 @@ UProceduralMeshComponent* APTSculptVolume::CreateDetailLayerMesh()
 
 void APTSculptVolume::Multicast_BeginDetailLayer_Implementation()
 {
+    // Modo SVO: nueva capa = su propio octree + su propio mesh.
+    if (bUseSVO)
+    {
+        if (!bSVOInit) InitSVO();
+        TSharedPtr<FPTVoxelOctree> Layer = MakeShared<FPTVoxelOctree>();
+        InitSVOOctree(*Layer);
+        SVODetailFields.Add(Layer);
+        DetailMeshes.Add(CreateDetailLayerMesh());
+        UndoOrder.Add(1);
+        bSVODirty = true;
+        return;
+    }
+
     // Nueva capa: su propio campo SDF (con los parámetros del volumen) + su propio mesh.
     TSharedPtr<FPTSculptField> Layer = MakeShared<FPTSculptField>();
     Layer->VoxelSize        = VoxelSize;
@@ -1632,8 +1680,8 @@ void APTSculptVolume::ClearAll()
     if (Mesh) Mesh->ClearAllMeshSections();
     TimeSinceRebuild = 0.f;
 
-    // Modo SVO: reiniciar el octree (lienzo en blanco).
-    if (bUseSVO) InitSVO();
+    // Modo SVO: reiniciar el octree base y descartar capas de detalle (lienzo en blanco).
+    if (bUseSVO) { SVODetailFields.Reset(); InitSVO(); }
 
     // Capas de detalle: destruir sus meshes y descartar sus campos (el lienzo queda en blanco).
     for (UProceduralMeshComponent* M : DetailMeshes) if (M) M->DestroyComponent();
@@ -1676,7 +1724,12 @@ void APTSculptVolume::SaveFieldState(TArray<uint8>& Out)
     if (bUseSVO)
     {
         if (!bSVOInit) InitSVO();
-        SVOField.Serialize(Out);
+        Out.Reset();
+        FMemoryWriter Ar(Out, /*bIsPersistent=*/true);
+        TArray<uint8> Base; SVOField.Serialize(Base); Ar << Base;
+        int32 NumLayers = SVODetailFields.Num(); Ar << NumLayers;
+        for (const TSharedPtr<FPTVoxelOctree>& L : SVODetailFields)
+        { TArray<uint8> B; if (L.IsValid()) L->Serialize(B); Ar << B; }
         return;
     }
 
@@ -1696,11 +1749,35 @@ bool APTSculptVolume::LoadFieldState(const TArray<uint8>& In)
 {
     if (In.Num() == 0) return false;
 
-    // Modo SVO: cargar el octree serializado y forzar remallado.
+    // Modo SVO: cargar el octree base + capas de detalle, y forzar remallado.
     if (bUseSVO)
     {
-        const bool bOk = SVOField.LoadFromBytes(In);
-        bSVOInit  = bOk;
+        FMemoryReader Ar(In, /*bIsPersistent=*/true);
+        TArray<uint8> Base; Ar << Base;
+        const bool bOk = SVOField.LoadFromBytes(Base);
+        bSVOInit = bOk;
+
+        // Descartar capas actuales.
+        for (UProceduralMeshComponent* M : DetailMeshes) if (M) M->DestroyComponent();
+        DetailMeshes.Reset();
+        SVODetailFields.Reset();
+        UndoOrder.Reset();
+        ActiveSVO = &SVOField;
+
+        if (!Ar.AtEnd())
+        {
+            int32 NumLayers = 0; Ar << NumLayers;
+            for (int32 i = 0; i < NumLayers; ++i)
+            {
+                TArray<uint8> B; Ar << B;
+                TSharedPtr<FPTVoxelOctree> L = MakeShared<FPTVoxelOctree>();
+                L->LoadFromBytes(B);
+                SVODetailFields.Add(L);
+                DetailMeshes.Add(CreateDetailLayerMesh());
+                UndoOrder.Add(1);
+            }
+        }
+
         bSVODirty = true;
         TimeSinceRebuild = RebuildInterval; // remallar en el próximo tick
         return bOk;

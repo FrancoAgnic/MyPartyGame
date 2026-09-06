@@ -286,13 +286,18 @@ private:
     FPTSculptField Field; // campo BASE (la arcilla principal)
 
     // ── SVO (modo bUseSVO) ───────────────────────────────────────────────────
-    FPTVoxelOctree SVOField;      // octree adaptativo en espacio ACTOR-LOCAL (UU)
+    FPTVoxelOctree SVOField;      // octree adaptativo BASE en espacio ACTOR-LOCAL (UU)
     bool bSVOInit  = false;       // ya inicializado sobre el lienzo actual
     bool bSVODirty = false;       // hay ediciones sin re-mallar
-    void InitSVO();               // arma el octree cubriendo el BoundsBox
+    // Capas de DETALLE (ALT): un octree por capa + su ProceduralMesh (reusa DetailMeshes, paralelo).
+    TArray<TSharedPtr<FPTVoxelOctree>> SVODetailFields;
+    FPTVoxelOctree* ActiveSVO = &SVOField; // dónde caen los sellos (base o última capa)
+    void InitSVO();               // arma el octree BASE cubriendo el BoundsBox
+    void InitSVOOctree(FPTVoxelOctree& F) const; // inicializa un octree cualquiera sobre el BoundsBox
     void ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float Size, EPTEditMode Mode,
                        FLinearColor PaintColor, FRotator StampRot, FVector StampScale);
-    void RebuildSVOMesh();        // remalla la seccion 0 del Mesh desde el octree
+    void RebuildSVOMesh();        // remalla base + capas
+    void RebuildSVOInto(FPTVoxelOctree& F, UProceduralMeshComponent* M); // remalla un octree a un mesh
 
     // ── Capas de detalle (ALT): campos + meshes aparte ──────────────────────
     // Cada capa fusiona consigo misma pero no con la base ni con otras. ActiveField apunta a dónde
