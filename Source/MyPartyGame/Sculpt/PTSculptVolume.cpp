@@ -833,6 +833,11 @@ void APTSculptVolume::CellBounds(FIntVector& OutMin, FIntVector& OutMax) const
 
 float APTSculptVolume::SampleWorldDensity(FVector WorldPos) const
 {
+    // Modo SVO: densidad = SDF del octree en ACTOR-LOCAL (>0 dentro). Lo usan los ojos (raymarch a
+    // la superficie) y el cursor.
+    if (bUseSVO)
+        return SVOField.Sample(GetActorTransform().InverseTransformPosition(WorldPos));
+
     const FVector C = WorldToCell(WorldPos);
     // Unión (máximo) de la base + TODAS las capas de detalle: así el raymarch del cursor (ALT) se pega
     // a la superficie más externa exista donde exista arcilla, no solo a la base. Convención: SDF
@@ -846,6 +851,7 @@ float APTSculptVolume::SampleWorldDensity(FVector WorldPos) const
 
 FLinearColor APTSculptVolume::SampleWorldColor(FVector WorldPos) const
 {
+    if (bUseSVO) return ClayBaseColor; // el color en SVO va por vértice; para FX alcanza el color base
     const FVector C = WorldToCell(WorldPos);
     return FLinearColor(Field.GetColor(FMath::RoundToInt(C.X), FMath::RoundToInt(C.Y), FMath::RoundToInt(C.Z)));
 }
