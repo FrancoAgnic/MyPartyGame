@@ -63,6 +63,10 @@ public:
     void EditShape(const FTransform& Xf, EPTSVOShape Shape, const FVector& HalfExtent,
                    bool bAdd, const FColor& PaintColor = FColor::White);
 
+    // PINTAR: recolorea las esquinas dentro de la shape SIN tocar el SDF ni subdividir (pinta sobre la
+    // superficie existente, a la resolución que ya tenga). Devuelve true si tocó alguna esquina de superficie.
+    bool PaintShape(const FTransform& Xf, EPTSVOShape Shape, const FVector& HalfExtent, const FColor& Color);
+
     // Balancea el árbol a 2:1 (hojas vecinas difieren máx. 1 nivel). Reduce muchísimo los artefactos
     // en transiciones con saltos grandes de nivel (brocha chica y después grande encima). Llamar
     // antes de BuildMesh.
@@ -114,6 +118,9 @@ private:
                        const FBox& WorldBounds, int32 TargetDepth, bool bAdd, const FColor& PaintColor, FSDFFunc SDF) const;
     void WriteCorners(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize,
                       bool bAdd, const FColor& PaintColor, FSDFFunc SDF) const;
+    // Recolorea sin refinar ni tocar SDF. Devuelve true si pintó alguna esquina de superficie.
+    bool PaintNode(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize,
+                   const FBox& WorldBounds, const FColor& Color, FSDFFunc SDF) const;
 
     // Refina una HOJA en 8 hijos-hoja, resampleando (trilineal) sus esquinas a cada hijo.
     static void RefineLeaf(FPTOctreeNode& Node);

@@ -1410,8 +1410,8 @@ void APTSculptVolume::ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float
                                     FLinearColor PaintColor, FRotator StampRot, FVector StampScale)
 {
     if (!bSVOInit) InitSVO();
-    // Paint/Smooth todavía no portados al SVO → se ignoran (solo Add/Erase por ahora).
-    if (Mode != EPTEditMode::Add && Mode != EPTEditMode::Erase) return;
+    // Smooth no se usa en modo SVO (se ignora). Paint recolorea la superficie sin tocar geometría.
+    if (Mode == EPTEditMode::Smooth) return;
 
     // Mapeo de forma clásica → forma del octree.
     EPTSVOShape S;
@@ -1434,7 +1434,10 @@ void APTSculptVolume::ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float
     const FVector HalfExtent = (Size * 0.5f) * SafeScale; // radio en UU por eje
 
     const FTransform Xf(LocalQ, LocalPos);
-    SVOField.EditShape(Xf, S, HalfExtent, /*bAdd=*/Mode == EPTEditMode::Add, PaintColor.ToFColor(true));
+    if (Mode == EPTEditMode::Paint)
+        SVOField.PaintShape(Xf, S, HalfExtent, PaintColor.ToFColor(true)); // recolorea la superficie
+    else
+        SVOField.EditShape(Xf, S, HalfExtent, /*bAdd=*/Mode == EPTEditMode::Add, PaintColor.ToFColor(true));
     bSVODirty = true;
 }
 

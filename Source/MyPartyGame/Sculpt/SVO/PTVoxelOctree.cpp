@@ -174,6 +174,50 @@ void FPTVoxelOctree::EditShape(const FTransform& Xf, EPTSVOShape Shape, const FV
               [&](const FVector& P) { return ShapeSDF(Shape, Inv.TransformPosition(P), H); });
 }
 
+bool FPTVoxelOctree::PaintShape(const FTransform& Xf, EPTSVOShape Shape, const FVector& HalfExtent, const FColor& Color)
+{
+    if (!Root.IsValid()) return false;
+    const FVector H = HalfExtent.ComponentMax(FVector(1e-2f));
+    FBox Bounds(ForceInit);
+    for (int32 c = 0; c < 8; ++c)
+    {
+        const FVector Local(((c & 1) ? H.X : -H.X), ((c & 2) ? H.Y : -H.Y), ((c & 4) ? H.Z : -H.Z));
+        Bounds += Xf.TransformPosition(Local);
+    }
+    const FTransform Inv = Xf.Inverse();
+    return PaintNode(*Root, Origin, RootSize, Bounds, Color,
+                     [&](const FVector& P) { return ShapeSDF(Shape, Inv.TransformPosition(P), H); });
+}
+
+bool FPTVoxelOctree::PaintNode(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize,
+                               const FBox& WorldBounds, const FColor& Color, FSDFFunc SDF) const
+{
+    const FBox NodeBox(NodeMin, NodeMin + FVector(NodeSize));
+    if (!NodeBox.Intersect(WorldBounds)) return false;
+
+    if (Node.IsLeaf())
+    {
+        // Solo hojas de superficie (tienen cambio de signo). Pinta las esquinas dentro de la shape.
+        bool bIn = false, bOut = false;
+        for (int32 k = 0; k < 8; ++k) { if (Node.Corner[k] > 0.f) bIn = true; else bOut = true; }
+        if (!(bIn && bOut)) return false; // no es superficie
+        bool bPainted = false;
+        for (int32 k = 0; k < 8; ++k)
+        {
+            const FVector P = NodeMin + OctantOffset(k) * NodeSize;
+            if (SDF(P) > -NodeSize) { Node.Col[k] = Color; bPainted = true; } // dentro de la shape + 1 celda
+        }
+        return bPainted;
+    }
+
+    bool bAny = false;
+    const float Half = NodeSize * 0.5f;
+    for (int32 i = 0; i < 8; ++i)
+        if (Node.Children[i].IsValid())
+            bAny |= PaintNode(*Node.Children[i], NodeMin + OctantOffset(i) * Half, Half, WorldBounds, Color, SDF);
+    return bAny;
+}
+
 void FPTVoxelOctree::WriteCorners(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize,
                                   bool bAdd, const FColor& PaintColor, FSDFFunc SDF) const
 {
