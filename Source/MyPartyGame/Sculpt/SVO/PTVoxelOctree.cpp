@@ -310,7 +310,10 @@ void FPTVoxelOctree::EditFieldNode(FPTOctreeNode& Node, const FVector& NodeMin, 
         const FVector Center = NodeMin + FVector(NodeSize * 0.5f);
         if (SDF(Center) > -NodeSize)
         {
-            PendingBalanceBounds += NodeBox;
+            // El colapso crea un salto de resolución con los vecinos finos que quedan alrededor. Marcamos
+            // una región AMPLIADA (nodo + 1 tamaño de nodo por lado) para que el balance 2:1 regrade toda
+            // la orilla de la transición → anillos intermedios graduales, sin salto brusco ni grietas.
+            PendingBalanceBounds += FBox(NodeMin - FVector(NodeSize), NodeMin + FVector(NodeSize * 2.f));
             CollapseToLeaf(Node);
             WriteCorners(Node, NodeMin, NodeSize, bAdd, PaintColor, SDF);
             return;
