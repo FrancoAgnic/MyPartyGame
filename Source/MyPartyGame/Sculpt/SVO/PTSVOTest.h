@@ -41,7 +41,8 @@ public:
     // API usada por los comandos de consola.
     void RunDemo();
     void ClearAll();
-    void AddSphere(float Radius);   // esfera en el centro (con PaintColor)
+    void AddSphere(float Radius);   // esfera en el centro (con PaintColor), deshacible
+    void Undo();                    // deshace el último Add
     void Rebuild();                 // re-mallar + loguear stats
 
     // Instancia activa (para los comandos de consola). Weak: puede no existir.

@@ -59,6 +59,13 @@ public:
     void BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris, TArray<FVector>& OutNormals,
                    TArray<FColor>& OutColors) const;
 
+    // ── Undo por trazo (snapshots) ──────────────────────────────────────────
+    // Llamá PushUndoSnapshot() ANTES de cada trazo; Undo() vuelve al estado previo.
+    void PushUndoSnapshot();
+    bool Undo();
+    int32 UndoDepth() const { return UndoStack.Num(); }
+    int32 MaxUndo = 20;
+
     // ── Métricas / debug ────────────────────────────────────────────────────
     int32 CountLeaves() const;   // hojas allocadas (≈ cuánto detalle hay)
     int32 CountNodes()  const;   // nodos totales
@@ -73,6 +80,9 @@ private:
     float   RootSize = 1024.f;
     int32   MaxDepth = 8;
     TUniquePtr<FPTOctreeNode> Root;
+    TArray<TUniquePtr<FPTOctreeNode>> UndoStack; // snapshots (clones) para deshacer
+
+    static TUniquePtr<FPTOctreeNode> CloneNode(const FPTOctreeNode* N);
 
     // Profundidad objetivo para un radio dado (adaptativo). Celda ≈ Radius/CellsPerRadius.
     int32 DepthForRadius(float Radius) const;

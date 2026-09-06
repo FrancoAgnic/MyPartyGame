@@ -147,6 +147,33 @@ void FPTVoxelOctree::EditNode(FPTOctreeNode& Node, const FVector& NodeMin, float
     }
 }
 
+// ── Undo (snapshots por clon) ──────────────────────────────────────────────────────
+TUniquePtr<FPTOctreeNode> FPTVoxelOctree::CloneNode(const FPTOctreeNode* N)
+{
+    if (!N) return nullptr;
+    TUniquePtr<FPTOctreeNode> C = MakeUnique<FPTOctreeNode>();
+    C->bLeaf = N->bLeaf;
+    for (int32 i = 0; i < 8; ++i) { C->Corner[i] = N->Corner[i]; C->Col[i] = N->Col[i]; }
+    if (!N->bLeaf)
+        for (int32 i = 0; i < 8; ++i) C->Children[i] = CloneNode(N->Children[i].Get());
+    return C;
+}
+
+void FPTVoxelOctree::PushUndoSnapshot()
+{
+    if (!Root.IsValid()) return;
+    UndoStack.Add(CloneNode(Root.Get()));
+    while (UndoStack.Num() > FMath::Max(1, MaxUndo)) UndoStack.RemoveAt(0); // tope: descarta el más viejo
+}
+
+bool FPTVoxelOctree::Undo()
+{
+    if (UndoStack.Num() == 0) return false;
+    Root = MoveTemp(UndoStack.Last());
+    UndoStack.Pop();
+    return true;
+}
+
 // ── Sample ──────────────────────────────────────────────────────────────────────
 float FPTVoxelOctree::Sample(const FVector& LocalPos) const
 {

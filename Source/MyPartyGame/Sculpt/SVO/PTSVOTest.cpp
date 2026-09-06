@@ -30,6 +30,10 @@ static FAutoConsoleCommand GCmdSVOAdd(
         A->AddSphere(R);
     }));
 
+static FAutoConsoleCommand GCmdSVOUndo(
+    TEXT("PTSVO.Undo"), TEXT("Deshace el último PTSVO.Add."),
+    FConsoleCommandDelegate::CreateLambda([] { if (APTSVOTest* A = APTSVOTest::Instance.Get()) A->Undo(); }));
+
 static FAutoConsoleCommand GCmdSVOColor(
     TEXT("PTSVO.Color"), TEXT("PTSVO.Color <R> <G> <B> (0-255) — color de la arcilla para lo que agregues."),
     FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
@@ -67,20 +71,21 @@ void APTSVOTest::EndPlay(const EEndPlayReason::Type Reason)
 
 void APTSVOTest::EnsureInit()
 {
-    // Octree centrado en el actor: origin = -RootSize/2 → el centro (0,0,0) local cae en el medio.
-    Octree.Init(FVector(-RootSize * 0.5f), RootSize, MaxDepth);
+    // Idempotente: sólo crea el octree si aún no existe (así los Add ACUMULAN, no se pisan).
+    if (!Octree.IsInit())
+        Octree.Init(FVector(-RootSize * 0.5f), RootSize, MaxDepth); // origin = -RootSize/2 → centro en (0,0,0)
 }
 
 void APTSVOTest::ClearAll()
 {
-    EnsureInit();
+    Octree.Init(FVector(-RootSize * 0.5f), RootSize, MaxDepth); // fuerza árbol vacío
     if (Mesh) Mesh->ClearAllMeshSections();
     UE_LOG(LogTemp, Log, TEXT("[SVO] Clear."));
 }
 
 void APTSVOTest::RunDemo()
 {
-    EnsureInit();
+    Octree.Init(FVector(-RootSize * 0.5f), RootSize, MaxDepth); // demo siempre desde cero
     // Esfera GRANDE (se mallar grueso → pocos tris), en gris arcilla.
     const float BigR = RootSize * 0.16f;
     const float SmallR = RootSize * 0.02f;
@@ -100,9 +105,16 @@ void APTSVOTest::RunDemo()
 
 void APTSVOTest::AddSphere(float Radius)
 {
-    EnsureInit(); // no re-init si ya está; EnsureInit re-crea → para "Add" acumulativo mejor no re-init.
+    EnsureInit();
+    Octree.PushUndoSnapshot(); // cada Add = un trazo deshacible
     Octree.EditSphere(FVector(0, 0, 0), Radius, /*bAdd=*/true, PaintColor);
     Rebuild();
+}
+
+void APTSVOTest::Undo()
+{
+    if (Octree.Undo()) { Rebuild(); UE_LOG(LogTemp, Log, TEXT("[SVO] Undo (quedan %d)."), Octree.UndoDepth()); }
+    else               UE_LOG(LogTemp, Log, TEXT("[SVO] Nada para deshacer."));
 }
 
 void APTSVOTest::Rebuild()
