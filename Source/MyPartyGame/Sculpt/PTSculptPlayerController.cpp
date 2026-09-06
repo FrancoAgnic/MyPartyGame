@@ -1107,8 +1107,15 @@ void APTSculptPlayerController::UpdatePreviewVisual()
     {
         // Usar el mesh estático del usuario, escalado al tamaño de brocha.
         PreviewStaticMesh->SetStaticMesh(Chosen);
-        const float Base = FMath::Max(PreviewMeshBaseSize, 1.f);
-        PreviewStaticMesh->SetWorldScale3D(FVector(StampSize / Base) * StampScale); // escala no-uniforme
+        // AUTO-FIT: escalar el mesh para que su lado más ancho = StampSize (lo que ocupa el sello). Así
+        // el preview coincide con lo que se esculpe SIN importar el tamaño nativo del mesh (antes dependía
+        // de PreviewMeshBaseSize y no cuadraba). Se usa la escala RELATIVA (frame rotado del actor) para
+        // que la escala no-uniforme siga los ejes locales del sello.
+        const FVector Ext = Chosen->GetBoundingBox().GetExtent(); // half-extents
+        const float MaxExt = FMath::Max3(Ext.X, Ext.Y, Ext.Z);
+        const float Fit = (MaxExt > 1.f) ? (StampSize * 0.5f) / MaxExt
+                                         : (StampSize / FMath::Max(PreviewMeshBaseSize, 1.f));
+        PreviewStaticMesh->SetRelativeScale3D(FVector(Fit) * StampScale);
         PreviewStaticMesh->SetVisibility(true);
         PreviewMesh->SetVisibility(false);
     }
