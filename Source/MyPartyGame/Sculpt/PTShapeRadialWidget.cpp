@@ -107,9 +107,8 @@ void UPTShapeRadialWidget::UpdateSelection()
     const FVector2D LocalSize = Geo.GetLocalSize();
     if (LocalSize.X <= 0.f || LocalSize.Y <= 0.f) return; // sin geometría aún (primer frame)
 
-    const FVector2D Center      = LocalSize * 0.5f;
-    const FVector2D CursorLocal = Geo.AbsoluteToLocal(FSlateApplication::Get().GetCursorPos());
-    const FVector2D Delta       = CursorLocal - Center;
+    const FVector2D CursorAbs   = FSlateApplication::Get().GetCursorPos();
+    const FVector2D CursorLocal = Geo.AbsoluteToLocal(CursorAbs);
 
     // Mover el dot custom a la posición del cursor (centrado). Forzamos anchor/alineación top-left para
     // que SetPosition sea en coords locales absolutas (si el slot está anclado al centro, se iría abajo-der).
@@ -123,18 +122,10 @@ void UPTShapeRadialWidget::UpdateSelection()
             CursorDot->SetVisibility(ESlateVisibility::HitTestInvisible); // ya posicionado → mostrar
         }
 
-    // Selección CARDINAL por eje dominante (nada de diagonales): rapidísima y sin ambigüedad.
-    //   0 = arriba, 1 = derecha, 2 = abajo, 3 = izquierda (matchea StartAngle -90 + horario).
-    int32 NewIndex = -1;
-    if (Delta.Size() >= DeadZonePixels)
-    {
-        if (FMath::Abs(Delta.X) > FMath::Abs(Delta.Y))
-            NewIndex = (Delta.X > 0.f) ? 1 : 3;   // derecha / izquierda
-        else
-            NewIndex = (Delta.Y < 0.f) ? 0 : 2;   // arriba / abajo
-    }
-    // Si esa dirección no tiene slot en esta página (página incompleta), no seleccionar.
-    if (NewIndex >= SlotsHere) NewIndex = -1;
+    // Selección: el slot cuyo SECTOR (porción de la pizza) está bajo el DOT. Es el hit-test real del
+    // radial (dot encima del slot = seleccionado), mucho más preciso que el de eje dominante.
+    int32 NewIndex = Radial ? Radial->HitTestAbsolute(CursorAbs) : -1;
+    if (NewIndex >= SlotsHere) NewIndex = -1; // por si la página está incompleta
 
     if (Radial) Radial->SetHighlightedIndex(NewIndex);
     if (NewIndex != SelectedIndex)

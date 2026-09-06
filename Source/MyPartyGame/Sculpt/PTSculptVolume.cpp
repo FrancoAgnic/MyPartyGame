@@ -1225,6 +1225,37 @@ void APTSculptVolume::BuildStampPreview(EPTStampShape Shape, float Size, float V
                                          TArray<FVector>& OutVerts, TArray<int32>& OutTris,
                                          TArray<FVector>& OutNormals)
 {
+    // Formas de CARAS PLANAS: malla explícita con caras lisas (el marching cubes las escalona → boxelart).
+    if (Shape == EPTStampShape::Pyramid || Shape == EPTStampShape::Octahedron)
+    {
+        OutVerts.Reset(); OutTris.Reset(); OutNormals.Reset();
+        const float HS = Size * 0.5f;
+        auto AddTri = [&](FVector A, FVector B, FVector C)
+        {
+            FVector N = FVector::CrossProduct(B - A, C - A).GetSafeNormal();
+            const FVector Cen = (A + B + C) / 3.f;      // normal HACIA AFUERA (desde el origen)
+            if (FVector::DotProduct(N, Cen) < 0.f) { Swap(B, C); N = -N; }
+            const int32 i0 = OutVerts.Num();
+            OutVerts.Add(A); OutVerts.Add(B); OutVerts.Add(C);
+            OutNormals.Add(N); OutNormals.Add(N); OutNormals.Add(N); // flat: normal por cara (verts no compartidos)
+            OutTris.Add(i0); OutTris.Add(i0 + 1); OutTris.Add(i0 + 2);
+        };
+        if (Shape == EPTStampShape::Pyramid)
+        {
+            const FVector Ap(0, 0, HS);
+            const FVector B0(-HS, -HS, -HS), B1(HS, -HS, -HS), B2(HS, HS, -HS), B3(-HS, HS, -HS);
+            AddTri(Ap, B0, B1); AddTri(Ap, B1, B2); AddTri(Ap, B2, B3); AddTri(Ap, B3, B0); // caras
+            AddTri(B0, B2, B1); AddTri(B0, B3, B2);                                          // base
+        }
+        else // Octahedron
+        {
+            const FVector PX(HS,0,0), NX(-HS,0,0), PY(0,HS,0), NY(0,-HS,0), PZ(0,0,HS), NZ(0,0,-HS);
+            AddTri(PZ, PX, PY); AddTri(PZ, PY, NX); AddTri(PZ, NX, NY); AddTri(PZ, NY, PX);
+            AddTri(NZ, PX, PY); AddTri(NZ, PY, NX); AddTri(NZ, NX, NY); AddTri(NZ, NY, PX);
+        }
+        return;
+    }
+
     const float HalfSize = (Size * 0.5f) / VoxSz;
     const int32 PGS = FMath::Clamp(2 * (FMath::CeilToInt(HalfSize) + 2), 6, 48);
     const float Center = PGS * 0.5f;
