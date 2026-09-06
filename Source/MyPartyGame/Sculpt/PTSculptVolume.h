@@ -5,6 +5,7 @@
 #include "Components/BoxComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "PTSculptField.h"
+#include "SVO/PTVoxelOctree.h"
 #include "PTSculptVolume.generated.h"
 
 class UTexture2D;
@@ -30,6 +31,12 @@ public:
 
     // Resolución del campo (tamaño de celda en UU). Menor = más geometría/detalle.
     UPROPERTY(EditAnywhere, Category="Sculpt") float VoxelSize = 5.f;
+
+    // ── SVO experimental (esculpido adaptativo tipo SculptrVR) detrás de un flag ──
+    // ON = la GEOMETRÍA (Add/Erase) y el color van por el octree adaptativo (menos tris en grande,
+    // detalle en chico), con mallas por bloque y replicado por las mismas operaciones.
+    // OFF (default) = campo clásico FPTSculptField. SVO soporta pintura y capas; Smooth se ignora.
+    UPROPERTY(EditAnywhere, Category="Sculpt|SVO") bool bUseSVO = false;
     UPROPERTY(EditAnywhere, Category="Sculpt") UMaterialInterface* ClayMaterial = nullptr;
     // Override opcional del material de la malla de arcilla. Si se asigna, el volumen lo usa en vez del
     // ClayMID (atlas) al crear/re-crear las secciones. Lo usa la CABEZA del modo G (material de pintura
@@ -137,6 +144,7 @@ public:
     UProceduralMeshComponent* GetMeshComponent() const { return Mesh; }
     // Mallas de las CAPAS de detalle (para hornearlas junto a la base en la cabeza custom).
     const TArray<UProceduralMeshComponent*>& GetDetailMeshes() const { return DetailMeshes; }
+    const TMap<int32, UProceduralMeshComponent*>& GetSVOChunkMeshes() const { return SVOChunkMeshes; }
 
     /** ¿Ese punto del mundo cae DENTRO del lienzo (el BoundsBox)? Para no dejar poner cosas
      *  (ej: ojos) fuera de la zona de modelado. */
@@ -238,6 +246,7 @@ protected:
 
     UFUNCTION() void OnRep_Eyes();
     void RebuildEyesMesh(); // reconstruye EyesMesh desde Eyes (usa EyeMesh/EyeMaterial)
+    void EraseEyesNear(const FVector& WorldPos, float Radius); // saca los ojos bajo la brocha (servidor)
 
     // ── Fuente de partículas al esculpir (Borrar/Pintar) ─────────────────────
     // Componente único reusado: se lo reubica en cada sello, se le setea el sistema según la
@@ -276,6 +285,42 @@ private:
     void BackupAtlas(int32 AIdx, int32 Slot);
 
     FPTSculptField Field; // campo BASE (la arcilla principal)
+
+    // ── SVO (modo bUseSVO) ───────────────────────────────────────────────────
+    FPTVoxelOctree SVOField;      // octree adaptativo BASE en espacio ACTOR-LOCAL (UU)
+    bool bSVOInit  = false;       // ya inicializado sobre el lienzo actual
+    bool bSVODirty = false;       // hay ediciones sin re-mallar
+    // Capas de DETALLE (ALT): un octree por capa + su ProceduralMesh (reusa DetailMeshes, paralelo).
+    TArray<TSharedPtr<FPTVoxelOctree>> SVODetailFields;
+    TSet<int32> DirtySVODetailLayers;
+    FPTVoxelOctree* ActiveSVO = &SVOField; // dónde caen los sellos (base o última capa)
+    void InitSVO();               // arma el octree BASE cubriendo el BoundsBox
+    void InitSVOOctree(FPTVoxelOctree& F) const; // inicializa un octree cualquiera sobre el BoundsBox
+    void ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float Size, EPTEditMode Mode,
+                       FLinearColor PaintColor, FRotator StampRot, FVector StampScale);
+    void RebuildSVOMesh();        // remalla base (por chunks) + capas
+    void RebuildSVOInto(FPTVoxelOctree& F, UProceduralMeshComponent* M); // remalla un octree entero a un mesh (capas)
+
+    // Base: Mesh sección 0 = hojas grandes. Cada chunk fino ocupado tiene su propio componente;
+    // cambiar su topología no recrea el scene proxy de los otros chunks.
+    static constexpr int32 SVOChunkDim = 12;                // 12^3 chunks (grilla fina → re-mallado acotado)
+    TSet<int32> DirtySVOChunks;                             // chunks finos a rehacer
+    // One render proxy per occupied chunk: changing topology must not upload the whole sculpture.
+    UPROPERTY(Transient) TMap<int32, UProceduralMeshComponent*> SVOChunkMeshes;
+    void ClearSVOChunkMeshes();
+    bool bSVOCoarseDirty = true;                            // sección gruesa a rehacer
+    void MarkAllSVODirty();                                 // marca todo (tras load/clear/demo)
+    void MarkSVODirtyLocalBounds(const FVector& LMin, const FVector& LMax); // marca chunks tocados por una edición
+    void RebuildSVOChunk(int32 ChunkIndex);                // rehace una sección de chunk fino (sync)
+    // Aplica una malla de chunk ya construida a su componente (game thread). Lo usa el mallado async.
+    void ApplySVOChunkMesh(int32 ChunkIndex, const TArray<FVector>& V, const TArray<int32>& T,
+                           const TArray<FVector>& N, const TArray<FColor>& C);
+    bool bSVOMeshing = false;                              // hay un mallado async de chunks en vuelo
+    uint32 SVOMeshGen = 0;                                 // generación: descarta resultados async viejos tras clear/load
+    float SVOChunkSize() const { return SVOField.GetRootSize() / (float)SVOChunkDim; }
+    // Hojas <= chunk = "finas" (van a chunks); > chunk = grandes (pocas, sección gruesa). Umbral = chunk
+    // para que quepan en un chunk y el halo de 1 chunk cubra sus vecinos.
+    float SVOFineThreshold() const { return SVOChunkSize(); }
 
     // ── Capas de detalle (ALT): campos + meshes aparte ──────────────────────
     // Cada capa fusiona consigo misma pero no con la base ni con otras. ActiveField apunta a dónde
@@ -351,7 +396,8 @@ private:
     // Rango de celdas del lienzo (definido por el BoundsBox).
     void    CellBounds(FIntVector& OutMin, FIntVector& OutMax) const;
 
-    // ── Preview (marching cubes sobre un grid chico aislado) ────────────────
+public:
+    // ── Preview (marching cubes sobre un grid chico aislado). PÚBLICO: lo reusa el mallado del SVO. ──
     static void RunMarchingCubes(const TArray<float>& G, const TArray<FLinearColor>& CG,
                                  int32 GS, float VoxSz,
                                  int32 X0, int32 Y0, int32 Z0, int32 X1, int32 Y1, int32 Z1,
@@ -359,6 +405,7 @@ private:
                                  TArray<FVector>& OutNormals, TArray<FColor>& OutColors);
     static FVector Interp     (FVector P1, FVector P2, float V1, float V2);
     static FColor  InterpColor(FLinearColor C1, FLinearColor C2, float V1, float V2);
+protected:
 
     static const int32 EdgeTable[256];
     static const int32 TriTable[256][16];

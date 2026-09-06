@@ -99,8 +99,10 @@ void APTSculptGameMode::HandleSeamlessTravelPlayer(AController*& C)
 
     // El seamless travel NO llama PostLogin (donde el lobby hace RestartPlayer), así que
     // el jugador llega sin pawn = espectador. Lo posesionamos a mano acá.
+    // Guard: NO llamar RestartPlayer sin PlayerState (el engine crashea: "Couldn't spawn player:
+    // PlayerState is null"). Puede pasar al salir/viajar antes de que llegue el PlayerState.
     if (APlayerController* PC = Cast<APlayerController>(C))
-        if (!PC->GetPawn())
+        if (!PC->GetPawn() && PC->PlayerState)
             RestartPlayer(PC);
 
     StartPawnFlying(C);

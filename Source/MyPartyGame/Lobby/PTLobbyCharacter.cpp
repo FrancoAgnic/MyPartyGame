@@ -182,6 +182,9 @@ void APTLobbyCharacter::BakeAndReplicateHead(UProceduralMeshComponent* ClaySrc, 
     // Componer: arcilla base + CAPAS de detalle (lentes/bigote, mallas aparte) + sección de OJOS.
     TArray<FPTHeadSection> Secs = ExtractSections(ClaySrc, PaintSource);
     if (PaintSource)
+        for (const auto& Pair : PaintSource->GetSVOChunkMeshes())
+            if (Pair.Value) Secs.Append(ExtractSections(Pair.Value, PaintSource));
+    if (PaintSource)
         for (UProceduralMeshComponent* DM : PaintSource->GetDetailMeshes())
             if (DM) Secs.Append(ExtractSections(DM, PaintSource));
     if (LocalEyes.Num() > 0)

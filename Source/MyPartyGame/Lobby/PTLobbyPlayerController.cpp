@@ -667,6 +667,8 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
             if (!IsPaintBudgetFull()) // límite de pintura: no pintar más allá del peso replicable
             {
                 HeadChar->PaintHeadWorldSphere(HeadVolume->GetMeshComponent(), Pt, HeadBrushSize * 0.5f, HeadPaintColor);
+                for (const auto& Pair : HeadVolume->GetSVOChunkMeshes())
+                    if (Pair.Value) HeadChar->PaintHeadWorldSphere(Pair.Value, Pt, HeadBrushSize * 0.5f, HeadPaintColor);
                 // También las capas de detalle (lentes/bigote): pintan la MISMA textura 2D por posición.
                 for (UProceduralMeshComponent* DM : HeadVolume->GetDetailMeshes())
                     if (DM) HeadChar->PaintHeadWorldSphere(DM, Pt, HeadBrushSize * 0.5f, HeadPaintColor);
@@ -1433,6 +1435,9 @@ void APTLobbyPlayerController::EnterHeadSculpt()
             PaintChar->RecomputeBodyPaintBytes();
             // El volumen usa este material al re-mallar (sin pelear con un set-por-tick → sin parpadeo).
             HeadVolume->ClayMaterialOverride = HeadPaintMID;
+            if (HeadPaintMID)
+                for (const auto& Pair : HeadVolume->GetSVOChunkMeshes())
+                    if (Pair.Value) Pair.Value->SetMaterial(0, HeadPaintMID);
             if (HeadPaintMID)
                 if (UProceduralMeshComponent* CM = HeadVolume->GetMeshComponent())
                     for (int32 s = 0; s < CM->GetNumSections(); ++s) CM->SetMaterial(s, HeadPaintMID);
