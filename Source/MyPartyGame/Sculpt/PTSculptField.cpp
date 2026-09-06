@@ -220,8 +220,8 @@ float FPTSculptField::SampleSDF(float X, float Y, float Z) const
 //
 // SNMargin = MaxStep para que el muestreo grueso tenga su celda fantasma.
 
-static constexpr int32 SNMaxStep = 8;          // paso de mallado más grueso permitido (1=fino..8=muy grueso)
-static constexpr int32 SNMargin  = SNMaxStep;  // borde fantasma en celdas finas (= MaxStep)
+static constexpr int32 SNMaxStep = 2;          // paso de mallado más grueso (zonas lisas)
+static constexpr int32 SNMargin  = SNMaxStep;  // borde fantasma en celdas finas
 static constexpr float SNFlatThreshold = 0.985f;
 
 static float BrickFlatness(const FPTSculptField::FBrickSnapshot& Snap, int32 SS);
@@ -269,68 +269,21 @@ void FPTSculptField::SnapshotBrick(const FPTBrickKey& Key, FBrickSnapshot& Out)
 
     // Cache de flatness para decidir el paso (vacío = liso, no fuerza vecinos a fino).
     Flatness.Add(Key, Out.bEmpty ? 1.f : BrickFlatness(Out, SS));
-    // Registrar si el brick tiene superficie (para que los vecinos VACÍOS no limiten el paso: no hay
-    // costura contra el aire, así una superficie de brocha grande sí puede llegar al paso grueso).
-    if (Out.bEmpty) NonEmptyBricks.Remove(Key); else NonEmptyBricks.Add(Key);
 }
 
 int32 FPTSculptField::DecideStep(const FPTBrickKey& Key) const
 {
     if (SNMaxStep < 2) return 1;
-    const int32* s = GradedStep.Find(Key);
-    return s ? *s : 1; // ya viene graduado y snappeado a 1/2/4/8
-}
-
-void FPTSculptField::RecomputeGradedSteps()
-{
-    GradedStep.Reset();
-    if (SNMaxStep < 2) return;
-
-    // Nivel = log2 del paso: 1→0, 2→1, 4→2, 8→3. Y su inverso.
-    auto LevelOfStep = [](int32 step){ int32 l = 0; while ((1 << (l + 1)) <= step && l < 3) ++l; return l; };
-    auto StepOfLevel = [](int32 lvl){ return 1 << FMath::Clamp(lvl, 0, 3); };
-    const int32 CoarseLvl = LevelOfStep(FMath::Clamp(BigBrushStep, 1, SNMaxStep));
-
-    // Nivel OBJETIVO por brick con geometría: brocha grande → CoarseLvl; liso → 1 (paso 2); detalle → 0.
-    TMap<FPTBrickKey, int32> Lvl;
-    Lvl.Reserve(NonEmptyBricks.Num());
-    for (const FPTBrickKey& K : NonEmptyBricks)
-    {
-        int32 t;
-        if (CoarseBricks.Contains(K)) t = CoarseLvl;
-        else { const float* p = Flatness.Find(K); t = ((p ? *p : 1.f) > SNFlatThreshold) ? 1 : 0; }
-        Lvl.Add(K, t);
-    }
-
-    // Relajar: cada brick a lo sumo 1 nivel por encima de su vecino con geometría más fino → gradiente
-    // suave (8→4→2→1) sin saltos bruscos. Converge en pocas pasadas (rango de niveles = 0..3).
-    static const FIntVector N6[6] = { {1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1} };
-    for (int32 pass = 0; pass < 4; ++pass)
-    {
-        bool bChanged = false;
-        for (TPair<FPTBrickKey, int32>& It : Lvl)
-        {
-            int32 minN = 999;
-            for (const FIntVector& d : N6)
-                if (const int32* n = Lvl.Find(It.Key + d)) minN = FMath::Min(minN, *n);
-            if (minN < 999 && It.Value > minN + 1) { It.Value = minN + 1; bChanged = true; }
-        }
-        if (!bChanged) break;
-    }
-
-    // Nuevo mapa de pasos. Marcar DIRTY los bricks cuyo paso cambió (para re-mallar el gradiente aunque
-    // su SDF no haya cambiado: si un detalle nuevo baja el nivel de sus vecinos, esos vecinos hay que
-    // re-mallarlos o el salto/costura queda). Sin cambios → no marca nada (no hay loop).
-    TMap<FPTBrickKey, int32> NewSteps;
-    NewSteps.Reserve(Lvl.Num());
-    for (const TPair<FPTBrickKey, int32>& It : Lvl)
-    {
-        const int32 st = StepOfLevel(It.Value);
-        NewSteps.Add(It.Key, st);
-        const int32* Old = GradedStep.Find(It.Key);
-        if (!Old || *Old != st) MarkDirty(It.Key);
-    }
-    GradedStep = MoveTemp(NewSteps);
+    auto F = [&](const FPTBrickKey& K) -> float {
+        const float* p = Flatness.Find(K);
+        return p ? *p : 1.f; // desconocido/vacío = liso
+    };
+    if (F(Key) <= SNFlatThreshold) return 1;
+    static const FIntVector N6[6] = {
+        {1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1} };
+    for (const FIntVector& d : N6)
+        if (F(Key + d) <= SNFlatThreshold) return 1;
+    return 2;
 }
 
 // ─── Surface Nets ─────────────────────────────────────────────────────────────

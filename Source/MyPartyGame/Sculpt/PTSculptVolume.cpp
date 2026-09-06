@@ -16,15 +16,6 @@
 #include "GameFramework/PlayerState.h"
 #include "Components/PrimitiveComponent.h"
 #include "../Lobby/PTLobbyCharacter.h" // BuildEyesSection (esferas/mesh de ojos)
-#include "DrawDebugHelpers.h"           // overlay del LOD (PTSculpt.DebugLOD)
-#include "Engine/Engine.h"              // GEngine->AddOnScreenDebugMessage
-#include "HAL/IConsoleManager.h"        // TAutoConsoleVariable
-
-// Debug del LOD: en la consola → "PTSculpt.DebugLOD 1" para ver los bricks (verde=fino / rojo=paso 2).
-static TAutoConsoleVariable<int32> CVarSculptDebugLOD(
-    TEXT("PTSculpt.DebugLOD"), 0,
-    TEXT("Sculpturillo: dibuja el LOD de la escultura. verde=mallado fino (paso 1), rojo=grueso (paso 2)."),
-    ECVF_Default);
 
 // ─── Marching Cubes lookup tables (Bourke / Lorensen & Cline) ──────────────
 // EdgeTable[i]: bitmask of the 12 edges intersected when corners have sign pattern i.
@@ -830,42 +821,6 @@ FVector APTSculptVolume::WorldToCell(FVector W) const
     return GetActorTransform().InverseTransformPosition(W) / VoxelSize;
 }
 
-void APTSculptVolume::DebugDrawLOD()
-{
-    UWorld* W = GetWorld();
-    if (!W) return;
-    if (CVarSculptDebugLOD.GetValueOnGameThread() <= 0)
-    {
-        if (DebugBrickStep.Num() > 0) DebugBrickStep.Reset(); // apagado → limpiar
-        return;
-    }
-
-    const float BS = (float)FPTBrick::BrickSize;
-    const FVector Half = FVector(BS * VoxelSize * 0.5f) * 0.96f; // caja por brick (un pelín menor)
-    const FTransform X = GetActorTransform();
-    int32 nFine = 0, nCoarse = 0;
-    // Color por paso: 1=verde (fino), 2=amarillo, 3=naranja, 4=rojo (más grueso = menos triángulos).
-    auto StepColor = [](int32 s) -> FColor {
-        switch (s) { case 1: return FColor::Green; case 2: return FColor::Yellow;
-                     case 3: return FColor::Orange; case 4: return FColor::Red;
-                     default: return FColor::Magenta; } }; // 8 = magenta (más grueso)
-
-    for (const TPair<FPTBrickKey, int32>& P : DebugBrickStep)
-    {
-        // Centro del brick en mundo: (brick*BrickSize + BrickSize/2) celdas × VoxelSize → local → mundo.
-        const FVector CellCenter = (FVector(P.Key) * BS + FVector(BS * 0.5f)) * VoxelSize;
-        const FVector WC = X.TransformPosition(CellCenter);
-        (P.Value >= 2) ? ++nCoarse : ++nFine;
-        DrawDebugBox(W, WC, Half, X.GetRotation(), StepColor(P.Value), /*bPersistent=*/false,
-                     /*LifeTime=*/-1.f, /*DepthPriority=*/0, /*Thickness=*/1.5f);
-    }
-
-    if (GEngine)
-        GEngine->AddOnScreenDebugMessage((uint64)((PTRINT)this), 0.f, FColor::Yellow,
-            FString::Printf(TEXT("[LOD] fino(verde)=%d  grueso(amar/naran/rojo)=%d  Step=%d  MinSize=%.0f"),
-                            nFine, nCoarse, BigBrushLODStep, BigBrushLODMinSize));
-}
-
 void APTSculptVolume::CellBounds(FIntVector& OutMin, FIntVector& OutMax) const
 {
     const FVector Center = BoundsBox ? BoundsBox->GetRelativeLocation() : FVector::ZeroVector;
@@ -1055,21 +1010,6 @@ bool APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
     // Campo DESTINO de la geometría: base por defecto, o la capa de detalle activa (ALT). Así el
     // detalle no se fusiona con la arcilla base ni con otras capas (cada una es un campo aparte).
     FPTSculptField& F = *ActiveField;
-
-    // LOD por brocha (rendimiento): al AGREGAR, marcar los bricks de la región como "gruesos" si la
-    // brocha es grande (>= BigBrushLODMinSize) → se mallan a media resolución. Con brocha chica se
-    // limpia el flag (así el detalle fino que agregues después se ve fino). Determinístico (mismo
-    // umbral en todos) → LOD consistente entre clientes sin replicar nada extra.
-    if (Mode == EPTEditMode::Add && BigBrushLODMinSize > 0.f)
-    {
-        const bool  bCoarse = (Size >= BigBrushLODMinSize);
-        const int32 BS = FPTBrick::BrickSize;
-        auto FloorDiv = [BS](int32 c){ return (c >= 0) ? c / BS : -(((-c) + BS - 1) / BS); };
-        for (int32 bz = FloorDiv(z0); bz <= FloorDiv(z1); ++bz)
-        for (int32 by = FloorDiv(y0); by <= FloorDiv(y1); ++by)
-        for (int32 bx = FloorDiv(x0); bx <= FloorDiv(x1); ++bx)
-            F.SetBrickCoarse(FPTBrickKey(bx, by, bz), bCoarse);
-    }
 
     // ── Smooth: Laplaciano suave de dos pasos con falloff radial y leve empuje
     //    hacia afuera (SmoothBias) para que suavice sin encoger el modelo. ────
@@ -1388,7 +1328,6 @@ void APTSculptVolume::RebuildDirty()
     auto Collect = [&](FPTSculptField& F, UProceduralMeshComponent* MComp)
     {
         if (!MComp || !F.HasDirty()) return;
-        F.BigBrushStep = FMath::Clamp(BigBrushLODStep, 1, 8); // knob de reducción de tris (brocha grande)
         TArray<FPTBrickKey> Keys;
         F.TakeDirty(Keys);
         const int32 Base = Jobs->Num();
@@ -1396,19 +1335,11 @@ void APTSculptVolume::RebuildDirty()
         {
             FSnapJob J; J.Target = MComp;
             J.Snap.Section = F.SectionIndex(K);
-            F.SnapshotBrick(K, J.Snap); // actualiza flatness + NonEmpty
+            F.SnapshotBrick(K, J.Snap); // actualiza flatness
             Jobs->Add(MoveTemp(J));
         }
-        // Graduar DESPUÉS de snapshotear (flatness/NonEmpty frescos). Marca dirty los vecinos cuyo paso
-        // cambió (se re-mallan en el próximo rebuild → el gradiente converge mientras esculpís).
-        F.RecomputeGradedSteps();
         for (int32 i = Base; i < Jobs->Num(); ++i)
             (*Jobs)[i].Snap.Step = F.DecideStep((*Jobs)[i].Snap.Key);
-
-        // DEBUG LOD: registrar el paso por brick del campo BASE (para el overlay PTSculpt.DebugLOD).
-        if (MComp == Mesh && CVarSculptDebugLOD.GetValueOnGameThread() > 0)
-            for (int32 i = Base; i < Jobs->Num(); ++i)
-                DebugBrickStep.Add((*Jobs)[i].Snap.Key, (*Jobs)[i].Snap.Step);
     };
 
     Collect(Field, Mesh);

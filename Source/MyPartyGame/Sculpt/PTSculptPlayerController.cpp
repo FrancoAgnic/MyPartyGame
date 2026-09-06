@@ -441,9 +441,6 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         SetIgnoreMoveInput(bPhaseWantsUILock);
     }
 
-    // DEBUG LOD: overlay de los bricks por paso de mallado (consola: PTSculpt.DebugLOD 1).
-    if (Volume) Volume->DebugDrawLOD();
-
     // Radial de formas abierto: congelar cámara y movimiento (mismo lock por transición balanceado)
     // así arrastrar el mouse elige el slot sin girar la cámara — el foco queda en el radial.
     if (bShapeRadialActive != bShapeRadialInputLocked)

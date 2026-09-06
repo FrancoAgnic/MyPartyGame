@@ -86,17 +86,6 @@ public:
     void TakeDirty(TArray<FPTBrickKey>& Out) { Out = DirtyBricks.Array(); DirtyBricks.Reset(); }
     void MarkDirty(const FPTBrickKey& Key)   { DirtyBricks.Add(Key); }
 
-    // LOD por brocha: marca un brick como "grueso" (esculpido con brocha grande) → se malla a media
-    // resolución (paso 2) aunque no sea liso, para bajar triángulos/costo. Se limpia al esculpirlo con
-    // brocha chica (así el detalle fino que agregues después se ve). DecideStep respeta el constraint de
-    // vecinos, así que no genera costuras (reusa el camino 1↔2 existente).
-    void SetBrickCoarse(const FPTBrickKey& Key, bool bCoarse)
-    { if (bCoarse) CoarseBricks.Add(Key); else CoarseBricks.Remove(Key); }
-
-    // Paso de mallado para las zonas de brocha grande (2..4). Lo setea el volumen desde BigBrushLODStep.
-    // 2 ≈ -75% triángulos, 3 ≈ -89%, 4 ≈ -94% (más perf, más grueso). Lo usa DecideStep.
-    int32 BigBrushStep = 2;
-
     // Índice de sección del ProceduralMesh para un brick (estable por key).
     int32 SectionIndex(const FPTBrickKey& Key);
 
@@ -117,14 +106,9 @@ public:
     // Actualiza el cache de "flatness" del brick (por eso no es const).
     void SnapshotBrick(const FPTBrickKey& Key, FBrickSnapshot& Out);
 
-    // Paso de mallado por brick, ya GRADUADO (bricks vecinos difieren <=1 nivel: 1/2/4/8), para que la
-    // resolución baje de a poco (geometría intermedia) y se minimicen las costuras del LOD. Lee GradedStep.
+    // Decide el paso de mallado: 2 solo si el brick y sus 6 vecinos son lisos
+    // (evita costuras LOD en bordes de detalle).
     int32 DecideStep(const FPTBrickKey& Key) const;
-
-    // Recalcula GradedStep para TODOS los bricks con geometría: nivel objetivo (brocha grande/liso/detalle)
-    // relajado para que vecinos difieran como mucho 1 nivel (gradiente 8->4->2->1). Lo llama el volumen
-    // una vez por rebuild antes de decidir pasos.
-    void RecomputeGradedSteps();
 
     // Convierte coord global de celda → (brick key, coord local dentro del brick).
     static void CellToBrick(int32 X, int32 Y, int32 Z, FPTBrickKey& OutKey, int32& lx, int32& ly, int32& lz);
@@ -153,9 +137,6 @@ private:
     TSet<FPTBrickKey>                       DirtyBricks;
     TMap<FPTBrickKey, int32>                SectionOf;  // key → sección estable
     TMap<FPTBrickKey, float>                Flatness;   // key → coherencia [0,1]
-    TSet<FPTBrickKey>                       CoarseBricks;   // bricks esculpidos con brocha grande → LOD grueso
-    TSet<FPTBrickKey>                       NonEmptyBricks; // bricks con superficie (para no dejar que los vacíos limiten el LOD)
-    TMap<FPTBrickKey, int32>                GradedStep;     // paso ya graduado por brick (1/2/4/8), lo calcula RecomputeGradedSteps
     int32                                   NextSection = 0;
 
     const FPTBrick* FindBrick(const FPTBrickKey& Key) const;

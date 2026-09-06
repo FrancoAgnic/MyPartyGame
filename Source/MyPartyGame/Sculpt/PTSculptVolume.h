@@ -30,20 +30,6 @@ public:
 
     // Resolución del campo (tamaño de celda en UU). Menor = más geometría/detalle.
     UPROPERTY(EditAnywhere, Category="Sculpt") float VoxelSize = 5.f;
-
-    // LOD por brocha (rendimiento): al AGREGAR con una brocha de tamaño >= esto, esa zona se malla a
-    // MEDIA resolución (paso 2) → ~1/8 de triángulos ahí → mucho menos costo con brochas grandes. Es
-    // seam-safe (reusa el LOD liso 1↔2 con constraint de vecinos). BAJARLO = más zonas en baja
-    // resolución (más perf, menos detalle); SUBIRLO = solo brochas muy grandes bajan resolución.
-    // 0 = desactivado (comportamiento anterior: solo LOD por planitud).
-    UPROPERTY(EditAnywhere, Category="Sculpt|LOD") float BigBrushLODMinSize = 300.f;
-
-    // Cuán GRUESO se malla lo esculpido con brocha grande. Es el knob de reducción de triángulos.
-    // Valores efectivos por la grilla (BrickSize=16, solo pasos divisores 1/2/4/8): 1 = sin reducción,
-    // 2 ≈ -75% tris, 4 ≈ -94%, 8 ≈ -98% (3→2, 5-7→4). Subilo lo máximo posible hasta donde la calidad
-    // te siga gustando. OJO: a 4 y sobre todo a 8 se nota más el borde entre la zona gruesa y el detalle
-    // fino (costura/escalón) y las formas grandes quedan más facetadas.
-    UPROPERTY(EditAnywhere, Category="Sculpt|LOD", meta=(ClampMin="1", ClampMax="8")) int32 BigBrushLODStep = 2;
     UPROPERTY(EditAnywhere, Category="Sculpt") UMaterialInterface* ClayMaterial = nullptr;
     // Override opcional del material de la malla de arcilla. Si se asigna, el volumen lo usa en vez del
     // ClayMID (atlas) al crear/re-crear las secciones. Lo usa la CABEZA del modo G (material de pintura
@@ -243,14 +229,6 @@ public:
 
     // SDF de cada forma, centrado en origen. HalfSize en unidades de celda.
     static float StampSDF(EPTStampShape Shape, FVector LocalPos, float HalfSize);
-
-    // ── DEBUG LOD ────────────────────────────────────────────────────────────
-    // Dibuja cada brick con color según su paso de mallado (verde=fino paso 1, rojo=grueso paso 2) +
-    // contador en pantalla. Se activa con la consola: PTSculpt.DebugLOD 1. Lo llama el PlayerController
-    // cada tick (early-return si el cvar está en 0). Sirve para verificar que el LOD por brocha funciona.
-    void DebugDrawLOD();
-    // Paso de mallado por brick del campo base (última vez que se malló). Solo se llena con el cvar on.
-    TMap<FPTBrickKey, int32> DebugBrickStep;
 
 protected:
     virtual void BeginPlay() override;
