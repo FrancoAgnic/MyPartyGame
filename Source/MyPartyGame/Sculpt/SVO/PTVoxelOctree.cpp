@@ -459,9 +459,11 @@ namespace DCR
         FNode c; c.N = P.N->Children[H2M[h]].Get(); c.Min = P.Min + HOffset(h) * hs; c.Size = hs; return c;
     }
     FORCEINLINE float Corner(const FPTOctreeNode* N, int32 c) { return N->Corner[H2M[c]]; }
-    using FVertMap = TMap<const FPTOctreeNode*, int32>;
+    // GetVert: devuelve el índice del vértice de una hoja, CREÁNDOLO al vuelo si no lo tiene (así el
+    // abanico del DC siempre cierra → sin huecos). Devuelve -1 solo si la hoja es 100% aire.
+    using FVertFn = TFunctionRef<int32(const FNode&)>;
 
-    void ProcessEdge(const FNode n[4], int32 dir, const FVertMap& V, TArray<int32>& T)
+    void ProcessEdge(const FNode n[4], int32 dir, const FVertFn& GetVert, TArray<int32>& T)
     {
         float minSize = FLT_MAX; bool flip = false; bool sign = false; int32 idx[4];
         for (int32 i = 0; i < 4; ++i)
@@ -470,7 +472,7 @@ namespace DCR
             const bool m1 = Corner(n[i].N, edgevmap[e][0]) > 0.f;
             const bool m2 = Corner(n[i].N, edgevmap[e][1]) > 0.f;
             if (n[i].Size < minSize) { minSize = n[i].Size; flip = m1; sign = (m1 != m2); }
-            const int32* f = V.Find(n[i].N); idx[i] = f ? *f : -1;
+            idx[i] = GetVert(n[i]);
         }
         if (!sign) return;
         const bool bAll = (idx[0] >= 0 && idx[1] >= 0 && idx[2] >= 0 && idx[3] >= 0);
@@ -480,7 +482,7 @@ namespace DCR
             else      { T.Add(idx[0]); T.Add(idx[3]); T.Add(idx[1]); T.Add(idx[0]); T.Add(idx[2]); T.Add(idx[3]); }
             return;
         }
-        // Fallback (alguna hoja sin vértice por inconsistencia): triángulo con los que existan.
+        // Alguna hoja 100% aire (raro): triángulo con los vértices que existan.
         int32 o[4]; int32 nv = 0;
         for (int32 i = 0; i < 4; ++i) if (idx[i] >= 0) o[nv++] = idx[i];
         if (nv < 3) return;
@@ -488,19 +490,19 @@ namespace DCR
         else      { T.Add(o[0]); T.Add(o[2]); T.Add(o[1]); }
     }
 
-    void EdgeProc(const FNode n[4], int32 dir, const FVertMap& V, TArray<int32>& T)
+    void EdgeProc(const FNode n[4], int32 dir, const FVertFn& GetVert, TArray<int32>& T)
     {
         for (int32 i = 0; i < 4; ++i) if (!n[i].N) return;
-        if (n[0].IsLeaf() && n[1].IsLeaf() && n[2].IsLeaf() && n[3].IsLeaf()) { ProcessEdge(n, dir, V, T); return; }
+        if (n[0].IsLeaf() && n[1].IsLeaf() && n[2].IsLeaf() && n[3].IsLeaf()) { ProcessEdge(n, dir, GetVert, T); return; }
         for (int32 i = 0; i < 2; ++i)
         {
             FNode en[4];
             for (int32 j = 0; j < 4; ++j) en[j] = n[j].IsLeaf() ? n[j] : Child(n[j], edgeProcEdgeMask[dir][i][j]);
-            EdgeProc(en, edgeProcEdgeMask[dir][i][4], V, T);
+            EdgeProc(en, edgeProcEdgeMask[dir][i][4], GetVert, T);
         }
     }
 
-    void FaceProc(const FNode& a, const FNode& b, int32 dir, const FVertMap& V, TArray<int32>& T)
+    void FaceProc(const FNode& a, const FNode& b, int32 dir, const FVertFn& GetVert, TArray<int32>& T)
     {
         if (!a.N || !b.N) return;
         if (a.IsLeaf() && b.IsLeaf()) return;
@@ -508,7 +510,7 @@ namespace DCR
         {
             const FNode fa = a.IsLeaf() ? a : Child(a, faceProcFaceMask[dir][i][0]);
             const FNode fb = b.IsLeaf() ? b : Child(b, faceProcFaceMask[dir][i][1]);
-            FaceProc(fa, fb, faceProcFaceMask[dir][i][2], V, T);
+            FaceProc(fa, fb, faceProcFaceMask[dir][i][2], GetVert, T);
         }
         static const int32 orders[2][4] = { {0,0,1,1}, {0,1,0,1} };
         for (int32 i = 0; i < 4; ++i)
@@ -519,23 +521,23 @@ namespace DCR
             FNode en[4];
             for (int32 j = 0; j < 4; ++j)
             { const FNode& src = (ord[j] == 0) ? a : b; en[j] = src.IsLeaf() ? src : Child(src, cc[j]); }
-            EdgeProc(en, faceProcEdgeMask[dir][i][5], V, T);
+            EdgeProc(en, faceProcEdgeMask[dir][i][5], GetVert, T);
         }
     }
 
-    void CellProc(const FNode& c, const FVertMap& V, TArray<int32>& T)
+    void CellProc(const FNode& c, const FVertFn& GetVert, TArray<int32>& T)
     {
         if (!c.N || c.N->IsLeaf()) return;
         FNode ch[8];
         for (int32 i = 0; i < 8; ++i) ch[i] = Child(c, i);
-        for (int32 i = 0; i < 8; ++i) CellProc(ch[i], V, T);
+        for (int32 i = 0; i < 8; ++i) CellProc(ch[i], GetVert, T);
         for (int32 i = 0; i < 12; ++i)
-            FaceProc(ch[cellProcFaceMask[i][0]], ch[cellProcFaceMask[i][1]], cellProcFaceMask[i][2], V, T);
+            FaceProc(ch[cellProcFaceMask[i][0]], ch[cellProcFaceMask[i][1]], cellProcFaceMask[i][2], GetVert, T);
         for (int32 i = 0; i < 6; ++i)
         {
             const FNode en[4] = { ch[cellProcEdgeMask[i][0]], ch[cellProcEdgeMask[i][1]],
                                   ch[cellProcEdgeMask[i][2]], ch[cellProcEdgeMask[i][3]] };
-            EdgeProc(en, cellProcEdgeMask[i][4], V, T);
+            EdgeProc(en, cellProcEdgeMask[i][4], GetVert, T);
         }
     }
 }
@@ -546,23 +548,39 @@ void FPTVoxelOctree::BuildMeshDC(TArray<FVector>& OutVerts, TArray<int32>& OutTr
     OutVerts.Reset(); OutTris.Reset(); OutNormals.Reset(); OutColors.Reset();
     if (!Root.IsValid()) return;
 
-    // 1) Un vértice por hoja de superficie (Surface Nets) + normal por gradiente + color.
-    TArray<FLeafRef> Leaves;
-    CollectLeaves(Root.Get(), Origin, RootSize, Leaves);
-    DCR::FVertMap VertOf; VertOf.Reserve(Leaves.Num());
-    for (const FLeafRef& L : Leaves)
+    // Vértice por hoja, creado AL VUELO cuando el DC lo pide (así el abanico siempre cierra → sin huecos).
+    // Con cruce limpio: Surface Nets. Con material pero sin cruce (inconsistencia): al centro de la hoja.
+    // 100% aire: sin vértice (-1).
+    TMap<const FPTOctreeNode*, int32> VertOf;
+    auto GetVert = [&](const DCR::FNode& n) -> int32
     {
+        if (const int32* f = VertOf.Find(n.N)) return *f;
+        int32 Idx = -1;
         FVector VP; FColor VC;
-        if (!LeafVertex(*L.Node, L.Min, L.Size, VP, VC)) continue;
-        const int32 Idx = OutVerts.Add(VP);
-        OutNormals.Add(FieldNormal(VP));
-        OutColors.Add(VC);
-        VertOf.Add(L.Node, Idx);
-    }
+        if (LeafVertex(*n.N, n.Min, n.Size, VP, VC))
+        {
+            Idx = OutVerts.Add(VP); OutNormals.Add(FieldNormal(VP)); OutColors.Add(VC);
+        }
+        else
+        {
+            // ¿Tiene algo de material? Si sí, vértice al centro (evita hueco); si es puro aire, -1.
+            int32 R = 0, G = 0, B = 0, Cnt = 0;
+            for (int32 k = 0; k < 8; ++k)
+                if (n.N->Corner[k] > 0.f) { const FColor& Cc = n.N->Col[k]; R += Cc.R; G += Cc.G; B += Cc.B; ++Cnt; }
+            if (Cnt > 0)
+            {
+                VP = n.Min + FVector(n.Size * 0.5f);
+                const FColor Avg((uint8)(R / Cnt), (uint8)(G / Cnt), (uint8)(B / Cnt), 255);
+                Idx = OutVerts.Add(VP); OutNormals.Add(FieldNormal(VP)); OutColors.Add(Avg);
+            }
+        }
+        VertOf.Add(n.N, Idx);
+        return Idx;
+    };
 
-    // 2) Conectividad recursiva (watertight): cellProc → faceProc → edgeProc.
+    // Conectividad recursiva (watertight): cellProc → faceProc → edgeProc.
     DCR::FNode RootN; RootN.N = Root.Get(); RootN.Min = Origin; RootN.Size = RootSize;
-    DCR::CellProc(RootN, VertOf, OutTris);
+    DCR::CellProc(RootN, GetVert, OutTris);
 }
 
 // ── Undo (snapshots por clon) ──────────────────────────────────────────────────────

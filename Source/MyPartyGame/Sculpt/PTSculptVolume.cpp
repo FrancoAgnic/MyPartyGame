@@ -1616,15 +1616,32 @@ void APTSculptVolume::RebuildSVOMesh()
         const int32 cx = Idx % D, cy = (Idx / D) % D, cz = Idx / (D * D);
         Region += FBox(Origin + FVector(cx, cy, cz) * CS, Origin + FVector(cx + 1, cy + 1, cz + 1) * CS);
     }
-    // Halo generoso (2 chunks): el clon debe contener TODA hoja que aporte triángulos a los chunks sucios,
-    // incluidas hojas GRANDES cuyo vértice cae lejos → si no, el triángulo queda incompleto = hueco.
-    Region = Region.ExpandBy(CS * 2.f);
+    // Halo generoso (3 chunks): el clon debe contener TODA hoja que aporte triángulos a los chunks a
+    // refrescar (sucios + 1 anillo), incluidas hojas GRANDES con vértice lejano → si no, quedan huecos.
+    Region = Region.ExpandBy(CS * 3.f);
     TSharedPtr<FPTVoxelOctree> Clone = SVOField.CloneRegion(Region);
+
+    // Keep = chunks sucios + su anillo de vecinos (1): refrescamos también los bordes para que ningún
+    // triángulo cross-boundary quede viejo (los vecinos quedan totalmente cubiertos por el halo de 2).
+    TSet<int32> KeepSet;
+    for (int32 Idx : Chunks)
+    {
+        const int32 cx = Idx % D, cy = (Idx / D) % D, cz = Idx / (D * D);
+        for (int32 dz = -1; dz <= 1; ++dz)
+        for (int32 dy = -1; dy <= 1; ++dy)
+        for (int32 dx = -1; dx <= 1; ++dx)
+        {
+            const int32 nx = cx + dx, ny = cy + dy, nz = cz + dz;
+            if (nx < 0 || ny < 0 || nz < 0 || nx >= D || ny >= D || nz >= D) continue;
+            KeepSet.Add(nx + ny * D + nz * D * D);
+        }
+    }
+    TArray<int32> Keep = KeepSet.Array();
 
     bSVOMeshing = true;
     const uint32 Gen = SVOMeshGen;
     TWeakObjectPtr<APTSculptVolume> WeakThis(this);
-    Async(EAsyncExecution::ThreadPool, [WeakThis, Clone, Chunks, Origin, CS, D, Gen]()
+    Async(EAsyncExecution::ThreadPool, [WeakThis, Clone, Keep, Origin, CS, D, Gen]()
     {
         struct FChunkRes { int32 Idx; TArray<FVector> V, N; TArray<int32> T; TArray<FColor> C; TMap<int32,int32> Remap; };
         TSharedPtr<TArray<FChunkRes>, ESPMode::ThreadSafe> Results = MakeShared<TArray<FChunkRes>, ESPMode::ThreadSafe>();
@@ -1635,7 +1652,7 @@ void APTSculptVolume::RebuildSVOMesh()
 
         // 2) Repartir triángulos por chunk según el centroide; solo se quedan los chunks sucios.
         //    (cada triángulo va a UN chunk → sin duplicar; DC garantiza que no falta ninguno).
-        TSet<int32> Keep(Chunks);
+        TSet<int32> KeepC(Keep);
         TMap<int32, int32> ChunkToRes; // idx de chunk → índice en Results
         auto GetRes = [&](int32 ci) -> FChunkRes&
         {
@@ -1652,7 +1669,7 @@ void APTSculptVolume::RebuildSVOMesh()
             const int32 cz = FMath::FloorToInt((Ctr.Z - Origin.Z) / CS);
             if (cx < 0 || cy < 0 || cz < 0 || cx >= D || cy >= D || cz >= D) continue;
             const int32 ci = cx + cy * D + cz * D * D;
-            if (!Keep.Contains(ci)) continue;
+            if (!KeepC.Contains(ci)) continue;
             FChunkRes& R = GetRes(ci);
             auto Local = [&](int32 g) -> int32
             {
@@ -1661,8 +1678,8 @@ void APTSculptVolume::RebuildSVOMesh()
             };
             R.T.Add(Local(i0)); R.T.Add(Local(i1)); R.T.Add(Local(i2));
         }
-        // 3) Chunks sucios que quedaron SIN triángulos → resultado vacío (para limpiar su sección).
-        for (int32 ci : Chunks) if (!ChunkToRes.Contains(ci)) Results->Add(FChunkRes{ ci, {}, {}, {}, {}, {} });
+        // 3) Chunks de Keep que quedaron SIN triángulos → resultado vacío (para limpiar su sección).
+        for (int32 ci : Keep) if (!ChunkToRes.Contains(ci)) Results->Add(FChunkRes{ ci, {}, {}, {}, {}, {} });
         AsyncTask(ENamedThreads::GameThread, [WeakThis, Results, Gen]()
         {
             if (APTSculptVolume* Self = WeakThis.Get())
