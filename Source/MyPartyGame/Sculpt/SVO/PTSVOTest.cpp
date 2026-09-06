@@ -30,6 +30,18 @@ static FAutoConsoleCommand GCmdSVOAdd(
         A->AddSphere(R);
     }));
 
+static FAutoConsoleCommand GCmdSVOColor(
+    TEXT("PTSVO.Color"), TEXT("PTSVO.Color <R> <G> <B> (0-255) — color de la arcilla para lo que agregues."),
+    FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+    {
+        APTSVOTest* A = APTSVOTest::Instance.Get();
+        if (!A || Args.Num() < 3) return;
+        A->PaintColor = FColor(
+            (uint8)FMath::Clamp(FCString::Atoi(*Args[0]), 0, 255),
+            (uint8)FMath::Clamp(FCString::Atoi(*Args[1]), 0, 255),
+            (uint8)FMath::Clamp(FCString::Atoi(*Args[2]), 0, 255));
+    }));
+
 // ── Actor ────────────────────────────────────────────────────────────────────────
 APTSVOTest::APTSVOTest()
 {
@@ -69,16 +81,19 @@ void APTSVOTest::ClearAll()
 void APTSVOTest::RunDemo()
 {
     EnsureInit();
-    // Esfera GRANDE (se mallar grueso → pocos tris).
-    Octree.EditSphere(FVector(0, 0, 0), RootSize * 0.16f, /*bAdd=*/true);
-    // Varios detalles CHICOS encima (se subdividen fino → mucha malla local). Muestra lo adaptativo.
+    // Esfera GRANDE (se mallar grueso → pocos tris), en gris arcilla.
     const float BigR = RootSize * 0.16f;
     const float SmallR = RootSize * 0.02f;
+    Octree.EditSphere(FVector(0, 0, 0), BigR, /*bAdd=*/true, FColor(180, 170, 160));
+    // Varios detalles CHICOS de colores encima (se subdividen fino → detalle + color por voxel).
+    static const FColor Palette[8] = {
+        FColor::Red, FColor::Green, FColor::Blue, FColor::Yellow,
+        FColor::Cyan, FColor::Magenta, FColor::Orange, FColor::Purple };
     for (int32 i = 0; i < 8; ++i)
     {
         const float a = (float)i / 8.f * 2.f * PI;
         const FVector P(FMath::Cos(a) * BigR * 0.9f, FMath::Sin(a) * BigR * 0.9f, BigR * 0.4f);
-        Octree.EditSphere(P, SmallR, /*bAdd=*/true);
+        Octree.EditSphere(P, SmallR, /*bAdd=*/true, Palette[i]);
     }
     Rebuild();
 }
@@ -86,7 +101,7 @@ void APTSVOTest::RunDemo()
 void APTSVOTest::AddSphere(float Radius)
 {
     EnsureInit(); // no re-init si ya está; EnsureInit re-crea → para "Add" acumulativo mejor no re-init.
-    Octree.EditSphere(FVector(0, 0, 0), Radius, /*bAdd=*/true);
+    Octree.EditSphere(FVector(0, 0, 0), Radius, /*bAdd=*/true, PaintColor);
     Rebuild();
 }
 
@@ -95,10 +110,10 @@ void APTSVOTest::Rebuild()
     if (!Mesh) return;
     TArray<FVector> V, N;
     TArray<int32>   T;
-    Octree.BuildMesh(V, T, N);
+    TArray<FColor>  C;
+    Octree.BuildMesh(V, T, N, C);
 
     TArray<FVector2D> UV;
-    TArray<FColor>    C;
     TArray<FProcMeshTangent> Tan;
     Mesh->CreateMeshSection(0, V, T, N, UV, C, Tan, /*bCreateCollision=*/false);
     if (Material) Mesh->SetMaterial(0, Material);

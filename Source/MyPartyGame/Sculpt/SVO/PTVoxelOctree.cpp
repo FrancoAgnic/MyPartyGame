@@ -75,6 +75,9 @@ void FPTVoxelOctree::RefineLeaf(FPTOctreeNode& Node)
     float P[8];
     for (int32 i = 0; i < 8; ++i) P[i] = Node.Corner[i];
 
+    FColor PC[8];
+    for (int32 i = 0; i < 8; ++i) PC[i] = Node.Col[i];
+
     for (int32 c = 0; c < 8; ++c)
     {
         TUniquePtr<FPTOctreeNode> Child = MakeUnique<FPTOctreeNode>();
@@ -83,6 +86,9 @@ void FPTVoxelOctree::RefineLeaf(FPTOctreeNode& Node)
         {
             const FVector KF = Off + OctantOffset(k) * 0.5f; // esquina k del hijo en fracción del padre
             Child->Corner[k] = TrilinearCorners(P, KF.X, KF.Y, KF.Z);
+            // Color: esquina del padre más cercana (evita mezclar float↔FColor; las zonas editadas se repintan).
+            const int32 nx = KF.X >= 0.5f ? 1 : 0, ny = KF.Y >= 0.5f ? 1 : 0, nz = KF.Z >= 0.5f ? 1 : 0;
+            Child->Col[k] = PC[nx | (ny << 1) | (nz << 2)];
         }
         Node.Children[c] = MoveTemp(Child);
     }
@@ -90,15 +96,15 @@ void FPTVoxelOctree::RefineLeaf(FPTOctreeNode& Node)
 }
 
 // ── Edición ─────────────────────────────────────────────────────────────────────
-void FPTVoxelOctree::EditSphere(const FVector& Center, float Radius, bool bAdd)
+void FPTVoxelOctree::EditSphere(const FVector& Center, float Radius, bool bAdd, const FColor& PaintColor)
 {
     if (!Root.IsValid() || Radius <= 0.f) return;
     const int32 TargetDepth = DepthForRadius(Radius);
-    EditNode(*Root, Origin, RootSize, 0, Center, Radius, bAdd, TargetDepth);
+    EditNode(*Root, Origin, RootSize, 0, Center, Radius, bAdd, PaintColor, TargetDepth);
 }
 
 void FPTVoxelOctree::WriteSphereCorners(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize,
-                                        const FVector& Center, float Radius, bool bAdd) const
+                                        const FVector& Center, float Radius, bool bAdd, const FColor& PaintColor) const
 {
     for (int32 k = 0; k < 8; ++k)
     {
@@ -111,11 +117,13 @@ void FPTVoxelOctree::WriteSphereCorners(FPTOctreeNode& Node, const FVector& Node
         V = bAdd ? FMath::Max(V, SphereSDF)   // unión (agregar)
                  : FMath::Min(V, -SphereSDF); // resta  (borrar)
         V = FMath::Clamp(V, -1.f, 1.f);
+        // Pintar la esquina que quede dentro de la esfera al AGREGAR.
+        if (bAdd && Dist <= Radius) Node.Col[k] = PaintColor;
     }
 }
 
 void FPTVoxelOctree::EditNode(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize, int32 Depth,
-                              const FVector& Center, float Radius, bool bAdd, int32 TargetDepth) const
+                              const FVector& Center, float Radius, bool bAdd, const FColor& PaintColor, int32 TargetDepth) const
 {
     if (!SphereHitsBox(Center, Radius, NodeMin, NodeSize)) return;
 
@@ -123,7 +131,7 @@ void FPTVoxelOctree::EditNode(FPTOctreeNode& Node, const FVector& NodeMin, float
     {
         if (Depth >= TargetDepth || Depth >= MaxDepth)
         {
-            WriteSphereCorners(Node, NodeMin, NodeSize, Center, Radius, bAdd);
+            WriteSphereCorners(Node, NodeMin, NodeSize, Center, Radius, bAdd, PaintColor);
             return;
         }
         RefineLeaf(Node); // hay que bajar más: subdividir preservando lo esculpido
@@ -135,7 +143,7 @@ void FPTVoxelOctree::EditNode(FPTOctreeNode& Node, const FVector& NodeMin, float
     {
         if (!Node.Children[i].IsValid()) continue;
         const FVector ChildMin = NodeMin + OctantOffset(i) * Half;
-        EditNode(*Node.Children[i], ChildMin, Half, Depth + 1, Center, Radius, bAdd, TargetDepth);
+        EditNode(*Node.Children[i], ChildMin, Half, Depth + 1, Center, Radius, bAdd, PaintColor, TargetDepth);
     }
 }
 
@@ -181,9 +189,10 @@ FPTVoxelOctree::FLeafInfo FPTVoxelOctree::FindLeaf(const FVector& P) const
 }
 
 // ── Vértice Surface Nets de una hoja ───────────────────────────────────────────────
-bool FPTVoxelOctree::LeafVertex(const FPTOctreeNode& Leaf, const FVector& Min, float Size, FVector& OutLocal)
+bool FPTVoxelOctree::LeafVertex(const FPTOctreeNode& Leaf, const FVector& Min, float Size, FVector& OutLocal, FColor& OutColor)
 {
     FVector Sum(0.f);
+    FLinearColor ColSum(0, 0, 0, 0);
     int32 Count = 0;
     for (int32 e = 0; e < 12; ++e)
     {
@@ -197,10 +206,12 @@ bool FPTVoxelOctree::LeafVertex(const FPTOctreeNode& Leaf, const FVector& Min, f
         const FVector Pa = Min + FPTOctreeNode::CornerOffset(a) * Size;
         const FVector Pb = Min + FPTOctreeNode::CornerOffset(b) * Size;
         Sum += FMath::Lerp(Pa, Pb, t);
+        ColSum += FMath::Lerp(FLinearColor(Leaf.Col[a]), FLinearColor(Leaf.Col[b]), t);
         ++Count;
     }
     if (Count == 0) return false;
     OutLocal = Sum / (float)Count;
+    OutColor = (ColSum / (float)Count).ToFColor(false); // sRGB=false: los colores ya son lineales aquí
     return true;
 }
 
@@ -229,9 +240,10 @@ void FPTVoxelOctree::CollectLeaves(const FPTOctreeNode* N, const FVector& NodeMi
 }
 
 // ── Mallado: Dual Contouring por aristas mínimas ────────────────────────────────────
-void FPTVoxelOctree::BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris, TArray<FVector>& OutNormals) const
+void FPTVoxelOctree::BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris, TArray<FVector>& OutNormals,
+                               TArray<FColor>& OutColors) const
 {
-    OutVerts.Reset(); OutTris.Reset(); OutNormals.Reset();
+    OutVerts.Reset(); OutTris.Reset(); OutNormals.Reset(); OutColors.Reset();
     if (!Root.IsValid()) return;
 
     // 1) Un vértice por hoja con cambio de signo.
@@ -242,10 +254,11 @@ void FPTVoxelOctree::BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris
     VertOf.Reserve(Leaves.Num());
     for (const FLeafRef& L : Leaves)
     {
-        FVector VLocal;
-        if (!LeafVertex(*L.Node, L.Min, L.Size, VLocal)) continue;
+        FVector VLocal; FColor VCol;
+        if (!LeafVertex(*L.Node, L.Min, L.Size, VLocal, VCol)) continue;
         const int32 Idx = OutVerts.Add(VLocal);
         OutNormals.Add(FieldNormal(VLocal));
+        OutColors.Add(VCol);
         VertOf.Add(L.Node, Idx);
     }
 

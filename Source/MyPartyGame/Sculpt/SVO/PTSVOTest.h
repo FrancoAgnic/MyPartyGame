@@ -35,10 +35,13 @@ public:
 
     UPROPERTY(VisibleAnywhere) UProceduralMeshComponent* Mesh = nullptr;
 
+    // Color de arcilla actual (lo usan AddSphere y el demo). Cambialo con PTSVO.Color R G B.
+    UPROPERTY(EditAnywhere, Category="SVO") FColor PaintColor = FColor::White;
+
     // API usada por los comandos de consola.
     void RunDemo();
     void ClearAll();
-    void AddSphere(float Radius);   // esfera en el centro
+    void AddSphere(float Radius);   // esfera en el centro (con PaintColor)
     void Rebuild();                 // re-mallar + loguear stats
 
     // Instancia activa (para los comandos de consola). Weak: puede no existir.

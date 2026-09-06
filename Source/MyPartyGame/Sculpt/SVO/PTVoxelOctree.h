@@ -20,12 +20,13 @@
 struct FPTOctreeNode
 {
     TUniquePtr<FPTOctreeNode> Children[8]; // hijos (octantes) si es interno
-    float Corner[8];                        // SDF en las 8 esquinas si es hoja
-    bool  bLeaf = true;
+    float  Corner[8];                       // SDF en las 8 esquinas si es hoja
+    FColor Col[8];                          // color de arcilla en las 8 esquinas
+    bool   bLeaf = true;
 
     FPTOctreeNode()
     {
-        for (int32 i = 0; i < 8; ++i) Corner[i] = -1.f; // todo aire por defecto
+        for (int32 i = 0; i < 8; ++i) { Corner[i] = -1.f; Col[i] = FColor::White; } // aire, blanco
     }
 
     bool IsLeaf() const { return bLeaf; }
@@ -51,10 +52,12 @@ public:
 
     // Edita una esfera (CSG). bAdd=true une (agrega arcilla), false resta (borra). La resolución se elige
     // según el RADIO: radio grande → nodos grandes (pocos tris), radio chico → subdivide fino (detalle).
-    void EditSphere(const FVector& Center, float Radius, bool bAdd);
+    // PaintColor = color de la arcilla agregada (ignorado al borrar).
+    void EditSphere(const FVector& Center, float Radius, bool bAdd, const FColor& PaintColor = FColor::White);
 
     // Mallado por Dual Contouring (crack-free entre niveles). Verts en espacio LOCAL.
-    void BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris, TArray<FVector>& OutNormals) const;
+    void BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris, TArray<FVector>& OutNormals,
+                   TArray<FColor>& OutColors) const;
 
     // ── Métricas / debug ────────────────────────────────────────────────────
     int32 CountLeaves() const;   // hojas allocadas (≈ cuánto detalle hay)
@@ -76,9 +79,9 @@ private:
 
     // Descenso recursivo de edición.
     void EditNode(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize, int32 Depth,
-                  const FVector& Center, float Radius, bool bAdd, int32 TargetDepth) const;
+                  const FVector& Center, float Radius, bool bAdd, const FColor& PaintColor, int32 TargetDepth) const;
     void WriteSphereCorners(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize,
-                            const FVector& Center, float Radius, bool bAdd) const;
+                            const FVector& Center, float Radius, bool bAdd, const FColor& PaintColor) const;
 
     // Refina una HOJA en 8 hijos-hoja, resampleando (trilineal) sus esquinas a cada hijo.
     static void RefineLeaf(FPTOctreeNode& Node);
@@ -97,7 +100,8 @@ private:
     struct FLeafRef { const FPTOctreeNode* Node; FVector Min; float Size; };
     void CollectLeaves(const FPTOctreeNode* N, const FVector& NodeMin, float NodeSize, TArray<FLeafRef>& Out) const;
     // Vértice Surface Nets de una hoja (promedio de cruces de sus 12 aristas). Devuelve false si no hay cruce.
-    static bool LeafVertex(const FPTOctreeNode& Leaf, const FVector& Min, float Size, FVector& OutLocal);
+    // OutColor = color interpolado en los cruces.
+    static bool LeafVertex(const FPTOctreeNode& Leaf, const FVector& Min, float Size, FVector& OutLocal, FColor& OutColor);
     FVector FieldNormal(const FVector& P) const; // normal = -grad(SDF)
 
     static int32 CountLeavesRec(const FPTOctreeNode* N);

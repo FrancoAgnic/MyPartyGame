@@ -8,14 +8,13 @@ uno por uno, SIN tocar el esculpido actual (uniforme) hasta que el nuevo esté v
 
 ## Fases
 
-### Fase 1 — Núcleo SVO + mallado (single-player, offline)
-- [ ] 1.1  Estructura del octree esparso (`FPTVoxelOctree`): nodos, subdivisión adaptativa,
-           sample SDF trilineal, edición CSG de esfera (add/erase). ← ESTE INCREMENTO
-- [ ] 1.2  Dual Contouring por nodo hoja + hermite data (posición+normal en cruces de arista)
-           → malla con menos tris en zonas grandes y detalle en zonas subdivididas.
-- [ ] 1.3  Costura entre niveles distintos SIN grietas (caras de transición / minimal-edge).
-- [ ] 1.4  Un Actor de prueba (`APTSVOTest`) que edita y mallar en un ProceduralMesh, con
-           comandos de consola, para validar calidad/seams/perf aislado del gameplay.
+### Fase 1 — Núcleo SVO + mallado (single-player, offline)  ✅ VALIDADA (2026-09-05)
+- [x] 1.1  Estructura del octree esparso (`FPTVoxelOctree`): nodos, subdivisión adaptativa,
+           sample SDF trilineal, edición CSG de esfera (add/erase).
+- [x] 1.2/1.3  Dual Contouring (Surface Nets, hojas de 1 celda) + conectividad por aristas mínimas
+           con consulta de vecinos → CRACK-FREE entre niveles distintos. Validado: sólido, sin
+           grietas, adaptativo, normales OK.
+- [x] 1.4  Actor de prueba (`APTSVOTest`) + comandos `PTSVO.Demo/Clear/Stats/Add`.
 
 ### Fase 2 — Paridad de features sobre el SVO
 - [ ] 2.1  Color/pintura por voxel en el octree.
