@@ -23,7 +23,7 @@ uno por uno, SIN tocar el esculpido actual (uniforme) hasta que el nuevo esté v
 - [x] 2.4  Shapes (Box/Elipsoide/Cilindro/Toro/Cono) + escala no-uniforme + rotacion (EditShape).  ✅
 
 ### Fase 3 — Integración al juego + multiplayer
-- [ ] 3.1  Reemplazar `FPTSculptField` por el SVO en `APTSculptVolume` (detrás de un flag).
+- [~] 3.1  Flag bUseSVO en APTSculptVolume: geometria Add/Erase + color por el octree, meshado a la seccion 0. OFF=juego intacto. Paint/Smooth/capas/ojos aun no portados.
 - [ ] 3.2  Replicación de OPERACIONES (reusar el patrón `Server/Multicast_ApplyStamp`):
            se manda la operación, cada cliente la aplica a su octree → determinismo.
 - [ ] 3.3  Tests multiplayer (2+ máquinas): consistencia, sin desync.

@@ -5,6 +5,7 @@
 #include "Components/BoxComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "PTSculptField.h"
+#include "SVO/PTVoxelOctree.h"
 #include "PTSculptVolume.generated.h"
 
 class UTexture2D;
@@ -30,6 +31,13 @@ public:
 
     // Resolución del campo (tamaño de celda en UU). Menor = más geometría/detalle.
     UPROPERTY(EditAnywhere, Category="Sculpt") float VoxelSize = 5.f;
+
+    // ── SVO experimental (esculpido adaptativo tipo SculptrVR) detrás de un flag ──
+    // ON = la GEOMETRÍA (Add/Erase) y el color van por el octree adaptativo (menos tris en grande,
+    // detalle en chico), meshado a la sección 0 del Mesh y replicado por las mismas operaciones.
+    // OFF (default) = el juego funciona EXACTAMENTE como hoy (FPTSculptField). Paint/Smooth/capas/ojos
+    // todavía NO están portados al SVO (se ignoran en modo SVO por ahora).
+    UPROPERTY(EditAnywhere, Category="Sculpt|SVO") bool bUseSVO = false;
     UPROPERTY(EditAnywhere, Category="Sculpt") UMaterialInterface* ClayMaterial = nullptr;
     // Override opcional del material de la malla de arcilla. Si se asigna, el volumen lo usa en vez del
     // ClayMID (atlas) al crear/re-crear las secciones. Lo usa la CABEZA del modo G (material de pintura
@@ -276,6 +284,15 @@ private:
     void BackupAtlas(int32 AIdx, int32 Slot);
 
     FPTSculptField Field; // campo BASE (la arcilla principal)
+
+    // ── SVO (modo bUseSVO) ───────────────────────────────────────────────────
+    FPTVoxelOctree SVOField;      // octree adaptativo en espacio ACTOR-LOCAL (UU)
+    bool bSVOInit  = false;       // ya inicializado sobre el lienzo actual
+    bool bSVODirty = false;       // hay ediciones sin re-mallar
+    void InitSVO();               // arma el octree cubriendo el BoundsBox
+    void ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float Size, EPTEditMode Mode,
+                       FLinearColor PaintColor, FRotator StampRot, FVector StampScale);
+    void RebuildSVOMesh();        // remalla la seccion 0 del Mesh desde el octree
 
     // ── Capas de detalle (ALT): campos + meshes aparte ──────────────────────
     // Cada capa fusiona consigo misma pero no con la base ni con otras. ActiveField apunta a dónde

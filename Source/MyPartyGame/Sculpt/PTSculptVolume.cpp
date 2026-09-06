@@ -406,8 +406,8 @@ void APTSculptVolume::Tick(float DeltaTime)
     BoundaryAccum += DeltaTime;
     if (BoundaryAccum >= 0.2f) { BoundaryAccum = 0.f; UpdateSculptBoundaryCollision(); }
 
-    // ¿Hay algo que re-mallar? La base o alguna capa de detalle.
-    bool bAnyDirty = Field.HasDirty();
+    // ¿Hay algo que re-mallar? La base, alguna capa de detalle, o el octree (modo SVO).
+    bool bAnyDirty = bUseSVO ? bSVODirty : Field.HasDirty();
     for (const TSharedPtr<FPTSculptField>& L : DetailFields)
         if (L.IsValid() && L->HasDirty()) { bAnyDirty = true; break; }
 
@@ -962,6 +962,13 @@ bool APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
                                   EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot,
                                   FVector StampScale)
 {
+    // Modo SVO (experimental, detrás de flag): la geometría va por el octree adaptativo.
+    if (bUseSVO)
+    {
+        ApplyStampSVO(WorldPos, Shape, Size, Mode, PaintColor, StampRot, StampScale);
+        return true;
+    }
+
     // Escala no-uniforme: se deforma el punto de muestreo local dividiéndolo por la escala (así una
     // escala 2 en Z estira la forma al doble en Z). Se clampea para no dividir por ~0.
     const FVector SafeScale(FMath::Max(StampScale.X, 0.05f),
@@ -1314,6 +1321,13 @@ void APTSculptVolume::BuildStampPreview(EPTStampShape Shape, float Size, float V
 
 void APTSculptVolume::RebuildDirty()
 {
+    // Modo SVO: remalla todo el octree en la sección 0 (sincrónico, sencillo para validar).
+    if (bUseSVO)
+    {
+        if (bSVODirty) { RebuildSVOMesh(); bSVODirty = false; }
+        return;
+    }
+
     bRebuildInProgress = true;
 
     UMaterialInterface* Mat = ClayMaterialOverride ? ClayMaterialOverride
@@ -1375,6 +1389,66 @@ void APTSculptVolume::RebuildDirty()
             bRebuildInProgress = false;
         });
     });
+}
+
+// ─── SVO (modo experimental detrás de flag) ────────────────────────────────────
+void APTSculptVolume::InitSVO()
+{
+    // Octree cúbico en ACTOR-LOCAL (UU) que cubre el BoundsBox del lienzo.
+    const FVector Center = BoundsBox ? BoundsBox->GetRelativeLocation() : FVector::ZeroVector;
+    const FVector Half   = BoundsBox ? BoundsBox->GetUnscaledBoxExtent() : FVector(480.f);
+    const float RootSize = 2.f * FMath::Max3(Half.X, Half.Y, Half.Z);
+    // Profundidad tal que la celda mínima ≈ VoxelSize (mismo detalle que el campo clásico).
+    const float Ratio = RootSize / FMath::Max(VoxelSize, 0.5f);
+    const int32 MaxDepth = FMath::Clamp(FMath::CeilToInt(FMath::Log2(Ratio)), 0, 12);
+    SVOField.Init(Center - FVector(RootSize * 0.5f), RootSize, MaxDepth);
+    bSVOInit  = true;
+    bSVODirty = true;
+}
+
+void APTSculptVolume::ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float Size, EPTEditMode Mode,
+                                    FLinearColor PaintColor, FRotator StampRot, FVector StampScale)
+{
+    if (!bSVOInit) InitSVO();
+    // Paint/Smooth todavía no portados al SVO → se ignoran (solo Add/Erase por ahora).
+    if (Mode != EPTEditMode::Add && Mode != EPTEditMode::Erase) return;
+
+    // Mapeo de forma clásica → forma del octree.
+    EPTSVOShape S;
+    switch (Shape)
+    {
+    case EPTStampShape::Cube:                              S = EPTSVOShape::Box;      break;
+    case EPTStampShape::Cylinder: case EPTStampShape::HexPrism:
+    case EPTStampShape::Capsule:                           S = EPTSVOShape::Cylinder; break;
+    case EPTStampShape::TriPrism:  case EPTStampShape::Pyramid: S = EPTSVOShape::Cone; break;
+    case EPTStampShape::Torus:                             S = EPTSVOShape::Torus;    break;
+    case EPTStampShape::Sphere: case EPTStampShape::Octahedron:
+    default:                                               S = EPTSVOShape::Sphere;   break;
+    }
+
+    // Transform del sello en ACTOR-LOCAL (posición + rotación). Tamaño por HalfExtent (no-uniforme).
+    const FTransform& AX = GetActorTransform();
+    const FVector LocalPos = AX.InverseTransformPosition(WorldPos);
+    const FQuat   LocalQ   = AX.InverseTransformRotation(StampRot.Quaternion());
+    const FVector SafeScale(FMath::Max(StampScale.X, 0.05f), FMath::Max(StampScale.Y, 0.05f), FMath::Max(StampScale.Z, 0.05f));
+    const FVector HalfExtent = (Size * 0.5f) * SafeScale; // radio en UU por eje
+
+    const FTransform Xf(LocalQ, LocalPos);
+    SVOField.EditShape(Xf, S, HalfExtent, /*bAdd=*/Mode == EPTEditMode::Add, PaintColor.ToFColor(true));
+    bSVODirty = true;
+}
+
+void APTSculptVolume::RebuildSVOMesh()
+{
+    if (!Mesh) return;
+    TArray<FVector> V, N; TArray<int32> T; TArray<FColor> C;
+    SVOField.BuildMesh(V, T, N, C);
+
+    UMaterialInterface* Mat = ClayMaterialOverride ? ClayMaterialOverride
+                            : (ClayMID ? (UMaterialInterface*)ClayMID : ClayMaterial);
+    TArray<FVector2D> UV; TArray<FProcMeshTangent> Tan;
+    Mesh->CreateMeshSection(0, V, T, N, UV, C, Tan, /*collision=*/false);
+    if (Mat) Mesh->SetMaterial(0, Mat);
 }
 
 // ─── RPCs de replicación ──────────────────────────────────────────────────────
@@ -1547,6 +1621,9 @@ void APTSculptVolume::ClearAll()
     Field.DisplaySmoothing = DisplaySmoothing;
     if (Mesh) Mesh->ClearAllMeshSections();
     TimeSinceRebuild = 0.f;
+
+    // Modo SVO: reiniciar el octree (lienzo en blanco).
+    if (bUseSVO) InitSVO();
 
     // Capas de detalle: destruir sus meshes y descartar sus campos (el lienzo queda en blanco).
     for (UProceduralMeshComponent* M : DetailMeshes) if (M) M->DestroyComponent();
