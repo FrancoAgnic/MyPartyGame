@@ -16,6 +16,15 @@
 #include "GameFramework/PlayerState.h"
 #include "Components/PrimitiveComponent.h"
 #include "../Lobby/PTLobbyCharacter.h" // BuildEyesSection (esferas/mesh de ojos)
+#include "DrawDebugHelpers.h"           // overlay del LOD (PTSculpt.DebugLOD)
+#include "Engine/Engine.h"              // GEngine->AddOnScreenDebugMessage
+#include "HAL/IConsoleManager.h"        // TAutoConsoleVariable
+
+// Debug del LOD: en la consola → "PTSculpt.DebugLOD 1" para ver los bricks (verde=fino / rojo=paso 2).
+static TAutoConsoleVariable<int32> CVarSculptDebugLOD(
+    TEXT("PTSculpt.DebugLOD"), 0,
+    TEXT("Sculpturillo: dibuja el LOD de la escultura. verde=mallado fino (paso 1), rojo=grueso (paso 2)."),
+    ECVF_Default);
 
 // ─── Marching Cubes lookup tables (Bourke / Lorensen & Cline) ──────────────
 // EdgeTable[i]: bitmask of the 12 edges intersected when corners have sign pattern i.
@@ -821,6 +830,39 @@ FVector APTSculptVolume::WorldToCell(FVector W) const
     return GetActorTransform().InverseTransformPosition(W) / VoxelSize;
 }
 
+void APTSculptVolume::DebugDrawLOD()
+{
+    UWorld* W = GetWorld();
+    if (!W) return;
+    if (CVarSculptDebugLOD.GetValueOnGameThread() <= 0)
+    {
+        if (DebugBrickStep.Num() > 0) DebugBrickStep.Reset(); // apagado → limpiar
+        return;
+    }
+
+    const float BS = (float)FPTBrick::BrickSize;
+    const FVector Half = FVector(BS * VoxelSize * 0.5f) * 0.96f; // caja por brick (un pelín menor)
+    const FTransform X = GetActorTransform();
+    int32 nFine = 0, nCoarse = 0;
+
+    for (const TPair<FPTBrickKey, int32>& P : DebugBrickStep)
+    {
+        // Centro del brick en mundo: (brick*BrickSize + BrickSize/2) celdas × VoxelSize → local → mundo.
+        const FVector CellCenter = (FVector(P.Key) * BS + FVector(BS * 0.5f)) * VoxelSize;
+        const FVector WC = X.TransformPosition(CellCenter);
+        const bool bCoarse = (P.Value >= 2);
+        bCoarse ? ++nCoarse : ++nFine;
+        DrawDebugBox(W, WC, Half, X.GetRotation(),
+                     bCoarse ? FColor::Red : FColor::Green, /*bPersistent=*/false,
+                     /*LifeTime=*/-1.f, /*DepthPriority=*/0, /*Thickness=*/1.5f);
+    }
+
+    if (GEngine)
+        GEngine->AddOnScreenDebugMessage((uint64)((PTRINT)this), 0.f, FColor::Yellow,
+            FString::Printf(TEXT("[LOD] fino/verde=%d  grueso-paso2/rojo=%d  BigBrushLODMinSize=%.0f (0=off)"),
+                            nFine, nCoarse, BigBrushLODMinSize));
+}
+
 void APTSculptVolume::CellBounds(FIntVector& OutMin, FIntVector& OutMax) const
 {
     const FVector Center = BoundsBox ? BoundsBox->GetRelativeLocation() : FVector::ZeroVector;
@@ -1355,6 +1397,11 @@ void APTSculptVolume::RebuildDirty()
         }
         for (int32 i = Base; i < Jobs->Num(); ++i)
             (*Jobs)[i].Snap.Step = F.DecideStep((*Jobs)[i].Snap.Key);
+
+        // DEBUG LOD: registrar el paso por brick del campo BASE (para el overlay PTSculpt.DebugLOD).
+        if (MComp == Mesh && CVarSculptDebugLOD.GetValueOnGameThread() > 0)
+            for (int32 i = Base; i < Jobs->Num(); ++i)
+                DebugBrickStep.Add((*Jobs)[i].Snap.Key, (*Jobs)[i].Snap.Step);
     };
 
     Collect(Field, Mesh);

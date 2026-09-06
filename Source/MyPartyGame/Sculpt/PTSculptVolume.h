@@ -237,6 +237,14 @@ public:
     // SDF de cada forma, centrado en origen. HalfSize en unidades de celda.
     static float StampSDF(EPTStampShape Shape, FVector LocalPos, float HalfSize);
 
+    // ── DEBUG LOD ────────────────────────────────────────────────────────────
+    // Dibuja cada brick con color según su paso de mallado (verde=fino paso 1, rojo=grueso paso 2) +
+    // contador en pantalla. Se activa con la consola: PTSculpt.DebugLOD 1. Lo llama el PlayerController
+    // cada tick (early-return si el cvar está en 0). Sirve para verificar que el LOD por brocha funciona.
+    void DebugDrawLOD();
+    // Paso de mallado por brick del campo base (última vez que se malló). Solo se llena con el cvar on.
+    TMap<FPTBrickKey, int32> DebugBrickStep;
+
 protected:
     virtual void BeginPlay() override;
     virtual void Tick(float DeltaTime) override;
