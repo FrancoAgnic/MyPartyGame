@@ -31,25 +31,25 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input")
     UInputMappingContext* MovementMappingContext;
 
-    // ── Stamp ───────────────────────────────────────────────────────────────
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt")
+    // ── Tamaño UNIFORME de brocha (rueda sin modo eje) ───────────────────────
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt|Brush Size")
     float StampSize = 160.f;
-
-    UPROPERTY(EditAnywhere, Category="Sculpt")
+    // Cuánto sube/baja el tamaño por tick de rueda (el "50+ / 50-").
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt|Brush Size", meta=(ClampMin="1"))
     float SizeStep = 20.f;
+    // Mínimo de brocha: para geometría (MinSize) y para Paint (más chico). Y el máximo.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt|Brush Size", meta=(ClampMin="1")) float MinSize      = 100.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt|Brush Size", meta=(ClampMin="1")) float PaintMinSize = 20.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt|Brush Size", meta=(ClampMin="1")) float MaxSize      = 500.f;
 
-    // Escala NO uniforme del sello (en su espacio local). Con la rueda + modo eje Z estira Z; con modo
-    // eje X estira X e Y. Se resetea con doble-click de rueda y al empezar tu turno.
+    // ── Escala NO UNIFORME del sello (rueda + modo eje: Z estira Z, X estira X+Y) ─────────────
+    // OJO: la extensión REAL de un eje = StampSize × Scale. Por eso con MaxScale alto "se duplica"
+    // (un eje puede llegar a MaxScale×). Bajá MaxScale/ScaleStep para acotarlo. Reset: doble-click de
+    // rueda + al empezar tu turno.
     FVector StampScale = FVector::OneVector;
-    // Cuánto cambia la escala por tick de rueda, y sus topes.
-    UPROPERTY(EditAnywhere, Category="Sculpt") float ScaleStep = 0.25f;
-    UPROPERTY(EditAnywhere, Category="Sculpt") float MinScale  = 0.25f;
-    UPROPERTY(EditAnywhere, Category="Sculpt") float MaxScale  = 4.0f;
-
-    // Mínimo de brocha: 100 para las tools de geometría, más chico para Paint.
-    UPROPERTY(EditAnywhere, Category="Sculpt") float MinSize      = 100.f;
-    UPROPERTY(EditAnywhere, Category="Sculpt") float PaintMinSize = 20.f;
-    UPROPERTY(EditAnywhere, Category="Sculpt") float MaxSize      = 500.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt|Brush Scale", meta=(ClampMin="0.01")) float ScaleStep = 0.25f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt|Brush Scale", meta=(ClampMin="0.05")) float MinScale  = 0.25f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt|Brush Scale", meta=(ClampMin="0.1"))  float MaxScale  = 4.0f;
 
     UPROPERTY(EditAnywhere, Category="Sculpt")
     float AirDepth = 400.f; // distancia brazo cuando no hay superficie
