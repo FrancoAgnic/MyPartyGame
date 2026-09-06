@@ -10,17 +10,6 @@ namespace
         return FVector((i & 1) ? 1.f : 0.f, (i & 2) ? 1.f : 0.f, (i & 4) ? 1.f : 0.f);
     }
 
-    // ¿La esfera (Center,R) toca la caja [Min, Min+Size]?
-    FORCEINLINE bool SphereHitsBox(const FVector& Center, float R, const FVector& Min, float Size)
-    {
-        const FVector Max = Min + FVector(Size);
-        const FVector Closest(
-            FMath::Clamp(Center.X, Min.X, Max.X),
-            FMath::Clamp(Center.Y, Min.Y, Max.Y),
-            FMath::Clamp(Center.Z, Min.Z, Max.Z));
-        return FVector::DistSquared(Closest, Center) <= R * R;
-    }
-
     FORCEINLINE bool Inside(float V) { return V > 0.f; } // POSITIVO = dentro
 
     // Las 12 aristas del cubo como pares de esquinas (numeración x=1,y=2,z=4).
@@ -96,54 +85,138 @@ void FPTVoxelOctree::RefineLeaf(FPTOctreeNode& Node)
 }
 
 // ── Edición ─────────────────────────────────────────────────────────────────────
+// SDFs analíticas en espacio LOCAL de la shape (POSITIVO = dentro, en UU). h = semiejes.
+namespace
+{
+    float SdfEllipsoid(const FVector& p, const FVector& h)
+    {
+        const FVector hs(FMath::Max(h.X, 1e-3f), FMath::Max(h.Y, 1e-3f), FMath::Max(h.Z, 1e-3f));
+        const float k0 = FVector(p.X / hs.X, p.Y / hs.Y, p.Z / hs.Z).Size();
+        const float k1 = FVector(p.X / (hs.X * hs.X), p.Y / (hs.Y * hs.Y), p.Z / (hs.Z * hs.Z)).Size();
+        if (k1 < KINDA_SMALL_NUMBER) return hs.GetMin(); // en el centro
+        return -(k0 * (k0 - 1.f) / k1); // negado: >0 dentro
+    }
+    float SdfBox(const FVector& p, const FVector& h)
+    {
+        const FVector q = FVector(FMath::Abs(p.X), FMath::Abs(p.Y), FMath::Abs(p.Z)) - h;
+        const float outside = FVector(FMath::Max(q.X, 0.f), FMath::Max(q.Y, 0.f), FMath::Max(q.Z, 0.f)).Size();
+        const float inside  = FMath::Min(FMath::Max3(q.X, q.Y, q.Z), 0.f);
+        return -(outside + inside); // >0 dentro
+    }
+    float SdfCylinder(const FVector& p, const FVector& h) // eje Z, radio h.X (elíptico con h.Y), semialtura h.Z
+    {
+        const float rx = FMath::Max(h.X, 1e-3f), ry = FMath::Max(h.Y, 1e-3f);
+        const float radial = FVector2D(p.X / rx, p.Y / ry).Size() * FMath::Min(rx, ry) - FMath::Min(rx, ry);
+        const float dz = FMath::Abs(p.Z) - h.Z;
+        const float outside = FVector2D(FMath::Max(radial, 0.f), FMath::Max(dz, 0.f)).Size();
+        const float inside  = FMath::Min(FMath::Max(radial, dz), 0.f);
+        return -(outside + inside);
+    }
+    float SdfTorus(const FVector& p, const FVector& h) // plano XY, R mayor=h.X, r menor=h.Z
+    {
+        const FVector2D q(FVector2D(p.X, p.Y).Size() - h.X, p.Z);
+        return -(q.Size() - FMath::Max(h.Z, 1e-3f));
+    }
+    float SdfCone(const FVector& p, const FVector& h) // base radio h.X en z=-h.Z, ápice en z=+h.Z
+    {
+        const float tHeight = 2.f * FMath::Max(h.Z, 1e-3f);
+        const float frac = FMath::Clamp((h.Z - p.Z) / tHeight, 0.f, 1.f); // 0 en ápice, 1 en base
+        const float allowed = h.X * frac;
+        const float radial = allowed - FVector2D(p.X, p.Y).Size();
+        const float dz = h.Z - FMath::Abs(p.Z);
+        return FMath::Min(radial, dz); // aprox: >0 dentro
+    }
+
+    float ShapeSDF(EPTSVOShape S, const FVector& p, const FVector& h)
+    {
+        switch (S)
+        {
+        case EPTSVOShape::Box:      return SdfBox(p, h);
+        case EPTSVOShape::Cylinder: return SdfCylinder(p, h);
+        case EPTSVOShape::Torus:    return SdfTorus(p, h);
+        case EPTSVOShape::Cone:     return SdfCone(p, h);
+        case EPTSVOShape::Sphere:
+        default:                    return SdfEllipsoid(p, h);
+        }
+    }
+}
+
 void FPTVoxelOctree::EditSphere(const FVector& Center, float Radius, bool bAdd, const FColor& PaintColor)
 {
     if (!Root.IsValid() || Radius <= 0.f) return;
     const int32 TargetDepth = DepthForRadius(Radius);
-    EditNode(*Root, Origin, RootSize, 0, Center, Radius, bAdd, PaintColor, TargetDepth);
+    const FBox Bounds(Center - FVector(Radius), Center + FVector(Radius));
+    EditField(Bounds, TargetDepth, bAdd, PaintColor,
+              [&](const FVector& P) { return Radius - FVector::Dist(P, Center); }); // >0 dentro
 }
 
-void FPTVoxelOctree::WriteSphereCorners(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize,
-                                        const FVector& Center, float Radius, bool bAdd, const FColor& PaintColor) const
+void FPTVoxelOctree::EditShape(const FTransform& Xf, EPTSVOShape Shape, const FVector& HalfExtent,
+                               bool bAdd, const FColor& PaintColor)
+{
+    if (!Root.IsValid()) return;
+    const FVector H = HalfExtent.ComponentMax(FVector(1e-2f));
+
+    // Resolución por el semieje MÁS CHICO (features finos → más detalle).
+    const int32 TargetDepth = DepthForRadius(H.GetMin());
+
+    // AABB mundo = caja de los 8 vértices del box [-H,H] transformados por Xf (rotación + posición).
+    FBox Bounds(ForceInit);
+    for (int32 c = 0; c < 8; ++c)
+    {
+        const FVector Local(((c & 1) ? H.X : -H.X), ((c & 2) ? H.Y : -H.Y), ((c & 4) ? H.Z : -H.Z));
+        Bounds += Xf.TransformPosition(Local);
+    }
+
+    const FTransform Inv = Xf.Inverse();
+    EditField(Bounds, TargetDepth, bAdd, PaintColor,
+              [&](const FVector& P) { return ShapeSDF(Shape, Inv.TransformPosition(P), H); });
+}
+
+void FPTVoxelOctree::WriteCorners(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize,
+                                  bool bAdd, const FColor& PaintColor, FSDFFunc SDF) const
 {
     for (int32 k = 0; k < 8; ++k)
     {
         const FVector P = NodeMin + OctantOffset(k) * NodeSize;
-        const float Dist = FVector::Dist(P, Center);
-        // SDF de la esfera normalizado por el tamaño de celda (>0 dentro de la esfera). El SIGNO es
-        // consistente entre niveles (no depende del tamaño) → topología coherente = crack-free.
-        const float SphereSDF = FMath::Clamp((Radius - Dist) / NodeSize, -1.f, 1.f);
+        const float d = SDF(P); // >0 dentro (UU)
+        // Normalizado por el tamaño de celda. El SIGNO no depende del tamaño → crack-free entre niveles.
+        const float SN = FMath::Clamp(d / NodeSize, -1.f, 1.f);
         float& V = Node.Corner[k];
-        V = bAdd ? FMath::Max(V, SphereSDF)   // unión (agregar)
-                 : FMath::Min(V, -SphereSDF); // resta  (borrar)
+        V = bAdd ? FMath::Max(V, SN) : FMath::Min(V, -SN);
         V = FMath::Clamp(V, -1.f, 1.f);
-        // Pintar la esquina que quede dentro de la esfera al AGREGAR.
-        if (bAdd && Dist <= Radius) Node.Col[k] = PaintColor;
+        if (bAdd && d > 0.f) Node.Col[k] = PaintColor; // pintar lo que queda dentro
     }
 }
 
-void FPTVoxelOctree::EditNode(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize, int32 Depth,
-                              const FVector& Center, float Radius, bool bAdd, const FColor& PaintColor, int32 TargetDepth) const
+void FPTVoxelOctree::EditField(const FBox& WorldBounds, int32 TargetDepth, bool bAdd,
+                               const FColor& PaintColor, FSDFFunc SDF)
 {
-    if (!SphereHitsBox(Center, Radius, NodeMin, NodeSize)) return;
+    EditFieldNode(*Root, Origin, RootSize, 0, WorldBounds, TargetDepth, bAdd, PaintColor, SDF);
+}
+
+void FPTVoxelOctree::EditFieldNode(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize, int32 Depth,
+                                   const FBox& WorldBounds, int32 TargetDepth, bool bAdd,
+                                   const FColor& PaintColor, FSDFFunc SDF) const
+{
+    const FBox NodeBox(NodeMin, NodeMin + FVector(NodeSize));
+    if (!NodeBox.Intersect(WorldBounds)) return; // el AABB de la shape no toca el nodo
 
     if (Node.IsLeaf())
     {
         if (Depth >= TargetDepth || Depth >= MaxDepth)
         {
-            WriteSphereCorners(Node, NodeMin, NodeSize, Center, Radius, bAdd, PaintColor);
+            WriteCorners(Node, NodeMin, NodeSize, bAdd, PaintColor, SDF);
             return;
         }
-        RefineLeaf(Node); // hay que bajar más: subdividir preservando lo esculpido
+        RefineLeaf(Node); // subdividir preservando lo esculpido
     }
 
-    // Interno: recursión a los 8 hijos (siempre existen tras RefineLeaf).
     const float Half = NodeSize * 0.5f;
     for (int32 i = 0; i < 8; ++i)
     {
         if (!Node.Children[i].IsValid()) continue;
         const FVector ChildMin = NodeMin + OctantOffset(i) * Half;
-        EditNode(*Node.Children[i], ChildMin, Half, Depth + 1, Center, Radius, bAdd, PaintColor, TargetDepth);
+        EditFieldNode(*Node.Children[i], ChildMin, Half, Depth + 1, WorldBounds, TargetDepth, bAdd, PaintColor, SDF);
     }
 }
 

@@ -15,6 +15,9 @@
 #pragma once
 #include "CoreMinimal.h"
 
+// Formas analíticas del sello para el SVO (todas soportan escala no-uniforme + rotación).
+enum class EPTSVOShape : uint8 { Sphere, Box, Cylinder, Torus, Cone };
+
 // Un nodo del octree. HOJA = una sola celda cúbica con 8 valores SDF en las esquinas.
 // INTERNO = 8 hijos (octantes) y sin esquinas propias. Nunca ambos.
 struct FPTOctreeNode
@@ -55,6 +58,11 @@ public:
     // PaintColor = color de la arcilla agregada (ignorado al borrar).
     void EditSphere(const FVector& Center, float Radius, bool bAdd, const FColor& PaintColor = FColor::White);
 
+    // Sello genérico: shape analítica con escala NO-UNIFORME (HalfExtent por eje) y ROTACIÓN (Xf).
+    // Xf aporta posición + rotación (su escala se ignora; el tamaño lo da HalfExtent en UU local).
+    void EditShape(const FTransform& Xf, EPTSVOShape Shape, const FVector& HalfExtent,
+                   bool bAdd, const FColor& PaintColor = FColor::White);
+
     // Mallado por Dual Contouring (crack-free entre niveles). Verts en espacio LOCAL.
     void BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris, TArray<FVector>& OutNormals,
                    TArray<FColor>& OutColors) const;
@@ -87,11 +95,13 @@ private:
     // Profundidad objetivo para un radio dado (adaptativo). Celda ≈ Radius/CellsPerRadius.
     int32 DepthForRadius(float Radius) const;
 
-    // Descenso recursivo de edición.
-    void EditNode(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize, int32 Depth,
-                  const FVector& Center, float Radius, bool bAdd, const FColor& PaintColor, int32 TargetDepth) const;
-    void WriteSphereCorners(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize,
-                            const FVector& Center, float Radius, bool bAdd, const FColor& PaintColor) const;
+    // SDF genérico (POSITIVO = dentro, en UU). Descenso recursivo de edición.
+    using FSDFFunc = TFunctionRef<float(const FVector&)>;
+    void EditField(const FBox& WorldBounds, int32 TargetDepth, bool bAdd, const FColor& PaintColor, FSDFFunc SDF);
+    void EditFieldNode(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize, int32 Depth,
+                       const FBox& WorldBounds, int32 TargetDepth, bool bAdd, const FColor& PaintColor, FSDFFunc SDF) const;
+    void WriteCorners(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize,
+                      bool bAdd, const FColor& PaintColor, FSDFFunc SDF) const;
 
     // Refina una HOJA en 8 hijos-hoja, resampleando (trilineal) sus esquinas a cada hijo.
     static void RefineLeaf(FPTOctreeNode& Node);

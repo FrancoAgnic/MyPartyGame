@@ -42,6 +42,8 @@ public:
     void RunDemo();
     void ClearAll();
     void AddSphere(float Radius);   // esfera en el centro (con PaintColor), deshacible
+    // Shape genérica en el centro con semiejes (hx,hy,hz) y rotación YawDeg (para ver no-uniforme+rotación).
+    void AddShape(EPTSVOShape Shape, const FVector& HalfExtent, float YawDeg);
     void Undo();                    // deshace el último Add
     void Rebuild();                 // re-mallar + loguear stats
 

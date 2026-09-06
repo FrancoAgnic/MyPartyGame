@@ -30,6 +30,24 @@ static FAutoConsoleCommand GCmdSVOAdd(
         A->AddSphere(R);
     }));
 
+static FAutoConsoleCommand GCmdSVOShape(
+    TEXT("PTSVO.Shape"),
+    TEXT("PTSVO.Shape <box|cyl|torus|cone|ellip> <hx> <hy> <hz> [yawGrados] — shape con escala no-uniforme y rotacion."),
+    FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+    {
+        APTSVOTest* A = APTSVOTest::Instance.Get();
+        if (!A || Args.Num() < 4) return;
+        EPTSVOShape S = EPTSVOShape::Box;
+        const FString Name = Args[0].ToLower();
+        if      (Name.StartsWith(TEXT("cyl")))   S = EPTSVOShape::Cylinder;
+        else if (Name.StartsWith(TEXT("tor")))   S = EPTSVOShape::Torus;
+        else if (Name.StartsWith(TEXT("con")))   S = EPTSVOShape::Cone;
+        else if (Name.StartsWith(TEXT("ell")) || Name.StartsWith(TEXT("sph"))) S = EPTSVOShape::Sphere;
+        const FVector H(FCString::Atof(*Args[1]), FCString::Atof(*Args[2]), FCString::Atof(*Args[3]));
+        const float Yaw = (Args.Num() > 4) ? FCString::Atof(*Args[4]) : 0.f;
+        A->AddShape(S, H, Yaw);
+    }));
+
 static FAutoConsoleCommand GCmdSVOUndo(
     TEXT("PTSVO.Undo"), TEXT("Deshace el último PTSVO.Add."),
     FConsoleCommandDelegate::CreateLambda([] { if (APTSVOTest* A = APTSVOTest::Instance.Get()) A->Undo(); }));
@@ -108,6 +126,15 @@ void APTSVOTest::AddSphere(float Radius)
     EnsureInit();
     Octree.PushUndoSnapshot(); // cada Add = un trazo deshacible
     Octree.EditSphere(FVector(0, 0, 0), Radius, /*bAdd=*/true, PaintColor);
+    Rebuild();
+}
+
+void APTSVOTest::AddShape(EPTSVOShape Shape, const FVector& HalfExtent, float YawDeg)
+{
+    EnsureInit();
+    Octree.PushUndoSnapshot();
+    const FTransform Xf(FRotator(0.f, YawDeg, 0.f), FVector::ZeroVector);
+    Octree.EditShape(Xf, Shape, HalfExtent, /*bAdd=*/true, PaintColor);
     Rebuild();
 }
 
