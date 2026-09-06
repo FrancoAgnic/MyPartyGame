@@ -186,7 +186,9 @@ void FPTVoxelOctree::WriteCorners(FPTOctreeNode& Node, const FVector& NodeMin, f
         float& V = Node.Corner[k];
         V = bAdd ? FMath::Max(V, SN) : FMath::Min(V, -SN);
         V = FMath::Clamp(V, -1.f, 1.f);
-        if (bAdd && d > 0.f) Node.Col[k] = PaintColor; // pintar lo que queda dentro
+        // Pintar TODA la banda afectada (dentro + una celda hacia afuera): así las 2 esquinas de cada
+        // arista de superficie quedan del color del sello → color SÓLIDO (sin mezcla con blanco).
+        if (bAdd && d > -NodeSize) Node.Col[k] = PaintColor;
     }
 }
 
@@ -355,7 +357,7 @@ FPTVoxelOctree::FLeafInfo FPTVoxelOctree::FindLeaf(const FVector& P) const
 bool FPTVoxelOctree::LeafVertex(const FPTOctreeNode& Leaf, const FVector& Min, float Size, FVector& OutLocal, FColor& OutColor)
 {
     FVector Sum(0.f);
-    FLinearColor ColSum(0, 0, 0, 0);
+    float RSum = 0, GSum = 0, BSum = 0; // promedio de color en bytes crudos (sin gamma → color fiel)
     int32 Count = 0;
     for (int32 e = 0; e < 12; ++e)
     {
@@ -369,12 +371,18 @@ bool FPTVoxelOctree::LeafVertex(const FPTOctreeNode& Leaf, const FVector& Min, f
         const FVector Pa = Min + FPTOctreeNode::CornerOffset(a) * Size;
         const FVector Pb = Min + FPTOctreeNode::CornerOffset(b) * Size;
         Sum += FMath::Lerp(Pa, Pb, t);
-        ColSum += FMath::Lerp(FLinearColor(Leaf.Col[a]), FLinearColor(Leaf.Col[b]), t);
+        const FColor& Ca = Leaf.Col[a];
+        const FColor& Cb = Leaf.Col[b];
+        RSum += FMath::Lerp((float)Ca.R, (float)Cb.R, t);
+        GSum += FMath::Lerp((float)Ca.G, (float)Cb.G, t);
+        BSum += FMath::Lerp((float)Ca.B, (float)Cb.B, t);
         ++Count;
     }
     if (Count == 0) return false;
     OutLocal = Sum / (float)Count;
-    OutColor = (ColSum / (float)Count).ToFColor(false); // sRGB=false: los colores ya son lineales aquí
+    const float Inv = 1.f / (float)Count;
+    OutColor = FColor((uint8)FMath::RoundToInt(RSum * Inv), (uint8)FMath::RoundToInt(GSum * Inv),
+                      (uint8)FMath::RoundToInt(BSum * Inv), 255);
     return true;
 }
 
