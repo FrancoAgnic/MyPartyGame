@@ -458,7 +458,7 @@ namespace DCR
         const float hs = P.Size * 0.5f;
         FNode c; c.N = P.N->Children[H2M[h]].Get(); c.Min = P.Min + HOffset(h) * hs; c.Size = hs; return c;
     }
-    FORCEINLINE float Corner(const FPTOctreeNode* N, int32 c) { return N->Corner[H2M[c]]; }
+    FORCEINLINE float Corner(const FPTOctreeNode* N, int32 c) { return N ? N->Corner[H2M[c]] : -1.f; } // nulo = aire
     // GetVert: devuelve el índice del vértice de una hoja, CREÁNDOLO al vuelo si no lo tiene (así el
     // abanico del DC siempre cierra → sin huecos). Devuelve -1 solo si la hoja es 100% aire.
     using FVertFn = TFunctionRef<int32(const FNode&)>;
@@ -492,7 +492,7 @@ namespace DCR
 
     void EdgeProc(const FNode n[4], int32 dir, const FVertFn& GetVert, TArray<int32>& T)
     {
-        for (int32 i = 0; i < 4; ++i) if (!n[i].N) return;
+        // Nota: los nodos NULOS = aire (no se saltean); así la arcilla que limita con aire cierra.
         if (n[0].IsLeaf() && n[1].IsLeaf() && n[2].IsLeaf() && n[3].IsLeaf()) { ProcessEdge(n, dir, GetVert, T); return; }
         for (int32 i = 0; i < 2; ++i)
         {
@@ -504,8 +504,7 @@ namespace DCR
 
     void FaceProc(const FNode& a, const FNode& b, int32 dir, const FVertFn& GetVert, TArray<int32>& T)
     {
-        if (!a.N || !b.N) return;
-        if (a.IsLeaf() && b.IsLeaf()) return;
+        if (a.IsLeaf() && b.IsLeaf()) return; // ambos hojas (incluye aire/nulo) → sin caras internas acá
         for (int32 i = 0; i < 4; ++i)
         {
             const FNode fa = a.IsLeaf() ? a : Child(a, faceProcFaceMask[dir][i][0]);
@@ -554,6 +553,7 @@ void FPTVoxelOctree::BuildMeshDC(TArray<FVector>& OutVerts, TArray<int32>& OutTr
     TMap<const FPTOctreeNode*, int32> VertOf;
     auto GetVert = [&](const DCR::FNode& n) -> int32
     {
+        if (!n.N) return -1; // aire (región no allocada) → sin vértice
         if (const int32* f = VertOf.Find(n.N)) return *f;
         int32 Idx = -1;
         FVector VP; FColor VC;
