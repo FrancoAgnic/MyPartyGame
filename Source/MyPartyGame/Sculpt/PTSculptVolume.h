@@ -297,8 +297,19 @@ private:
     void InitSVOOctree(FPTVoxelOctree& F) const; // inicializa un octree cualquiera sobre el BoundsBox
     void ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float Size, EPTEditMode Mode,
                        FLinearColor PaintColor, FRotator StampRot, FVector StampScale);
-    void RebuildSVOMesh();        // remalla base + capas
-    void RebuildSVOInto(FPTVoxelOctree& F, UProceduralMeshComponent* M); // remalla un octree a un mesh
+    void RebuildSVOMesh();        // remalla base (por chunks) + capas
+    void RebuildSVOInto(FPTVoxelOctree& F, UProceduralMeshComponent* M); // remalla un octree entero a un mesh (capas)
+
+    // Re-mallado INCREMENTAL de la base por chunks: sección 0 = hojas GRANDES (pocas, se rehace entera),
+    // secciones 1.. = grilla de chunks con las hojas finas (solo se rehacen las tocadas).
+    static constexpr int32 SVOChunkDim = 4;                 // 4^3 = 64 chunks
+    TSet<int32> DirtySVOChunks;                             // chunks finos a rehacer
+    bool bSVOCoarseDirty = true;                            // sección gruesa a rehacer
+    void MarkAllSVODirty();                                 // marca todo (tras load/clear/demo)
+    void MarkSVODirtyLocalBounds(const FVector& LMin, const FVector& LMax); // marca chunks tocados por una edición
+    void RebuildSVOChunk(int32 ChunkIndex);                // rehace una sección de chunk fino
+    float SVOChunkSize() const { return SVOField.GetRootSize() / (float)SVOChunkDim; }
+    float SVOFineThreshold() const { return SVOChunkSize() * 0.5f; } // hojas <= esto = "finas"
 
     // ── Capas de detalle (ALT): campos + meshes aparte ──────────────────────
     // Cada capa fusiona consigo misma pero no con la base ni con otras. ActiveField apunta a dónde

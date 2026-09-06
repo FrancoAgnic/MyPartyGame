@@ -653,6 +653,141 @@ void FPTVoxelOctree::BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris
     }
 }
 
+// ── Recolección filtrada (para mallado por chunks) ──────────────────────────────────
+void FPTVoxelOctree::CollectLeavesFiltered(const FPTOctreeNode* N, const FVector& NodeMin, float NodeSize,
+                                           const FBox& Region, float MinSize, TArray<FLeafRef>& Out) const
+{
+    if (!N) return;
+    const FBox NodeBox(NodeMin, NodeMin + FVector(NodeSize));
+    if (!NodeBox.Intersect(Region)) return;
+    if (N->IsLeaf()) { Out.Add({ N, NodeMin, NodeSize }); return; }
+    if (NodeSize < MinSize) return; // descendientes aún más chicos → ninguno califica (poda del pase grueso)
+    const float Half = NodeSize * 0.5f;
+    for (int32 i = 0; i < 8; ++i)
+        if (N->Children[i].IsValid())
+            CollectLeavesFiltered(N->Children[i].Get(), NodeMin + OctantOffset(i) * Half, Half, Region, MinSize, Out);
+}
+
+// ── Mallado FILTRADO por región + rango de tamaño (re-mallado incremental) ───────────
+void FPTVoxelOctree::BuildMeshFiltered(const FBox& OwnerRegion, float MinLeafSize, float MaxLeafSize,
+                                       TArray<FVector>& OutVerts, TArray<int32>& OutTris,
+                                       TArray<FVector>& OutNormals, TArray<FColor>& OutColors) const
+{
+    OutVerts.Reset(); OutTris.Reset(); OutNormals.Reset(); OutColors.Reset();
+    if (!Root.IsValid()) return;
+
+    TArray<FLeafRef> Owners;
+    CollectLeavesFiltered(Root.Get(), Origin, RootSize, OwnerRegion, MinLeafSize, Owners);
+    if (Owners.Num() == 0) return;
+
+    // Vértices ON-DEMAND, locales a esta sección (se duplican los de hojas vecinas → autocontenida).
+    TMap<const FPTOctreeNode*, int32> VertOf;
+    auto GetVert = [&](const FPTOctreeNode* Nd, const FVector& Min, float Size) -> int32
+    {
+        if (const int32* F = VertOf.Find(Nd)) return *F;
+        FVector VLocal; FColor VCol;
+        int32 Idx = -1;
+        if (LeafVertex(*Nd, Min, Size, VLocal, VCol))
+        {
+            Idx = OutVerts.Add(VLocal);
+            OutNormals.Add(FieldNormal(VLocal));
+            OutColors.Add(VCol);
+        }
+        VertOf.Add(Nd, Idx);
+        return Idx;
+    };
+
+    auto InHalfOpen = [](const FBox& R, const FVector& P) -> bool
+    {
+        return P.X >= R.Min.X && P.Y >= R.Min.Y && P.Z >= R.Min.Z &&
+               P.X <  R.Max.X && P.Y <  R.Max.Y && P.Z <  R.Max.Z;
+    };
+
+    for (const FLeafRef& L : Owners)
+    {
+        if (L.Size < MinLeafSize - KINDA_SMALL_NUMBER || L.Size >= MaxLeafSize - KINDA_SMALL_NUMBER) continue;
+        if (!InHalfOpen(OwnerRegion, L.Min)) continue;   // 1 sección por hoja (partición por esquina Min)
+        if (GetVert(L.Node, L.Min, L.Size) < 0) continue; // sin superficie
+
+        const float s = L.Size;
+        for (int32 axis = 0; axis < 3; ++axis)
+        {
+            const int32 u = (axis + 1) % 3, v = (axis + 2) % 3;
+            for (int32 cv = 0; cv < 2; ++cv)
+            for (int32 cu = 0; cu < 2; ++cu)
+            {
+                FVector A0 = L.Min, A1 = L.Min;
+                A0[u] = A1[u] = L.Min[u] + cu * s;
+                A0[v] = A1[v] = L.Min[v] + cv * s;
+                A0[axis] = L.Min[axis];
+                A1[axis] = L.Min[axis] + s;
+
+                const float f0 = Sample(A0);
+                const float f1 = Sample(A1);
+                if (Inside(f0) == Inside(f1)) continue;
+
+                static const int32 SU[4] = { -1, +1, +1, -1 };
+                static const int32 SV[4] = { -1, -1, +1, +1 };
+                const float aMid = L.Min[axis] + 0.5f * s;
+                const float eps  = FMath::Min(0.25f * s, MinCellSize() * 0.25f);
+
+                const FPTOctreeNode* Ring[4] = { nullptr, nullptr, nullptr, nullptr };
+                FVector RingMin[4]; float RingSize[4] = { 0,0,0,0 };
+                bool bValid = true; float finest = s;
+                for (int32 q = 0; q < 4; ++q)
+                {
+                    FVector Q; Q[axis] = aMid;
+                    Q[u] = L.Min[u] + cu * s + SU[q] * eps;
+                    Q[v] = L.Min[v] + cv * s + SV[q] * eps;
+                    const FLeafInfo LI = FindLeaf(Q);
+                    if (!LI.Node) { bValid = false; break; }
+                    Ring[q] = LI.Node; RingMin[q] = LI.Min; RingSize[q] = LI.Size;
+                    finest = FMath::Min(finest, LI.Size);
+                }
+                if (!bValid) continue;
+                if (finest < s - KINDA_SMALL_NUMBER) continue;
+
+                const FPTOctreeNode* Owner = nullptr; FVector OwnerMin(FLT_MAX);
+                for (int32 q = 0; q < 4; ++q)
+                {
+                    if (FMath::Abs(RingSize[q] - s) > KINDA_SMALL_NUMBER) continue;
+                    const FVector& M = RingMin[q];
+                    if (M.X < OwnerMin.X - KINDA_SMALL_NUMBER ||
+                        (FMath::IsNearlyEqual(M.X, OwnerMin.X) && (M.Y < OwnerMin.Y - KINDA_SMALL_NUMBER ||
+                        (FMath::IsNearlyEqual(M.Y, OwnerMin.Y) && M.Z < OwnerMin.Z - KINDA_SMALL_NUMBER))))
+                    { OwnerMin = M; Owner = Ring[q]; }
+                }
+                if (Owner != L.Node) continue;
+
+                const FPTOctreeNode* RingU[4]; FVector RingUMin[4]; float RingUSize[4]; int32 NR = 0;
+                for (int32 q = 0; q < 4; ++q)
+                {
+                    if (NR > 0 && Ring[q] == RingU[NR - 1]) continue;
+                    RingU[NR] = Ring[q]; RingUMin[NR] = RingMin[q]; RingUSize[NR] = RingSize[q]; ++NR;
+                }
+                if (NR > 1 && RingU[NR - 1] == RingU[0]) --NR;
+
+                int32 Ord[4]; int32 NV = 0;
+                for (int32 i = 0; i < NR; ++i)
+                {
+                    const int32 Vi = GetVert(RingU[i], RingUMin[i], RingUSize[i]);
+                    if (Vi >= 0) Ord[NV++] = Vi;
+                }
+                if (NV < 3) continue;
+
+                const bool bFlip = (Inside(f0) && !Inside(f1));
+                auto EmitTri = [&](int32 i0, int32 i1, int32 i2)
+                {
+                    if (bFlip) { OutTris.Add(i0); OutTris.Add(i2); OutTris.Add(i1); }
+                    else       { OutTris.Add(i0); OutTris.Add(i1); OutTris.Add(i2); }
+                };
+                EmitTri(Ord[0], Ord[1], Ord[2]);
+                if (NV == 4) EmitTri(Ord[0], Ord[2], Ord[3]);
+            }
+        }
+    }
+}
+
 // ── Métricas ──────────────────────────────────────────────────────────────────────
 int32 FPTVoxelOctree::CountLeavesRec(const FPTOctreeNode* N)
 {

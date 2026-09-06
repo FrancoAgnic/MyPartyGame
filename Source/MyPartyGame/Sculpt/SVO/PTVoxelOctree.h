@@ -80,6 +80,13 @@ public:
     void BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris, TArray<FVector>& OutNormals,
                    TArray<FColor>& OutColors) const;
 
+    // Mallado FILTRADO para re-mallado incremental por chunks: emite solo los triángulos cuya hoja
+    // DUEÑA cae en OwnerRegion (por su esquina Min, medio-abierto) y tiene tamaño en [MinLeafSize,
+    // MaxLeafSize). Malla autocontenida (vértices propios). Reusa consultas globales de vecinos.
+    void BuildMeshFiltered(const FBox& OwnerRegion, float MinLeafSize, float MaxLeafSize,
+                           TArray<FVector>& OutVerts, TArray<int32>& OutTris,
+                           TArray<FVector>& OutNormals, TArray<FColor>& OutColors) const;
+
     // ── Baking / persistencia (serialización del octree a bytes) ─────────────
     // Snapshot compacto del árbol para guardar (SaveGame), bakear escenografía o mandar por red.
     void Serialize(TArray<uint8>& OutBytes) const;
@@ -144,6 +151,10 @@ private:
     // ── Mallado ───────────────────────────────────────────────────────────────
     struct FLeafRef { const FPTOctreeNode* Node; FVector Min; float Size; };
     void CollectLeaves(const FPTOctreeNode* N, const FVector& NodeMin, float NodeSize, TArray<FLeafRef>& Out) const;
+    // Recolecta hojas cuyo box intersecta Region, podando subtrees con NodeSize < MinSize (para no
+    // recorrer lo fino en el pase grueso). Para el mallado por chunks.
+    void CollectLeavesFiltered(const FPTOctreeNode* N, const FVector& NodeMin, float NodeSize,
+                               const FBox& Region, float MinSize, TArray<FLeafRef>& Out) const;
     // Vértice Surface Nets de una hoja (promedio de cruces de sus 12 aristas). Devuelve false si no hay cruce.
     // OutColor = color interpolado en los cruces.
     static bool LeafVertex(const FPTOctreeNode& Leaf, const FVector& Min, float Size, FVector& OutLocal, FColor& OutColor);

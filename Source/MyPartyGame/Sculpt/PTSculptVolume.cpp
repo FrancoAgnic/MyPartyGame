@@ -1420,7 +1420,7 @@ void APTSculptVolume::InitSVO()
     InitSVOOctree(SVOField);
     ActiveSVO = &SVOField;
     bSVOInit  = true;
-    bSVODirty = true;
+    MarkAllSVODirty();
 }
 
 void APTSculptVolume::ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float Size, EPTEditMode Mode,
@@ -1459,7 +1459,17 @@ void APTSculptVolume::ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float
         F.PaintShape(Xf, S, HalfExtent, Col); // recolorea la superficie
     else
         F.EditShape(Xf, S, HalfExtent, /*bAdd=*/Mode == EPTEditMode::Add, Col);
-    bSVODirty = true;
+
+    if (&F == &SVOField)
+    {
+        // Base: marcar solo los chunks tocados (re-mallado incremental).
+        const FVector Ext(HalfExtent.GetMax());
+        MarkSVODirtyLocalBounds(LocalPos - Ext, LocalPos + Ext);
+    }
+    else
+    {
+        bSVODirty = true; // capa de detalle → se rehace entera (es chica)
+    }
 }
 
 void APTSculptVolume::RebuildSVOInto(FPTVoxelOctree& F, UProceduralMeshComponent* M)
@@ -1476,12 +1486,90 @@ void APTSculptVolume::RebuildSVOInto(FPTVoxelOctree& F, UProceduralMeshComponent
     if (Mat) M->SetMaterial(0, Mat);
 }
 
+void APTSculptVolume::MarkAllSVODirty()
+{
+    bSVOCoarseDirty = true;
+    DirtySVOChunks.Reset();
+    const int32 N = SVOChunkDim * SVOChunkDim * SVOChunkDim;
+    for (int32 i = 0; i < N; ++i) DirtySVOChunks.Add(i);
+    bSVODirty = true;
+}
+
+void APTSculptVolume::MarkSVODirtyLocalBounds(const FVector& LMin, const FVector& LMax)
+{
+    bSVOCoarseDirty = true; // la sección gruesa es barata → siempre se rehace
+    const FVector Origin = SVOField.GetOrigin();
+    const float   CS = SVOChunkSize();
+    if (CS <= KINDA_SMALL_NUMBER) return;
+    // Expandir por un chunk (halo): cubre a los vecinos de las hojas finas tocadas → sin costuras.
+    const FVector Emin = LMin - FVector(CS);
+    const FVector Emax = LMax + FVector(CS);
+    auto CI = [&](float x, int32 axisMax) { return FMath::Clamp(FMath::FloorToInt(x), 0, axisMax); };
+    const int32 x0 = CI((Emin.X - Origin.X) / CS, SVOChunkDim - 1), x1 = CI((Emax.X - Origin.X) / CS, SVOChunkDim - 1);
+    const int32 y0 = CI((Emin.Y - Origin.Y) / CS, SVOChunkDim - 1), y1 = CI((Emax.Y - Origin.Y) / CS, SVOChunkDim - 1);
+    const int32 z0 = CI((Emin.Z - Origin.Z) / CS, SVOChunkDim - 1), z1 = CI((Emax.Z - Origin.Z) / CS, SVOChunkDim - 1);
+    for (int32 z = z0; z <= z1; ++z)
+    for (int32 y = y0; y <= y1; ++y)
+    for (int32 x = x0; x <= x1; ++x)
+        DirtySVOChunks.Add(x + y * SVOChunkDim + z * SVOChunkDim * SVOChunkDim);
+    bSVODirty = true;
+}
+
+void APTSculptVolume::RebuildSVOChunk(int32 ChunkIndex)
+{
+    if (!Mesh) return;
+    const int32 D = SVOChunkDim;
+    const int32 cx = ChunkIndex % D;
+    const int32 cy = (ChunkIndex / D) % D;
+    const int32 cz = ChunkIndex / (D * D);
+    const FVector Origin = SVOField.GetOrigin();
+    const float CS = SVOChunkSize();
+    const FBox ChunkBox(Origin + FVector(cx, cy, cz) * CS, Origin + FVector(cx + 1, cy + 1, cz + 1) * CS);
+
+    TArray<FVector> V, N; TArray<int32> T; TArray<FColor> C;
+    SVOField.BuildMeshFiltered(ChunkBox, 0.f, SVOFineThreshold(), V, T, N, C);
+
+    const int32 Section = 1 + ChunkIndex; // 0 = sección gruesa
+    if (V.Num() == 0) { Mesh->ClearMeshSection(Section); return; }
+    UMaterialInterface* Mat = ClayMaterialOverride ? ClayMaterialOverride
+                            : (ClayMID ? (UMaterialInterface*)ClayMID : ClayMaterial);
+    TArray<FVector2D> UV; TArray<FProcMeshTangent> Tan;
+    Mesh->CreateMeshSection(Section, V, T, N, UV, C, Tan, /*collision=*/false);
+    if (Mat) Mesh->SetMaterial(Section, Mat);
+}
+
 void APTSculptVolume::RebuildSVOMesh()
 {
-    RebuildSVOInto(SVOField, Mesh); // base
+    if (!Mesh) return;
+    SVOField.Balance(); // 2:1 (solo superficie) antes de mallar
+
+    // Sección 0 = hojas GRANDES (pocas → barato rehacerlas enteras).
+    if (bSVOCoarseDirty)
+    {
+        const FBox Whole(SVOField.GetOrigin() - FVector(1.f),
+                         SVOField.GetOrigin() + FVector(SVOField.GetRootSize() + 1.f));
+        TArray<FVector> V, N; TArray<int32> T; TArray<FColor> C;
+        SVOField.BuildMeshFiltered(Whole, SVOFineThreshold(), FLT_MAX, V, T, N, C);
+        UMaterialInterface* Mat = ClayMaterialOverride ? ClayMaterialOverride
+                                : (ClayMID ? (UMaterialInterface*)ClayMID : ClayMaterial);
+        if (V.Num() == 0) Mesh->ClearMeshSection(0);
+        else
+        {
+            TArray<FVector2D> UV; TArray<FProcMeshTangent> Tan;
+            Mesh->CreateMeshSection(0, V, T, N, UV, C, Tan, false);
+            if (Mat) Mesh->SetMaterial(0, Mat);
+        }
+        bSVOCoarseDirty = false;
+    }
+
+    // Secciones 1.. = chunks finos tocados.
+    for (int32 Idx : DirtySVOChunks) RebuildSVOChunk(Idx);
+    DirtySVOChunks.Reset();
+
+    // Capas de detalle: enteras (son chicas).
     for (int32 i = 0; i < SVODetailFields.Num(); ++i)
         if (SVODetailFields[i].IsValid() && DetailMeshes.IsValidIndex(i))
-            RebuildSVOInto(*SVODetailFields[i], DetailMeshes[i]); // capas de detalle
+            RebuildSVOInto(*SVODetailFields[i], DetailMeshes[i]);
 }
 
 // ─── RPCs de replicación ──────────────────────────────────────────────────────
@@ -1789,7 +1877,7 @@ bool APTSculptVolume::LoadFieldState(const TArray<uint8>& In)
             }
         }
 
-        bSVODirty = true;
+        MarkAllSVODirty();
         TimeSinceRebuild = RebuildInterval; // remallar en el próximo tick
         return bOk;
     }
@@ -1996,7 +2084,7 @@ void APTSculptVolume::Multicast_Undo_Implementation()
             return;
         }
         if (UndoOrder.Num() > 0 && UndoOrder.Last() == 0) UndoOrder.Pop();
-        if (SVOField.Undo()) { bSVODirty = true; TimeSinceRebuild = RebuildInterval; }
+        if (SVOField.Undo()) { MarkAllSVODirty(); TimeSinceRebuild = RebuildInterval; }
         return;
     }
 
