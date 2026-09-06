@@ -302,7 +302,7 @@ private:
 
     // Re-mallado INCREMENTAL de la base por chunks: sección 0 = hojas GRANDES (pocas, se rehace entera),
     // secciones 1.. = grilla de chunks con las hojas finas (solo se rehacen las tocadas).
-    static constexpr int32 SVOChunkDim = 4;                 // 4^3 = 64 chunks
+    static constexpr int32 SVOChunkDim = 8;                 // 8^3 = 512 chunks (grilla fina → re-mallado acotado)
     TSet<int32> DirtySVOChunks;                             // chunks finos a rehacer
     bool bSVOCoarseDirty = true;                            // sección gruesa a rehacer
     void MarkAllSVODirty();                                 // marca todo (tras load/clear/demo)

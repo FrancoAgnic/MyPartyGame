@@ -1501,9 +1501,11 @@ void APTSculptVolume::MarkSVODirtyLocalBounds(const FVector& LMin, const FVector
     const FVector Origin = SVOField.GetOrigin();
     const float   CS = SVOChunkSize();
     if (CS <= KINDA_SMALL_NUMBER) return;
-    // Expandir por un chunk (halo): cubre a los vecinos de las hojas finas tocadas → sin costuras.
-    const FVector Emin = LMin - FVector(CS);
-    const FVector Emax = LMax + FVector(CS);
+    // Halo = umbral fino (los vecinos de una hoja fina están a <= esa distancia) → cubre las costuras
+    // sin re-mallar de más.
+    const float Halo = SVOFineThreshold();
+    const FVector Emin = LMin - FVector(Halo);
+    const FVector Emax = LMax + FVector(Halo);
     auto CI = [&](float x, int32 axisMax) { return FMath::Clamp(FMath::FloorToInt(x), 0, axisMax); };
     const int32 x0 = CI((Emin.X - Origin.X) / CS, SVOChunkDim - 1), x1 = CI((Emax.X - Origin.X) / CS, SVOChunkDim - 1);
     const int32 y0 = CI((Emin.Y - Origin.Y) / CS, SVOChunkDim - 1), y1 = CI((Emax.Y - Origin.Y) / CS, SVOChunkDim - 1);
