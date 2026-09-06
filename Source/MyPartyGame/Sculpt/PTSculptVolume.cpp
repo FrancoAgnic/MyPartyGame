@@ -1327,7 +1327,7 @@ void APTSculptVolume::BuildStampPreview(EPTStampShape Shape, float Size, float V
 
 void APTSculptVolume::RebuildDirty()
 {
-    // Modo SVO: remalla todo el octree en la sección 0 (sincrónico, sencillo para validar).
+    // SVO: balance local y remallado de los componentes afectados.
     if (bUseSVO)
     {
         if (bSVODirty) { RebuildSVOMesh(); bSVODirty = false; }
@@ -1417,6 +1417,7 @@ void APTSculptVolume::InitSVOOctree(FPTVoxelOctree& F) const
 
 void APTSculptVolume::InitSVO()
 {
+    ClearSVOChunkMeshes();
     InitSVOOctree(SVOField);
     ActiveSVO = &SVOField;
     bSVOInit  = true;
@@ -1456,19 +1457,28 @@ void APTSculptVolume::ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float
     // color del vértice coincide con el del picker/preview (con true quedaba más claro).
     const FColor Col = PaintColor.ToFColor(false);
     if (Mode == EPTEditMode::Paint)
-        F.PaintShape(Xf, S, HalfExtent, Col); // recolorea la superficie
+    {
+        if (!F.PaintShape(Xf, S, HalfExtent, Col)) return;
+    }
     else
         F.EditShape(Xf, S, HalfExtent, /*bAdd=*/Mode == EPTEditMode::Add, Col);
 
     if (&F == &SVOField)
     {
         // Base: marcar solo los chunks tocados (re-mallado incremental).
-        const FVector Ext(HalfExtent.GetMax());
-        MarkSVODirtyLocalBounds(LocalPos - Ext, LocalPos + Ext);
+        // Rotated boxes can extend farther than their largest unrotated half-axis.
+        FBox Bounds(ForceInit);
+        for (int32 c = 0; c < 8; ++c)
+            Bounds += Xf.TransformPosition(FVector((c & 1) ? HalfExtent.X : -HalfExtent.X,
+                (c & 2) ? HalfExtent.Y : -HalfExtent.Y, (c & 4) ? HalfExtent.Z : -HalfExtent.Z));
+        if (F.GetPendingBalanceBounds().IsValid) Bounds += F.GetPendingBalanceBounds();
+        MarkSVODirtyLocalBounds(Bounds.Min, Bounds.Max);
     }
     else
     {
         bSVODirty = true; // capa de detalle → se rehace entera (es chica)
+        for (int32 i = 0; i < SVODetailFields.Num(); ++i)
+            if (SVODetailFields[i].Get() == &F) { DirtySVODetailLayers.Add(i); break; }
     }
 }
 
@@ -1488,6 +1498,8 @@ void APTSculptVolume::RebuildSVOInto(FPTVoxelOctree& F, UProceduralMeshComponent
 
 void APTSculptVolume::MarkAllSVODirty()
 {
+    DirtySVODetailLayers.Reset();
+    for (int32 i = 0; i < SVODetailFields.Num(); ++i) DirtySVODetailLayers.Add(i);
     bSVOCoarseDirty = true;
     DirtySVOChunks.Reset();
     const int32 N = SVOChunkDim * SVOChunkDim * SVOChunkDim;
@@ -1531,19 +1543,41 @@ void APTSculptVolume::RebuildSVOChunk(int32 ChunkIndex)
     TArray<FVector> V, N; TArray<int32> T; TArray<FColor> C;
     SVOField.BuildMeshFiltered(ChunkBox, 0.f, SVOFineThreshold(), V, T, N, C);
 
-    const int32 Section = 1 + ChunkIndex; // 0 = sección gruesa
-    if (V.Num() == 0) { Mesh->ClearMeshSection(Section); return; }
+    UProceduralMeshComponent* ChunkMesh = SVOChunkMeshes.FindRef(ChunkIndex);
+    if (T.Num() == 0)
+    {
+        if (ChunkMesh) { ChunkMesh->DestroyComponent(); SVOChunkMeshes.Remove(ChunkIndex); }
+        return;
+    }
+    if (!ChunkMesh)
+    {
+        ChunkMesh = CreateDetailLayerMesh();
+        if (!ChunkMesh) return;
+        ChunkMesh->SetMobility(Mesh->Mobility);
+        ChunkMesh->SetCastShadow(Mesh->CastShadow);
+        ChunkMesh->SetVisibility(Mesh->IsVisible());
+        SVOChunkMeshes.Add(ChunkIndex, ChunkMesh);
+    }
     UMaterialInterface* Mat = ClayMaterialOverride ? ClayMaterialOverride
                             : (ClayMID ? (UMaterialInterface*)ClayMID : ClayMaterial);
     TArray<FVector2D> UV; TArray<FProcMeshTangent> Tan;
-    Mesh->CreateMeshSection(Section, V, T, N, UV, C, Tan, /*collision=*/false);
-    if (Mat) Mesh->SetMaterial(Section, Mat);
+    ChunkMesh->CreateMeshSection(0, V, T, N, UV, C, Tan, /*collision=*/false);
+    if (Mat) ChunkMesh->SetMaterial(0, Mat);
+}
+
+void APTSculptVolume::ClearSVOChunkMeshes()
+{
+    for (const auto& Pair : SVOChunkMeshes)
+        if (Pair.Value) Pair.Value->DestroyComponent();
+    SVOChunkMeshes.Reset();
 }
 
 void APTSculptVolume::RebuildSVOMesh()
 {
     if (!Mesh) return;
-    SVOField.Balance(); // 2:1 (solo superficie) antes de mallar
+    TArray<FBox> RefinedBounds;
+    if (bSVOCoarseDirty || DirtySVOChunks.Num() > 0) SVOField.Balance(&RefinedBounds);
+    for (const FBox& Bounds : RefinedBounds) MarkSVODirtyLocalBounds(Bounds.Min, Bounds.Max);
 
     // Sección 0 = hojas GRANDES (pocas → barato rehacerlas enteras).
     if (bSVOCoarseDirty)
@@ -1569,9 +1603,10 @@ void APTSculptVolume::RebuildSVOMesh()
     DirtySVOChunks.Reset();
 
     // Capas de detalle: enteras (son chicas).
-    for (int32 i = 0; i < SVODetailFields.Num(); ++i)
-        if (SVODetailFields[i].IsValid() && DetailMeshes.IsValidIndex(i))
+    for (int32 i : DirtySVODetailLayers)
+        if (SVODetailFields.IsValidIndex(i) && SVODetailFields[i].IsValid() && DetailMeshes.IsValidIndex(i))
             RebuildSVOInto(*SVODetailFields[i], DetailMeshes[i]);
+    DirtySVODetailLayers.Reset();
 }
 
 // ─── RPCs de replicación ──────────────────────────────────────────────────────
@@ -1660,6 +1695,7 @@ void APTSculptVolume::Multicast_BeginDetailLayer_Implementation()
         TSharedPtr<FPTVoxelOctree> Layer = MakeShared<FPTVoxelOctree>();
         InitSVOOctree(*Layer);
         SVODetailFields.Add(Layer);
+        DirtySVODetailLayers.Add(SVODetailFields.Num() - 1);
         DetailMeshes.Add(CreateDetailLayerMesh());
         UndoOrder.Add(1);
         bSVODirty = true;
@@ -1779,6 +1815,8 @@ void APTSculptVolume::ClearAll()
     Field.VoxelSize        = VoxelSize;
     Field.DisplaySmoothing = DisplaySmoothing;
     if (Mesh) Mesh->ClearAllMeshSections();
+    ClearSVOChunkMeshes();
+    DirtySVODetailLayers.Reset();
     TimeSinceRebuild = 0.f;
 
     // Modo SVO: reiniciar el octree base y descartar capas de detalle (lienzo en blanco).
@@ -1854,6 +1892,7 @@ bool APTSculptVolume::LoadFieldState(const TArray<uint8>& In)
     if (bUseSVO)
     {
         FMemoryReader Ar(In, /*bIsPersistent=*/true);
+        ClearSVOChunkMeshes();
         TArray<uint8> Base; Ar << Base;
         const bool bOk = SVOField.LoadFromBytes(Base);
         bSVOInit = bOk;

@@ -74,7 +74,11 @@ public:
     // Balancea el árbol a 2:1 (hojas vecinas difieren máx. 1 nivel). Reduce muchísimo los artefactos
     // en transiciones con saltos grandes de nivel (brocha chica y después grande encima). Llamar
     // antes de BuildMesh.
-    void Balance();
+    // Changed leaves include refinements outside the brush: callers must invalidate their meshes too.
+    // bForceFull is the reference path used by regression/performance tests.
+    void Balance(TArray<FBox>* OutRefinedBounds = nullptr, bool bForceFull = false);
+    int32 GetLastBalanceLeafChecks() const { return LastBalanceLeafChecks; }
+    const FBox& GetPendingBalanceBounds() const { return PendingBalanceBounds; }
 
     // Mallado por Dual Contouring (crack-free entre niveles). Verts en espacio LOCAL.
     void BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris, TArray<FVector>& OutNormals,
@@ -116,6 +120,8 @@ private:
     FBox    ClampBox = FBox(ForceInit); // caja de recorte (local)
     bool    bClamp   = false;
     TArray<TUniquePtr<FPTOctreeNode>> UndoStack; // snapshots (clones) para deshacer
+    FBox PendingBalanceBounds = FBox(ForceInit);
+    int32 LastBalanceLeafChecks = 0;
 
     static TUniquePtr<FPTOctreeNode> CloneNode(const FPTOctreeNode* N);
     static void SerializeNode(FArchive& Ar, FPTOctreeNode& N);
@@ -128,7 +134,7 @@ private:
     using FSDFFunc = TFunctionRef<float(const FVector&)>;
     void EditField(const FBox& WorldBounds, int32 TargetDepth, bool bAdd, const FColor& PaintColor, FSDFFunc SDF);
     void EditFieldNode(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize, int32 Depth,
-                       const FBox& WorldBounds, int32 TargetDepth, bool bAdd, const FColor& PaintColor, FSDFFunc SDF) const;
+                       const FBox& WorldBounds, int32 TargetDepth, bool bAdd, const FColor& PaintColor, FSDFFunc SDF);
     void WriteCorners(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize,
                       bool bAdd, const FColor& PaintColor, FSDFFunc SDF) const;
     // Recolorea sin refinar ni tocar SDF. Devuelve true si pintó alguna esquina de superficie.
@@ -138,6 +144,9 @@ private:
     // Refina una HOJA en 8 hijos-hoja, resampleando (trilineal) sus esquinas a cada hijo.
     static void RefineLeaf(FPTOctreeNode& Node);
     static float TrilinearCorners(const float C[8], float fx, float fy, float fz);
+    // Colapsa un nodo interno a HOJA downsampleando (la brocha grande borra el detalle fino que tapa).
+    static void CollapseToLeaf(FPTOctreeNode& Node);
+    static void GetCornerDeep(const FPTOctreeNode& N, int32 k, float& OutV, FColor& OutC);
 
     // ── Consulta espacial ────────────────────────────────────────────────────
     struct FLeafInfo
@@ -151,6 +160,8 @@ private:
     // ── Mallado ───────────────────────────────────────────────────────────────
     struct FLeafRef { const FPTOctreeNode* Node; FVector Min; float Size; };
     void CollectLeaves(const FPTOctreeNode* N, const FVector& NodeMin, float NodeSize, TArray<FLeafRef>& Out) const;
+    void CollectBalanceCandidates(const FPTOctreeNode* N, const FVector& NodeMin, float NodeSize,
+                                  const FBox& ChangedBounds, TArray<FLeafRef>& Out) const;
     // Recolecta hojas cuyo box intersecta Region, podando subtrees con NodeSize < MinSize (para no
     // recorrer lo fino en el pase grueso). Para el mallado por chunks.
     void CollectLeavesFiltered(const FPTOctreeNode* N, const FVector& NodeMin, float NodeSize,

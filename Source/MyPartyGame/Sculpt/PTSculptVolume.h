@@ -34,9 +34,8 @@ public:
 
     // ── SVO experimental (esculpido adaptativo tipo SculptrVR) detrás de un flag ──
     // ON = la GEOMETRÍA (Add/Erase) y el color van por el octree adaptativo (menos tris en grande,
-    // detalle en chico), meshado a la sección 0 del Mesh y replicado por las mismas operaciones.
-    // OFF (default) = el juego funciona EXACTAMENTE como hoy (FPTSculptField). Paint/Smooth/capas/ojos
-    // todavía NO están portados al SVO (se ignoran en modo SVO por ahora).
+    // detalle en chico), con mallas por bloque y replicado por las mismas operaciones.
+    // OFF (default) = campo clásico FPTSculptField. SVO soporta pintura y capas; Smooth se ignora.
     UPROPERTY(EditAnywhere, Category="Sculpt|SVO") bool bUseSVO = false;
     UPROPERTY(EditAnywhere, Category="Sculpt") UMaterialInterface* ClayMaterial = nullptr;
     // Override opcional del material de la malla de arcilla. Si se asigna, el volumen lo usa en vez del
@@ -145,6 +144,7 @@ public:
     UProceduralMeshComponent* GetMeshComponent() const { return Mesh; }
     // Mallas de las CAPAS de detalle (para hornearlas junto a la base en la cabeza custom).
     const TArray<UProceduralMeshComponent*>& GetDetailMeshes() const { return DetailMeshes; }
+    const TMap<int32, UProceduralMeshComponent*>& GetSVOChunkMeshes() const { return SVOChunkMeshes; }
 
     /** ¿Ese punto del mundo cae DENTRO del lienzo (el BoundsBox)? Para no dejar poner cosas
      *  (ej: ojos) fuera de la zona de modelado. */
@@ -292,6 +292,7 @@ private:
     bool bSVODirty = false;       // hay ediciones sin re-mallar
     // Capas de DETALLE (ALT): un octree por capa + su ProceduralMesh (reusa DetailMeshes, paralelo).
     TArray<TSharedPtr<FPTVoxelOctree>> SVODetailFields;
+    TSet<int32> DirtySVODetailLayers;
     FPTVoxelOctree* ActiveSVO = &SVOField; // dónde caen los sellos (base o última capa)
     void InitSVO();               // arma el octree BASE cubriendo el BoundsBox
     void InitSVOOctree(FPTVoxelOctree& F) const; // inicializa un octree cualquiera sobre el BoundsBox
@@ -300,10 +301,13 @@ private:
     void RebuildSVOMesh();        // remalla base (por chunks) + capas
     void RebuildSVOInto(FPTVoxelOctree& F, UProceduralMeshComponent* M); // remalla un octree entero a un mesh (capas)
 
-    // Re-mallado INCREMENTAL de la base por chunks: sección 0 = hojas GRANDES (pocas, se rehace entera),
-    // secciones 1.. = grilla de chunks con las hojas finas (solo se rehacen las tocadas).
+    // Base: Mesh sección 0 = hojas grandes. Cada chunk fino ocupado tiene su propio componente;
+    // cambiar su topología no recrea el scene proxy de los otros chunks.
     static constexpr int32 SVOChunkDim = 12;                // 12^3 chunks (grilla fina → re-mallado acotado)
     TSet<int32> DirtySVOChunks;                             // chunks finos a rehacer
+    // One render proxy per occupied chunk: changing topology must not upload the whole sculpture.
+    UPROPERTY(Transient) TMap<int32, UProceduralMeshComponent*> SVOChunkMeshes;
+    void ClearSVOChunkMeshes();
     bool bSVOCoarseDirty = true;                            // sección gruesa a rehacer
     void MarkAllSVODirty();                                 // marca todo (tras load/clear/demo)
     void MarkSVODirtyLocalBounds(const FVector& LMin, const FVector& LMax); // marca chunks tocados por una edición

@@ -3,6 +3,7 @@
 #include "PTVoxelOctree.h"
 #include "Serialization/MemoryWriter.h"
 #include "Serialization/MemoryReader.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 
 namespace
 {
@@ -29,11 +30,14 @@ void FPTVoxelOctree::Init(const FVector& InOrigin, float InRootSize, int32 InMax
     RootSize = FMath::Max(InRootSize, 1.f);
     MaxDepth = FMath::Clamp(InMaxDepth, 0, 12);
     Root = MakeUnique<FPTOctreeNode>(); // hoja gruesa, todo aire
+    UndoStack.Reset();
+    PendingBalanceBounds = FBox(ForceInit);
 }
 
 void FPTVoxelOctree::Reset()
 {
     Root.Reset();
+    PendingBalanceBounds = FBox(ForceInit);
 }
 
 // ── Profundidad adaptativa por radio ──────────────────────────────────────────────
@@ -245,27 +249,72 @@ void FPTVoxelOctree::WriteCorners(FPTOctreeNode& Node, const FVector& NodeMin, f
     }
 }
 
+// Valor y color en la esquina k del nodo = esquina k de la hoja más profunda en el octante k.
+void FPTVoxelOctree::GetCornerDeep(const FPTOctreeNode& N, int32 k, float& OutV, FColor& OutC)
+{
+    const FPTOctreeNode* Cur = &N;
+    while (!Cur->IsLeaf())
+    {
+        const FPTOctreeNode* Ch = Cur->Children[k].Get();
+        if (!Ch) { OutV = -1.f; OutC = FColor::White; return; } // octante aire
+        Cur = Ch;
+    }
+    OutV = Cur->Corner[k];
+    OutC = Cur->Col[k];
+}
+
+// Colapsa un nodo interno a HOJA, downsampleando: cada esquina toma el valor/color del campo en esa
+// esquina (esquina de la hoja más profunda del octante). Descarta la subdivisión fina.
+void FPTVoxelOctree::CollapseToLeaf(FPTOctreeNode& Node)
+{
+    if (Node.IsLeaf()) return;
+    float NC[8]; FColor NCol[8];
+    for (int32 k = 0; k < 8; ++k) GetCornerDeep(Node, k, NC[k], NCol[k]);
+    for (int32 i = 0; i < 8; ++i) Node.Children[i].Reset();
+    for (int32 k = 0; k < 8; ++k) { Node.Corner[k] = NC[k]; Node.Col[k] = NCol[k]; }
+    Node.bLeaf = true;
+}
+
 void FPTVoxelOctree::EditField(const FBox& WorldBounds, int32 TargetDepth, bool bAdd,
                                const FColor& PaintColor, FSDFFunc SDF)
 {
+    TRACE_CPUPROFILER_EVENT_SCOPE(SVO_Edit);
     EditFieldNode(*Root, Origin, RootSize, 0, WorldBounds, TargetDepth, bAdd, PaintColor, SDF);
 }
 
 void FPTVoxelOctree::EditFieldNode(FPTOctreeNode& Node, const FVector& NodeMin, float NodeSize, int32 Depth,
                                    const FBox& WorldBounds, int32 TargetDepth, bool bAdd,
-                                   const FColor& PaintColor, FSDFFunc SDF) const
+                                   const FColor& PaintColor, FSDFFunc SDF)
 {
     const FBox NodeBox(NodeMin, NodeMin + FVector(NodeSize));
     if (!NodeBox.Intersect(WorldBounds)) return; // el AABB de la shape no toca el nodo
 
     if (Node.IsLeaf())
     {
+        // Refining a leaf also changes the siblings outside the brush AABB.
+        PendingBalanceBounds += NodeBox;
         if (Depth >= TargetDepth || Depth >= MaxDepth)
         {
             WriteCorners(Node, NodeMin, NodeSize, bAdd, PaintColor, SDF);
             return;
         }
         RefineLeaf(Node); // subdividir preservando lo esculpido
+    }
+    else if (Depth >= TargetDepth)
+    {
+        // El nodo ya está subdividido MÁS FINO que la brocha (esculpiste chico y ahora tapás con una
+        // brocha grande). La brocha grande GANA: colapsamos la subdivisión fina a una hoja a ESTA
+        // resolución (downsampleando el campo → se preserva lo que haya de otras ediciones, pero se borra
+        // el detalle fino) y escribimos acá. Solo si la shape realmente llega a este nodo (para no
+        // coarsear detalle fino vecino que quede afuera del sello).
+        const FVector Center = NodeMin + FVector(NodeSize * 0.5f);
+        if (SDF(Center) > -NodeSize)
+        {
+            PendingBalanceBounds += NodeBox;
+            CollapseToLeaf(Node);
+            WriteCorners(Node, NodeMin, NodeSize, bAdd, PaintColor, SDF);
+            return;
+        }
     }
 
     const float Half = NodeSize * 0.5f;
@@ -335,6 +384,7 @@ bool FPTVoxelOctree::LoadFromBytes(const TArray<uint8>& InBytes)
     Ar << Origin; Ar << RootSize; Ar << MaxDepth;
     Root = DeserializeNode(Ar);
     UndoStack.Empty();
+    PendingBalanceBounds = FBox(Origin, Origin + FVector(RootSize));
     return Root.IsValid();
 }
 
@@ -362,6 +412,7 @@ bool FPTVoxelOctree::Undo()
     if (UndoStack.Num() == 0) return false;
     Root = MoveTemp(UndoStack.Last());
     UndoStack.Pop();
+    PendingBalanceBounds = FBox(Origin, Origin + FVector(RootSize));
     return true;
 }
 
@@ -465,9 +516,29 @@ void FPTVoxelOctree::CollectLeaves(const FPTOctreeNode* N, const FVector& NodeMi
 }
 
 // ── Balance 2:1 ─────────────────────────────────────────────────────────────────────
-void FPTVoxelOctree::Balance()
+void FPTVoxelOctree::CollectBalanceCandidates(const FPTOctreeNode* N, const FVector& NodeMin,
+                                             float NodeSize, const FBox& ChangedBounds,
+                                             TArray<FLeafRef>& Out) const
 {
+    if (!N) return;
+    // A leaf's face probes extend half a minimum cell beyond its box. A parent box contains
+    // all descendant probes after this expansion, so disjoint subtrees are safe to skip.
+    const float Probe = MinCellSize() * 0.5f + KINDA_SMALL_NUMBER;
+    if (!FBox(NodeMin, NodeMin + FVector(NodeSize)).ExpandBy(Probe).Intersect(ChangedBounds)) return;
+    if (N->IsLeaf()) { Out.Add({N, NodeMin, NodeSize}); return; }
+    const float Half = NodeSize * 0.5f;
+    for (int32 i = 0; i < 8; ++i)
+        CollectBalanceCandidates(N->Children[i].Get(), NodeMin + OctantOffset(i) * Half, Half, ChangedBounds, Out);
+}
+
+void FPTVoxelOctree::Balance(TArray<FBox>* OutRefinedBounds, bool bForceFull)
+{
+    TRACE_CPUPROFILER_EVENT_SCOPE(SVO_Balance);
+    LastBalanceLeafChecks = 0;
     if (!Root.IsValid()) return;
+    FBox ChangedBounds = bForceFull ? FBox(Origin, Origin + FVector(RootSize)) : PendingBalanceBounds;
+    PendingBalanceBounds = FBox(ForceInit);
+    if (!ChangedBounds.IsValid) return;
     const float MinCell = MinCellSize();
     // Direcciones de las 6 caras (normal saliente).
     static const FVector FaceN[6] = {
@@ -485,11 +556,14 @@ void FPTVoxelOctree::Balance()
     for (int32 iter = 0; iter <= MaxDepth; ++iter)
     {
         TArray<FLeafRef> Leaves;
-        CollectLeaves(Root.Get(), Origin, RootSize, Leaves);
+        if (bForceFull) CollectLeaves(Root.Get(), Origin, RootSize, Leaves);
+        else CollectBalanceCandidates(Root.Get(), Origin, RootSize, ChangedBounds, Leaves);
 
         TArray<FPTOctreeNode*> ToRefine;
+        FBox NextBounds(ForceInit);
         for (const FLeafRef& L : Leaves)
         {
+            ++LastBalanceLeafChecks;
             if (L.Size <= MinCell + KINDA_SMALL_NUMBER) continue; // ya en el máximo detalle
             if (!HasSurface(L.Node)) continue;                    // no es superficie → no afecta costuras
             const float probe = MinCell * 0.5f;
@@ -511,11 +585,18 @@ void FPTVoxelOctree::Balance()
                     if (N.Node && N.Size <= L.Size * 0.25f + KINDA_SMALL_NUMBER) bNeeds = true; // ≥2 niveles más fino
                 }
             }
-            if (bNeeds) ToRefine.Add(const_cast<FPTOctreeNode*>(L.Node));
+            if (bNeeds)
+            {
+                ToRefine.Add(const_cast<FPTOctreeNode*>(L.Node));
+                const FBox Bounds(L.Min, L.Min + FVector(L.Size));
+                NextBounds += Bounds;
+                if (OutRefinedBounds) OutRefinedBounds->Add(Bounds);
+            }
         }
 
         if (ToRefine.Num() == 0) break;
         for (FPTOctreeNode* N : ToRefine) RefineLeaf(*N);
+        ChangedBounds = NextBounds;
     }
 }
 
@@ -673,6 +754,7 @@ void FPTVoxelOctree::BuildMeshFiltered(const FBox& OwnerRegion, float MinLeafSiz
                                        TArray<FVector>& OutVerts, TArray<int32>& OutTris,
                                        TArray<FVector>& OutNormals, TArray<FColor>& OutColors) const
 {
+    TRACE_CPUPROFILER_EVENT_SCOPE(SVO_MeshChunk);
     OutVerts.Reset(); OutTris.Reset(); OutNormals.Reset(); OutColors.Reset();
     if (!Root.IsValid()) return;
 
