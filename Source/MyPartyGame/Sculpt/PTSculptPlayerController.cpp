@@ -1075,11 +1075,16 @@ void APTSculptPlayerController::UpdatePreviewVisual()
     UStaticMesh* ShapeMesh = nullptr;
     switch (EffectiveShape())
     {
-    case EPTStampShape::Sphere:   ShapeMesh = PreviewMeshSphere;   break;
-    case EPTStampShape::Cube:     ShapeMesh = PreviewMeshCube;     break;
-    case EPTStampShape::Cylinder: ShapeMesh = PreviewMeshCylinder; break;
-    case EPTStampShape::TriPrism: ShapeMesh = PreviewMeshTriPrism; break;
-    default: break; // formas nuevas (Pyramid/Torus/Capsule/HexPrism/Octahedron) → procedural
+    case EPTStampShape::Sphere:     ShapeMesh = PreviewMeshSphere;     break;
+    case EPTStampShape::Cube:       ShapeMesh = PreviewMeshCube;       break;
+    case EPTStampShape::Cylinder:   ShapeMesh = PreviewMeshCylinder;   break;
+    case EPTStampShape::TriPrism:   ShapeMesh = PreviewMeshTriPrism;   break;
+    case EPTStampShape::Pyramid:    ShapeMesh = PreviewMeshPyramid;    break;
+    case EPTStampShape::Torus:      ShapeMesh = PreviewMeshTorus;      break;
+    case EPTStampShape::Capsule:    ShapeMesh = PreviewMeshCapsule;    break;
+    case EPTStampShape::HexPrism:   ShapeMesh = PreviewMeshHexPrism;   break;
+    case EPTStampShape::Octahedron: ShapeMesh = PreviewMeshOctahedron; break;
+    default: break;
     }
     // El preview debe MATCHEAR la forma. Si hay mesh dedicado a esa forma se usa; si no (formas nuevas),
     // va el PROCEDURAL (generado del SDF, siempre coincide). NO se usa un mesh genérico por-tool porque
@@ -1103,6 +1108,12 @@ void APTSculptPlayerController::UpdatePreviewVisual()
         RebuildPreviewMesh();
     }
     ApplyPreviewMaterial();
+
+    // Re-aplicar el overlay X-ray al componente que quedó visible, según el estado actual (así las formas
+    // que van por procedural también intentan mostrar el xray tras el rebuild, no solo las de mesh estático).
+    UMaterialInterface* Ov = bXrayOverlayOn ? PreviewOverlayMaterial : nullptr;
+    if (PreviewMesh)       PreviewMesh->SetOverlayMaterial(Ov);
+    if (PreviewStaticMesh) PreviewStaticMesh->SetOverlayMaterial(Ov);
 }
 
 // ── Acciones de input ─────────────────────────────────────────────────────────

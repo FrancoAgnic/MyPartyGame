@@ -1238,7 +1238,9 @@ void APTSculptVolume::BuildStampPreview(EPTStampShape Shape, float Size, float V
             const int32 i0 = OutVerts.Num();
             OutVerts.Add(A); OutVerts.Add(B); OutVerts.Add(C);
             OutNormals.Add(N); OutNormals.Add(N); OutNormals.Add(N); // flat: normal por cara (verts no compartidos)
-            OutTris.Add(i0); OutTris.Add(i0 + 1); OutTris.Add(i0 + 2);
+            // Winding INVERTIDO respecto a la normal: UE culea la cara "front" con winding horario visto
+            // de frente; con la normal hacia afuera hay que emitir el triángulo al revés o se ve por dentro.
+            OutTris.Add(i0); OutTris.Add(i0 + 2); OutTris.Add(i0 + 1);
         };
         if (Shape == EPTStampShape::Pyramid)
         {

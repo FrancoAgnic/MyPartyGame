@@ -94,8 +94,8 @@ protected:
     /** Tamaño del dot en px. */
     UPROPERTY(EditAnywhere, Category="ShapeRadial|Cursor") FVector2D CursorDotSize = FVector2D(22.f, 22.f);
 
-    /** Formas por página (cardinales). No tocar: la selección cardinal asume 4. */
-    static constexpr int32 SlotsPerPage = 4;
+    /** Formas por página. La selección es por hit-test de la porción, así que soporta cualquier N. */
+    static constexpr int32 SlotsPerPage = 8;
 
 private:
     int32 SelectedIndex = -1; // slot dentro de la página (0=arriba,1=der,2=abajo,3=izq)
