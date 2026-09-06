@@ -135,6 +135,8 @@ private:
     // OutColor = color interpolado en los cruces.
     static bool LeafVertex(const FPTOctreeNode& Leaf, const FVector& Min, float Size, FVector& OutLocal, FColor& OutColor);
     FVector FieldNormal(const FVector& P) const; // normal = -grad(SDF)
+    // Tapa aristas de borde (huecos) enlazándolas en bucles y rellenándolas.
+    static void CloseHoles(TArray<FVector>& V, TArray<int32>& T, TArray<FVector>& N, TArray<FColor>& C);
 
     static int32 CountLeavesRec(const FPTOctreeNode* N);
     static int32 CountNodesRec(const FPTOctreeNode* N);
