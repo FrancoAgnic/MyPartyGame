@@ -432,15 +432,17 @@ void FPTVoxelOctree::Balance()
             bool bNeeds = false;
             for (int32 f = 0; f < 6 && !bNeeds; ++f)
             {
-                // 4 puntos sobre la cara (a 1/4 y 3/4) empujados apenas hacia afuera.
+                // Grilla 3x3 sobre la cara empujada apenas hacia afuera (densa: no se escapa una
+                // sub-zona fina en las esquinas de la cara).
                 const int32 ax = (f / 2); // 0=X,1=Y,2=Z
                 const int32 u = (ax + 1) % 3, v = (ax + 2) % 3;
-                for (int32 j = 0; j < 4 && !bNeeds; ++j)
+                for (int32 jv = 0; jv < 3 && !bNeeds; ++jv)
+                for (int32 ju = 0; ju < 3 && !bNeeds; ++ju)
                 {
                     FVector P = L.Min;
                     P[ax] += (FaceN[f][ax] > 0 ? L.Size + probe : -probe);
-                    P[u]  += ((j & 1) ? 0.75f : 0.25f) * L.Size;
-                    P[v]  += ((j & 2) ? 0.75f : 0.25f) * L.Size;
+                    P[u]  += (ju + 0.5f) / 3.f * L.Size;
+                    P[v]  += (jv + 0.5f) / 3.f * L.Size;
                     const FLeafInfo N = FindLeaf(P);
                     if (N.Node && N.Size <= L.Size * 0.25f + KINDA_SMALL_NUMBER) bNeeds = true; // ≥2 niveles más fino
                 }
@@ -507,7 +509,9 @@ void FPTVoxelOctree::BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris
                 static const int32 SU[4] = { -1, +1, +1, -1 };
                 static const int32 SV[4] = { -1, -1, +1, +1 };
                 const float aMid = L.Min[axis] + 0.5f * s;
-                const float eps  = 0.25f * s;
+                // Sondeo con radio CHICO fijo (no proporcional a s): así cae siempre en la celda
+                // inmediatamente adyacente a la arista, aun con saltos de nivel extremos.
+                const float eps  = FMath::Min(0.25f * s, MinCellSize() * 0.25f);
 
                 const FPTOctreeNode* Ring[4] = { nullptr, nullptr, nullptr, nullptr };
                 FVector RingMin[4];
