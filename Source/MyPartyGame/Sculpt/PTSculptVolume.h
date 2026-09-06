@@ -115,9 +115,12 @@ public:
     // (Add/Erase/Smooth); Paint es un splat sobre la superficie y la ignora.
     // Devuelve true si el sello CAMBIÓ algo (para Borrar: hubo malla que borrar). Sirve para no
     // lanzar partículas de borrado en el aire.
+    // StampScale = escala NO uniforme del sello (en su espacio local, antes de la rotación). (1,1,1) =
+    // uniforme. Ej: (1,1,2) estira la forma al doble en Z. Se aplica deformando el punto de muestreo.
     bool ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
                     EPTEditMode Mode, FLinearColor PaintColor,
-                    FRotator StampRot = FRotator::ZeroRotator);
+                    FRotator StampRot = FRotator::ZeroRotator,
+                    FVector StampScale = FVector::OneVector);
 
 
     // ── Ojos (tecla 4): esferas/mesh aparte, replicadas, que se apoyan sobre la escultura ──
@@ -154,19 +157,20 @@ public:
 
     UFUNCTION(Server, Reliable, WithValidation)
     void Server_ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
-                           EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot);
+                           EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot, FVector StampScale);
 
     // bDetail=true → el sello cae en la CAPA de detalle activa (la última creada con Multicast_BeginDetailLayer),
     // no en la base. Solo se usa con Add (ALT). false = base (comportamiento normal).
     UFUNCTION(NetMulticast, Reliable)
     void Multicast_ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
-                              EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot, bool bDetail);
+                              EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot, bool bDetail, FVector StampScale);
 
     // Aplica el sello Y dispara el feedback (partículas de Borrar/Pintar, brillo de Agregar).
     // Lo llama el Multicast (gameplay, en todos los clientes) y también el modo G del lobby
     // (esculpido de la cabeza, local). Así el modo G tiene las mismas partículas que el gameplay.
     void ApplyStampAndFX(FVector WorldPos, EPTStampShape Shape, float Size,
-                         EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot = FRotator::ZeroRotator);
+                         EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot = FRotator::ZeroRotator,
+                         FVector StampScale = FVector::OneVector);
 
     // Dispara SOLO la partícula de pintar (gotitas) en un punto del mundo, sin tocar la escultura.
     // Lo usa el pintado del CUERPO en el modo G (que pinta una textura, no el volumen).
@@ -221,7 +225,7 @@ public:
     // Preview de la forma del sello (malla fantasma que sigue al cursor).
     static void BuildStampPreview(EPTStampShape Shape, float Size, float VoxSz,
                                   TArray<FVector>& OutVerts, TArray<int32>& OutTris,
-                                  TArray<FVector>& OutNormals);
+                                  TArray<FVector>& OutNormals, FVector StampScale = FVector::OneVector);
 
     // SDF de cada forma, centrado en origen. HalfSize en unidades de celda.
     static float StampSDF(EPTStampShape Shape, FVector LocalPos, float HalfSize);
@@ -332,13 +336,14 @@ private:
     void InitColorField();
     void SetupClayMID();
     // Devuelve true si pintó sobre superficie (para no lanzar partículas al pintar en el aire).
-    bool WritePaintStamp(FVector WorldPos, EPTStampShape Shape, float Size, FLinearColor Color, bool bFull = false);
+    bool WritePaintStamp(FVector WorldPos, EPTStampShape Shape, float Size, FLinearColor Color, bool bFull = false,
+                         FVector StampScale = FVector::OneVector);
     // Escribe un voxel de color (alloca brick si hace falta). false = atlas lleno.
     bool WriteColorVoxel(int32 vx, int32 vy, int32 vz, const FColor& C);
     // Limpia un voxel de color (libera el brick si queda vacío).
     void ClearColorVoxel(int32 vx, int32 vy, int32 vz);
     // Borra la pintura dentro del volumen del sello (al usar Erase).
-    void ClearPaintStamp(FVector WorldPos, EPTStampShape Shape, float Size);
+    void ClearPaintStamp(FVector WorldPos, EPTStampShape Shape, float Size, FVector StampScale = FVector::OneVector);
     void UploadColorField();
 
     // Coordenadas: mundo → celda (float) en espacio local del actor.

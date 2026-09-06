@@ -633,7 +633,8 @@ bool APTSculptVolume::WriteColorVoxel(int32 vx, int32 vy, int32 vz, const FColor
     return true;
 }
 
-bool APTSculptVolume::WritePaintStamp(FVector WorldPos, EPTStampShape Shape, float Size, FLinearColor Color, bool bFull)
+bool APTSculptVolume::WritePaintStamp(FVector WorldPos, EPTStampShape Shape, float Size, FLinearColor Color, bool bFull,
+                                      FVector StampScale)
 {
     if (!AtlasTex) return false;
     bool bPaintedAny = false; // true si al menos un vóxel cayó sobre la superficie (no en el aire)
@@ -641,6 +642,9 @@ bool APTSculptVolume::WritePaintStamp(FVector WorldPos, EPTStampShape Shape, flo
     const FVector Local = GetActorTransform().InverseTransformPosition(WorldPos);
     const FColor  FCol  = Color.ToFColor(true);
     const float   HalfUU = Size * 0.5f;
+    // Escala en el plano del splat (X→u, Y→v). Z no aplica a un splat 2D de superficie.
+    const float SU = FMath::Max(StampScale.X, 0.05f);
+    const float SV = FMath::Max(StampScale.Y, 0.05f);
 
     // Normal de la superficie (gradiente del SDF), en espacio local. Una sola vez por sello.
     const float E = VoxelSize;
@@ -660,10 +664,10 @@ bool APTSculptVolume::WritePaintStamp(FVector WorldPos, EPTStampShape Shape, flo
 
     // Iteración O(radio²): disco en el plano tangente × grosor fino a lo largo de la normal.
     // La sección del sello se evalúa en el plano (u,v); la normal es el eje "Z" del stamp.
-    for (float u = -HalfUU; u <= HalfUU; u += CV)
-    for (float v = -HalfUU; v <= HalfUU; v += CV)
+    for (float u = -HalfUU * SU; u <= HalfUU * SU; u += CV)
+    for (float v = -HalfUU * SV; v <= HalfUU * SV; v += CV)
     {
-        const float sdf2d = StampSDF(Shape, FVector(u, v, 0.f), HalfUU);
+        const float sdf2d = StampSDF(Shape, FVector(u / SU, v / SV, 0.f), HalfUU);
         if (sdf2d < 0.f) continue;
         const uint8 cov = bFull ? 255 : (uint8)FMath::Clamp(sdf2d / SoftUU * 255.f, 0.f, 255.f);
         if (cov == 0) continue;
@@ -721,15 +725,17 @@ void APTSculptVolume::ClearColorVoxel(int32 vx, int32 vy, int32 vz)
     }
 }
 
-void APTSculptVolume::ClearPaintStamp(FVector WorldPos, EPTStampShape Shape, float Size)
+void APTSculptVolume::ClearPaintStamp(FVector WorldPos, EPTStampShape Shape, float Size, FVector StampScale)
 {
     if (!AtlasTex || BrickSlot.Num() == 0) return;
     const float CV = FMath::Max(ColorVoxel, 0.5f);
     const FVector Local = GetActorTransform().InverseTransformPosition(WorldPos);
     const float HalfUU = Size * 0.5f;
+    const FVector SafeScale(FMath::Max(StampScale.X, 0.05f), FMath::Max(StampScale.Y, 0.05f), FMath::Max(StampScale.Z, 0.05f));
+    const float MaxScale = FMath::Max3(SafeScale.X, SafeScale.Y, SafeScale.Z);
 
     const FVector Center = (Local - CanvasMinLocal) / CV;
-    const int32 Rv  = FMath::CeilToInt(HalfUU / CV) + 1;
+    const int32 Rv  = FMath::CeilToInt(HalfUU * MaxScale / CV) + 1;
     const int32 vcx = FMath::RoundToInt(Center.X), vcy = FMath::RoundToInt(Center.Y), vcz = FMath::RoundToInt(Center.Z);
     const int32 x0 = FMath::Max(0, vcx - Rv), x1 = FMath::Min(ColorVoxDim.X - 1, vcx + Rv);
     const int32 y0 = FMath::Max(0, vcy - Rv), y1 = FMath::Min(ColorVoxDim.Y - 1, vcy + Rv);
@@ -750,7 +756,7 @@ void APTSculptVolume::ClearPaintStamp(FVector WorldPos, EPTStampShape Shape, flo
             const int32 vx = vxs + lx, vy = vys + ly, vz = vzs + lz;
             if (vx < x0 || vx > x1 || vy < y0 || vy > y1 || vz < z0 || vz > z1) continue;
             const FVector VoxLocal = CanvasMinLocal + FVector(vx + 0.5f, vy + 0.5f, vz + 0.5f) * CV;
-            if (StampSDF(Shape, VoxLocal - Local, HalfUU) < 0.f) continue; // fuera del sello
+            if (StampSDF(Shape, (VoxLocal - Local) / SafeScale, HalfUU) < 0.f) continue; // fuera del sello (con escala)
             ClearColorVoxel(vx, vy, vz);
         }
     }
@@ -953,16 +959,23 @@ float APTSculptVolume::StampSDF(EPTStampShape Shape, FVector P, float HalfSize)
 }
 
 bool APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
-                                  EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot)
+                                  EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot,
+                                  FVector StampScale)
 {
+    // Escala no-uniforme: se deforma el punto de muestreo local dividiéndolo por la escala (así una
+    // escala 2 en Z estira la forma al doble en Z). Se clampea para no dividir por ~0.
+    const FVector SafeScale(FMath::Max(StampScale.X, 0.05f),
+                            FMath::Max(StampScale.Y, 0.05f),
+                            FMath::Max(StampScale.Z, 0.05f));
+
     // Paint: escribe en el volumen 3D de pintura (per-pixel, no toca la geometría).
     // Devuelve si pintó sobre superficie: pintar en el aire no debe lanzar partículas.
     if (Mode == EPTEditMode::Paint)
-        return WritePaintStamp(WorldPos, Shape, Size, PaintColor);
+        return WritePaintStamp(WorldPos, Shape, Size, PaintColor, false, SafeScale);
 
     // Erase también borra la pintura de esa zona (libera bricks, sin fantasmas).
     if (Mode == EPTEditMode::Erase)
-        ClearPaintStamp(WorldPos, Shape, Size);
+        ClearPaintStamp(WorldPos, Shape, Size, SafeScale);
 
     // Rotación del sello: el SDF se evalúa siempre alineado a los ejes, así que en vez de rotar la
     // forma se ROTA AL REVÉS el punto de muestreo (a espacio local del sello). La rotación llega en
@@ -972,9 +985,10 @@ bool APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
 
     const FVector GC = WorldToCell(WorldPos);
     const float HalfSize = (Size * 0.5f) / VoxelSize; // radio en celdas
-    // Con rotación, una forma no-esférica barre más lejos que HalfSize (diagonal del cubo ≈ √3)
-    // → ampliar el rango de celdas a revisar para no cortar la punta del sello.
-    const int32 R = FMath::CeilToInt(HalfSize * (bRotated ? 1.75f : 1.f)) + 1;
+    // Con rotación (o escala >1) una forma barre más lejos que HalfSize → ampliar el rango de celdas a
+    // revisar para no cortar la punta del sello. Se toma el eje más estirado.
+    const float MaxScale = FMath::Max3(SafeScale.X, SafeScale.Y, SafeScale.Z);
+    const int32 R = FMath::CeilToInt(HalfSize * MaxScale * (bRotated ? 1.75f : 1.f)) + 1;
 
     // Clamp al lienzo (BoundsBox).
     FIntVector BMin, BMax;
@@ -1012,6 +1026,7 @@ bool APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
             const float prev = F.GetSDF(x, y, z);
             FVector LP(x - GC.X, y - GC.Y, z - GC.Z);
             if (bRotated) LP = LocalQ.UnrotateVector(LP);
+            LP /= SafeScale; // escala no-uniforme: deforma el punto de muestreo
             const float sdf  = StampSDF(Shape, LP, HalfSize);
             const float fall = FMath::Clamp(sdf / FMath::Max(HalfSize, 1.f), 0.f, 1.f);
             if (fall <= 0.f) { NewV[WI(x,y,z)] = prev; continue; }
@@ -1045,6 +1060,7 @@ bool APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
     {
         FVector LP(x - GC.X, y - GC.Y, z - GC.Z);
         if (bRotated) LP = LocalQ.UnrotateVector(LP);
+        LP /= SafeScale; // escala no-uniforme
         const float sdf  = StampSDF(Shape, LP, HalfSize);
         const float prev = F.GetSDF(x, y, z);
 
@@ -1221,9 +1237,18 @@ void APTSculptVolume::RunMarchingCubes(const TArray<float>& G, const TArray<FLin
     }
 }
 
+// Aplica escala no-uniforme a una malla de preview ya construida (estira verts + corrige normales).
+static void PT_ScalePreview(TArray<FVector>& Verts, TArray<FVector>& Normals, FVector Scale)
+{
+    if (Scale.Equals(FVector::OneVector)) return;
+    const FVector S(FMath::Max(Scale.X,0.05f), FMath::Max(Scale.Y,0.05f), FMath::Max(Scale.Z,0.05f));
+    for (FVector& V : Verts) V *= S;
+    for (FVector& N : Normals) N = (N / S).GetSafeNormal(); // normal correcta al escalar no-uniforme
+}
+
 void APTSculptVolume::BuildStampPreview(EPTStampShape Shape, float Size, float VoxSz,
                                          TArray<FVector>& OutVerts, TArray<int32>& OutTris,
-                                         TArray<FVector>& OutNormals)
+                                         TArray<FVector>& OutNormals, FVector StampScale)
 {
     // Formas de CARAS PLANAS: malla explícita con caras lisas (el marching cubes las escalona → boxelart).
     if (Shape == EPTStampShape::Pyramid || Shape == EPTStampShape::Octahedron)
@@ -1255,6 +1280,7 @@ void APTSculptVolume::BuildStampPreview(EPTStampShape Shape, float Size, float V
             AddTri(PZ, PX, PY); AddTri(PZ, PY, NX); AddTri(PZ, NX, NY); AddTri(PZ, NY, PX);
             AddTri(NZ, PX, PY); AddTri(NZ, PY, NX); AddTri(NZ, NX, NY); AddTri(NZ, NY, PX);
         }
+        PT_ScalePreview(OutVerts, OutNormals, StampScale);
         return;
     }
 
@@ -1282,6 +1308,8 @@ void APTSculptVolume::BuildStampPreview(EPTStampShape Shape, float Size, float V
     // Centrar la preview en el origen
     FVector Offset(Center * VoxSz);
     for (FVector& V : OutVerts) V -= Offset;
+
+    PT_ScalePreview(OutVerts, OutNormals, StampScale); // escala no-uniforme
 }
 
 void APTSculptVolume::RebuildDirty()
@@ -1351,33 +1379,33 @@ void APTSculptVolume::RebuildDirty()
 
 // ─── RPCs de replicación ──────────────────────────────────────────────────────
 
-bool APTSculptVolume::Server_ApplyStamp_Validate(FVector, EPTStampShape, float, EPTEditMode, FLinearColor, FRotator)
+bool APTSculptVolume::Server_ApplyStamp_Validate(FVector, EPTStampShape, float, EPTEditMode, FLinearColor, FRotator, FVector)
 {
     return true;
 }
 
 void APTSculptVolume::Server_ApplyStamp_Implementation(FVector WorldPos, EPTStampShape Shape,
                                                         float Size, EPTEditMode Mode, FLinearColor PaintColor,
-                                                        FRotator StampRot)
+                                                        FRotator StampRot, FVector StampScale)
 {
-    Multicast_ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot, /*bDetail=*/false);
+    Multicast_ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot, /*bDetail=*/false, StampScale);
 }
 
 void APTSculptVolume::Multicast_ApplyStamp_Implementation(FVector WorldPos, EPTStampShape Shape,
                                                            float Size, EPTEditMode Mode, FLinearColor PaintColor,
-                                                           FRotator StampRot, bool bDetail)
+                                                           FRotator StampRot, bool bDetail, FVector StampScale)
 {
     // BORRAR afecta la BASE y TODAS las capas de detalle: saca arcilla de todo lo que haya bajo la
     // brocha (si no, no se podrían borrar los lentes/bigote de una capa). La FX sale una sola vez.
     if (Mode == EPTEditMode::Erase)
     {
         ActiveField = &Field;
-        ApplyStampAndFX(WorldPos, Shape, Size, Mode, PaintColor, StampRot); // base + partículas
+        ApplyStampAndFX(WorldPos, Shape, Size, Mode, PaintColor, StampRot, StampScale); // base + partículas
         for (const TSharedPtr<FPTSculptField>& L : DetailFields)
             if (L.IsValid())
             {
                 ActiveField = L.Get();
-                ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot); // capa (sin FX repetida)
+                ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot, StampScale); // capa (sin FX repetida)
             }
         ActiveField = &Field;
         return;
@@ -1385,7 +1413,7 @@ void APTSculptVolume::Multicast_ApplyStamp_Implementation(FVector WorldPos, EPTS
 
     // Add/Paint/Smooth: campo destino = la última capa si bDetail, o la base. Se restaura al final.
     ActiveField = (bDetail && DetailFields.Num() > 0) ? DetailFields.Last().Get() : &Field;
-    ApplyStampAndFX(WorldPos, Shape, Size, Mode, PaintColor, StampRot);
+    ApplyStampAndFX(WorldPos, Shape, Size, Mode, PaintColor, StampRot, StampScale);
     ActiveField = &Field;
 }
 
@@ -1415,13 +1443,14 @@ void APTSculptVolume::Multicast_BeginDetailLayer_Implementation()
 }
 
 void APTSculptVolume::ApplyStampAndFX(FVector WorldPos, EPTStampShape Shape, float Size,
-                                       EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot)
+                                       EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot,
+                                       FVector StampScale)
 {
     // ApplyStamp devuelve, según la herramienta:
     //  · Borrar: true si sacó arcilla sólida (y deja su color en LastErasedColor).
     //  · Pintar: true si pintó sobre superficie (no en el aire).
     //  · Agregar: true si cambió algo (no usa partículas: la arcilla nueva brilla en la malla).
-    const bool bChanged = ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot);
+    const bool bChanged = ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot, StampScale);
 
     switch (Mode)
     {

@@ -423,6 +423,16 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         bPhaseWantsUILock =
             (G->TurnPhase == EPTTurnPhase::GameOver) ||
             (G->TurnPhase == EPTTurnPhase::ChoosingWord && G->IsLocalPlayerSculptor());
+
+        // Al EMPEZAR tu turno de esculpir (transición a "sos el escultor"), resetear rotación y escala.
+        const bool bMyTurn = (G->TurnPhase == EPTTurnPhase::Drawing) && G->IsLocalPlayerSculptor();
+        if (bMyTurn && !bWasSculptorTurn)
+        {
+            StampRotation = FRotator::ZeroRotator;
+            StampScale    = FVector::OneVector;
+            bPreviewDirty = true;
+        }
+        bWasSculptorTurn = bMyTurn;
     }
     if (bPhaseWantsUILock != bGamePhaseInputLocked)
     {
@@ -559,12 +569,14 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
     if (PreviewMesh && (bPreviewDirty
         || CachedPreviewShape != StampShape
         || CachedPreviewSize  != StampSize
+        || CachedPreviewScale != StampScale
         || CachedPreviewMode  != EditMode
         || CachedPreviewColor != CurrentPaintColor))
     {
         UpdatePreviewVisual();
         CachedPreviewShape = StampShape;
         CachedPreviewSize  = StampSize;
+        CachedPreviewScale = StampScale;
         CachedPreviewMode  = EditMode;
         CachedPreviewColor = CurrentPaintColor;
         bPreviewDirty      = false;
@@ -752,12 +764,12 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
             for (int32 i = 1; i <= N; ++i)
             {
                 const FVector P = FMath::Lerp(LastStampPos, StampPos, (float)i / N);
-                Server_ApplyStamp(P, Sh, StampSize, EditMode, CurrentPaintColor, StampRotation, bStrokeIsDetail);
+                Server_ApplyStamp(P, Sh, StampSize, EditMode, CurrentPaintColor, StampRotation, bStrokeIsDetail, StampScale);
             }
         }
         else
         {
-            Server_ApplyStamp(StampPos, Sh, StampSize, EditMode, CurrentPaintColor, StampRotation, bStrokeIsDetail);
+            Server_ApplyStamp(StampPos, Sh, StampSize, EditMode, CurrentPaintColor, StampRotation, bStrokeIsDetail, StampScale);
             bStrokeActive = true;
             // ALT+Add: congelar el plano en el 1er sello (perpendicular a la vista) para que el resto
             // del trazo vaya a profundidad constante y no trepe hacia la cámara.
@@ -974,7 +986,7 @@ void APTSculptPlayerController::RebuildPreviewMesh()
 
     TArray<FVector> Verts, Normals;
     TArray<int32>   Tris;
-    APTSculptVolume::BuildStampPreview(EffectiveShape(), StampSize, Volume->VoxelSize, Verts, Tris, Normals);
+    APTSculptVolume::BuildStampPreview(EffectiveShape(), StampSize, Volume->VoxelSize, Verts, Tris, Normals, StampScale);
 
     // Add/Paint: teñir la preview con el color del picker (por vertex color).
     // Otras tools: blanco (el material del tool decide su propio look).
@@ -1096,7 +1108,7 @@ void APTSculptPlayerController::UpdatePreviewVisual()
         // Usar el mesh estático del usuario, escalado al tamaño de brocha.
         PreviewStaticMesh->SetStaticMesh(Chosen);
         const float Base = FMath::Max(PreviewMeshBaseSize, 1.f);
-        PreviewStaticMesh->SetWorldScale3D(FVector(StampSize / Base));
+        PreviewStaticMesh->SetWorldScale3D(FVector(StampSize / Base) * StampScale); // escala no-uniforme
         PreviewStaticMesh->SetVisibility(true);
         PreviewMesh->SetVisibility(false);
     }
@@ -1219,12 +1231,13 @@ void APTSculptPlayerController::OnShapeRotatePressed()
 {
     const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 
-    // Doble click de rueda → volver a la rotación default.
+    // Doble click de rueda → resetear rotación Y escala del sello.
     if (Now - LastWheelPressTime <= WheelDoubleClickWindow)
     {
         StampRotation = FRotator::ZeroRotator;
+        StampScale    = FVector::OneVector;
         bPreviewDirty = true;
-        UE_LOG(LogTemp, Log, TEXT("[Sculpt] Rotación del shape: reset"));
+        UE_LOG(LogTemp, Log, TEXT("[Sculpt] Rotación + escala del shape: reset"));
     }
     LastWheelPressTime = Now;
 
@@ -1338,6 +1351,15 @@ void APTSculptPlayerController::OnScrollUp()
             CP->QuickAdjustValue(+0.05f);
         return;
     }
+    // Modo eje activo → la rueda ESCALA (no uniforme): eje Z (modo vertical) o X+Y (modo horizontal).
+    if (bAxisLock)
+    {
+        if (bAxisHorizontal) { StampScale.X = FMath::Clamp(StampScale.X + ScaleStep, MinScale, MaxScale); StampScale.Y = StampScale.X; }
+        else                 { StampScale.Z = FMath::Clamp(StampScale.Z + ScaleStep, MinScale, MaxScale); }
+        bPreviewDirty = true;
+        UE_LOG(LogTemp, Log, TEXT("[Sculpt] Scale: %s"), *StampScale.ToString());
+        return;
+    }
     StampSize += SizeStep;
     ClampStampSize();
     bPreviewDirty = true;
@@ -1351,6 +1373,14 @@ void APTSculptPlayerController::OnScrollDown()
     {
         if (UPTColorPickerWidget* CP = Cast<UPTColorPickerWidget>(ColorPicker))
             CP->QuickAdjustValue(-0.05f);
+        return;
+    }
+    if (bAxisLock)
+    {
+        if (bAxisHorizontal) { StampScale.X = FMath::Clamp(StampScale.X - ScaleStep, MinScale, MaxScale); StampScale.Y = StampScale.X; }
+        else                 { StampScale.Z = FMath::Clamp(StampScale.Z - ScaleStep, MinScale, MaxScale); }
+        bPreviewDirty = true;
+        UE_LOG(LogTemp, Log, TEXT("[Sculpt] Scale: %s"), *StampScale.ToString());
         return;
     }
     StampSize -= SizeStep;
@@ -1648,7 +1678,7 @@ bool APTSculptPlayerController::CanLocalPlayerSculpt() const
 }
 
 void APTSculptPlayerController::Server_ApplyStamp_Implementation(FVector WorldPos, EPTStampShape Shape,
-    float Size, EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot, bool bDetail)
+    float Size, EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot, bool bDetail, FVector StampScale)
 {
     // Gating de autoridad: solo el escultor del turno en curso modifica la escultura.
     if (const APTSculptGameState* G = GetWorld()->GetGameState<APTSculptGameState>())
@@ -1661,7 +1691,7 @@ void APTSculptPlayerController::Server_ApplyStamp_Implementation(FVector WorldPo
         Volume = Cast<APTSculptVolume>(
             UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
     if (Volume)
-        Volume->Multicast_ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot, bDetail);
+        Volume->Multicast_ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot, bDetail, StampScale);
 }
 
 void APTSculptPlayerController::Server_BeginDetailLayer_Implementation()

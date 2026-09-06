@@ -38,6 +38,14 @@ public:
     UPROPERTY(EditAnywhere, Category="Sculpt")
     float SizeStep = 20.f;
 
+    // Escala NO uniforme del sello (en su espacio local). Con la rueda + modo eje Z estira Z; con modo
+    // eje X estira X e Y. Se resetea con doble-click de rueda y al empezar tu turno.
+    FVector StampScale = FVector::OneVector;
+    // Cuánto cambia la escala por tick de rueda, y sus topes.
+    UPROPERTY(EditAnywhere, Category="Sculpt") float ScaleStep = 0.25f;
+    UPROPERTY(EditAnywhere, Category="Sculpt") float MinScale  = 0.25f;
+    UPROPERTY(EditAnywhere, Category="Sculpt") float MaxScale  = 4.0f;
+
     // Mínimo de brocha: 100 para las tools de geometría, más chico para Paint.
     UPROPERTY(EditAnywhere, Category="Sculpt") float MinSize      = 100.f;
     UPROPERTY(EditAnywhere, Category="Sculpt") float PaintMinSize = 20.f;
@@ -263,7 +271,8 @@ public:
      *  clientes: el Volume no tiene owner por jugador, así que su Server RPC se descartaba). */
     UFUNCTION(Server, Reliable)
     void Server_ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
-                           EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot, bool bDetail);
+                           EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot, bool bDetail,
+                           FVector StampScale);
 
     /** ALT: arranca una nueva CAPA de detalle (malla aparte) en el volumen. Solo el escultor. */
     UFUNCTION(Server, Reliable)
@@ -407,7 +416,9 @@ private:
 
     EPTStampShape CachedPreviewShape = EPTStampShape::Sphere;
     float         CachedPreviewSize  = 0.f;
+    FVector       CachedPreviewScale = FVector::OneVector;
     EPTEditMode   CachedPreviewMode  = EPTEditMode::Add;
+    bool          bWasSculptorTurn   = false; // para auto-resetear rotación/escala al empezar tu turno
     FLinearColor  CachedPreviewColor = FLinearColor::White;
 
     UPROPERTY() AActor*                   PreviewActor      = nullptr;
