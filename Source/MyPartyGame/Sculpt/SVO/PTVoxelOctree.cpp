@@ -230,8 +230,17 @@ void FPTVoxelOctree::WriteCorners(FPTOctreeNode& Node, const FVector& NodeMin, f
         float& V = Node.Corner[k];
         V = bAdd ? FMath::Max(V, SN) : FMath::Min(V, -SN);
         V = FMath::Clamp(V, -1.f, 1.f);
-        // Pintar TODA la banda afectada (dentro + una celda hacia afuera): así las 2 esquinas de cada
-        // arista de superficie quedan del color del sello → color SÓLIDO (sin mezcla con blanco).
+        // Recorte al lienzo: las esquinas en el límite o fuera del box = AIRE, así la arcilla contra la
+        // pared genera tapa (cambio de signo) y queda cerrada. Tolerancia chica para incluir la cara.
+        if (bClamp)
+        {
+            const float Tol = NodeSize * 0.01f;
+            if (P.X <= ClampBox.Min.X + Tol || P.Y <= ClampBox.Min.Y + Tol || P.Z <= ClampBox.Min.Z + Tol ||
+                P.X >= ClampBox.Max.X - Tol || P.Y >= ClampBox.Max.Y - Tol || P.Z >= ClampBox.Max.Z - Tol)
+                V = -1.f;
+        }
+        // Pintar la banda afectada (dentro + 1 celda) para que las 2 esquinas de cada arista de
+        // superficie queden del color del sello → color sólido.
         if (bAdd && d > -NodeSize) Node.Col[k] = PaintColor;
     }
 }

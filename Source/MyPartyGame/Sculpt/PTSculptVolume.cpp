@@ -1411,6 +1411,8 @@ void APTSculptVolume::InitSVOOctree(FPTVoxelOctree& F) const
     const float Ratio = RootSize / FMath::Max(VoxelSize, 0.5f);
     const int32 MaxDepth = FMath::Clamp(FMath::CeilToInt(FMath::Log2(Ratio)), 0, 12);
     F.Init(Center - FVector(RootSize * 0.5f), RootSize, MaxDepth);
+    // Recorte al lienzo (BoundsBox en local): la arcilla contra la pared cierra siempre.
+    F.SetClampBox(FBox(Center - Half, Center + Half));
 }
 
 void APTSculptVolume::InitSVO()

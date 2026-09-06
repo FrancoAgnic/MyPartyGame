@@ -50,6 +50,10 @@ public:
     void Reset();
     bool IsInit() const { return Root.IsValid(); }
 
+    // Caja de recorte (LOCAL): las esquinas en el límite o fuera se fuerzan a AIRE al editar, así la
+    // arcilla SIEMPRE cierra contra la pared (como el campo acotado del modo clásico). Sin caja = sin recorte.
+    void SetClampBox(const FBox& InBox) { ClampBox = InBox; bClamp = true; }
+
     // SDF interpolado (trilineal) en una posición LOCAL. >0 dentro, <0 fuera. Fuera de lo allocado = aire.
     float Sample(const FVector& LocalPos) const;
 
@@ -102,6 +106,8 @@ private:
     float   RootSize = 1024.f;
     int32   MaxDepth = 8;
     TUniquePtr<FPTOctreeNode> Root;
+    FBox    ClampBox = FBox(ForceInit); // caja de recorte (local)
+    bool    bClamp   = false;
     TArray<TUniquePtr<FPTOctreeNode>> UndoStack; // snapshots (clones) para deshacer
 
     static TUniquePtr<FPTOctreeNode> CloneNode(const FPTOctreeNode* N);
