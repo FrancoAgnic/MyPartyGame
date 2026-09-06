@@ -226,7 +226,7 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
         {
             // No listo → botón invita a ponerse "Ready" (verde). Listo → botón invita a
             // "Not Ready" (rojo). El color sigue al texto, no al estado actual.
-            ReadyButtonText->SetText(PTText::Get(bReady ? TEXT("LOBBY_BTN_READY") : TEXT("LOBBY_BTN_NOT_READY")));
+            ReadyButtonText->SetText(PTText::Get(bReady ? TEXT("LOBBY_BTN_NOT_READY") : TEXT("LOBBY_BTN_READY")));
             ReadyButtonText->SetColorAndOpacity(bReady ? NotReadyColor : ReadyColor);
             ReadyButtonText->SetShadowColorAndOpacity(bReady ? NotReadyTextShadowColor : ReadyTextShadowColor);
         }
