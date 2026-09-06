@@ -91,6 +91,11 @@ public:
                            TArray<FVector>& OutVerts, TArray<int32>& OutTris,
                            TArray<FVector>& OutNormals, TArray<FColor>& OutColors) const;
 
+    // Clona SOLO los nodos que intersectan Region (más un poco por el árbol de acceso) en un octree
+    // aparte, para mallar esa región en un HILO DE FONDO sin tocar el octree vivo (sin data races).
+    // Barato: cuesta ~ tamaño de la región editada, no del modelo.
+    TSharedPtr<FPTVoxelOctree> CloneRegion(const FBox& Region) const;
+
     // ── Baking / persistencia (serialización del octree a bytes) ─────────────
     // Snapshot compacto del árbol para guardar (SaveGame), bakear escenografía o mandar por red.
     void Serialize(TArray<uint8>& OutBytes) const;
@@ -124,6 +129,7 @@ private:
     int32 LastBalanceLeafChecks = 0;
 
     static TUniquePtr<FPTOctreeNode> CloneNode(const FPTOctreeNode* N);
+    static TUniquePtr<FPTOctreeNode> CloneNodeRegion(const FPTOctreeNode* N, const FVector& NodeMin, float NodeSize, const FBox& Region);
     static void SerializeNode(FArchive& Ar, FPTOctreeNode& N);
     static TUniquePtr<FPTOctreeNode> DeserializeNode(FArchive& Ar);
 

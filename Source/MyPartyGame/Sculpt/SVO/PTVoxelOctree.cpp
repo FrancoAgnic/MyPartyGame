@@ -391,6 +391,37 @@ bool FPTVoxelOctree::LoadFromBytes(const TArray<uint8>& InBytes)
     return Root.IsValid();
 }
 
+// ── Clonado de región (para mallado en hilo de fondo) ────────────────────────────────
+TUniquePtr<FPTOctreeNode> FPTVoxelOctree::CloneNodeRegion(const FPTOctreeNode* N, const FVector& NodeMin,
+                                                          float NodeSize, const FBox& Region)
+{
+    TUniquePtr<FPTOctreeNode> C = MakeUnique<FPTOctreeNode>();
+    C->bLeaf = N->bLeaf;
+    for (int32 k = 0; k < 8; ++k) { C->Corner[k] = N->Corner[k]; C->Col[k] = N->Col[k]; }
+    if (!N->bLeaf)
+    {
+        const float Half = NodeSize * 0.5f;
+        for (int32 i = 0; i < 8; ++i)
+        {
+            if (!N->Children[i].IsValid()) continue;
+            const FVector CMin = NodeMin + OctantOffset(i) * Half;
+            const FBox CBox(CMin, CMin + FVector(Half));
+            if (CBox.Intersect(Region)) // fuera de la región → hijo nulo (aire): el borde de la región
+                C->Children[i] = CloneNodeRegion(N->Children[i].Get(), CMin, Half, Region); // no se mallar acá
+        }
+    }
+    return C;
+}
+
+TSharedPtr<FPTVoxelOctree> FPTVoxelOctree::CloneRegion(const FBox& Region) const
+{
+    TSharedPtr<FPTVoxelOctree> C = MakeShared<FPTVoxelOctree>();
+    C->Origin = Origin; C->RootSize = RootSize; C->MaxDepth = MaxDepth;
+    C->ClampBox = ClampBox; C->bClamp = bClamp;
+    if (Root.IsValid()) C->Root = CloneNodeRegion(Root.Get(), Origin, RootSize, Region);
+    return C;
+}
+
 // ── Undo (snapshots por clon) ──────────────────────────────────────────────────────
 TUniquePtr<FPTOctreeNode> FPTVoxelOctree::CloneNode(const FPTOctreeNode* N)
 {

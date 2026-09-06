@@ -311,7 +311,12 @@ private:
     bool bSVOCoarseDirty = true;                            // sección gruesa a rehacer
     void MarkAllSVODirty();                                 // marca todo (tras load/clear/demo)
     void MarkSVODirtyLocalBounds(const FVector& LMin, const FVector& LMax); // marca chunks tocados por una edición
-    void RebuildSVOChunk(int32 ChunkIndex);                // rehace una sección de chunk fino
+    void RebuildSVOChunk(int32 ChunkIndex);                // rehace una sección de chunk fino (sync)
+    // Aplica una malla de chunk ya construida a su componente (game thread). Lo usa el mallado async.
+    void ApplySVOChunkMesh(int32 ChunkIndex, const TArray<FVector>& V, const TArray<int32>& T,
+                           const TArray<FVector>& N, const TArray<FColor>& C);
+    bool bSVOMeshing = false;                              // hay un mallado async de chunks en vuelo
+    uint32 SVOMeshGen = 0;                                 // generación: descarta resultados async viejos tras clear/load
     float SVOChunkSize() const { return SVOField.GetRootSize() / (float)SVOChunkDim; }
     // Hojas <= chunk = "finas" (van a chunks); > chunk = grandes (pocas, sección gruesa). Umbral = chunk
     // para que quepan en un chunk y el halo de 1 chunk cubra sus vecinos.

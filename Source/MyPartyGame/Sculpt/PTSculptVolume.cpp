@@ -1330,7 +1330,7 @@ void APTSculptVolume::RebuildDirty()
     // SVO: balance local y remallado de los componentes afectados.
     if (bUseSVO)
     {
-        if (bSVODirty) { RebuildSVOMesh(); bSVODirty = false; }
+        if (bSVODirty) RebuildSVOMesh(); // maneja bSVODirty y el mallado async internamente
         return;
     }
 
@@ -1498,6 +1498,7 @@ void APTSculptVolume::RebuildSVOInto(FPTVoxelOctree& F, UProceduralMeshComponent
 
 void APTSculptVolume::MarkAllSVODirty()
 {
+    ++SVOMeshGen; // invalida cualquier mallado async en vuelo (clear/load/init cambian todo)
     DirtySVODetailLayers.Reset();
     for (int32 i = 0; i < SVODetailFields.Num(); ++i) DirtySVODetailLayers.Add(i);
     bSVOCoarseDirty = true;
@@ -1542,7 +1543,14 @@ void APTSculptVolume::RebuildSVOChunk(int32 ChunkIndex)
 
     TArray<FVector> V, N; TArray<int32> T; TArray<FColor> C;
     SVOField.BuildMeshFiltered(ChunkBox, 0.f, SVOFineThreshold(), V, T, N, C);
+    ApplySVOChunkMesh(ChunkIndex, V, T, N, C);
+}
 
+// Aplica una malla ya construida (posiblemente en un hilo de fondo) al componente del chunk. Game thread.
+void APTSculptVolume::ApplySVOChunkMesh(int32 ChunkIndex, const TArray<FVector>& V, const TArray<int32>& T,
+                                        const TArray<FVector>& N, const TArray<FColor>& C)
+{
+    if (!Mesh) return;
     UProceduralMeshComponent* ChunkMesh = SVOChunkMeshes.FindRef(ChunkIndex);
     if (T.Num() == 0)
     {
@@ -1575,11 +1583,13 @@ void APTSculptVolume::ClearSVOChunkMeshes()
 void APTSculptVolume::RebuildSVOMesh()
 {
     if (!Mesh) return;
+    if (bSVOMeshing) return; // ya hay un mallado async en vuelo; se reintenta cuando termine (bSVODirty sigue)
+
     TArray<FBox> RefinedBounds;
     if (bSVOCoarseDirty || DirtySVOChunks.Num() > 0) SVOField.Balance(&RefinedBounds);
     for (const FBox& Bounds : RefinedBounds) MarkSVODirtyLocalBounds(Bounds.Min, Bounds.Max);
 
-    // Sección 0 = hojas GRANDES (pocas → barato rehacerlas enteras).
+    // Sección 0 = hojas GRANDES (pocas → barato, se rehace SINCRÓNICO en el game thread).
     if (bSVOCoarseDirty)
     {
         const FBox Whole(SVOField.GetOrigin() - FVector(1.f),
@@ -1598,15 +1608,60 @@ void APTSculptVolume::RebuildSVOMesh()
         bSVOCoarseDirty = false;
     }
 
-    // Secciones 1.. = chunks finos tocados.
-    for (int32 Idx : DirtySVOChunks) RebuildSVOChunk(Idx);
-    DirtySVOChunks.Reset();
-
-    // Capas de detalle: enteras (son chicas).
+    // Capas de detalle: enteras (son chicas, sync).
     for (int32 i : DirtySVODetailLayers)
         if (SVODetailFields.IsValidIndex(i) && SVODetailFields[i].IsValid() && DetailMeshes.IsValidIndex(i))
             RebuildSVOInto(*SVODetailFields[i], DetailMeshes[i]);
     DirtySVODetailLayers.Reset();
+
+    // Chunks finos tocados: se mallan en un HILO DE FONDO sobre un CLON de la región (el octree vivo
+    // se puede seguir editando sin choques). Al terminar, se aplican las mallas en el game thread.
+    if (DirtySVOChunks.Num() == 0) { bSVODirty = false; return; }
+
+    TArray<int32> Chunks = DirtySVOChunks.Array();
+    DirtySVOChunks.Reset();
+    bSVODirty = false;
+
+    const FVector Origin = SVOField.GetOrigin();
+    const float   CS   = SVOChunkSize();
+    const float   Fine = SVOFineThreshold();
+    const int32   D    = SVOChunkDim;
+    FBox Region(ForceInit);
+    for (int32 Idx : Chunks)
+    {
+        const int32 cx = Idx % D, cy = (Idx / D) % D, cz = Idx / (D * D);
+        Region += FBox(Origin + FVector(cx, cy, cz) * CS, Origin + FVector(cx + 1, cy + 1, cz + 1) * CS);
+    }
+    Region = Region.ExpandBy(Fine); // halo: cubre los vecinos de las hojas finas para cerrar las costuras
+    TSharedPtr<FPTVoxelOctree> Clone = SVOField.CloneRegion(Region);
+
+    bSVOMeshing = true;
+    const uint32 Gen = SVOMeshGen;
+    TWeakObjectPtr<APTSculptVolume> WeakThis(this);
+    Async(EAsyncExecution::ThreadPool, [WeakThis, Clone, Chunks, Origin, CS, Fine, D, Gen]()
+    {
+        struct FChunkRes { int32 Idx; TArray<FVector> V, N; TArray<int32> T; TArray<FColor> C; };
+        TSharedPtr<TArray<FChunkRes>, ESPMode::ThreadSafe> Results = MakeShared<TArray<FChunkRes>, ESPMode::ThreadSafe>();
+        Results->Reserve(Chunks.Num());
+        for (int32 Idx : Chunks)
+        {
+            const int32 cx = Idx % D, cy = (Idx / D) % D, cz = Idx / (D * D);
+            const FBox ChunkBox(Origin + FVector(cx, cy, cz) * CS, Origin + FVector(cx + 1, cy + 1, cz + 1) * CS);
+            FChunkRes R; R.Idx = Idx;
+            Clone->BuildMeshFiltered(ChunkBox, 0.f, Fine, R.V, R.T, R.N, R.C);
+            Results->Add(MoveTemp(R));
+        }
+        AsyncTask(ENamedThreads::GameThread, [WeakThis, Results, Gen]()
+        {
+            if (APTSculptVolume* Self = WeakThis.Get())
+            {
+                // Descartar si hubo clear/load/init mientras se mallaba (generación cambió).
+                if (Gen == Self->SVOMeshGen)
+                    for (const FChunkRes& R : *Results) Self->ApplySVOChunkMesh(R.Idx, R.V, R.T, R.N, R.C);
+                Self->bSVOMeshing = false;
+            }
+        });
+    });
 }
 
 // ─── RPCs de replicación ──────────────────────────────────────────────────────
