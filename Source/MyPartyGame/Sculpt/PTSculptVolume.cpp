@@ -1662,6 +1662,15 @@ void APTSculptVolume::ClearAll()
 
 void APTSculptVolume::SaveFieldState(TArray<uint8>& Out)
 {
+    // Modo SVO: el estado es el octree serializado (geometría + color). El flag es igual en server y
+    // clientes → no hay ambigüedad de formato. Cubre late-join / reconexión.
+    if (bUseSVO)
+    {
+        if (!bSVOInit) InitSVO();
+        SVOField.Serialize(Out);
+        return;
+    }
+
     Out.Reset();
     FMemoryWriter Ar(Out, /*bIsPersistent=*/true);
     Field.SerializeState(Ar);
@@ -1677,6 +1686,16 @@ void APTSculptVolume::SaveFieldState(TArray<uint8>& Out)
 bool APTSculptVolume::LoadFieldState(const TArray<uint8>& In)
 {
     if (In.Num() == 0) return false;
+
+    // Modo SVO: cargar el octree serializado y forzar remallado.
+    if (bUseSVO)
+    {
+        const bool bOk = SVOField.LoadFromBytes(In);
+        bSVOInit  = bOk;
+        bSVODirty = true;
+        TimeSinceRebuild = RebuildInterval; // remallar en el próximo tick
+        return bOk;
+    }
 
     // Cargar el campo (SerializeState limpia lo previo y marca todos los bricks dirty).
     FMemoryReader Ar(In, /*bIsPersistent=*/true);
