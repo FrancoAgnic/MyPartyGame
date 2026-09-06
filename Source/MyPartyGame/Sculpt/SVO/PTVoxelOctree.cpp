@@ -410,8 +410,18 @@ void FPTVoxelOctree::CollectLeaves(const FPTOctreeNode* N, const FVector& NodeMi
             CollectLeaves(N->Children[i].Get(), NodeMin + OctantOffset(i) * Half, Half, Out);
 }
 
-// ── Balance 2:1 ─────────────────────────────────────────────────────────────────────
+// ── Balance ─────────────────────────────────────────────────────────────────────────
 void FPTVoxelOctree::Balance()
+{
+    // Fase 1: 1:1 en la zona de contacto, acotado a pocos anillos (iguala resolución donde se
+    // fusionan geometrías muy distintas → sin huecos, sin perder adaptividad en el resto).
+    BalanceSweeps(0.5f, 3);
+    // Fase 2: 2:1 global sobre la superficie (limpia cualquier salto >1 nivel que dejó la fase
+    // acotada; deja todo en 2:1 + 1:1 en el contacto).
+    BalanceSweeps(0.25f, MaxDepth);
+}
+
+void FPTVoxelOctree::BalanceSweeps(float FinerFactor, int32 MaxIters)
 {
     if (!Root.IsValid()) return;
     const float MinCell = MinCellSize();
@@ -428,7 +438,7 @@ void FPTVoxelOctree::Balance()
         return bIn && bOut;
     };
 
-    for (int32 iter = 0; iter <= MaxDepth; ++iter)
+    for (int32 iter = 0; iter < MaxIters; ++iter)
     {
         TArray<FLeafRef> Leaves;
         CollectLeaves(Root.Get(), Origin, RootSize, Leaves);
@@ -454,7 +464,7 @@ void FPTVoxelOctree::Balance()
                     P[u]  += (ju + 0.5f) / 3.f * L.Size;
                     P[v]  += (jv + 0.5f) / 3.f * L.Size;
                     const FLeafInfo N = FindLeaf(P);
-                    if (N.Node && N.Size <= L.Size * 0.25f + KINDA_SMALL_NUMBER) bNeeds = true; // ≥2 niveles más fino
+                    if (N.Node && N.Size <= L.Size * FinerFactor + KINDA_SMALL_NUMBER) bNeeds = true; // vecino más fino
                 }
             }
             if (bNeeds) ToRefine.Add(const_cast<FPTOctreeNode*>(L.Node));

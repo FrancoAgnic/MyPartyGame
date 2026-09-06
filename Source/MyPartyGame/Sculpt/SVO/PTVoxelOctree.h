@@ -63,9 +63,10 @@ public:
     void EditShape(const FTransform& Xf, EPTSVOShape Shape, const FVector& HalfExtent,
                    bool bAdd, const FColor& PaintColor = FColor::White);
 
-    // Balancea el árbol a 2:1 (hojas vecinas difieren máx. 1 nivel). Reduce muchísimo los artefactos
-    // en transiciones con saltos grandes de nivel (brocha chica y después grande encima). Llamar
-    // antes de BuildMesh.
+    // Balancea el árbol antes de mallar: 2:1 global (hojas vecinas difieren máx. 1 nivel) + una fase
+    // estricta 1:1 acotada a la ZONA DE CONTACTO (pocos anillos) que iguala la resolución donde se
+    // fusionan geometrías de resolución muy distinta → elimina los huecos residuales sin perder
+    // adaptividad ni rendimiento en el resto.
     void Balance();
 
     // Mallado por Dual Contouring (crack-free entre niveles). Verts en espacio LOCAL.
@@ -135,6 +136,9 @@ private:
     // OutColor = color interpolado en los cruces.
     static bool LeafVertex(const FPTOctreeNode& Leaf, const FVector& Min, float Size, FVector& OutLocal, FColor& OutColor);
     FVector FieldNormal(const FVector& P) const; // normal = -grad(SDF)
+    // Pasadas de subdivisión sobre hojas de SUPERFICIE cuyo vecino es más fino que (Size*FinerFactor).
+    // FinerFactor=0.25 → 2:1; FinerFactor=0.5 → 1:1. MaxIters acota la propagación (anillos).
+    void BalanceSweeps(float FinerFactor, int32 MaxIters);
 
     static int32 CountLeavesRec(const FPTOctreeNode* N);
     static int32 CountNodesRec(const FPTOctreeNode* N);
