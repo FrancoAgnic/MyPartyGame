@@ -146,6 +146,8 @@ private:
     static float TrilinearCorners(const float C[8], float fx, float fy, float fz);
     // Colapsa un nodo interno a HOJA downsampleando (la brocha grande borra el detalle fino que tapa).
     static void CollapseToLeaf(FPTOctreeNode& Node);
+    // Rellena huecos CHICOS (bucles de borde cortos) de una malla; no toca bordes grandes (chunk).
+    static void FillSmallHoles(TArray<int32>& T);
     static void GetCornerDeep(const FPTOctreeNode& N, int32 k, float& OutV, FColor& OutC);
 
     // ── Consulta espacial ────────────────────────────────────────────────────

@@ -885,6 +885,53 @@ void FPTVoxelOctree::BuildMeshFiltered(const FBox& OwnerRegion, float MinLeafSiz
             }
         }
     }
+
+    FillSmallHoles(OutTris);
+}
+
+// Relleno de huecos ACOTADO: tapa bucles de borde CHICOS (huecos reales de transición, p.ej. un triángulo
+// faltante), sin tocar el borde del chunk (que es un bucle GRANDE legítimo, continuado en la sección
+// vecina). Se distingue por longitud del bucle → seguro con el mallado por chunks.
+void FPTVoxelOctree::FillSmallHoles(TArray<int32>& T)
+{
+    if (T.Num() < 3) return;
+    auto Key = [](int32 a, int32 b) -> uint64 { return ((uint64)(uint32)a << 32) | (uint64)(uint32)b; };
+
+    TSet<uint64> Dir; Dir.Reserve(T.Num());
+    for (int32 i = 0; i + 2 < T.Num(); i += 3)
+    {
+        Dir.Add(Key(T[i], T[i+1])); Dir.Add(Key(T[i+1], T[i+2])); Dir.Add(Key(T[i+2], T[i]));
+    }
+    // Aristas de borde (sin opuesta): a→b con el sólido a la izquierda.
+    TMap<int32, int32> Next; Next.Reserve(64);
+    for (int32 i = 0; i + 2 < T.Num(); i += 3)
+    {
+        const int32 e[3][2] = { {T[i],T[i+1]}, {T[i+1],T[i+2]}, {T[i+2],T[i]} };
+        for (int32 k = 0; k < 3; ++k)
+            if (!Dir.Contains(Key(e[k][1], e[k][0]))) Next.Add(e[k][0], e[k][1]);
+    }
+    if (Next.Num() == 0) return;
+
+    const int32 MaxHoleEdges = 8; // solo bucles chicos = huecos reales; los grandes = borde de chunk (no tocar)
+    TSet<int32> Visited;
+    for (const TPair<int32, int32>& Start : Next)
+    {
+        if (Visited.Contains(Start.Key)) continue;
+        TArray<int32> Loop; int32 Cur = Start.Key; bool bClosed = false;
+        for (int32 guard = 0; guard <= MaxHoleEdges; ++guard)
+        {
+            if (Visited.Contains(Cur)) break;
+            Visited.Add(Cur); Loop.Add(Cur);
+            const int32* Nx = Next.Find(Cur);
+            if (!Nx) break;
+            Cur = *Nx;
+            if (Cur == Start.Key) { bClosed = true; break; }
+        }
+        if (!bClosed || Loop.Num() < 3 || Loop.Num() > MaxHoleEdges) continue;
+        // Fan invertido (mira hacia afuera; si algún parche saliera oscuro, se invierte acá).
+        for (int32 i = 1; i + 1 < Loop.Num(); ++i)
+        { T.Add(Loop[0]); T.Add(Loop[i+1]); T.Add(Loop[i]); }
+    }
 }
 
 // ── Métricas ──────────────────────────────────────────────────────────────────────
