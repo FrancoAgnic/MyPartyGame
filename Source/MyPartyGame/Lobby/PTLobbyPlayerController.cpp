@@ -682,7 +682,7 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
             // siempre se sella. Si el trazo es de DETALLE (Alt), va a la capa aparte (bDetail=true);
             // si no, a la base. (Multicast_..._Implementation elige el campo y dispara las partículas.)
             HeadVolume->Multicast_ApplyStamp_Implementation(Pt, EffectiveHeadShape(), HeadBrushSize,
-                HeadEditMode, HeadPaintColor, HeadStampRotation, bHeadStrokeIsDetail);
+                HeadEditMode, HeadPaintColor, HeadStampRotation, bHeadStrokeIsDetail, FVector::OneVector);
 
             // AGREGAR (SOLO base, NO detalle) limpia la pintura 2D vieja de esa zona (la textura de la
             // cabeza es direccional, así que sin esto la arcilla nueva fusionada mostraría el color pintado

@@ -272,7 +272,7 @@ public:
     UFUNCTION(Server, Reliable)
     void Server_ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
                            EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot, bool bDetail,
-                           FVector StampScale);
+                           FVector InStampScale);
 
     /** ALT: arranca una nueva CAPA de detalle (malla aparte) en el volumen. Solo el escultor. */
     UFUNCTION(Server, Reliable)

@@ -1678,7 +1678,7 @@ bool APTSculptPlayerController::CanLocalPlayerSculpt() const
 }
 
 void APTSculptPlayerController::Server_ApplyStamp_Implementation(FVector WorldPos, EPTStampShape Shape,
-    float Size, EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot, bool bDetail, FVector StampScale)
+    float Size, EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot, bool bDetail, FVector InStampScale)
 {
     // Gating de autoridad: solo el escultor del turno en curso modifica la escultura.
     if (const APTSculptGameState* G = GetWorld()->GetGameState<APTSculptGameState>())
@@ -1691,7 +1691,7 @@ void APTSculptPlayerController::Server_ApplyStamp_Implementation(FVector WorldPo
         Volume = Cast<APTSculptVolume>(
             UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
     if (Volume)
-        Volume->Multicast_ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot, bDetail, StampScale);
+        Volume->Multicast_ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot, bDetail, InStampScale);
 }
 
 void APTSculptPlayerController::Server_BeginDetailLayer_Implementation()
