@@ -269,6 +269,9 @@ void FPTSculptField::SnapshotBrick(const FPTBrickKey& Key, FBrickSnapshot& Out)
 
     // Cache de flatness para decidir el paso (vacío = liso, no fuerza vecinos a fino).
     Flatness.Add(Key, Out.bEmpty ? 1.f : BrickFlatness(Out, SS));
+    // Registrar si el brick tiene superficie (para que los vecinos VACÍOS no limiten el paso: no hay
+    // costura contra el aire, así una superficie de brocha grande sí puede llegar al paso grueso).
+    if (Out.bEmpty) NonEmptyBricks.Remove(Key); else NonEmptyBricks.Add(Key);
 }
 
 int32 FPTSculptField::DecideStep(const FPTBrickKey& Key) const
@@ -282,12 +285,17 @@ int32 FPTSculptField::DecideStep(const FPTBrickKey& Key) const
     };
     int32 s = Target(Key);
     if (s <= 1) return 1;
-    // Constraint de vecinos: el paso es el MÍNIMO del brick y sus 6 vecinos (así el borde con zonas
-    // finas baja de a poco y se minimizan costuras). A pasos altos igual puede notarse un pelín el borde.
+    // Constraint de vecinos: paso = MÍNIMO del brick y sus vecinos CON GEOMETRÍA (los vacíos/aire NO
+    // restringen: no hay costura contra el aire). Así una superficie de brocha grande sí llega al paso
+    // grueso (antes el aire de un lado la forzaba a fino y no reducía nada).
     static const FIntVector N6[6] = {
         {1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1} };
     for (const FIntVector& d : N6)
-        s = FMath::Min(s, Target(Key + d));
+    {
+        const FPTBrickKey NK = Key + d;
+        if (!NonEmptyBricks.Contains(NK)) continue; // vecino vacío → no limita
+        s = FMath::Min(s, Target(NK));
+    }
     s = FMath::Clamp(s, 1, SNMaxStep);
     // BrickSize=16 solo malla bien en pasos DIVISORES (1,2,4,8); otros caerían a fino. Redondear abajo.
     if (s >= 8) return 8;

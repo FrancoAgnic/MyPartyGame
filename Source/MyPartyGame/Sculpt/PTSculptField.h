@@ -148,7 +148,8 @@ private:
     TSet<FPTBrickKey>                       DirtyBricks;
     TMap<FPTBrickKey, int32>                SectionOf;  // key → sección estable
     TMap<FPTBrickKey, float>                Flatness;   // key → coherencia [0,1]
-    TSet<FPTBrickKey>                       CoarseBricks; // bricks esculpidos con brocha grande → LOD grueso
+    TSet<FPTBrickKey>                       CoarseBricks;   // bricks esculpidos con brocha grande → LOD grueso
+    TSet<FPTBrickKey>                       NonEmptyBricks; // bricks con superficie (para no dejar que los vacíos limiten el LOD)
     int32                                   NextSection = 0;
 
     const FPTBrick* FindBrick(const FPTBrickKey& Key) const;
