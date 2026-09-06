@@ -277,31 +277,60 @@ void FPTSculptField::SnapshotBrick(const FPTBrickKey& Key, FBrickSnapshot& Out)
 int32 FPTSculptField::DecideStep(const FPTBrickKey& Key) const
 {
     if (SNMaxStep < 2) return 1;
-    // Paso OBJETIVO de cada brick: brocha grande → BigBrushStep (configurable); liso → 2; detalle → 1.
-    auto Target = [&](const FPTBrickKey& K) -> int32 {
-        if (CoarseBricks.Contains(K)) return FMath::Clamp(BigBrushStep, 1, SNMaxStep); // brocha grande
-        const float* p = Flatness.Find(K);
-        return ((p ? *p : 1.f) > SNFlatThreshold) ? 2 : 1; // liso=2, detalle=1
-    };
-    int32 s = Target(Key);
-    if (s <= 1) return 1;
-    // Constraint de vecinos: paso = MÍNIMO del brick y sus vecinos CON GEOMETRÍA (los vacíos/aire NO
-    // restringen: no hay costura contra el aire). Así una superficie de brocha grande sí llega al paso
-    // grueso (antes el aire de un lado la forzaba a fino y no reducía nada).
-    static const FIntVector N6[6] = {
-        {1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1} };
-    for (const FIntVector& d : N6)
+    const int32* s = GradedStep.Find(Key);
+    return s ? *s : 1; // ya viene graduado y snappeado a 1/2/4/8
+}
+
+void FPTSculptField::RecomputeGradedSteps()
+{
+    GradedStep.Reset();
+    if (SNMaxStep < 2) return;
+
+    // Nivel = log2 del paso: 1→0, 2→1, 4→2, 8→3. Y su inverso.
+    auto LevelOfStep = [](int32 step){ int32 l = 0; while ((1 << (l + 1)) <= step && l < 3) ++l; return l; };
+    auto StepOfLevel = [](int32 lvl){ return 1 << FMath::Clamp(lvl, 0, 3); };
+    const int32 CoarseLvl = LevelOfStep(FMath::Clamp(BigBrushStep, 1, SNMaxStep));
+
+    // Nivel OBJETIVO por brick con geometría: brocha grande → CoarseLvl; liso → 1 (paso 2); detalle → 0.
+    TMap<FPTBrickKey, int32> Lvl;
+    Lvl.Reserve(NonEmptyBricks.Num());
+    for (const FPTBrickKey& K : NonEmptyBricks)
     {
-        const FPTBrickKey NK = Key + d;
-        if (!NonEmptyBricks.Contains(NK)) continue; // vecino vacío → no limita
-        s = FMath::Min(s, Target(NK));
+        int32 t;
+        if (CoarseBricks.Contains(K)) t = CoarseLvl;
+        else { const float* p = Flatness.Find(K); t = ((p ? *p : 1.f) > SNFlatThreshold) ? 1 : 0; }
+        Lvl.Add(K, t);
     }
-    s = FMath::Clamp(s, 1, SNMaxStep);
-    // BrickSize=16 solo malla bien en pasos DIVISORES (1,2,4,8); otros caerían a fino. Redondear abajo.
-    if (s >= 8) return 8;
-    if (s >= 4) return 4;
-    if (s >= 2) return 2;
-    return 1;
+
+    // Relajar: cada brick a lo sumo 1 nivel por encima de su vecino con geometría más fino → gradiente
+    // suave (8→4→2→1) sin saltos bruscos. Converge en pocas pasadas (rango de niveles = 0..3).
+    static const FIntVector N6[6] = { {1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1} };
+    for (int32 pass = 0; pass < 4; ++pass)
+    {
+        bool bChanged = false;
+        for (TPair<FPTBrickKey, int32>& It : Lvl)
+        {
+            int32 minN = 999;
+            for (const FIntVector& d : N6)
+                if (const int32* n = Lvl.Find(It.Key + d)) minN = FMath::Min(minN, *n);
+            if (minN < 999 && It.Value > minN + 1) { It.Value = minN + 1; bChanged = true; }
+        }
+        if (!bChanged) break;
+    }
+
+    // Nuevo mapa de pasos. Marcar DIRTY los bricks cuyo paso cambió (para re-mallar el gradiente aunque
+    // su SDF no haya cambiado: si un detalle nuevo baja el nivel de sus vecinos, esos vecinos hay que
+    // re-mallarlos o el salto/costura queda). Sin cambios → no marca nada (no hay loop).
+    TMap<FPTBrickKey, int32> NewSteps;
+    NewSteps.Reserve(Lvl.Num());
+    for (const TPair<FPTBrickKey, int32>& It : Lvl)
+    {
+        const int32 st = StepOfLevel(It.Value);
+        NewSteps.Add(It.Key, st);
+        const int32* Old = GradedStep.Find(It.Key);
+        if (!Old || *Old != st) MarkDirty(It.Key);
+    }
+    GradedStep = MoveTemp(NewSteps);
 }
 
 // ─── Surface Nets ─────────────────────────────────────────────────────────────

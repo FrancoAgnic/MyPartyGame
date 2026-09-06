@@ -1396,9 +1396,12 @@ void APTSculptVolume::RebuildDirty()
         {
             FSnapJob J; J.Target = MComp;
             J.Snap.Section = F.SectionIndex(K);
-            F.SnapshotBrick(K, J.Snap); // actualiza flatness
+            F.SnapshotBrick(K, J.Snap); // actualiza flatness + NonEmpty
             Jobs->Add(MoveTemp(J));
         }
+        // Graduar DESPUÉS de snapshotear (flatness/NonEmpty frescos). Marca dirty los vecinos cuyo paso
+        // cambió (se re-mallan en el próximo rebuild → el gradiente converge mientras esculpís).
+        F.RecomputeGradedSteps();
         for (int32 i = Base; i < Jobs->Num(); ++i)
             (*Jobs)[i].Snap.Step = F.DecideStep((*Jobs)[i].Snap.Key);
 
