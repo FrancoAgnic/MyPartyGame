@@ -1400,10 +1400,13 @@ void APTSculptVolume::RebuildDirty()
 // ─── SVO (modo experimental detrás de flag) ────────────────────────────────────
 void APTSculptVolume::InitSVOOctree(FPTVoxelOctree& F) const
 {
-    // Octree cúbico en ACTOR-LOCAL (UU) que cubre el BoundsBox del lienzo.
+    // Octree cúbico en ACTOR-LOCAL (UU) que cubre el BoundsBox del lienzo, con MARGEN: así las paredes
+    // del box quedan estrictamente ADENTRO del octree (hay celdas de aire más allá) y el mallado SIEMPRE
+    // cierra la arcilla contra el límite (no se ve el interior al esculpir pegado a la pared).
     const FVector Center = BoundsBox ? BoundsBox->GetRelativeLocation() : FVector::ZeroVector;
     const FVector Half   = BoundsBox ? BoundsBox->GetUnscaledBoxExtent() : FVector(480.f);
-    const float RootSize = 2.f * FMath::Max3(Half.X, Half.Y, Half.Z);
+    const float Margin   = FMath::Max(VoxelSize * 4.f, 1.f);
+    const float RootSize = 2.f * FMath::Max3(Half.X, Half.Y, Half.Z) + 2.f * Margin;
     // Profundidad tal que la celda mínima ≈ VoxelSize (mismo detalle que el campo clásico).
     const float Ratio = RootSize / FMath::Max(VoxelSize, 0.5f);
     const int32 MaxDepth = FMath::Clamp(FMath::CeilToInt(FMath::Log2(Ratio)), 0, 12);

@@ -415,11 +415,12 @@ bool FPTVoxelOctree::LeafVertex(const FPTOctreeNode& Leaf, const FVector& Min, f
         const FVector Pa = Min + FPTOctreeNode::CornerOffset(a) * Size;
         const FVector Pb = Min + FPTOctreeNode::CornerOffset(b) * Size;
         Sum += FMath::Lerp(Pa, Pb, t);
-        const FColor& Ca = Leaf.Col[a];
-        const FColor& Cb = Leaf.Col[b];
-        RSum += FMath::Lerp((float)Ca.R, (float)Cb.R, t);
-        GSum += FMath::Lerp((float)Ca.G, (float)Cb.G, t);
-        BSum += FMath::Lerp((float)Ca.B, (float)Cb.B, t);
+        // Color = el de la esquina de ADENTRO (material). NO promediar con la de afuera (aire=blanco),
+        // que aclaraba el color. Así el color queda fiel al elegido.
+        const FColor& Ci = Leaf.Col[Inside(va) ? a : b];
+        RSum += (float)Ci.R;
+        GSum += (float)Ci.G;
+        BSum += (float)Ci.B;
         ++Count;
     }
     if (Count == 0) return false;
