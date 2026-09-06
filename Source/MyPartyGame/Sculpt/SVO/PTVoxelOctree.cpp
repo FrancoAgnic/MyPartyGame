@@ -593,36 +593,49 @@ void FPTVoxelOctree::FillAllHoles(const TArray<FVector>& V, TArray<int32>& T)
     if (T.Num() < 3) return;
     auto Key = [](int32 a, int32 b) -> uint64 { return ((uint64)(uint32)a << 32) | (uint64)(uint32)b; };
 
+    // Cuenta neta por arista dirigida: en una malla cerrada cada arista aparece una vez en cada sentido.
+    // Una arista de BORDE es la que tiene sentido (a→b) sin su opuesta (b→a).
     TSet<uint64> Dir; Dir.Reserve(T.Num());
     for (int32 i = 0; i + 2 < T.Num(); i += 3)
     { Dir.Add(Key(T[i], T[i+1])); Dir.Add(Key(T[i+1], T[i+2])); Dir.Add(Key(T[i+2], T[i])); }
 
-    // Bordes abiertos: arista dirigida sin opuesta.
-    TMap<int32, int32> Next; Next.Reserve(256);
+    // Aristas de borde → multimapa por vértice de salida (soporta uniones NO-MANIFOLD: varias aristas
+    // de borde por vértice, típico en las transiciones de resolución → tus "huecos n-gon").
+    TMultiMap<int32, int32> Out;
+    TSet<uint64> BoundarySet;
     for (int32 i = 0; i + 2 < T.Num(); i += 3)
     {
         const int32 e[3][2] = { {T[i],T[i+1]}, {T[i+1],T[i+2]}, {T[i+2],T[i]} };
         for (int32 k = 0; k < 3; ++k)
-            if (!Dir.Contains(Key(e[k][1], e[k][0]))) Next.Add(e[k][0], e[k][1]);
+            if (!Dir.Contains(Key(e[k][1], e[k][0])))
+            { Out.Add(e[k][0], e[k][1]); BoundarySet.Add(Key(e[k][0], e[k][1])); }
     }
-    if (Next.Num() == 0) return;
+    if (BoundarySet.Num() == 0) return;
 
-    TSet<int32> Visited;
-    for (const TPair<int32, int32>& Start : Next)
+    // Recorrer por ARISTAS (no por vértices): así los bucles ramificados de los cruces no-manifold se
+    // arman igual y se tapan todos.
+    TSet<uint64> Used;
+    TArray<int32> Cand;
+    for (const uint64 StartE : BoundarySet)
     {
-        if (Visited.Contains(Start.Key)) continue;
-        TArray<int32> Loop; int32 Cur = Start.Key;
-        for (int32 guard = 0; guard < 100000; ++guard)
+        if (Used.Contains(StartE)) continue;
+        const int32 A0 = (int32)(uint32)(StartE >> 32);
+        int32 Cur = A0;
+        TArray<int32> Loop;
+        for (int32 guard = 0; guard < 200000; ++guard)
         {
-            if (Visited.Contains(Cur)) break;
-            Visited.Add(Cur); Loop.Add(Cur);
-            const int32* Nx = Next.Find(Cur);
-            if (!Nx) break;
-            Cur = *Nx;
-            if (Cur == Start.Key) break;
+            // elegir una arista de borde no usada que salga de Cur
+            Cand.Reset(); Out.MultiFind(Cur, Cand);
+            int32 Nxt = -1;
+            for (int32 c : Cand) if (!Used.Contains(Key(Cur, c))) { Nxt = c; break; }
+            if (Nxt < 0) break;
+            Used.Add(Key(Cur, Nxt));
+            Loop.Add(Cur);
+            Cur = Nxt;
+            if (Cur == A0) break; // bucle cerrado
         }
         if (Loop.Num() < 3) continue;
-        // Fan DOBLE CARA (ambos windings): el tapón se ve de los dos lados → nunca queda oscuro/invertido.
+        // Fan DOBLE CARA (ambos windings): el tapón se ve de los dos lados → nunca oscuro/invertido.
         for (int32 i = 1; i + 1 < Loop.Num(); ++i)
         {
             T.Add(Loop[0]); T.Add(Loop[i]);   T.Add(Loop[i+1]);
