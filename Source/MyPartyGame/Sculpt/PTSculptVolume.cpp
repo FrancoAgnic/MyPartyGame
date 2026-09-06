@@ -1586,12 +1586,7 @@ void APTSculptVolume::RebuildSVOMesh()
     if (bSVOMeshing) return; // ya hay un mallado async en vuelo; se reintenta cuando termine (bSVODirty sigue)
 
     TArray<FBox> RefinedBounds;
-    if (bSVOCoarseDirty || DirtySVOChunks.Num() > 0) SVOField.Balance(&RefinedBounds);
-    for (const FBox& Bounds : RefinedBounds) MarkSVODirtyLocalBounds(Bounds.Min, Bounds.Max);
-
-    // Con DC recursivo, TODA la geometría (grande y chica) se reparte por chunks → la vieja "sección
-    // gruesa" del Mesh base ya no se usa: la vaciamos una vez.
-    if (bSVOCoarseDirty) { Mesh->ClearMeshSection(0); bSVOCoarseDirty = false; }
+    SVOField.Balance(&RefinedBounds); // mantiene 2:1 (barato, solo superficie)
 
     // Capas de detalle: enteras (son chicas, sync).
     for (int32 i : DirtySVODetailLayers)
@@ -1599,96 +1594,43 @@ void APTSculptVolume::RebuildSVOMesh()
             RebuildSVOInto(*SVODetailFields[i], DetailMeshes[i]);
     DirtySVODetailLayers.Reset();
 
-    // Chunks finos tocados: se mallan en un HILO DE FONDO sobre un CLON de la región (el octree vivo
-    // se puede seguir editando sin choques). Al terminar, se aplican las mallas en el game thread.
-    if (DirtySVOChunks.Num() == 0) { bSVODirty = false; return; }
-
-    TArray<int32> Chunks = DirtySVOChunks.Array();
+    // Ya NO usamos chunks: se genera UNA sola malla watertight de todo el modelo con DC recursivo,
+    // en un hilo de fondo (async) sobre un CLON completo → sin costuras entre secciones = CERO huecos.
     DirtySVOChunks.Reset();
+    bSVOCoarseDirty = false;
     bSVODirty = false;
 
-    const FVector Origin = SVOField.GetOrigin();
-    const float   CS   = SVOChunkSize();
-    const int32   D    = SVOChunkDim;
-    FBox Region(ForceInit);
-    for (int32 Idx : Chunks)
-    {
-        const int32 cx = Idx % D, cy = (Idx / D) % D, cz = Idx / (D * D);
-        Region += FBox(Origin + FVector(cx, cy, cz) * CS, Origin + FVector(cx + 1, cy + 1, cz + 1) * CS);
-    }
-    // Halo generoso (3 chunks): el clon debe contener TODA hoja que aporte triángulos a los chunks a
-    // refrescar (sucios + 1 anillo), incluidas hojas GRANDES con vértice lejano → si no, quedan huecos.
-    Region = Region.ExpandBy(CS * 3.f);
-    TSharedPtr<FPTVoxelOctree> Clone = SVOField.CloneRegion(Region);
-
-    // Keep = chunks sucios + su anillo de vecinos (1): refrescamos también los bordes para que ningún
-    // triángulo cross-boundary quede viejo (los vecinos quedan totalmente cubiertos por el halo de 2).
-    TSet<int32> KeepSet;
-    for (int32 Idx : Chunks)
-    {
-        const int32 cx = Idx % D, cy = (Idx / D) % D, cz = Idx / (D * D);
-        for (int32 dz = -1; dz <= 1; ++dz)
-        for (int32 dy = -1; dy <= 1; ++dy)
-        for (int32 dx = -1; dx <= 1; ++dx)
-        {
-            const int32 nx = cx + dx, ny = cy + dy, nz = cz + dz;
-            if (nx < 0 || ny < 0 || nz < 0 || nx >= D || ny >= D || nz >= D) continue;
-            KeepSet.Add(nx + ny * D + nz * D * D);
-        }
-    }
-    TArray<int32> Keep = KeepSet.Array();
+    const FBox Whole(SVOField.GetOrigin() - FVector(1.f),
+                     SVOField.GetOrigin() + FVector(SVOField.GetRootSize() + 1.f));
+    TSharedPtr<FPTVoxelOctree> Clone = SVOField.CloneRegion(Whole);
 
     bSVOMeshing = true;
     const uint32 Gen = SVOMeshGen;
     TWeakObjectPtr<APTSculptVolume> WeakThis(this);
-    Async(EAsyncExecution::ThreadPool, [WeakThis, Clone, Keep, Origin, CS, D, Gen]()
+    Async(EAsyncExecution::ThreadPool, [WeakThis, Clone, Gen]()
     {
-        struct FChunkRes { int32 Idx; TArray<FVector> V, N; TArray<int32> T; TArray<FColor> C; TMap<int32,int32> Remap; };
-        TSharedPtr<TArray<FChunkRes>, ESPMode::ThreadSafe> Results = MakeShared<TArray<FChunkRes>, ESPMode::ThreadSafe>();
+        struct FRes { TArray<FVector> V, N; TArray<int32> T; TArray<FColor> C; };
+        TSharedPtr<FRes, ESPMode::ThreadSafe> R = MakeShared<FRes, ESPMode::ThreadSafe>();
+        Clone->BuildMeshDC(R->V, R->T, R->N, R->C); // watertight, whole model
 
-        // 1) Malla WATERTIGHT del clon completo (DC recursivo).
-        TArray<FVector> AV, AN; TArray<int32> AT; TArray<FColor> AC;
-        Clone->BuildMeshDC(AV, AT, AN, AC);
-
-        // 2) Repartir triángulos por chunk según el centroide; solo se quedan los chunks sucios.
-        //    (cada triángulo va a UN chunk → sin duplicar; DC garantiza que no falta ninguno).
-        TSet<int32> KeepC(Keep);
-        TMap<int32, int32> ChunkToRes; // idx de chunk → índice en Results
-        auto GetRes = [&](int32 ci) -> FChunkRes&
+        AsyncTask(ENamedThreads::GameThread, [WeakThis, R, Gen]()
         {
-            if (int32* p = ChunkToRes.Find(ci)) return (*Results)[*p];
-            const int32 at = Results->Add(FChunkRes{ ci, {}, {}, {}, {}, {} });
-            ChunkToRes.Add(ci, at); return (*Results)[at];
-        };
-        for (int32 t = 0; t + 2 < AT.Num(); t += 3)
-        {
-            const int32 i0 = AT[t], i1 = AT[t + 1], i2 = AT[t + 2];
-            const FVector Ctr = (AV[i0] + AV[i1] + AV[i2]) / 3.f;
-            const int32 cx = FMath::FloorToInt((Ctr.X - Origin.X) / CS);
-            const int32 cy = FMath::FloorToInt((Ctr.Y - Origin.Y) / CS);
-            const int32 cz = FMath::FloorToInt((Ctr.Z - Origin.Z) / CS);
-            if (cx < 0 || cy < 0 || cz < 0 || cx >= D || cy >= D || cz >= D) continue;
-            const int32 ci = cx + cy * D + cz * D * D;
-            if (!KeepC.Contains(ci)) continue;
-            FChunkRes& R = GetRes(ci);
-            auto Local = [&](int32 g) -> int32
+            APTSculptVolume* Self = WeakThis.Get();
+            if (!Self) return;
+            if (Gen == Self->SVOMeshGen && Self->Mesh)
             {
-                if (int32* p = R.Remap.Find(g)) return *p;
-                const int32 li = R.V.Add(AV[g]); R.N.Add(AN[g]); R.C.Add(AC[g]); R.Remap.Add(g, li); return li;
-            };
-            R.T.Add(Local(i0)); R.T.Add(Local(i1)); R.T.Add(Local(i2));
-        }
-        // 3) Chunks de Keep que quedaron SIN triángulos → resultado vacío (para limpiar su sección).
-        for (int32 ci : Keep) if (!ChunkToRes.Contains(ci)) Results->Add(FChunkRes{ ci, {}, {}, {}, {}, {} });
-        AsyncTask(ENamedThreads::GameThread, [WeakThis, Results, Gen]()
-        {
-            if (APTSculptVolume* Self = WeakThis.Get())
-            {
-                // Descartar si hubo clear/load/init mientras se mallaba (generación cambió).
-                if (Gen == Self->SVOMeshGen)
-                    for (const FChunkRes& R : *Results) Self->ApplySVOChunkMesh(R.Idx, R.V, R.T, R.N, R.C);
-                Self->bSVOMeshing = false;
+                Self->ClearSVOChunkMeshes(); // limpiar los componentes de chunk (ya no se usan)
+                UMaterialInterface* Mat = Self->ClayMaterialOverride ? Self->ClayMaterialOverride
+                                        : (Self->ClayMID ? (UMaterialInterface*)Self->ClayMID : Self->ClayMaterial);
+                if (R->V.Num() == 0) Self->Mesh->ClearMeshSection(0);
+                else
+                {
+                    TArray<FVector2D> UV; TArray<FProcMeshTangent> Tan;
+                    Self->Mesh->CreateMeshSection(0, R->V, R->T, R->N, UV, R->C, Tan, /*collision=*/false);
+                    if (Mat) Self->Mesh->SetMaterial(0, Mat);
+                }
             }
+            Self->bSVOMeshing = false;
         });
     });
 }
