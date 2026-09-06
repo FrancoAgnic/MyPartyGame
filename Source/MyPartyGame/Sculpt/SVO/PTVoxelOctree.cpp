@@ -410,18 +410,8 @@ void FPTVoxelOctree::CollectLeaves(const FPTOctreeNode* N, const FVector& NodeMi
             CollectLeaves(N->Children[i].Get(), NodeMin + OctantOffset(i) * Half, Half, Out);
 }
 
-// ── Balance ─────────────────────────────────────────────────────────────────────────
+// ── Balance 2:1 ─────────────────────────────────────────────────────────────────────
 void FPTVoxelOctree::Balance()
-{
-    // Fase 1: 1:1 en la zona de contacto, acotado a pocos anillos (iguala resolución donde se
-    // fusionan geometrías muy distintas → sin huecos, sin perder adaptividad en el resto).
-    BalanceSweeps(0.5f, 3);
-    // Fase 2: 2:1 global sobre la superficie (limpia cualquier salto >1 nivel que dejó la fase
-    // acotada; deja todo en 2:1 + 1:1 en el contacto).
-    BalanceSweeps(0.25f, MaxDepth);
-}
-
-void FPTVoxelOctree::BalanceSweeps(float FinerFactor, int32 MaxIters)
 {
     if (!Root.IsValid()) return;
     const float MinCell = MinCellSize();
@@ -438,7 +428,7 @@ void FPTVoxelOctree::BalanceSweeps(float FinerFactor, int32 MaxIters)
         return bIn && bOut;
     };
 
-    for (int32 iter = 0; iter < MaxIters; ++iter)
+    for (int32 iter = 0; iter <= MaxDepth; ++iter)
     {
         TArray<FLeafRef> Leaves;
         CollectLeaves(Root.Get(), Origin, RootSize, Leaves);
@@ -464,7 +454,7 @@ void FPTVoxelOctree::BalanceSweeps(float FinerFactor, int32 MaxIters)
                     P[u]  += (ju + 0.5f) / 3.f * L.Size;
                     P[v]  += (jv + 0.5f) / 3.f * L.Size;
                     const FLeafInfo N = FindLeaf(P);
-                    if (N.Node && N.Size <= L.Size * FinerFactor + KINDA_SMALL_NUMBER) bNeeds = true; // vecino más fino
+                    if (N.Node && N.Size <= L.Size * 0.25f + KINDA_SMALL_NUMBER) bNeeds = true; // ≥2 niveles más fino
                 }
             }
             if (bNeeds) ToRefine.Add(const_cast<FPTOctreeNode*>(L.Node));
@@ -475,7 +465,136 @@ void FPTVoxelOctree::BalanceSweeps(float FinerFactor, int32 MaxIters)
     }
 }
 
-// ── Mallado: Dual Contouring por aristas mínimas ────────────────────────────────────
+// ── Dual Contouring RECURSIVO (Ju et al.) — watertight por construcción, sin consultas de vecinos ──
+// Tablas estándar (convención de índices x=bit2, y=bit1, z=bit0). Nuestro octree usa x=bit0 → se
+// remapea con H2M al acceder hijos/esquinas.
+namespace DC
+{
+    static const int32 H2M[8] = { 0, 4, 2, 6, 1, 5, 3, 7 };
+    FORCEINLINE FVector HOffset(int32 h) { return FVector((h >> 2) & 1, (h >> 1) & 1, h & 1); }
+
+    static const int32 edgevmap[12][2] = {
+        {0,4},{1,5},{2,6},{3,7}, {0,2},{1,3},{4,6},{5,7}, {0,1},{2,3},{4,5},{6,7} };
+    static const int32 cellProcFaceMask[12][3] = {
+        {0,4,0},{1,5,0},{2,6,0},{3,7,0},{0,2,1},{4,6,1},{1,3,1},{5,7,1},{0,1,2},{2,3,2},{4,5,2},{6,7,2} };
+    static const int32 cellProcEdgeMask[6][5] = {
+        {0,1,2,3,0},{4,5,6,7,0},{0,4,1,5,1},{2,6,3,7,1},{0,2,4,6,2},{1,3,5,7,2} };
+    static const int32 faceProcFaceMask[3][4][3] = {
+        {{4,0,0},{5,1,0},{6,2,0},{7,3,0}},
+        {{2,0,1},{6,4,1},{3,1,1},{7,5,1}},
+        {{1,0,2},{3,2,2},{5,4,2},{7,6,2}} };
+    static const int32 faceProcEdgeMask[3][4][6] = {
+        {{1,4,0,5,1,1},{1,6,2,7,3,1},{0,4,6,0,2,2},{0,5,7,1,3,2}},
+        {{0,2,3,0,1,0},{0,6,7,4,5,0},{1,2,0,6,4,2},{1,3,1,7,5,2}},
+        {{1,1,0,3,2,0},{1,5,4,7,6,0},{0,1,5,0,4,1},{0,3,7,2,6,1}} };
+    static const int32 edgeProcEdgeMask[3][2][5] = {
+        {{3,2,1,0,0},{7,6,5,4,0}},
+        {{5,1,4,0,1},{7,3,6,2,1}},
+        {{6,4,2,0,2},{7,5,3,1,2}} };
+    static const int32 processEdgeMask[3][4] = { {3,2,1,0},{7,5,6,4},{11,10,9,8} };
+
+    struct FNode
+    {
+        const FPTOctreeNode* N = nullptr;
+        FVector Min = FVector::ZeroVector;
+        float   Size = 0.f;
+        bool IsLeaf() const { return !N || N->IsLeaf(); }
+    };
+
+    FORCEINLINE FNode Child(const FNode& P, int32 h)
+    {
+        const float hs = P.Size * 0.5f;
+        FNode c; c.N = P.N->Children[H2M[h]].Get(); c.Min = P.Min + HOffset(h) * hs; c.Size = hs;
+        return c;
+    }
+    FORCEINLINE float Corner(const FPTOctreeNode* N, int32 c) { return N->Corner[H2M[c]]; }
+
+    using FVertMap = TMap<const FPTOctreeNode*, int32>;
+
+    void ProcessEdge(const FNode n[4], int32 dir, const FVertMap& V, TArray<int32>& T)
+    {
+        float minSize = FLT_MAX; bool flip = false; bool signChange = false;
+        int32 idx[4]; bool bMissing = false;
+        for (int32 i = 0; i < 4; ++i)
+        {
+            const int32 e  = processEdgeMask[dir][i];
+            const int32 c1 = edgevmap[e][0], c2 = edgevmap[e][1];
+            const bool m1 = Corner(n[i].N, c1) > 0.f; // >0 = dentro
+            const bool m2 = Corner(n[i].N, c2) > 0.f;
+            if (n[i].Size < minSize) { minSize = n[i].Size; flip = m1; signChange = (m1 != m2); }
+            const int32* f = V.Find(n[i].N);
+            if (f) idx[i] = *f; else { idx[i] = -1; bMissing = true; }
+        }
+        if (!signChange || bMissing) return; // sin superficie, o falta un vértice (inconsistencia) → no forzar cara mala
+        if (!flip)
+        {
+            T.Add(idx[0]); T.Add(idx[1]); T.Add(idx[3]);
+            T.Add(idx[0]); T.Add(idx[3]); T.Add(idx[2]);
+        }
+        else
+        {
+            T.Add(idx[0]); T.Add(idx[3]); T.Add(idx[1]);
+            T.Add(idx[0]); T.Add(idx[2]); T.Add(idx[3]);
+        }
+    }
+
+    void EdgeProc(const FNode n[4], int32 dir, const FVertMap& V, TArray<int32>& T)
+    {
+        for (int32 i = 0; i < 4; ++i) if (!n[i].N) return;
+        if (n[0].IsLeaf() && n[1].IsLeaf() && n[2].IsLeaf() && n[3].IsLeaf()) { ProcessEdge(n, dir, V, T); return; }
+        for (int32 i = 0; i < 2; ++i)
+        {
+            FNode en[4];
+            for (int32 j = 0; j < 4; ++j)
+                en[j] = n[j].IsLeaf() ? n[j] : Child(n[j], edgeProcEdgeMask[dir][i][j]);
+            EdgeProc(en, edgeProcEdgeMask[dir][i][4], V, T);
+        }
+    }
+
+    void FaceProc(const FNode& a, const FNode& b, int32 dir, const FVertMap& V, TArray<int32>& T)
+    {
+        if (!a.N || !b.N) return;
+        if (a.IsLeaf() && b.IsLeaf()) return;
+        for (int32 i = 0; i < 4; ++i)
+        {
+            const FNode fa = a.IsLeaf() ? a : Child(a, faceProcFaceMask[dir][i][0]);
+            const FNode fb = b.IsLeaf() ? b : Child(b, faceProcFaceMask[dir][i][1]);
+            FaceProc(fa, fb, faceProcFaceMask[dir][i][2], V, T);
+        }
+        static const int32 orders[2][4] = { {0,0,1,1}, {0,1,0,1} };
+        for (int32 i = 0; i < 4; ++i)
+        {
+            const int32* ord = orders[faceProcEdgeMask[dir][i][0]];
+            const int32 cc[4] = { faceProcEdgeMask[dir][i][1], faceProcEdgeMask[dir][i][2],
+                                  faceProcEdgeMask[dir][i][3], faceProcEdgeMask[dir][i][4] };
+            FNode en[4];
+            for (int32 j = 0; j < 4; ++j)
+            {
+                const FNode& src = (ord[j] == 0) ? a : b;
+                en[j] = src.IsLeaf() ? src : Child(src, cc[j]);
+            }
+            EdgeProc(en, faceProcEdgeMask[dir][i][5], V, T);
+        }
+    }
+
+    void CellProc(const FNode& c, const FVertMap& V, TArray<int32>& T)
+    {
+        if (!c.N || c.N->IsLeaf()) return;
+        FNode ch[8];
+        for (int32 i = 0; i < 8; ++i) ch[i] = Child(c, i);
+        for (int32 i = 0; i < 8; ++i) CellProc(ch[i], V, T);
+        for (int32 i = 0; i < 12; ++i)
+            FaceProc(ch[cellProcFaceMask[i][0]], ch[cellProcFaceMask[i][1]], cellProcFaceMask[i][2], V, T);
+        for (int32 i = 0; i < 6; ++i)
+        {
+            const FNode en[4] = { ch[cellProcEdgeMask[i][0]], ch[cellProcEdgeMask[i][1]],
+                                  ch[cellProcEdgeMask[i][2]], ch[cellProcEdgeMask[i][3]] };
+            EdgeProc(en, cellProcEdgeMask[i][4], V, T);
+        }
+    }
+}
+
+// ── Mallado: Dual Contouring recursivo ──────────────────────────────────────────────
 void FPTVoxelOctree::BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris, TArray<FVector>& OutNormals,
                                TArray<FColor>& OutColors) const
 {
@@ -498,115 +617,11 @@ void FPTVoxelOctree::BuildMesh(TArray<FVector>& OutVerts, TArray<int32>& OutTris
         VertOf.Add(L.Node, Idx);
     }
 
-    // 2) Conectividad: por cada "arista mínima" con cambio de signo, unir los vértices de las hojas
-    //    que la rodean. La hoja "dueña" (la más fina; a igualdad, la de esquina menor) la emite una vez.
-    for (const FLeafRef& L : Leaves)
-    {
-        if (!VertOf.Contains(L.Node)) continue; // hoja sin superficie
-        const float s = L.Size;
-
-        for (int32 axis = 0; axis < 3; ++axis)
-        {
-            const int32 u = (axis + 1) % 3;
-            const int32 v = (axis + 2) % 3;
-
-            for (int32 cv = 0; cv < 2; ++cv)
-            for (int32 cu = 0; cu < 2; ++cu)
-            {
-                // Recta de la arista (paralela a 'axis') en (pu,pv); extremos en axis = [min, min+s].
-                FVector A0 = L.Min, A1 = L.Min;
-                A0[u] = A1[u] = L.Min[u] + cu * s;
-                A0[v] = A1[v] = L.Min[v] + cv * s;
-                A0[axis] = L.Min[axis];
-                A1[axis] = L.Min[axis] + s;
-
-                const float f0 = Sample(A0);
-                const float f1 = Sample(A1);
-                if (Inside(f0) == Inside(f1)) continue; // sin cruce → no hay quad
-
-                // Las 4 hojas alrededor de la recta, en orden CCW mirando hacia +axis:
-                // (σu,σv) = (-,-),(+,-),(+,+),(-,+).
-                static const int32 SU[4] = { -1, +1, +1, -1 };
-                static const int32 SV[4] = { -1, -1, +1, +1 };
-                const float aMid = L.Min[axis] + 0.5f * s;
-                // Sondeo con radio CHICO fijo (no proporcional a s): así cae siempre en la celda
-                // inmediatamente adyacente a la arista, aun con saltos de nivel extremos.
-                const float eps  = FMath::Min(0.25f * s, MinCellSize() * 0.25f);
-
-                const FPTOctreeNode* Ring[4] = { nullptr, nullptr, nullptr, nullptr };
-                FVector RingMin[4];
-                float   RingSize[4] = { 0,0,0,0 };
-                bool    bValid = true;
-                float   finest = s;
-                for (int32 q = 0; q < 4; ++q)
-                {
-                    FVector Q; Q[axis] = aMid;
-                    Q[u] = L.Min[u] + cu * s + SU[q] * eps;
-                    Q[v] = L.Min[v] + cv * s + SV[q] * eps;
-                    const FLeafInfo LI = FindLeaf(Q);
-                    if (!LI.Node) { bValid = false; break; }
-                    Ring[q] = LI.Node; RingMin[q] = LI.Min; RingSize[q] = LI.Size;
-                    finest = FMath::Min(finest, LI.Size);
-                }
-                if (!bValid) continue;
-
-                // Sólo la hoja MÁS FINA de la arista la procesa (evita duplicados). Si hay un vecino más
-                // fino que L, esta arista no es mínima para L → la emitirá el vecino fino.
-                if (finest < s - KINDA_SMALL_NUMBER) continue;
-
-                // A igualdad de tamaño (== s), dueña = la de esquina (min) menor lexicográfica.
-                const FPTOctreeNode* Owner = nullptr;
-                FVector OwnerMin(FLT_MAX);
-                for (int32 q = 0; q < 4; ++q)
-                {
-                    if (FMath::Abs(RingSize[q] - s) > KINDA_SMALL_NUMBER) continue; // sólo las de tamaño s
-                    const FVector& M = RingMin[q];
-                    if (M.X < OwnerMin.X - KINDA_SMALL_NUMBER ||
-                        (FMath::IsNearlyEqual(M.X, OwnerMin.X) && (M.Y < OwnerMin.Y - KINDA_SMALL_NUMBER ||
-                        (FMath::IsNearlyEqual(M.Y, OwnerMin.Y) && M.Z < OwnerMin.Z - KINDA_SMALL_NUMBER))))
-                    {
-                        OwnerMin = M; Owner = Ring[q];
-                    }
-                }
-                if (Owner != L.Node) continue; // no soy la dueña
-
-                // Hojas DISTINTAS alrededor del anillo (una hoja grande puede ocupar 2 cuadrantes
-                // consecutivos → se dedupea). Orden CCW preservado.
-                const FPTOctreeNode* RingU[4]; int32 NR = 0;
-                for (int32 q = 0; q < 4; ++q)
-                {
-                    const FPTOctreeNode* Nd = Ring[q];
-                    if (NR > 0 && Nd == RingU[NR - 1]) continue;
-                    RingU[NR++] = Nd;
-                }
-                if (NR > 1 && RingU[NR - 1] == RingU[0]) --NR; // cierre del anillo
-
-                // Mapear a vértices. Si a una hoja le FALTA vértice (p.ej. quedó sólida por un salto
-                // grande de nivel), se la salta y se cierra la arista con los que sí existen (triángulo)
-                // en vez de dejar un HUECO. Así no hay grietas en las transiciones grande↔chico.
-                int32 Ord[4]; int32 NV = 0;
-                for (int32 i = 0; i < NR; ++i)
-                {
-                    const int32* Found = VertOf.Find(RingU[i]);
-                    if (Found) Ord[NV++] = *Found;
-                }
-                if (NV < 3) continue;
-
-                // Orientación: si el material está del lado -axis (f0 dentro, f1 fuera) la normal va +axis
-                // y el anillo CCW ya es correcto; si no, invertimos.
-                const bool bFlip = (Inside(f0) && !Inside(f1));
-
-                auto EmitTri = [&](int32 i0, int32 i1, int32 i2)
-                {
-                    if (bFlip) { OutTris.Add(i0); OutTris.Add(i2); OutTris.Add(i1); }
-                    else       { OutTris.Add(i0); OutTris.Add(i1); OutTris.Add(i2); }
-                };
-
-                EmitTri(Ord[0], Ord[1], Ord[2]);
-                if (NV == 4) EmitTri(Ord[0], Ord[2], Ord[3]);
-            }
-        }
-    }
+    // 2) Conectividad: Dual Contouring RECURSIVO (Ju et al.). Recorre el árbol conectando los vértices
+    //    duales. Watertight por construcción, cada arista mínima se procesa exactamente una vez, sin
+    //    consultas de vecinos (más rápido y sin los huecos de la heurística anterior).
+    DC::FNode RootN; RootN.N = Root.Get(); RootN.Min = Origin; RootN.Size = RootSize;
+    DC::CellProc(RootN, VertOf, OutTris);
 }
 
 // ── Métricas ──────────────────────────────────────────────────────────────────────
