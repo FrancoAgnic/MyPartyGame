@@ -600,6 +600,22 @@ FLinearColor FPTVoxelOctree::SampleColorLinear(const FVector& P) const
     return FMath::Lerp(FMath::Lerp(c00, c10, fy), FMath::Lerp(c01, c11, fy), fz);
 }
 
+// Color SÓLIDO del material en P: promedio de las esquinas de ADENTRO (con material) de la hoja que
+// contiene P, en bytes CRUDOS (sin gamma). Ignora las esquinas de aire (blancas) → sin manchas ni lavado,
+// y como los bytes se guardan lineales, coincide EXACTO con el color del picker.
+FColor FPTVoxelOctree::SampleSolidColor(const FVector& P) const
+{
+    const FLeafInfo LI = FindLeaf(P);
+    if (LI.Node)
+    {
+        int32 R = 0, G = 0, B = 0, Cnt = 0;
+        for (int32 k = 0; k < 8; ++k)
+            if (LI.Node->Corner[k] > 0.f) { const FColor& Cc = LI.Node->Col[k]; R += Cc.R; G += Cc.G; B += Cc.B; ++Cnt; }
+        if (Cnt > 0) return FColor((uint8)(R / Cnt), (uint8)(G / Cnt), (uint8)(B / Cnt), 255);
+    }
+    return FColor(153, 140, 128, 255); // fallback (arcilla base)
+}
+
 void FPTVoxelOctree::BuildMeshMC(TArray<FVector>& OutVerts, TArray<int32>& OutTris,
                                  TArray<FVector>& OutNormals, TArray<FColor>& OutColors) const
 {
@@ -644,6 +660,11 @@ void FPTVoxelOctree::BuildMeshMC(TArray<FVector>& OutVerts, TArray<int32>& OutTr
     APTSculptVolume::RunMarchingCubes(G, CG, GS, Cell, 0, 0, 0, Nx - 1, Ny - 1, Nz - 1,
                                      OutVerts, OutTris, OutNormals, OutColors);
     for (FVector& Vx : OutVerts) Vx += GMin;
+
+    // Recolorear cada vértice con el color SÓLIDO del material (evita el lavado/manchas de la
+    // interpolación de la grilla y hace que el color coincida EXACTO con el del picker).
+    if (OutColors.Num() != OutVerts.Num()) OutColors.SetNumUninitialized(OutVerts.Num());
+    for (int32 i = 0; i < OutVerts.Num(); ++i) OutColors[i] = SampleSolidColor(OutVerts[i]);
 }
 
 void FPTVoxelOctree::FillAllHoles(const TArray<FVector>& V, TArray<int32>& T)
