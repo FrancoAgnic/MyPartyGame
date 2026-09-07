@@ -1,12 +1,18 @@
 #include "PTNameTagWidget.h"
 #include "Components/TextBlock.h"
 #include "Components/Image.h"
+#include "Components/Border.h"
+
+// Mismo verde que el texto del acierto (ShowGuessMessage usa FLinearColor::Green).
+const FLinearColor UPTNameTagWidget::BorderGreen = FLinearColor::Green;
 
 bool UPTNameTagWidget::Initialize()
 {
     if (!Super::Initialize()) return false;
     if (NameText) DefaultColor = NameText->GetColorAndOpacity().GetSpecifiedColor();
     if (HostCrown) HostCrown->SetVisibility(ESlateVisibility::Collapsed); // arranca oculta
+    // Marco verde del cartel (mismo verde del acierto). Tiñe el brush del UBorder.
+    if (Border) Border->SetBrushColor(BorderGreen);
     return true;
 }
 

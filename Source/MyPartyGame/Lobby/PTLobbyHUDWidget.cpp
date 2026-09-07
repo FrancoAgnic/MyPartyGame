@@ -217,18 +217,18 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
     // Vista read-only de la config elegida por el host (la ven todos).
     RefreshSettingsView();
 
-    // Botón Ready: refleja el estado propio. No listo → "Not Ready" en rojo pastel; listo →
-    // "Ready" en verde pastel. Clickearlo alterna (ver OnReadyClicked). El color se aplica al
-    // texto (ReadyButtonText), no al botón.
+    // Botón Ready: MUESTRA EL ESTADO ACTUAL (no la acción). No listo → "No listo" en rojo
+    // pastel; listo → "Listo" en verde pastel. Clickearlo alterna el estado (ver OnReadyClicked).
+    // El color se aplica al texto (ReadyButtonText), no al botón.
     {
         const bool bReady = (LocalPS && LocalPS->bIsReady);
         if (ReadyButtonText)
         {
-            // No listo → botón invita a ponerse "Ready" (verde). Listo → botón invita a
-            // "Not Ready" (rojo). El color sigue al texto, no al estado actual.
-            ReadyButtonText->SetText(PTText::Get(bReady ? TEXT("LOBBY_BTN_NOT_READY") : TEXT("LOBBY_BTN_READY")));
-            ReadyButtonText->SetColorAndOpacity(bReady ? NotReadyColor : ReadyColor);
-            ReadyButtonText->SetShadowColorAndOpacity(bReady ? NotReadyTextShadowColor : ReadyTextShadowColor);
+            // El texto y el color reflejan tu estado actual: apenas entrás estás "No listo"
+            // (rojo); al apretar pasás a "Listo" (verde).
+            ReadyButtonText->SetText(PTText::Get(bReady ? TEXT("LOBBY_BTN_READY") : TEXT("LOBBY_BTN_NOT_READY")));
+            ReadyButtonText->SetColorAndOpacity(bReady ? ReadyColor : NotReadyColor);
+            ReadyButtonText->SetShadowColorAndOpacity(bReady ? ReadyTextShadowColor : NotReadyTextShadowColor);
         }
     }
 

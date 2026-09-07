@@ -8,6 +8,7 @@
 
 class UTextBlock;
 class UImage;
+class UBorder;
 
 UCLASS()
 class MYPARTYGAME_API UPTNameTagWidget : public UUserWidget
@@ -33,6 +34,12 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* NameText;
     // Corona del host (opcional): nombrala EXACTO "HostCrown" en el WBP_NameTag. Solo visible si sos host.
     UPROPERTY(meta = (BindWidgetOptional)) UImage* HostCrown;
+    // Marco del cartel (el UBorder llamado "Border" en WBP_NameTag). Se tiñe de verde (mismo
+    // verde del acierto) para el look del lobby. Opcional: si el WBP no lo tiene, no pasa nada.
+    UPROPERTY(meta = (BindWidgetOptional)) UBorder* Border;
+
+    // Verde del cartel = el mismo que usa el globo de acierto (ShowGuessMessage).
+    static const FLinearColor BorderGreen;
 
     // Color original del NameText (del WBP), para restaurarlo tras un globo verde.
     FLinearColor DefaultColor = FLinearColor::White;
