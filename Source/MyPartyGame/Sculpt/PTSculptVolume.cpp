@@ -1453,15 +1453,21 @@ void APTSculptVolume::ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float
 
     const FTransform Xf(LocalQ, LocalPos);
     FPTVoxelOctree& F = ActiveSVO ? *ActiveSVO : SVOField; // base o capa de detalle activa
-    // ToFColor(false) = SIN gamma: el nodo Vertex Color del material lee byte/255 como lineal, así el
-    // color del vértice coincide con el del picker/preview (con true quedaba más claro).
-    const FColor Col = PaintColor.ToFColor(false);
+    const FColor Col = PaintColor.ToFColor(false); // color por vértice (respaldo); byte lineal = picker
+
+    // PINTAR: usa el MISMO sistema de color del clásico (atlas 3D por voxel), que el material samplea
+    // por posición → crisp, con resolución/dureza propias, idéntico a antes. No toca geometría.
     if (Mode == EPTEditMode::Paint)
     {
-        if (!F.PaintShape(Xf, S, HalfExtent, Col)) return;
+        WritePaintStamp(WorldPos, Shape, Size, PaintColor, /*bFull=*/false, SafeScale);
+        return;
     }
-    else
-        F.EditShape(Xf, S, HalfExtent, /*bAdd=*/Mode == EPTEditMode::Add, Col);
+
+    F.EditShape(Xf, S, HalfExtent, /*bAdd=*/Mode == EPTEditMode::Add, Col);
+    if (Mode == EPTEditMode::Add)
+        WritePaintStamp(WorldPos, Shape, Size, PaintColor, /*bFull=*/false, SafeScale); // color al atlas también
+    else if (Mode == EPTEditMode::Erase)
+        ClearPaintStamp(WorldPos, Shape, Size, SafeScale); // borrar también limpia la pintura
 
     if (&F == &SVOField)
     {
