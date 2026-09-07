@@ -1,0 +1,27 @@
+TITLE:
+Sculpturillo v0.7.3 — Smoother, faster sculpting with no holes
+
+BBCODE (paste directly into the Steam patch notes / event description box):
+--------------------------------------------------------------------------
+[h1]✨ What's New[/h1]
+[list]
+[*] 🧱 Brand-new adaptive sculpting engine: large shapes use few triangles while fine detail stays crisp — all in real time.
+[*] 🌊 Always-sealed mesh: no more holes or cracks when mixing brush sizes or sculpting against the box walls.
+[/list]
+
+[h1]🎨 Improvements[/h1]
+[list]
+[*] 🖌️ More faithful color: what you pick in the color wheel is exactly what gets painted and sculpted.
+[*] ⚡ Better performance while sculpting: adding lots of detail no longer drops your FPS.
+[*] 💡 Fixed lighting on the new clay.
+[/list]
+
+[h1]🔧 Fixes[/h1]
+[list]
+[*] 🚑 Fixed the game closing right after launch (crash on the main menu).
+[*] ↩️ Undo now also clears painted color, leaving no leftover tint on new geometry.
+[*] 👁️ Eyes can now be removed with the erase tool.
+[/list]
+
+[hr][/hr]
+[i]Thanks for playing Sculpturillo! 🎨 Tell us what you'd like to see in the next patch.[/i]

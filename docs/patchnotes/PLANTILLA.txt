@@ -1,0 +1,46 @@
+==========================================================================
+  PATCH NOTES TEMPLATE — Sculpturillo (Steam BBCode)
+==========================================================================
+  LANGUAGE: always ENGLISH.
+  HOW TO USE: paste the BBCode block directly into the Steam patch notes /
+  event description box (NO "Import from HTML"). Steam renders BBCode on save.
+  Also give the user the TITLE line.
+
+  STYLE (keep consistent every version):
+    Title:  Sculpturillo v<X.Y.Z> — <short catchy phrase>
+    Sections in this ORDER (skip any that doesn't apply):
+        ✨ What's New   -> new player-facing features
+        🎨 Improvements -> things that existed, now better
+        🔧 Fixes        -> bug fixes
+        🧪 Playtest / Notes -> heads-up, things in testing, feedback asks
+    Short bullets, 2nd person, one emoji per bullet.
+    Close with the thank-you line.
+--------------------------------------------------------------------------
+TITLE:
+Sculpturillo v<X.Y.Z> — <phrase>
+
+BBCODE:
+--------------------------------------------------------------------------
+[h1]✨ What's New[/h1]
+[list]
+[*] <new feature 1>
+[*] <new feature 2>
+[/list]
+
+[h1]🎨 Improvements[/h1]
+[list]
+[*] <improvement 1>
+[/list]
+
+[h1]🔧 Fixes[/h1]
+[list]
+[*] <fix 1>
+[/list]
+
+[h1]🧪 Playtest / Notes[/h1]
+[list]
+[*] <note or feature in playtest>
+[/list]
+
+[hr][/hr]
+[i]Thanks for playing Sculpturillo! 🎨 Tell us what you'd like to see in the next patch.[/i]
