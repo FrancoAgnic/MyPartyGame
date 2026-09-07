@@ -1,0 +1,52 @@
+==========================================================================
+  PLANTILLA DE NOTAS DE PARCHE — Sculpturillo (Steam)
+==========================================================================
+Formato: BBCode de Steam (pegar en Steamworks -> SteamPipe -> "Set build live" ->
+Patch notes, o en un Anuncio/Evento de la comunidad).
+
+REGLAS DE ESTILO (respetar SIEMPRE):
+  - Titulo:  Sculpturillo v<X.Y.Z> — <frase corta y con onda>
+  - Arranca con UNA imagen destacada (arte de la tienda).
+  - Secciones en este ORDEN (omitir la que no aplique):
+        ✨ Novedades      -> features nuevas visibles para el jugador
+        🎨 Mejoras        -> cosas que ya estaban pero quedaron mejor
+        🔧 Arreglos       -> bugs corregidos
+        🧪 Playtest/Notas -> avisos, cosas en prueba, pedidos de feedback
+  - Bullets cortos, en 2da persona, con un emoji al inicio de cada seccion.
+  - Cerrar con una linea de agradecimiento + llamada a la comunidad.
+  - Imagenes: insertarlas con el boton de imagen del editor de Steam (sube a
+    Steam) o con [img]<url>[/img]. Los <IMAGEN: ...> son marcadores: reemplazalos
+    por el arte real (arte de tienda; se iran sumando nuevas).
+
+--------------------------------------------------------------------------
+TITULO:
+Sculpturillo v<X.Y.Z> — <frase>
+
+DESCRIPCION (BBCode):
+--------------------------------------------------------------------------
+[img]<IMAGEN: arte destacado de la version>[/img]
+
+[h1]✨ Novedades[/h1]
+[list]
+[*] <novedad 1>
+[*] <novedad 2>
+[/list]
+
+[h1]🎨 Mejoras[/h1]
+[list]
+[*] <mejora 1>
+[/list]
+
+[h1]🔧 Arreglos[/h1]
+[list]
+[*] <arreglo 1>
+[/list]
+
+[h1]🧪 En prueba / Notas[/h1]
+[list]
+[*] <nota o feature en playtest>
+[/list]
+
+[hr][/hr]
+[i]¡Gracias por jugar Sculpturillo! 🎨 Contanos qué te gustaría ver en el próximo parche.[/i]
+==========================================================================

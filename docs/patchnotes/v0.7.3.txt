@@ -1,0 +1,34 @@
+==========================================================================
+  Notas de parche — Sculpturillo v0.7.3
+==========================================================================
+
+TITULO:
+Sculpturillo v0.7.3 — Esculpido más suave, más rápido y sin agujeros
+
+DESCRIPCION (BBCode — pegar en el cuadro de Patch notes de Steam):
+--------------------------------------------------------------------------
+[img]<IMAGEN: arte destacado / header de la tienda>[/img]
+
+[h1]✨ Novedades[/h1]
+[list]
+[*] 🧱 Nuevo motor de esculpido adaptativo: la geometría grande usa pocos triángulos y el detalle chico se ve finísimo, todo en tiempo real.
+[*] 🌊 Malla siempre cerrada: se terminaron los agujeros y grietas al mezclar brochas de distintos tamaños o esculpir contra las paredes.
+[/list]
+
+[h1]🎨 Mejoras[/h1]
+[list]
+[*] 🖌️ Color más fiel: lo que elegís en el selector es exactamente lo que se pinta y se esculpe.
+[*] ⚡ Mejor rendimiento al esculpir: agregar mucho detalle ya no baja los FPS.
+[*] 💡 Iluminación corregida en la arcilla nueva.
+[/list]
+
+[h1]🔧 Arreglos[/h1]
+[list]
+[*] 🚑 Arreglado el cierre del juego al abrirlo (crash en la pantalla de inicio).
+[*] ↩️ El "deshacer" ahora también borra el color pintado, sin dejar restos en la geometría nueva.
+[*] 👁️ Los ojos se pueden borrar con la herramienta de borrar.
+[/list]
+
+[hr][/hr]
+[i]¡Gracias por jugar Sculpturillo! 🎨 Contanos qué te gustaría ver en el próximo parche.[/i]
+==========================================================================
