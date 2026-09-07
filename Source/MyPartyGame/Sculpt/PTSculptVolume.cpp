@@ -679,11 +679,23 @@ bool APTSculptVolume::WritePaintStamp(FVector WorldPos, EPTStampShape Shape, flo
             // Solo pintar si hay geometría cerca (evita pintar el aire → sin fantasmas). Se considera
             // la superficie de CUALQUIER campo: base O alguna capa de detalle (si no, no se podrían
             // pintar los lentes/bigote de una capa).
-            const FVector Cell = P / VoxelSize;
-            bool bNearSurface = FMath::Abs(Field.SampleSDF(Cell.X, Cell.Y, Cell.Z)) < SurfBand;
-            if (!bNearSurface)
-                for (const TSharedPtr<FPTSculptField>& L : DetailFields)
-                    if (L.IsValid() && FMath::Abs(L->SampleSDF(Cell.X, Cell.Y, Cell.Z)) < SurfBand) { bNearSurface = true; break; }
+            bool bNearSurface;
+            if (bUseSVO)
+            {
+                // SVO: la superficie está en el octree (P es ACTOR-LOCAL, igual que el octree). El SDF
+                // del octree está clampeado [-1,1] → cerca de superficie |Sample| es chico.
+                bNearSurface = FMath::Abs(SVOField.Sample(P)) < 0.999f;
+                for (const TSharedPtr<FPTVoxelOctree>& L : SVODetailFields)
+                    if (!bNearSurface && L.IsValid() && FMath::Abs(L->Sample(P)) < 0.999f) { bNearSurface = true; }
+            }
+            else
+            {
+                const FVector Cell = P / VoxelSize;
+                bNearSurface = FMath::Abs(Field.SampleSDF(Cell.X, Cell.Y, Cell.Z)) < SurfBand;
+                if (!bNearSurface)
+                    for (const TSharedPtr<FPTSculptField>& L : DetailFields)
+                        if (L.IsValid() && FMath::Abs(L->SampleSDF(Cell.X, Cell.Y, Cell.Z)) < SurfBand) { bNearSurface = true; break; }
+            }
             if (!bNearSurface) continue;
             const int32 vx = FMath::FloorToInt((P.X - CanvasMinLocal.X) / CV);
             const int32 vy = FMath::FloorToInt((P.Y - CanvasMinLocal.Y) / CV);

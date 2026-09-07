@@ -665,6 +665,11 @@ void FPTVoxelOctree::BuildMeshMC(TArray<FVector>& OutVerts, TArray<int32>& OutTr
     // interpolación de la grilla y hace que el color coincida EXACTO con el del picker).
     if (OutColors.Num() != OutVerts.Num()) OutColors.SetNumUninitialized(OutVerts.Num());
     for (int32 i = 0; i < OutVerts.Num(); ++i) OutColors[i] = SampleSolidColor(OutVerts[i]);
+
+    // RunMarchingCubes es el mallador del PREVIEW (sus normales/winding apuntan al revés para una malla
+    // iluminada real). Se invierten: normales hacia afuera + winding consistente → iluminación correcta.
+    for (FVector& Nn : OutNormals) Nn = -Nn;
+    for (int32 i = 0; i + 2 < OutTris.Num(); i += 3) { const int32 tmp = OutTris[i + 1]; OutTris[i + 1] = OutTris[i + 2]; OutTris[i + 2] = tmp; }
 }
 
 void FPTVoxelOctree::FillAllHoles(const TArray<FVector>& V, TArray<int32>& T)
