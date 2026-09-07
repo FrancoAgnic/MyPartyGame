@@ -2125,7 +2125,15 @@ void APTSculptVolume::BackupAtlas(int32 AIdx, int32 Slot)
 
 void APTSculptVolume::Multicast_BeginStroke_Implementation()
 {
-    if (bUseSVO) { if (!bSVOInit) InitSVO(); SVOField.PushUndoSnapshot(); return; } // snapshot de la base
+    if (bUseSVO)
+    {
+        if (!bSVOInit) InitSVO();
+        SVOField.PushUndoSnapshot();          // geometría (octree)
+        CurrentVolumeUndo = FPTVolumeUndo();   // + respaldo de PINTURA (atlas) y ojos, igual que el clásico
+        CurrentVolumeUndo.EyesCount = Eyes.Num();
+        bRecordingStroke = true;               // BackupAtlas grabará los texels tocados en este trazo
+        return;
+    }
 
     Field.BeginStroke();
     CurrentVolumeUndo = FPTVolumeUndo();
@@ -2135,7 +2143,21 @@ void APTSculptVolume::Multicast_BeginStroke_Implementation()
 
 void APTSculptVolume::Multicast_EndStroke_Implementation()
 {
-    if (bUseSVO) { UndoOrder.Add(0); return; }   // 0 = trazo de la BASE (el snapshot ya se guardó en BeginStroke)
+    if (bUseSVO)
+    {
+        // Guardar el respaldo de pintura/ojos del trazo (el snapshot de geometría ya se guardó en BeginStroke).
+        VolumeUndoStack.Add(MoveTemp(CurrentVolumeUndo));
+        CurrentVolumeUndo = FPTVolumeUndo();
+        bRecordingStroke = false;
+        UndoOrder.Add(0);
+        while (VolumeUndoStack.Num() > MaxUndoSteps)
+        {
+            VolumeUndoStack.RemoveAt(0);
+            const int32 Idx = UndoOrder.IndexOfByKey((uint8)0);
+            if (Idx != INDEX_NONE) UndoOrder.RemoveAt(Idx);
+        }
+        return;
+    }
 
     Field.PushStroke();                          // la pila del campo y esta van 1:1
     VolumeUndoStack.Add(MoveTemp(CurrentVolumeUndo));
@@ -2169,7 +2191,26 @@ void APTSculptVolume::Multicast_Undo_Implementation()
             return;
         }
         if (UndoOrder.Num() > 0 && UndoOrder.Last() == 0) UndoOrder.Pop();
-        if (SVOField.Undo()) { MarkAllSVODirty(); TimeSinceRebuild = RebuildInterval; }
+        const bool bGeoUndone = SVOField.Undo(); // geometría
+
+        // PINTURA (atlas) + ojos: restaurar como el clásico → los voxeles pintados vuelven a su estado
+        // previo (vacío) para que la geometría nueva en ese lugar no herede el color viejo.
+        if (VolumeUndoStack.Num() > 0)
+        {
+            const FPTVolumeUndo U = MoveTemp(VolumeUndoStack.Last());
+            VolumeUndoStack.Pop();
+            for (const auto& It : U.AtlasOld)
+                if (AtlasBuf.IsValidIndex(It.Key)) AtlasBuf[It.Key] = It.Value;
+            if (U.AtlasOld.Num() > 0)
+            {
+                for (const int32 Slot : U.Slots) DirtyTiles.Add(Slot);
+                bPaintDirty = true;
+                UploadColorField();
+            }
+            if (HasAuthority() && Eyes.Num() > U.EyesCount) { Eyes.SetNum(U.EyesCount); RebuildEyesMesh(); }
+        }
+
+        if (bGeoUndone) { MarkAllSVODirty(); TimeSinceRebuild = RebuildInterval; }
         return;
     }
 
