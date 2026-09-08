@@ -90,6 +90,13 @@ public:
     // Estos dos valores se le pasan al material como parámetros (NewClayGlowSeconds/Brightness).
     UPROPERTY(EditAnywhere, Category="Sculpt|FX", meta=(ClampMin="0.05")) float NewClayGlowSeconds    = 1.2f;
     UPROPERTY(EditAnywhere, Category="Sculpt|FX", meta=(ClampMin="0.0"))  float NewClayGlowBrightness = 2.5f;
+    // (Solo modo SVO) Máscara RADIAL del glow de arcilla nueva. Radio de la máscara = radio del sello *
+    // esto. La superficie nueva cae ~al radio del sello, así que con >1 (ej 1.6) queda dentro de la zona
+    // brillante y brilla IGUAL con brocha chica o grande. Subilo si querés el brillo más ancho.
+    UPROPERTY(EditAnywhere, Category="Sculpt|FX", meta=(ClampMin="0.5")) float NewClayGlowRadiusScale = 1.6f;
+    // Fracción del radio que queda a brillo PLENO antes de empezar a desvanecer hacia el borde (0..0.95).
+    // 0 = degradado desde el centro; más alto = un centro pleno más grande y el fade solo cerca del borde.
+    UPROPERTY(EditAnywhere, Category="Sculpt|FX", meta=(ClampMin="0.0", ClampMax="0.95")) float NewClayGlowInnerFrac = 0.15f;
 
     // ── Modo Smooth (tuneables) ─────────────────────────────────────────────
     // Intensidad del suavizado por aplicación (0..1). Más alto = suaviza más rápido.

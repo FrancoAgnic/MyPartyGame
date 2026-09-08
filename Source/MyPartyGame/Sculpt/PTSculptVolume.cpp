@@ -1609,8 +1609,9 @@ void APTSculptVolume::ClearSVOChunkMeshes()
 void APTSculptVolume::RecordSVOAddEvent(const FVector& LocalCenter, float Radius)
 {
     const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
-    // Radio efectivo del sello + un poco (los vértices de Marching Cubes caen en el borde del sello).
-    const float R = FMath::Max(2.f, Radius + SVOField.MinCellSize());
+    // Guardar el radio CRUDO del sello (la escala de la máscara se aplica al hornear, así se puede
+    // retocar en vivo con NewClayGlowRadiusScale sin re-esculpir).
+    const float R = FMath::Max(2.f, Radius);
     SVOAddEvents.Add({ LocalCenter, R, Now });
     // Purgar eventos ya apagados (más viejos que la ventana de glow) para no acumular.
     const float Cutoff = Now - FMath::Max(0.05f, NewClayGlowSeconds);
@@ -1626,6 +1627,9 @@ void APTSculptVolume::BuildSVOGlowUVs(const TArray<FVector>& Verts, TArray<FVect
     const float Seconds = FMath::Max(0.05f, NewClayGlowSeconds);
     const float Cutoff  = Now - Seconds; // UV0.x por debajo de esto → el material ya no lo ilumina
 
+    const float Cell      = SVOField.MinCellSize();
+    const float Scale     = FMath::Max(0.5f, NewClayGlowRadiusScale);
+    const float InnerFrac = FMath::Clamp(NewClayGlowInnerFrac, 0.f, 0.95f);
     for (int32 i = 0; i < Verts.Num(); ++i)
     {
         const FVector V = Verts[i];
@@ -1633,9 +1637,12 @@ void APTSculptVolume::BuildSVOGlowUVs(const TArray<FVector>& Verts, TArray<FVect
         for (const FPTSVOAddEvent& E : SVOAddEvents)
         {
             if (E.Time < Cutoff) continue; // evento ya apagado
-            // Máscara RADIAL suave: 1 en el centro del sello → 0 en el borde (círculo, no cuadrado).
-            const float dist01 = (E.Radius > 1e-3f) ? FMath::Clamp((float)(V - E.Center).Size() / E.Radius, 0.f, 1.f) : 1.f;
-            const float mask   = 1.f - FMath::SmoothStep(0.15f, 1.f, dist01); // pleno hasta ~15% del radio
+            // Radio de la máscara = radio del sello * escala (+1 celda). La superficie nueva cae ~al radio
+            // del sello → con escala>1 queda dentro de la zona brillante y brilla igual con cualquier brocha.
+            const float EffR = E.Radius * Scale + Cell;
+            const float dist01 = (EffR > 1e-3f) ? FMath::Clamp((float)(V - E.Center).Size() / EffR, 0.f, 1.f) : 1.f;
+            // Máscara RADIAL suave: 1 en el centro → 0 en el borde (círculo, no cuadrado).
+            const float mask   = 1.f - FMath::SmoothStep(InnerFrac, 1.f, dist01);
             if (mask <= 0.f) continue; // fuera del círculo del sello
             // Codificar la intensidad en el tiempo: al recién agregar, glow = mask; luego se desvanece.
             const float EffTime = E.Time - (1.f - mask) * Seconds;
