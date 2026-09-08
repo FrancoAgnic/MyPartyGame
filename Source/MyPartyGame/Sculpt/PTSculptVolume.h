@@ -335,7 +335,11 @@ private:
     struct FPTSVOAddEvent { FVector Center; float Radius; float Time; };
     TArray<FPTSVOAddEvent> SVOAddEvents;
     void RecordSVOAddEvent(const FVector& LocalCenter, float Radius); // agrega un evento y purga los expirados
-    void BuildSVOGlowUVs(const TArray<FVector>& Verts, TArray<FVector2D>& OutUV) const; // UV0.x por vértice
+    // Hornea UV0.x (tiempo de add + máscara radial) por vértice. STATIC y sin estado de actor: se corre en
+    // el HILO DE FONDO junto al mesheo (recibe una copia de los eventos), para no bajar los FPS.
+    static void ComputeSVOGlowUVs(const TArray<FVector>& Verts, const TArray<FPTSVOAddEvent>& Events,
+                                  float Now, float Seconds, float RadiusScale, float InnerFrac, float Cell,
+                                  TArray<FVector2D>& OutUV);
     float SVOChunkSize() const { return SVOField.GetRootSize() / (float)SVOChunkDim; }
     // Hojas <= chunk = "finas" (van a chunks); > chunk = grandes (pocas, sección gruesa). Umbral = chunk
     // para que quepan en un chunk y el halo de 1 chunk cubra sus vecinos.

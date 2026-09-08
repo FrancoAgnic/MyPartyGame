@@ -1620,32 +1620,45 @@ void APTSculptVolume::RecordSVOAddEvent(const FVector& LocalCenter, float Radius
     if (SVOAddEvents.Num() > 4096) SVOAddEvents.RemoveAt(0, SVOAddEvents.Num() - 4096, EAllowShrinking::No);
 }
 
-void APTSculptVolume::BuildSVOGlowUVs(const TArray<FVector>& Verts, TArray<FVector2D>& OutUV) const
+void APTSculptVolume::ComputeSVOGlowUVs(const TArray<FVector>& Verts, const TArray<FPTSVOAddEvent>& Events,
+                                        float Now, float Seconds, float RadiusScale, float InnerFrac, float Cell,
+                                        TArray<FVector2D>& OutUV)
 {
     OutUV.SetNumUninitialized(Verts.Num());
-    const float Now     = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
-    const float Seconds = FMath::Max(0.05f, NewClayGlowSeconds);
-    const float Cutoff  = Now - Seconds; // UV0.x por debajo de esto → el material ya no lo ilumina
+    Seconds        = FMath::Max(0.05f, Seconds);
+    RadiusScale    = FMath::Max(0.5f, RadiusScale);
+    InnerFrac      = FMath::Clamp(InnerFrac, 0.f, 0.95f);
+    const float Cutoff = Now - Seconds; // UV0.x por debajo de esto → el material ya no lo ilumina
 
-    const float Cell      = SVOField.MinCellSize();
-    const float Scale     = FMath::Max(0.5f, NewClayGlowRadiusScale);
-    const float InnerFrac = FMath::Clamp(NewClayGlowInnerFrac, 0.f, 0.95f);
+    // Sin eventos vigentes → todo "viejo" (no brilla): salida barata, un solo memset lógico.
+    if (Events.Num() == 0)
+    {
+        for (int32 i = 0; i < Verts.Num(); ++i) OutUV[i] = FVector2D(-1.e9f, 0.f);
+        return;
+    }
+
+    // Pre-calcular centro/radio efectivo y radio² (para el early-out sin sqrt).
+    struct FEv { FVector C; float R2; float Time; };
+    TArray<FEv> Evs; Evs.Reserve(Events.Num());
+    for (const FPTSVOAddEvent& E : Events)
+    {
+        if (E.Time < Cutoff) continue; // evento ya apagado
+        const float EffR = E.Radius * RadiusScale + Cell;
+        Evs.Add({ E.Center, EffR * EffR, E.Time });
+    }
+
     for (int32 i = 0; i < Verts.Num(); ++i)
     {
         const FVector V = Verts[i];
         float Best = -1.e9f; // mejor UV0.x (más "nuevo") que le toca a este vértice
-        for (const FPTSVOAddEvent& E : SVOAddEvents)
+        for (const FEv& E : Evs)
         {
-            if (E.Time < Cutoff) continue; // evento ya apagado
-            // Radio de la máscara = radio del sello * escala (+1 celda). La superficie nueva cae ~al radio
-            // del sello → con escala>1 queda dentro de la zona brillante y brilla igual con cualquier brocha.
-            const float EffR = E.Radius * Scale + Cell;
-            const float dist01 = (EffR > 1e-3f) ? FMath::Clamp((float)(V - E.Center).Size() / EffR, 0.f, 1.f) : 1.f;
-            // Máscara RADIAL suave: 1 en el centro → 0 en el borde (círculo, no cuadrado).
-            const float mask   = 1.f - FMath::SmoothStep(InnerFrac, 1.f, dist01);
-            if (mask <= 0.f) continue; // fuera del círculo del sello
-            // Codificar la intensidad en el tiempo: al recién agregar, glow = mask; luego se desvanece.
-            const float EffTime = E.Time - (1.f - mask) * Seconds;
+            const float D2 = (float)(V - E.C).SizeSquared();
+            if (D2 >= E.R2) continue;                        // fuera del círculo del sello (sin sqrt)
+            const float dist01 = FMath::Sqrt(D2 / E.R2);     // sqrt SOLO cuando cae adentro
+            const float mask   = 1.f - FMath::SmoothStep(InnerFrac, 1.f, dist01); // 1 centro → 0 borde
+            if (mask <= 0.f) continue;
+            const float EffTime = E.Time - (1.f - mask) * Seconds; // intensidad codificada en el tiempo
             if (EffTime > Best) Best = EffTime;
         }
         OutUV[i] = FVector2D(Best, 0.f);
@@ -1679,11 +1692,21 @@ void APTSculptVolume::RebuildSVOMesh()
     bSVOMeshing = true;
     const uint32 Gen = SVOMeshGen;
     TWeakObjectPtr<APTSculptVolume> WeakThis(this);
-    Async(EAsyncExecution::ThreadPool, [WeakThis, Clone, Gen]()
+    // Snapshot para el glow (se computa en el HILO DE FONDO, no en el game thread → sin bajar FPS).
+    TArray<FPTSVOAddEvent> GlowEvents = SVOAddEvents;
+    const float GlowNow     = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+    const float GlowSeconds = NewClayGlowSeconds;
+    const float GlowScale   = NewClayGlowRadiusScale;
+    const float GlowInner   = NewClayGlowInnerFrac;
+    const float GlowCell    = SVOField.MinCellSize();
+    Async(EAsyncExecution::ThreadPool,
+        [WeakThis, Clone, Gen, GlowEvents = MoveTemp(GlowEvents), GlowNow, GlowSeconds, GlowScale, GlowInner, GlowCell]()
     {
-        struct FRes { TArray<FVector> V, N; TArray<int32> T; TArray<FColor> C; };
+        struct FRes { TArray<FVector> V, N; TArray<int32> T; TArray<FColor> C; TArray<FVector2D> UV; };
         TSharedPtr<FRes, ESPMode::ThreadSafe> R = MakeShared<FRes, ESPMode::ThreadSafe>();
         Clone->BuildMeshMC(R->V, R->T, R->N, R->C); // Marching Cubes uniforme = watertight garantizado
+        // Glow (UV0.x por vértice) EN EL WORKER, con el snapshot de eventos.
+        APTSculptVolume::ComputeSVOGlowUVs(R->V, GlowEvents, GlowNow, GlowSeconds, GlowScale, GlowInner, GlowCell, R->UV);
 
         AsyncTask(ENamedThreads::GameThread, [WeakThis, R, Gen]()
         {
@@ -1697,10 +1720,8 @@ void APTSculptVolume::RebuildSVOMesh()
                 if (R->V.Num() == 0) Self->Mesh->ClearMeshSection(0);
                 else
                 {
-                    // UV0.x = tiempo de agregado por vértice (glow de arcilla nueva); el resto viejo.
-                    TArray<FVector2D> UV; TArray<FProcMeshTangent> Tan;
-                    Self->BuildSVOGlowUVs(R->V, UV);
-                    Self->Mesh->CreateMeshSection(0, R->V, R->T, R->N, UV, R->C, Tan, /*collision=*/false);
+                    TArray<FProcMeshTangent> Tan;
+                    Self->Mesh->CreateMeshSection(0, R->V, R->T, R->N, R->UV, R->C, Tan, /*collision=*/false);
                     if (Mat) Self->Mesh->SetMaterial(0, Mat);
                 }
             }
