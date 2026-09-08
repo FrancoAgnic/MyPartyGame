@@ -220,6 +220,20 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera")
     UCameraComponent* Camera;
 
+    // ── POV exacto para el ESPECTADOR (grabar trailer) ──────────────────────────────────────────
+    // El yaw ya viaja por la rotación del actor; el PITCH no (los proxies solo tienen RemoteViewPitch,
+    // grueso). El cliente dueño lo manda periódico y se replica a los demás (COND_SkipOwner), para que
+    // el espectador reproduzca el POV COMPLETO (arriba/abajo) y fluido.
+public:
+    /** Ubicación del ojo (cámara) para espectar este pawn. */
+    FVector  GetSpectateCamLocation() const;
+    /** Rotación de la vista (pitch replicado + yaw del actor) para espectar este pawn. */
+    FRotator GetSpectateViewRotation() const;
+protected:
+    UPROPERTY(Replicated) float ReplViewPitch = 0.f;
+    UFUNCTION(Server, Unreliable) void Server_ReportViewPitch(float InPitch);
+    float ViewPitchSendAccum = 0.f;
+
     // Cartel con el nombre sobre la cabeza. Asignale su Widget Class (WBP_NameTag,
     // reparentado a UPTNameTagWidget) en el Blueprint. El nombre lo pone C++.
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="NameTag")

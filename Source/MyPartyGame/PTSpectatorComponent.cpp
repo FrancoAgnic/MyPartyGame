@@ -8,6 +8,7 @@
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Lobby/PTPlayerState.h"
+#include "Lobby/PTLobbyCharacter.h"
 #include "UI/PTSpectatorHUDWidget.h"
 #include "PTGameUserSettings.h"
 #include "PTTextTable.h"
@@ -159,8 +160,16 @@ void UPTSpectatorComponent::CyclePov(APlayerController* C)
         return;
     }
     PovIndex = Next;
-    C->SetViewTargetWithBlend(Pawns[PovIndex], 0.3f);
     ApplyPovLanguageAndFlag(C, Pawns[PovIndex]); // idioma + bandera de ese jugador
+
+    // La cámara del ESPECTADOR (CamActor) sigue el POV del jugador con SUAVIZADO — no hacemos
+    // SetViewTarget al pawn, así controlamos el lag (fluido para el trailer) y usamos el pitch replicado.
+    if (const APTLobbyCharacter* PovC = Cast<APTLobbyCharacter>(Pawns[PovIndex]))
+    {
+        TargetLoc = PovC->GetSpectateCamLocation();
+        TargetRot = PovC->GetSpectateViewRotation();
+    }
+    if (CamActor && C->GetViewTarget() != CamActor) C->SetViewTargetWithBlend(CamActor, 0.3f);
 }
 
 void UPTSpectatorComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -179,15 +188,23 @@ void UPTSpectatorComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
     if (!FMath::IsNearlyZero(Wheel))
         SpeedScale = FMath::Clamp(SpeedScale * FMath::Pow(1.15f, Wheel), 0.1f, 30.f);
 
-    // Viendo el POV de un jugador: el que controla es ese jugador; acá no movemos nada.
+    // Viendo el POV de un jugador: la cámara del espectador SIGUE su POV (ojo + pitch replicado + yaw)
+    // con suavizado → fluido, sin los saltos de la replicación, y con el movimiento vertical incluido.
     if (PovIndex >= 0)
     {
-        // Si el pawn desapareció (se fue / murió), volver al vuelo libre.
         const TArray<APawn*> Pawns = GatherPovPawns(C);
-        if (!Pawns.IsValidIndex(PovIndex) || C->GetViewTarget() != Pawns[PovIndex])
+        const APTLobbyCharacter* PovC = Pawns.IsValidIndex(PovIndex) ? Cast<APTLobbyCharacter>(Pawns[PovIndex]) : nullptr;
+        if (!PovC) { EnterFreeFly(C); return; } // el jugador se fue → vuelo libre
+
+        // Objetivo = POV exacto del jugador (responde al instante); la cámara real interpola hacia él.
+        TargetLoc = PovC->GetSpectateCamLocation();
+        TargetRot = PovC->GetSpectateViewRotation();
+        CamLoc = FMath::VInterpTo(CamLoc, TargetLoc, DeltaTime, CamLagSpeed);
+        CamRot = FMath::RInterpTo(CamRot, TargetRot, DeltaTime, CamLagSpeed);
+        if (CamActor)
         {
-            if (Pawns.IsValidIndex(PovIndex)) C->SetViewTargetWithBlend(Pawns[PovIndex], 0.1f);
-            else EnterFreeFly(C);
+            CamActor->SetActorLocationAndRotation(CamLoc, CamRot);
+            if (C->GetViewTarget() != CamActor) C->SetViewTargetWithBlend(CamActor, 0.15f);
         }
         return;
     }

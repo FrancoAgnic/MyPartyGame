@@ -27,6 +27,7 @@
 #include "IImageWrapperModule.h"
 #include "Modules/ModuleManager.h"
 #include "Engine/Engine.h" // GEngine->AddOnScreenDebugMessage (debug de tamaño del blob)
+#include "Net/UnrealNetwork.h" // DOREPLIFETIME (ReplViewPitch para el espectador)
 #include "PTLockerSubsystem.h"
 #include "../Multiplayer/MultiplayerSessionsSubsystem.h" // nick local de Steam (fallback del nametag propio)
 #include "../PTGameInstance.h" // modo captura dev (Player N / ocultar nombres)
@@ -1070,9 +1071,53 @@ void APTLobbyCharacter::SetFlyingMode(bool bEnable)
     }
 }
 
+void APTLobbyCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    // Solo a los OTROS (el dueño usa su control real). Para que el espectador vea el pitch de la vista.
+    DOREPLIFETIME_CONDITION(APTLobbyCharacter, ReplViewPitch, COND_SkipOwner);
+}
+
+void APTLobbyCharacter::Server_ReportViewPitch_Implementation(float InPitch)
+{
+    ReplViewPitch = InPitch; // el server lo replica a los espectadores
+}
+
+FVector APTLobbyCharacter::GetSpectateCamLocation() const
+{
+    // El ojo está a la altura de la cámara sobre la raíz; el pitch gira la cámara EN EL LUGAR (no mueve
+    // el punto), así que la ubicación del ojo = posición del actor + altura de cámara (estable).
+    const float EyeZ = Camera ? Camera->GetRelativeLocation().Z : BaseEyeHeight;
+    return GetActorLocation() + FVector(0.f, 0.f, EyeZ);
+}
+
+FRotator APTLobbyCharacter::GetSpectateViewRotation() const
+{
+    // Yaw del actor (ya replicado) + pitch replicado aparte. Para uno mismo, el control real.
+    if (IsLocallyControlled())
+        if (const AController* C = GetController()) return C->GetControlRotation();
+    return FRotator(ReplViewPitch, GetActorRotation().Yaw, 0.f);
+}
+
 void APTLobbyCharacter::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+
+    // El dueño manda su PITCH de vista al server ~30 Hz (unreliable), para que los espectadores
+    // reproduzcan su POV completo (arriba/abajo). El yaw ya viaja por la rotación del actor.
+    if (IsLocallyControlled() && GetController() && !HasAuthority()) // el host lo setea directo abajo
+    {
+        ViewPitchSendAccum += DeltaSeconds;
+        if (ViewPitchSendAccum >= 0.033f)
+        {
+            ViewPitchSendAccum = 0.f;
+            Server_ReportViewPitch(GetController()->GetControlRotation().Pitch);
+        }
+    }
+    else if (IsLocallyControlled() && GetController() && HasAuthority())
+    {
+        ReplViewPitch = GetController()->GetControlRotation().Pitch; // host: setear directo (ya es server)
+    }
 
     // Actualizar el cartel del nombre cada ~0.5s (el DisplayName se replica, puede tardar).
     NameTagAccum += DeltaSeconds;
