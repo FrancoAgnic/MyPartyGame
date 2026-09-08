@@ -249,6 +249,10 @@ void PTText::LocalizeWidgetTree(UUserWidget* Widget)
     {
         const FString Cur = In.ToString();
         if (Cur.IsEmpty()) return false;
+        // NUNCA auto-traducir texto de 1 solo carácter: no son frases de UI (se setean por código si hace
+        // falta) y colisionan con abreviaturas de una letra del CSV. Ej: la animación que revela LETRAS de
+        // la palabra muestra "S" un frame → matcheaba HUD_SECONDS_SHORT (FR="s") y quedaba pisada por "seg".
+        if (Cur.Len() <= 1) return false;
         const FName* Key = GReverse.Find(NormalizeForLookup(Cur));
         if (!Key) return false;
 
