@@ -97,7 +97,7 @@ APTLobbyCharacter::APTLobbyCharacter()
     ChatShout->SetupAttachment(GetMesh(), TEXT("Bone_008"));
     ChatShout->SetRelativeLocation(FVector(0.f, 0.f, -5.f)); // hacia la boca; ajustar en el BP
     ChatShout->SetWidgetSpace(EWidgetSpace::Screen);
-    ChatShout->SetDrawSize(FVector2D(300.f, 160.f));
+    ChatShout->SetDrawSize(FVector2D(420.f, 340.f)); // amplio: la animación sube y se corre a los lados
     ChatShout->SetVisibility(false);
 
     // Cabeza custom: malla procedural pegada al socket "HeadSocket" del mesh (baila con la cabeza).
