@@ -782,7 +782,9 @@ void APTLobbyPlayerController::UpdateHeadPreview(const FVector* At, const FVecto
         else switch (HeadEditMode)
         {
         case EPTEditMode::Erase: ToolMesh = HeadPreviewMeshErase; Mat = HeadPreviewMatErase; break;
-        case EPTEditMode::Paint: ToolMesh = HeadPreviewMeshPaint; Mat = HeadPreviewMatPaint; break;
+        // Paint: si no hay material de paint asignado, usar el material tintable del Add (M_HeadPreview),
+        // así el preview SIEMPRE muestra el color elegido en vez del material por defecto (blanco/emisivo).
+        case EPTEditMode::Paint: ToolMesh = HeadPreviewMeshPaint; Mat = HeadPreviewMatPaint ? HeadPreviewMatPaint : HeadPreviewMatAdd; break;
         default: // Add: un mesh por FORMA (asignable). Si esa forma no tiene mesh → preview procedural.
             switch (EffectiveHeadShape())
             {
