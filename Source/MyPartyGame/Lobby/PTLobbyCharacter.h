@@ -249,6 +249,12 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="NameTag")
     UWidgetComponent* NameTag;
 
+    // "Grito" de chat (onomatopeya de cómic) sobre la BOCA. Asignale su Widget Class (WBP_ChatShout,
+    // reparentado a UPTChatShoutWidget) en el Blueprint; ajustá su posición hacia la boca. El texto y la
+    // animación los dispara C++. Sigue al jugador (atado al personaje) y lo ven todas las máquinas.
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Chat")
+    UWidgetComponent* ChatShout;
+
     // Cuánto queda el globo de chat sobre la cabeza (segundos). Ajustable en BP_LobbyCharacter.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="NameTag")
     float ChatBubbleDuration = 4.5f;

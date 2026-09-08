@@ -3,6 +3,7 @@
 #include "PTLobbyCharacter.h"
 #include "PTPlayerState.h"
 #include "PTNameTagWidget.h"
+#include "PTChatShoutWidget.h"
 #include "../PTTextTable.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -89,6 +90,15 @@ APTLobbyCharacter::APTLobbyCharacter()
     NameTag->SetRelativeLocation(FVector(0.f, 0.f, 20.f)); // apenas arriba del hueso; ajustar en el BP
     NameTag->SetWidgetSpace(EWidgetSpace::Screen);
     NameTag->SetDrawSize(FVector2D(200.f, 50.f));
+
+    // "Grito" de chat (onomatopeya) sobre la boca. Atado a la cabeza para seguir al jugador; Screen space
+    // = mira a la cámara y tamaño constante. Arranca oculto; el Widget Class y la posición fina van en el BP.
+    ChatShout = CreateDefaultSubobject<UWidgetComponent>(TEXT("ChatShout"));
+    ChatShout->SetupAttachment(GetMesh(), TEXT("Bone_008"));
+    ChatShout->SetRelativeLocation(FVector(0.f, 0.f, -5.f)); // hacia la boca; ajustar en el BP
+    ChatShout->SetWidgetSpace(EWidgetSpace::Screen);
+    ChatShout->SetDrawSize(FVector2D(300.f, 160.f));
+    ChatShout->SetVisibility(false);
 
     // Cabeza custom: malla procedural pegada al socket "HeadSocket" del mesh (baila con la cabeza).
     // Arranca vacía; se llena con la cabeza esculpida por el jugador (SetHeadMeshFrom).
@@ -891,12 +901,8 @@ void APTLobbyCharacter::UpdateNameTag()
         return;
     }
 
-    // Globo de chat activo: mostrar el mensaje (a todos, incluso a uno mismo) sin pisarlo.
-    if (GetWorld() && GetWorld()->GetTimeSeconds() < ChatBubbleUntil)
-    {
-        NameTag->SetVisibility(true);
-        return;
-    }
+    // (El mensaje de chat ya NO reemplaza el nombre: va como "grito" aparte sobre la boca. El nombre
+    //  se mantiene siempre.)
 
     // Tu PROPIO tag: se ve en el LOBBY y en el MENÚ principal, pero NO en gameplay (Lvl-01).
     // bForceFlying solo se activa en gameplay (ApplyGameplayMovementMode), así que sirve de "estoy jugando".
@@ -941,17 +947,18 @@ void APTLobbyCharacter::UpdateNameTag()
 
 void APTLobbyCharacter::Multicast_ShowChatBubble_Implementation(const FString& Text, bool bGuess)
 {
-    if (NameTag)
+    // El NOMBRE se mantiene SIEMPRE (ya no se reemplaza por el mensaje). El mensaje aparece como un
+    // "grito" (onomatopeya de cómic) sobre la boca, con su animación de escala.
+    if (ChatShout)
     {
-        ChatBubbleUntil = GetWorld() ? GetWorld()->GetTimeSeconds() + ChatBubbleDuration : 0.f;
-        NameTag->SetVisibility(true);
-        if (UPTNameTagWidget* W = Cast<UPTNameTagWidget>(NameTag->GetUserWidgetObject()))
-        {
-            // El globo de acierto se traduce ACÁ, en cada cliente: el servidor manda Text vacío
-            // para que cada uno lo lea en su idioma (y para no filtrar nunca la palabra).
-            if (bGuess) W->ShowGuessMessage(PTText::GetStr(TEXT("BUBBLE_GUESSED_IT"))); // verde
-            else        W->ShowMessage(Text);
-        }
+        // El texto de acierto se traduce ACÁ, en cada cliente (el server manda Text vacío para no
+        // filtrar la palabra ni depender de un idioma).
+        const FString Msg = bGuess ? PTText::GetStr(TEXT("BUBBLE_GUESSED_IT")) : Text;
+        ChatShout->SetVisibility(true);
+        float Dur = ChatBubbleDuration;
+        if (UPTChatShoutWidget* W = Cast<UPTChatShoutWidget>(ChatShout->GetUserWidgetObject()))
+            Dur = W->ShowShout(Msg, bGuess);
+        ChatBubbleUntil = GetWorld() ? GetWorld()->GetTimeSeconds() + Dur : 0.f;
     }
 
     // Confetti al adivinar, desde la posición del jugador.
@@ -1112,11 +1119,16 @@ void APTLobbyCharacter::SetSpectateBodyHiddenLocal(bool bBodyHidden)
     if (USkeletalMeshComponent* M = GetMesh()) M->SetVisibility(!bBodyHidden, /*bPropagateToChildren=*/true);
     if (HeadMesh) HeadMesh->SetVisibility(!bBodyHidden, true);
     if (NameTag)  NameTag->SetVisibility(!bBodyHidden);
+    if (bBodyHidden && ChatShout) ChatShout->SetVisibility(false); // el grito propio no molesta en 1ra persona
 }
 
 void APTLobbyCharacter::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+
+    // Ocultar el "grito" de chat cuando venció su tiempo (su animación ya terminó/fundió).
+    if (ChatShout && ChatShout->IsVisible() && GetWorld() && GetWorld()->GetTimeSeconds() >= ChatBubbleUntil)
+        ChatShout->SetVisibility(false);
 
     // El dueño manda su PITCH de vista al server ~30 Hz (unreliable), para que los espectadores
     // reproduzcan su POV completo (arriba/abajo). El yaw ya viaja por la rotación del actor.
