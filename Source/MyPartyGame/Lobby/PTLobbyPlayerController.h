@@ -422,9 +422,15 @@ protected:
     // Herramienta de cabeza previa al pasar al cuerpo (para restaurarla al volver).
     EPTEditMode HeadToolBeforeBody = EPTEditMode::Add;
     bool        bHeadEyesBeforeBody = false;
-    // El cuerpo se pintó en esta sesión → al guardar, persistir el cuerpo en SU slot (el equipado),
-    // aparte de la cabeza en el slot de cabeza (no todo junto en un solo slot).
+    // El cuerpo se pintó en esta sesión → al guardar, persistir el cuerpo en SU slot (o el equipado),
+    // aparte de la cabeza en su slot (no todo junto en un solo slot).
     bool bHeadSessionBodyDirty = false;
+    // Ídem para la cabeza: solo se guarda la cabeza si la tocaste (así entrar por un slot de cuerpo y
+    // solo pintar el cuerpo NO pisa la cabeza equipada).
+    bool bHeadSessionHeadDirty = false;
+    // La sesión arrancó enfocada en el CUERPO (entraste por un slot de cuerpo). El volumen de cabeza
+    // igual se crea (cargando la cabeza equipada) para poder pasar a la cabeza con SHIFT.
+    bool bHeadStartOnBody = false;
     // Para trazos continuos al pintar el cuerpo: se interpola el movimiento del cursor EN PANTALLA
     // (cada paso hace su propio raycast) así el trazo no se corta al cruzar una costura del UV.
     FVector2D LastBodyCursor     = FVector2D::ZeroVector;

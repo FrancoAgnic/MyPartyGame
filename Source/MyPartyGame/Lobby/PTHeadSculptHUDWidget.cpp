@@ -133,14 +133,15 @@ void UPTHeadSculptHUDWidget::Refresh(APTLobbyPlayerController* PC)
         : (PC->GetHeadEditMode() == EPTEditMode::Add   ? 0
         :  PC->GetHeadEditMode() == EPTEditMode::Erase ? 1
         :  PC->GetHeadEditMode() == EPTEditMode::Paint ? 2 : -1);
-    // Editando un slot de CUERPO solo se puede PINTAR: mostrar únicamente el slot de Paint (índice 2)
-    // y colapsar las demás herramientas (Agregar/Borrar/Ojos), que no aplican sin volumen de cabeza.
-    const bool bBodyOnly = PC->IsHeadBodyOnlyEdit();
+    // Con el foco en el CUERPO (slot de cuerpo, o pasaste al cuerpo con SHIFT) solo se puede PINTAR:
+    // mostrar únicamente el slot de Paint (índice 2) y colapsar Agregar/Borrar/Ojos.
+    const bool bBodyOnly  = PC->IsHeadBodyOnlyEdit();
+    const bool bBodyFocus = bBodyOnly || PC->IsBodyPaintMode();
     for (int32 i = 0; i < ToolSlots.Num(); ++i)
         if (ToolSlots[i])
         {
             ToolSlots[i]->SetVisibility(
-                (bBodyOnly && i != 2) ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+                (bBodyFocus && i != 2) ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
             ToolSlots[i]->SetSelected(i == Equipped);
         }
 
@@ -174,11 +175,11 @@ void UPTHeadSculptHUDWidget::Refresh(APTLobbyPlayerController* PC)
         }
     }
 
-    // ALT (detalle en capa aparte): no aplica en la edición de un slot de CUERPO. Se resalta al mantener Alt.
+    // ALT (detalle en capa aparte): es de la CABEZA. No aplica con el foco en el cuerpo. Se resalta al mantener Alt.
     if (DetailSlot)
     {
-        DetailSlot->SetVisibility(bBodyOnly ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
-        if (!bBodyOnly) DetailSlot->SetSelected(PC->IsHeadSurfaceSnapActive());
+        DetailSlot->SetVisibility(bBodyFocus ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+        if (!bBodyFocus) DetailSlot->SetSelected(PC->IsHeadSurfaceSnapActive());
     }
 
     const bool  bPaintTool = PC->IsHeadPaintingTool();
