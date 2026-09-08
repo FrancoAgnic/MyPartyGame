@@ -110,7 +110,8 @@ protected:
     // Iconos de acciones.
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconColor    = nullptr;
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconExit     = nullptr;
-    UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconPaintBody = nullptr;
+    UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconPaintBody = nullptr; // SHIFT estando en la cabeza → ir al cuerpo
+    UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconEditHead  = nullptr; // SHIFT estando en el cuerpo → ir a la cabeza
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconClear    = nullptr;
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconDetail   = nullptr; // ALT (detalle)
     // Material de "pulse" (MUI_Pulse): se aplica al texto "¡Sin pintura!" para que parpadee y se note.

@@ -524,6 +524,7 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
             if (bBodyPaintMode || bHeadSculptBodyOnly)
             {
                 if (C) C->ClearBodyPaint(); // solo la pintura del cuerpo
+                bHeadSessionBodyDirty = true; // borrar también cuenta como cambio a guardar
             }
             else
             {
@@ -597,7 +598,7 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
                 FVector O, D, HP, HN; FVector2D StepUV;
                 if (DeprojectScreenPositionToWorld(P.X, P.Y, O, D)
                     && Char->RaycastSkinnedMeshUV(O, D, StepUV, HP, HN))
-                    Char->PaintBodyWorldSphere(HP, R, HeadPaintColor);
+                    { Char->PaintBodyWorldSphere(HP, R, HeadPaintColor); bHeadSessionBodyDirty = true; }
             }
             Char->FlushBodyPaint(); // una sola subida al GPU por frame
             if (bHit && HeadVolume) HeadVolume->PlayPaintFXAt(BPt, HeadPaintColor, HeadBrushSize); // gotitas
@@ -1047,12 +1048,29 @@ void APTLobbyPlayerController::OnHeadScrollDown()
 void APTLobbyPlayerController::OnHeadToggleBodyPaint()
 {
     // En modo edición de un SLOT DE CUERPO no se puede salir del foco del cuerpo (no hay cabeza que editar).
-    if (bHeadSculptBodyOnly) return;
-    // Solo tiene sentido con la herramienta Paint (no Ojos): alterna cabeza ↔ cuerpo.
-    if (!bHeadSculptMode || bHeadEyesTool || HeadEditMode != EPTEditMode::Paint) return;
-    bBodyPaintMode = !bBodyPaintMode;
-    bHeadStamping  = false; // no arrastrar pintura al cambiar de foco
-    UpdateHeadCam();        // reencuadra al cuerpo o a la cabeza
+    if (!bHeadSculptMode || bHeadSculptBodyOnly) return;
+    // Radial abierto: TAB manda; no alternar foco.
+    if (bHeadShapeRadialActive) return;
+
+    if (!bBodyPaintMode)
+    {
+        // Pasar al CUERPO: el cuerpo solo se pinta → recordar la herramienta de cabeza y forzar Paint.
+        HeadToolBeforeBody  = HeadEditMode;
+        bHeadEyesBeforeBody = bHeadEyesTool;
+        HeadEditMode = EPTEditMode::Paint;
+        bHeadEyesTool = false;
+        bBodyPaintMode = true;
+    }
+    else
+    {
+        // Volver a la CABEZA: restaurar la herramienta que tenías antes de pasar al cuerpo.
+        bBodyPaintMode = false;
+        HeadEditMode  = HeadToolBeforeBody;
+        bHeadEyesTool = bHeadEyesBeforeBody;
+    }
+    bHeadStamping = false; // no arrastrar pintura al cambiar de foco
+    bHasLastBodyCursor = false;
+    UpdateHeadCam();       // reencuadra al cuerpo o a la cabeza
 }
 
 // En modo edición de un slot de CUERPO (bHeadSculptBodyOnly) SOLO se puede pintar: no hay volumen de
@@ -1403,6 +1421,7 @@ void APTLobbyPlayerController::EnterHeadSculpt()
     if (bHeadSculptMode || !HeadVolumeClass || !P || !GetWorld()) return;
     bHeadSculptMode = true;
     bDiscardPopupOpen = false;
+    bHeadSessionBodyDirty = false; // aún no se tocó el cuerpo en esta sesión
 
     APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(P);
 
@@ -1727,6 +1746,21 @@ void APTLobbyPlayerController::ExitHeadSculpt(bool bSaveChanges)
                 L->SaveHeadSlot(Slot, Blob, Raw, Thumb); // ahora SÍ guardamos el crudo (Fase 2)
                 L->EquipHead(Slot);
             }
+
+            // Si también pintaste el CUERPO en esta sesión (SHIFT), guardarlo en SU slot (el equipado),
+            // aparte de la cabeza — así cada parte va a su casillero, no todo junto en un solo slot.
+            if (bHeadSessionBodyDirty && L)
+            {
+                const int32 BodySlot = L->GetEquippedBody();
+                TArray<uint8> BodyPNG;
+                if (BodySlot >= 0 && Char->GetBodyPaintPNG(BodyPNG))
+                {
+                    TArray<uint8> BodyThumb; Char->CaptureLookThumbnailPNG(BodyThumb, /*bHeadFocus=*/false, 256);
+                    L->SaveBodySlot(BodySlot, BodyPNG, BodyThumb);
+                    L->EquipBody(BodySlot);
+                }
+            }
+
             // Subir el blob horneado (ya incluye el cuerpo pintado en esta sesión).
             if (Blob.Num() > 0)
                 if (APTPlayerState* PS = Char->GetPlayerState<APTPlayerState>()) PS->UploadHead(Blob);

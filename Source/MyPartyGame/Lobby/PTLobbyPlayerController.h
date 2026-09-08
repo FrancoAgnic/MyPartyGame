@@ -409,9 +409,17 @@ protected:
     void OnHeadShapeRadialPressed();   // TAB pressed → abre el radial (o fallback cicla)
     void OnHeadShapeRadialReleased();  // TAB released → aplica la forma del hover
     void SetHeadShape(EPTStampShape S); // setea forma + resetea rotación + fuerza rebuild del preview
-    // SHIFT (solo en Paint): alterna foco cabeza (arcilla) ↔ cuerpo (piel del personaje).
+    // SHIFT: alterna el foco de edición cabeza (arcilla) ↔ cuerpo (piel del personaje). Disponible en
+    // CUALQUIER momento (no solo con Paint). El cuerpo solo se PINTA, así que al pasar al cuerpo se
+    // fuerza la herramienta Paint y al volver a la cabeza se restaura la que tenías.
     bool bBodyPaintMode = false;
     void OnHeadToggleBodyPaint();
+    // Herramienta de cabeza previa al pasar al cuerpo (para restaurarla al volver).
+    EPTEditMode HeadToolBeforeBody = EPTEditMode::Add;
+    bool        bHeadEyesBeforeBody = false;
+    // El cuerpo se pintó en esta sesión → al guardar, persistir el cuerpo en SU slot (el equipado),
+    // aparte de la cabeza en el slot de cabeza (no todo junto en un solo slot).
+    bool bHeadSessionBodyDirty = false;
     // Para trazos continuos al pintar el cuerpo: se interpola el movimiento del cursor EN PANTALLA
     // (cada paso hace su propio raycast) así el trazo no se corta al cruzar una costura del UV.
     FVector2D LastBodyCursor     = FVector2D::ZeroVector;

@@ -146,14 +146,21 @@ void UPTHeadSculptHUDWidget::Refresh(APTLobbyPlayerController* PC)
     // ── El slot de color se resalta mientras el picker está abierto ──
     if (ColorSlot) ColorSlot->SetSelected(PC->IsHeadColorPickerOpen());
 
-    // ── SHIFT (pintar cuerpo): solo visible con Paint; resaltado si estás en modo cuerpo ──
-    // En body-only NO se muestra: no hay cabeza a la que alternar, el foco ya está fijo en el cuerpo.
+    // ── SHIFT (cambiar foco cabeza ↔ cuerpo): visible SIEMPRE en la edición de cabeza (no solo con
+    // Paint). El icono y el texto cambian según dónde estés parado: en la cabeza → "ir al cuerpo";
+    // en el cuerpo → "ir a la cabeza". En body-only NO se muestra (el foco ya está fijo en el cuerpo).
     if (PaintBodySlot)
     {
-        const bool bPaintTool = !bBodyOnly && !PC->IsHeadEyesToolActive() && PC->GetHeadEditMode() == EPTEditMode::Paint;
-        PaintBodySlot->SetVisibility(bPaintTool ? ESlateVisibility::HitTestInvisible
-                                                : ESlateVisibility::Collapsed);
-        if (bPaintTool) PaintBodySlot->SetSelected(PC->IsBodyPaintMode());
+        PaintBodySlot->SetVisibility(bBodyOnly ? ESlateVisibility::Collapsed
+                                               : ESlateVisibility::HitTestInvisible);
+        if (!bBodyOnly)
+        {
+            const bool bOnBody = PC->IsBodyPaintMode();
+            UTexture2D* Icon = bOnBody ? (IconEditHead ? IconEditHead : IconPaintBody) : IconPaintBody;
+            const FText Label = PTText::Get(bOnBody ? TEXT("HEAD_SWITCH_TO_HEAD") : TEXT("HEAD_SWITCH_TO_BODY"));
+            PaintBodySlot->SetSlot(Icon, FText::FromString(TEXT("Shift")), Label);
+            PaintBodySlot->SetSelected(bOnBody);
+        }
     }
 
     // ALT (detalle en capa aparte): no aplica en la edición de un slot de CUERPO. Se resalta al mantener Alt.

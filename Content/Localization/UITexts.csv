@@ -214,3 +214,5 @@ SV_REVEAL,Revelado: {0}%,Reveal: {0}%,Revelação: {0}%,Aufdeckung: {0}%,Révél
 SV_LIBRARY,Biblioteca: {0},Library: {0},Biblioteca: {0},Bibliothek: {0},Bibliothèque : {0},Libreria: {0}
 SV_YES,Sí,Yes,Sim,Ja,Oui,Sì
 SV_NO,No,No,Não,Nein,Non,No
+HEAD_SWITCH_TO_BODY,Ir al cuerpo,To body,Ir ao corpo,Zum Körper,Au corps,Al corpo
+HEAD_SWITCH_TO_HEAD,Ir a la cabeza,To head,Ir à cabeça,Zum Kopf,À la tête,Alla testa
