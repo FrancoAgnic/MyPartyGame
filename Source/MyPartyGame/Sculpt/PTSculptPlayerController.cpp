@@ -803,8 +803,11 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
 
     // X-ray del preview: ocultarlo mientras se AGREGA arcilla (Add + click apretado). El contorno de
     // solape molesta justo cuando estás construyendo; solo tiene sentido al posicionar (sin sellar).
+    // Con PAINT no se usa nunca: el anillo va SOBRE la superficie y el x-ray lo pinta emisivo/blanco,
+    // tapando el color que tenés seleccionado.
     const bool bAddingClay = bIsStamping && CanLocalPlayerSculpt() && (EditMode == EPTEditMode::Add);
-    SetPreviewXrayEnabled(!bAddingClay);
+    const bool bPaintTool  = (!bEyesTool && EditMode == EPTEditMode::Paint);
+    SetPreviewXrayEnabled(!bAddingClay && !bPaintTool);
 
     // Loop 3D de la herramienta (Add/Erase/Paint) mientras se está sellando; se corta solo al soltar.
     if (SculptSounds)
