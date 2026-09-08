@@ -189,7 +189,9 @@ bool APTLobbyPlayerController::EyedropColorUnderCursor(FLinearColor& OutColor) c
     if (!(Self->GetMousePosition(MX, MY) && Self->DeprojectScreenPositionToWorld(MX, MY, Start, Dir)))
         return false;
 
-    // Raymarch a la superficie de la cabeza y leer el color exacto del atlas de pintura.
+    APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn());
+
+    // 1) ¿Apunta a la ARCILLA de la cabeza? Raymarch a su superficie.
     static constexpr float StepSize = 4.f; // la cabeza es chica: pasos más finos
     static constexpr int32 MaxSteps = 800;
     float prevD = HeadVolume->SampleWorldDensity(Start);
@@ -205,27 +207,42 @@ bool APTLobbyPlayerController::EyedropColorUnderCursor(FLinearColor& OutColor) c
                 const FVector mid = (lo + hi) * 0.5f;
                 (HeadVolume->SampleWorldDensity(mid) > 0.f ? hi : lo) = mid;
             }
-            // Ver la nota en APTSculptPlayerController::EyedropColorUnderCursor: Paint (atlas sRGB) se
-            // decodifica; el campo base (Add) se devuelve crudo (así matchea la arcilla que se ve).
             const FVector Surf = (lo + hi) * 0.5f;
             const float CV = FMath::Max(2.f, HeadVolume->VoxelSize);
+
+            // a) PINTURA 2D de la cabeza (herramienta Paint): es una textura aparte, NO el atlas. Es lo
+            //    que pintaste ENCIMA → tiene prioridad. Probar varios offsets a lo largo del rayo.
+            if (Char)
+                for (float Off : { 0.f, -CV, CV, -2.f * CV, 2.f * CV })
+                {
+                    FLinearColor HeadPaint;
+                    if (Char->SampleHeadPaintColorAt(HeadVolume->GetMeshComponent(), Surf + Dir * Off, HeadPaint))
+                    { OutColor = HeadPaint; OutColor.A = 1.f; return true; }
+                }
+
+            // b) COLOR BASE del atlas (Add con color). SampleWorldPaintColor ya devuelve el color
+            //    decodificado (= el del picker) → devolverlo tal cual.
             bool bPainted = false; FLinearColor RawPaint;
             for (float Off : { 0.f, -CV, CV, -2.f * CV, 2.f * CV, -3.f * CV, 3.f * CV })
             {
                 RawPaint = HeadVolume->SampleWorldPaintColor(Surf + Dir * Off, bPainted);
                 if (bPainted) break;
             }
-            // SampleWorldPaintColor ya devuelve el color DECODIFICADO (= el del picker); devolverlo tal
-            // cual. Re-decodificarlo cambiaba el brillo (gotero agarraba otro color).
             if (bPainted) { OutColor = RawPaint; OutColor.A = 1.f; return true; }
 
+            // c) color base del campo.
             FLinearColor Base = HeadVolume->SampleWorldColor(Surf + Dir * CV);
             Base.A = 1.f; OutColor = Base;
             return true;
         }
         prevD = d;
     }
-    return false;
+
+    // 2) No pegó en la cabeza → ¿apunta al CUERPO? Leer la pintura del cuerpo por UV (color exacto,
+    //    sin la luz de la escena, que lo aclaraba).
+    if (Char && Char->SampleBodyPaintColorAt(Start, Dir, OutColor)) { OutColor.A = 1.f; return true; }
+
+    return false; // nada pintado bajo el cursor → el picker cae a muestrear la pantalla
 }
 
 void APTLobbyPlayerController::PTSpecSpeed(float N)
@@ -558,7 +575,9 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
             CP->QuickPickTick();
             HeadPaintColor = CP->CurrentColor; // color en vivo en la brocha
         }
-        UpdateHeadPreview(nullptr, FVector::UpVector); // ocultar el preview mientras elegís color
+        // Mantener el preview visible en el último punto, tintado con el color EN VIVO, así ves el color
+        // elegido en tiempo real mientras te movés por el radial / ajustás el brillo.
+        UpdateHeadPreview(bHeadHasLastPreview ? &HeadLastPreviewAt : nullptr, HeadLastPreviewN);
         return;
     }
 
@@ -738,6 +757,10 @@ void APTLobbyPlayerController::UpdateHeadPreview(const FVector* At, const FVecto
     const bool bShow  = At && bHeadSculptMode && (bEyes || !bPaint || HeadPreviewMeshPaint != nullptr);
     HeadPreviewActor->SetActorHiddenInGame(!bShow);
     if (!bShow) return;
+
+    // Recordar el último punto/normal (para poder seguir mostrando el preview tintado en vivo mientras
+    // el color picker está abierto y el cursor no está sobre la superficie).
+    HeadLastPreviewAt = *At; HeadLastPreviewN = Normal; bHeadHasLastPreview = true;
 
     // Reconstruir/elegir el mesh de la brocha sólo si cambió tamaño, modo, forma o el toggle de ojos.
     if (HeadPreviewSize != HeadBrushSize || HeadPreviewMode != HeadEditMode

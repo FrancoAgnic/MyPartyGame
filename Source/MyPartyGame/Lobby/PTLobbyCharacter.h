@@ -364,6 +364,13 @@ public:
     /** Borra toda la pintura del CUERPO (textura transparente). */
     void ClearBodyPaint();
 
+    // ── Muestreo de color para el GOTERO (color EXACTO del picker, sin luz) ──
+    /** Color de la PINTURA 2D de la cabeza en un punto de mundo. Devuelve false si ahí no hay pintura
+     *  (alpha 0). ClayMesh = la malla de arcilla (para pasar el punto a local, igual que al pintar). */
+    bool SampleHeadPaintColorAt(const class UPrimitiveComponent* ClayMesh, const FVector& WorldPoint, FLinearColor& Out) const;
+    /** Color de la pintura del CUERPO donde apunta el rayo (raycast a la piel → UV). false si sin pintar. */
+    bool SampleBodyPaintColorAt(const FVector& Origin, const FVector& Dir, FLinearColor& Out) const;
+
     // Undo de PINTURA (snapshot por trazo). El controller llama Push* al empezar un trazo de Paint y
     // Undo* al deshacer. Acotado a MaxPaintUndo niveles; se limpia al salir del modo G.
     void PushHeadPaintUndo();

@@ -1523,6 +1523,35 @@ void APTLobbyCharacter::PaintHeadWorldSphere(UProceduralMeshComponent* ClayMesh,
     }
 }
 
+bool APTLobbyCharacter::SampleHeadPaintColorAt(const UPrimitiveComponent* ClayMesh, const FVector& WorldPoint, FLinearColor& Out) const
+{
+    if (!ClayMesh || HeadPaintPixels.Num() == 0 || HeadPaintN <= 0) return false;
+    // Mismo mapeo que al pintar: punto de mundo → local de la malla → UV esférica desde el centro fijo.
+    const FVector Local = ClayMesh->GetComponentTransform().InverseTransformPosition(WorldPoint);
+    const FVector2D UV = PT_HeadSphUV(Local, HeadPaintCenterLocal);
+    const int32 N = HeadPaintN;
+    const int32 px = ((FMath::FloorToInt(UV.X * N) % N) + N) % N; // wrap en X (costura)
+    const int32 py = FMath::Clamp(FMath::FloorToInt(UV.Y * N), 0, N - 1);
+    const FColor C = HeadPaintPixels[py * N + px];
+    if (C.A == 0) return false; // ahí no hay pintura 2D
+    Out = FLinearColor(FColor(C.R, C.G, C.B, 255)); // decodifica sRGB = color exacto del picker
+    return true;
+}
+
+bool APTLobbyCharacter::SampleBodyPaintColorAt(const FVector& Origin, const FVector& Dir, FLinearColor& Out) const
+{
+    if (PaintPixels.Num() == 0 || PaintTexN <= 0) return false;
+    FVector2D UV; FVector Pt, Nrm;
+    if (!RaycastSkinnedMeshUV(Origin, Dir, UV, Pt, Nrm)) return false;
+    const int32 N = PaintTexN;
+    const int32 px = FMath::Clamp(FMath::FloorToInt(UV.X * N), 0, N - 1);
+    const int32 py = FMath::Clamp(FMath::FloorToInt(UV.Y * N), 0, N - 1);
+    const FColor C = PaintPixels[py * N + px];
+    if (C.A == 0) return false; // ese téxel no está pintado
+    Out = FLinearColor(FColor(C.R, C.G, C.B, 255)); // decodifica sRGB = color exacto del picker
+    return true;
+}
+
 void APTLobbyCharacter::ClearHeadPaintCone(UProceduralMeshComponent* RefMesh, const FVector& P, float R)
 {
     if (!RefMesh || !HeadPaintTex || HeadPaintPixels.Num() == 0) return;

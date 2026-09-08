@@ -328,6 +328,11 @@ protected:
     EPTEditMode HeadPreviewMode = EPTEditMode::Smooth;  // idem (valor inicial != Add/Erase)
     EPTStampShape HeadPreviewShapeCached = EPTStampShape::TriPrism; // idem para la forma (valor != esfera)
     float HeadPreviewGlow = 0.f; // brillo del preview: 0 en reposo, sube a 1 mientras esculpís (Add)
+    // Último punto/normal donde se apoyó el preview de la brocha. Sirve para MANTENER visible el preview
+    // (tintado con el color en vivo) mientras el color picker está abierto, aunque el cursor esté en la UI.
+    FVector HeadLastPreviewAt = FVector::ZeroVector;
+    FVector HeadLastPreviewN  = FVector::UpVector;
+    bool    bHeadHasLastPreview = false;
     // Presupuesto de pintura: la pintura (cabeza + cuerpo) no puede pasar de este peso replicable.
     // Un chunk = 8 KB; el server corta ~a los 50 chunks. Dejamos margen para la geometría.
     UPROPERTY(EditAnywhere, Category="Head") int32 MaxPaintChunks = 45;
