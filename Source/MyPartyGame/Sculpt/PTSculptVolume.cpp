@@ -879,10 +879,16 @@ FLinearColor APTSculptVolume::SampleWorldPaintColor(FVector WorldPos, bool& bOut
 
     // Buscar el voxel pintado más cercano en un vecindario 3³ (la pintura es una cáscara fina
     // alrededor de la superficie; el vértice puede caer a 1 voxel del centro pintado).
-    for (int32 dz = -1; dz <= 1; ++dz)
-    for (int32 dy = -1; dy <= 1; ++dy)
-    for (int32 dx = -1; dx <= 1; ++dx)
+    // IMPORTANTE: se recorre por ANILLOS (centro primero, luego los 26 vecinos), no de esquina a
+    // esquina. Así el gotero devuelve el color del voxel que está JUSTO bajo el cursor — el que
+    // acabás de pintar — y no el de un vecino con el color base con el que se creó la malla.
+    for (int32 Ring = 0; Ring <= 1; ++Ring)
+    for (int32 dz = -Ring; dz <= Ring; ++dz)
+    for (int32 dy = -Ring; dy <= Ring; ++dy)
+    for (int32 dx = -Ring; dx <= Ring; ++dx)
     {
+        if (FMath::Max3(FMath::Abs(dx), FMath::Abs(dy), FMath::Abs(dz)) != Ring) continue; // solo el anillo actual
+
         const int32 vx = cx + dx, vy = cy + dy, vz = cz + dz;
         if (vx < 0 || vy < 0 || vz < 0 ||
             vx >= ColorVoxDim.X || vy >= ColorVoxDim.Y || vz >= ColorVoxDim.Z) continue;
