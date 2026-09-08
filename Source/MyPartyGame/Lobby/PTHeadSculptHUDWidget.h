@@ -42,7 +42,12 @@ public:
 
 protected:
     UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* ToolsBox;
+    // (Viejo) contenedor de formas. Con el radial ya no hace falta: preferí ShapesHintSlot (abajo).
     UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* ShapesBox;
+    // Celda "mantener TAB → formas": es un WBP_ToolSlot suelto con nombre EXACTO "ShapesHintSlot".
+    // Ponelo donde quieras en el HUD (igual que ColorSlot/ExitSlot). Si está, se usa este y se ignora
+    // ShapesBox. El icono/texto los pone el código.
+    UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* ShapesHintSlot;
 
     UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* ColorSlot;
     UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* ExitSlot;

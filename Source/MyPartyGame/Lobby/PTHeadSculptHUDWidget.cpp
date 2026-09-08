@@ -43,10 +43,18 @@ void UPTHeadSculptHUDWidget::BuildOnce()
 
     // ── Formas (TAB) ── con el radial, una sola celda-hint "mantener TAB → formas" (igual que el
     // gameplay). La forma se elige en el menú radial, no ciclando acá.
-    if (ShapesBox)
+    // Preferí un WBP_ToolSlot suelto llamado "ShapesHintSlot" (lo acomodás donde quieras). Si no está,
+    // se spawnea uno dentro de ShapesBox (compat con el layout viejo).
+    ShapeSlots.Reset(); // ya no hay 4 celdas por forma
+    if (ShapesHintSlot)
+    {
+        ShapeHintSlot = ShapesHintSlot;
+        ShapeHintSlot->SetSlot(IconShapesHint ? IconShapesHint : IconSphere,
+                               FText::FromString(TEXT("TAB")), PTText::Get(TEXT("SHAPE_HINT")));
+    }
+    else if (ShapesBox)
     {
         ShapesBox->ClearChildren();
-        ShapeSlots.Reset(); // ya no hay 4 celdas por forma
         ShapeHintSlot = Make(IconShapesHint ? IconShapesHint : IconSphere,
                              FText::FromString(TEXT("TAB")), PTText::Get(TEXT("SHAPE_HINT")));
         if (ShapeHintSlot) ShapesBox->AddChild(ShapeHintSlot);
@@ -139,9 +147,10 @@ void UPTHeadSculptHUDWidget::Refresh(APTLobbyPlayerController* PC)
     // ── Formas: la celda-hint (mantener TAB → radial) se muestra solo con herramientas que usan formas.
     // No hay "forma equipada" que resaltar (se elige en el radial).
     const bool bShowShapes = PC->HeadToolUsesShapes();
-    if (ShapesBox)
-        ShapesBox->SetVisibility(bShowShapes ? ESlateVisibility::HitTestInvisible
-                                             : ESlateVisibility::Collapsed);
+    const ESlateVisibility ShapeVis = bShowShapes ? ESlateVisibility::HitTestInvisible
+                                                  : ESlateVisibility::Collapsed;
+    if (ShapesHintSlot) ShapesHintSlot->SetVisibility(ShapeVis); // celda suelta (preferida)
+    else if (ShapesBox) ShapesBox->SetVisibility(ShapeVis);      // contenedor viejo (compat)
 
     // ── El slot de color se resalta mientras el picker está abierto ──
     if (ColorSlot) ColorSlot->SetSelected(PC->IsHeadColorPickerOpen());
