@@ -317,6 +317,16 @@ private:
                            const TArray<FVector>& N, const TArray<FColor>& C);
     bool bSVOMeshing = false;                              // hay un mallado async de chunks en vuelo
     uint32 SVOMeshGen = 0;                                 // generación: descarta resultados async viejos tras clear/load
+
+    // ── Glow de arcilla nueva en modo SVO ──
+    // El octree no guarda "tiempo de agregado" por vóxel (a diferencia del campo clásico). Para que la
+    // arcilla recién agregada BRILLE unos segundos igual que el clásico, guardamos los últimos ADD como
+    // {bounds LOCAL, tiempo de mundo}; al re-mallar se hornea UV0.x = el tiempo del add más reciente que
+    // cubre cada vértice, y el material desvanece el brillo con NowTime (mismo material/params que el clásico).
+    struct FPTSVOAddEvent { FBox LocalBounds; float Time; };
+    TArray<FPTSVOAddEvent> SVOAddEvents;
+    void RecordSVOAddEvent(const FBox& LocalBounds); // agrega un evento y purga los expirados
+    void BuildSVOGlowUVs(const TArray<FVector>& Verts, TArray<FVector2D>& OutUV) const; // UV0.x por vértice
     float SVOChunkSize() const { return SVOField.GetRootSize() / (float)SVOChunkDim; }
     // Hojas <= chunk = "finas" (van a chunks); > chunk = grandes (pocas, sección gruesa). Umbral = chunk
     // para que quepan en un chunk y el halo de 1 chunk cubra sus vecinos.

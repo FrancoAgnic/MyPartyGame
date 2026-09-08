@@ -1497,6 +1497,8 @@ void APTSculptVolume::ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float
                 (c & 2) ? HalfExtent.Y : -HalfExtent.Y, (c & 4) ? HalfExtent.Z : -HalfExtent.Z));
         if (F.GetPendingBalanceBounds().IsValid) Bounds += F.GetPendingBalanceBounds();
         MarkSVODirtyLocalBounds(Bounds.Min, Bounds.Max);
+        // Glow de arcilla nueva: recordar el bounds (local) de este ADD para hornear UV0.x al re-mallar.
+        if (Mode == EPTEditMode::Add) RecordSVOAddEvent(Bounds);
     }
     else
     {
@@ -1604,6 +1606,37 @@ void APTSculptVolume::ClearSVOChunkMeshes()
     SVOChunkMeshes.Reset();
 }
 
+void APTSculptVolume::RecordSVOAddEvent(const FBox& LocalBounds)
+{
+    const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+    // Expandir un poco: los vértices de Marching Cubes de la superficie nueva caen en el borde del sello.
+    const float Pad = FMath::Max(2.f, SVOField.MinCellSize());
+    SVOAddEvents.Add({ LocalBounds.ExpandBy(Pad), Now });
+    // Purgar eventos ya apagados (más viejos que la ventana de glow) para no acumular.
+    const float Cutoff = Now - FMath::Max(0.05f, NewClayGlowSeconds);
+    SVOAddEvents.RemoveAll([Cutoff](const FPTSVOAddEvent& E) { return E.Time < Cutoff; });
+    // Tope de seguridad (un trazo largo puede generar muchos): quedarse con los más recientes.
+    if (SVOAddEvents.Num() > 4096) SVOAddEvents.RemoveAt(0, SVOAddEvents.Num() - 4096, EAllowShrinking::No);
+}
+
+void APTSculptVolume::BuildSVOGlowUVs(const TArray<FVector>& Verts, TArray<FVector2D>& OutUV) const
+{
+    OutUV.SetNumUninitialized(Verts.Num());
+    const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+    const float Cutoff = Now - FMath::Max(0.05f, NewClayGlowSeconds);
+    // Sin eventos vigentes → todo "viejo" (no brilla): UV0.x muy negativo.
+    for (int32 i = 0; i < Verts.Num(); ++i)
+    {
+        float Best = -1.e9f; // tiempo de add más reciente que cubre este vértice
+        for (const FPTSVOAddEvent& E : SVOAddEvents)
+        {
+            if (E.Time < Cutoff || E.Time <= Best) continue; // expirado o no mejora
+            if (E.LocalBounds.IsInsideOrOn(Verts[i])) Best = E.Time;
+        }
+        OutUV[i] = FVector2D(Best, 0.f);
+    }
+}
+
 void APTSculptVolume::RebuildSVOMesh()
 {
     if (!Mesh) return;
@@ -1649,7 +1682,9 @@ void APTSculptVolume::RebuildSVOMesh()
                 if (R->V.Num() == 0) Self->Mesh->ClearMeshSection(0);
                 else
                 {
+                    // UV0.x = tiempo de agregado por vértice (glow de arcilla nueva); el resto viejo.
                     TArray<FVector2D> UV; TArray<FProcMeshTangent> Tan;
+                    Self->BuildSVOGlowUVs(R->V, UV);
                     Self->Mesh->CreateMeshSection(0, R->V, R->T, R->N, UV, R->C, Tan, /*collision=*/false);
                     if (Mat) Self->Mesh->SetMaterial(0, Mat);
                 }
