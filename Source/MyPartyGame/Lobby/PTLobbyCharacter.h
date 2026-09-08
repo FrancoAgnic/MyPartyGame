@@ -229,6 +229,9 @@ public:
     FVector  GetSpectateCamLocation() const;
     /** Rotación de la vista (pitch replicado + yaw del actor) para espectar este pawn. */
     FRotator GetSpectateViewRotation() const;
+    /** Oculta/muestra el cuerpo + cabeza + cartel de nombre SOLO localmente (no se replica), para que
+     *  al espectar en 1ra persona el propio cuerpo/cabeza del jugador no tapen su POV. */
+    void SetSpectateBodyHiddenLocal(bool bBodyHidden);
 protected:
     UPROPERTY(Replicated) float ReplViewPitch = 0.f;
     UFUNCTION(Server, Unreliable) void Server_ReportViewPitch(float InPitch);

@@ -57,6 +57,7 @@ private:
     UPROPERTY(Transient) class UPTSpectatorHUDWidget* FlagHUD = nullptr;
     FString  SavedLangCode;         // tu idioma, para restaurarlo al salir del POV
     bool     bLangOverridden = false;
+    TWeakObjectPtr<class APTLobbyCharacter> HiddenPovPawn; // pawn cuyo cuerpo ocultamos localmente en POV
     TWeakObjectPtr<AActor> PrevViewTarget;
     // CamLoc/CamRot = transform REAL de la cámara (lo que se aplica). Target* = objetivo que responde
     // al instante al input; la real interpola hacia el objetivo → suavizado/lag para video.

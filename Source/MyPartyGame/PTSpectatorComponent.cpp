@@ -124,6 +124,16 @@ void UPTSpectatorComponent::ApplyPovLanguageAndFlag(APlayerController* C, APawn*
     }
     // Bandera grande de ese idioma (centro-derecha).
     if (FlagHUD) FlagHUD->SetFlag(PTText::GetLanguageFlag(Lang));
+
+    // Ocultar LOCALMENTE el cuerpo + cabeza del jugador que espectás (en 1ra persona tapan su POV).
+    // Restaurar primero el anterior (si veníamos de otro POV) y ocultar el nuevo.
+    if (HiddenPovPawn.IsValid()) HiddenPovPawn->SetSpectateBodyHiddenLocal(false);
+    if (APTLobbyCharacter* PovC = Cast<APTLobbyCharacter>(PovPawn))
+    {
+        PovC->SetSpectateBodyHiddenLocal(true);
+        HiddenPovPawn = PovC;
+    }
+    else HiddenPovPawn = nullptr;
 }
 
 void UPTSpectatorComponent::ClearPovOverrides()
@@ -135,6 +145,9 @@ void UPTSpectatorComponent::ClearPovOverrides()
         bLangOverridden = false;
     }
     if (FlagHUD) FlagHUD->SetFlag(nullptr);
+    // Volver a mostrar el cuerpo del jugador que estábamos espectando.
+    if (HiddenPovPawn.IsValid()) HiddenPovPawn->SetSpectateBodyHiddenLocal(false);
+    HiddenPovPawn = nullptr;
 }
 
 void UPTSpectatorComponent::EnterFreeFly(APlayerController* C)
@@ -183,10 +196,18 @@ void UPTSpectatorComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
     if (C->WasInputKeyJustPressed(EKeys::Tab))
         CyclePov(C);
 
-    // Rueda del mouse: subir/bajar la velocidad de la cámara (multiplicativo, se siente parejo).
+    // Rueda del mouse:
+    //  - En POV de un jugador → ajusta la SUAVIDAD (cámara cinemática): bajo = más lag/suave,
+    //    alto = más directo. Paso grande (x1.4 por muesca) para llegar rápido al valor que querés.
+    //  - En vuelo libre → ajusta la VELOCIDAD de la cámara (como antes).
     const float Wheel = C->GetInputAnalogKeyState(EKeys::MouseWheelAxis);
     if (!FMath::IsNearlyZero(Wheel))
-        SpeedScale = FMath::Clamp(SpeedScale * FMath::Pow(1.15f, Wheel), 0.1f, 30.f);
+    {
+        if (PovIndex >= 0)
+            CamLagSpeed = FMath::Clamp(CamLagSpeed * FMath::Pow(1.4f, Wheel), 1.f, 60.f);
+        else
+            SpeedScale  = FMath::Clamp(SpeedScale * FMath::Pow(1.15f, Wheel), 0.1f, 30.f);
+    }
 
     // Viendo el POV de un jugador: la cámara del espectador SIGUE su POV (ojo + pitch replicado + yaw)
     // con suavizado → fluido, sin los saltos de la replicación, y con el movimiento vertical incluido.

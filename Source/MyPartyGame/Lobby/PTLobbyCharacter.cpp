@@ -1099,6 +1099,14 @@ FRotator APTLobbyCharacter::GetSpectateViewRotation() const
     return FRotator(ReplViewPitch, GetActorRotation().Yaw, 0.f);
 }
 
+void APTLobbyCharacter::SetSpectateBodyHiddenLocal(bool bBodyHidden)
+{
+    // SOLO visibilidad de componentes (local, no replica) → no afecta lo que ven las otras máquinas.
+    if (USkeletalMeshComponent* M = GetMesh()) M->SetVisibility(!bBodyHidden, /*bPropagateToChildren=*/true);
+    if (HeadMesh) HeadMesh->SetVisibility(!bBodyHidden, true);
+    if (NameTag)  NameTag->SetVisibility(!bBodyHidden);
+}
+
 void APTLobbyCharacter::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
