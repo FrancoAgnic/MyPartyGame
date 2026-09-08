@@ -44,6 +44,7 @@ protected:
     UPROPERTY(EditAnywhere, Category="Shout") float SpreadX   = 85.f;   // cuánto se corre a los lados
     UPROPERTY(EditAnywhere, Category="Shout") float MaxTiltDeg = 12.f;  // inclinación máxima (leve, legible)
     UPROPERTY(EditAnywhere, Category="Shout") float DriftUp   = 26.f;   // cuánto sigue subiendo al desvanecerse
+    UPROPERTY(EditAnywhere, Category="Shout") int32 MaxChars  = 40;     // tope de caracteres (no textos enormes)
     UPROPERTY(EditAnywhere, Category="Shout") FLinearColor GuessColor = FLinearColor(0.f, 1.f, 0.f, 1.f);
 
 private:

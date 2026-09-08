@@ -35,7 +35,10 @@ float UPTChatShoutWidget::ShowShout(const FString& Text, bool bGuess)
 {
     if (ShoutText)
     {
-        ShoutText->SetText(FText::FromString(Text));
+        // Tope de caracteres: nada de mega-textos, solo palabras cortas.
+        FString Shown = Text;
+        if (MaxChars > 0 && Shown.Len() > MaxChars) Shown = Shown.Left(MaxChars - 1) + TEXT("…");
+        ShoutText->SetText(FText::FromString(Shown));
         ShoutText->SetColorAndOpacity(FSlateColor(bGuess ? GuessColor : DefaultTextColor));
     }
 
