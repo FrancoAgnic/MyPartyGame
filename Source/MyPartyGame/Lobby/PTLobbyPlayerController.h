@@ -95,6 +95,10 @@ public:
     /** Segundos que faltan para borrar todo (para el contador del cuadrito). */
     float GetHeadClearHoldRemaining() const
     { return bHeadClearHeld ? FMath::Max(0.f, HeadClearHoldDuration - HeadClearHoldTime) : HeadClearHoldDuration; }
+    /** true mientras el radial de formas está abierto (mantener TAB): para el glow de la celda de formas. */
+    bool IsShapeRadialActive() const { return bHeadShapeRadialActive; }
+    /** true durante un instante tras un undo (toque de Backspace): para el glow de la celda de borrar. */
+    bool IsHeadUndoFlashing() const;
 
     /** true si la herramienta actual del modo G usa formas: SOLO Agregar. Borrar usa siempre esfera,
      *  Paint usa el círculo, Ojos esfera, y el pintado del cuerpo tampoco → en todos esos se colapsa
@@ -378,6 +382,7 @@ protected:
     bool  bHeadClearHeld    = false; // true mientras se mantiene la tecla (para el HUD)
     float HeadClearHoldTime = 0.f;
     bool  bHeadClearFired   = false; // ya se disparó el reset en este mantener (evita un undo al soltar)
+    float HeadUndoFlashUntil = 0.f;  // tiempo de mundo hasta el que la celda de undo brilla (toque Backspace)
     UPROPERTY(EditAnywhere, Category="Head") float HeadClearHoldDuration = 3.f;   // mantener → borrar todo
     UPROPERTY(EditAnywhere, Category="Head") float HeadUndoTapMaxTime    = 0.35f; // toque → undo
     bool bHeadStrokeActive = false; // hay un trazo de geometría abierto (para el undo)

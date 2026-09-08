@@ -1010,10 +1010,16 @@ void APTLobbyPlayerController::OnHeadClearReleased()
         if (SculptSounds) // sonido de undo simple (toque corto de Backspace)
             SculptSounds->PlayUndoSimple(HeadVolume ? HeadVolume->GetActorLocation()
                                                     : (GetPawn() ? GetPawn()->GetActorLocation() : FVector::ZeroVector));
+        // Glow breve de la celda de borrar/undo (igual que se prenden los demás botones al apretarlos).
+        if (GetWorld()) HeadUndoFlashUntil = GetWorld()->GetTimeSeconds() + 0.18f;
     }
     bHeadClearHeld    = false;
     HeadClearHoldTime = 0.f;
     bHeadClearFired   = false;
+}
+bool APTLobbyPlayerController::IsHeadUndoFlashing() const
+{
+    return GetWorld() && GetWorld()->GetTimeSeconds() < HeadUndoFlashUntil;
 }
 void APTLobbyPlayerController::OnHeadColorSave()
 {

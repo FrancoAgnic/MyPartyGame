@@ -151,6 +151,8 @@ void UPTHeadSculptHUDWidget::Refresh(APTLobbyPlayerController* PC)
                                                   : ESlateVisibility::Collapsed;
     if (ShapesHintSlot) ShapesHintSlot->SetVisibility(ShapeVis); // celda suelta (preferida)
     else if (ShapesBox) ShapesBox->SetVisibility(ShapeVis);      // contenedor viejo (compat)
+    // Glow de la celda de formas mientras mantenés TAB (radial abierto), como los demás botones.
+    if (ShapeHintSlot && bShowShapes) ShapeHintSlot->SetSelected(PC->IsShapeRadialActive());
 
     // ── El slot de color se resalta mientras el picker está abierto ──
     if (ColorSlot) ColorSlot->SetSelected(PC->IsHeadColorPickerOpen());
@@ -225,6 +227,8 @@ void UPTHeadSculptHUDWidget::Refresh(APTLobbyPlayerController* PC)
         ClearSlot->SetProgress(P, P > 0.f
             ? FText::AsNumber(FMath::CeilToInt(PC->GetHeadClearHoldRemaining()))
             : FText::GetEmpty());
+        // Glow breve al hacer undo (toque de Backspace), como se prenden los demás botones al apretarlos.
+        ClearSlot->SetSelected(PC->IsHeadUndoFlashing());
     }
 
     // ── Cruz WASD: brillan mientras se mantiene la tecla ──
