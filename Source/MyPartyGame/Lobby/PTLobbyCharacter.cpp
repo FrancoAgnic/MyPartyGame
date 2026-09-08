@@ -912,11 +912,13 @@ void APTLobbyCharacter::UpdateNameTag()
         // puede llegar vacío. Caer al nombre nativo del PlayerState (el "?Name=" de Steam).
         FString N;
         bool bHost = false;
+        bool bReady = false;
         if (const APTPlayerState* PS = GetPlayerState<APTPlayerState>())
         {
             N = PS->GetDisplayNameSafe();
             if (N.IsEmpty()) N = PS->GetPlayerName();
             bHost = PS->bIsHost;
+            bReady = PS->bIsReady;
         }
         // Fallback para el menú principal (sin sesión / sin DisplayName): usar el nick local de Steam.
         if (N.IsEmpty() && IsLocallyControlled())
@@ -932,6 +934,7 @@ void APTLobbyCharacter::UpdateNameTag()
             }
         W->SetPlayerName(N);
         W->SetHost(bHost); // corona del host, igual que en la lista de jugadores
+        W->SetReadyState(bReady); // marco verde cuando el jugador está listo
     }
 }
 

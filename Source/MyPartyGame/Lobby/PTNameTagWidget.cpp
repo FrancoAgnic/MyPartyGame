@@ -3,17 +3,22 @@
 #include "Components/Image.h"
 #include "Components/Border.h"
 
-// Mismo verde que el texto del acierto (ShowGuessMessage usa FLinearColor::Green).
-const FLinearColor UPTNameTagWidget::BorderGreen = FLinearColor::Green;
-
 bool UPTNameTagWidget::Initialize()
 {
     if (!Super::Initialize()) return false;
     if (NameText) DefaultColor = NameText->GetColorAndOpacity().GetSpecifiedColor();
     if (HostCrown) HostCrown->SetVisibility(ESlateVisibility::Collapsed); // arranca oculta
-    // Marco verde del cartel (mismo verde del acierto). Tiñe el brush del UBorder.
-    if (Border) Border->SetBrushColor(BorderGreen);
+    // Guardar el marco original del WBP para poder restaurarlo cuando el jugador deja de estar listo.
+    if (BorderNameTag) { DefaultBrush = BorderNameTag->Background; bDefaultBrushCaptured = true; }
     return true;
+}
+
+void UPTNameTagWidget::SetReadyState(bool bReady)
+{
+    if (!BorderNameTag) return;
+    // Listo → tu marco/material verde (ReadyBrush, asignado en el WBP). No listo → marco original.
+    if (bReady)                    BorderNameTag->SetBrush(ReadyBrush);
+    else if (bDefaultBrushCaptured) BorderNameTag->SetBrush(DefaultBrush);
 }
 
 void UPTNameTagWidget::SetHost(bool bIsHost)

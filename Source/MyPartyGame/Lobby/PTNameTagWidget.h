@@ -28,18 +28,26 @@ public:
     /** Globo de acierto: texto en VERDE (tope 40 chars). */
     void ShowGuessMessage(const FString& Msg);
 
+    /** Cambia el marco del cartel según el estado de listo del jugador:
+     *  listo → ReadyBrush (tu marco/material verde); no listo → el marco original del WBP. */
+    void SetReadyState(bool bReady);
+
 protected:
     virtual bool Initialize() override;
 
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* NameText;
     // Corona del host (opcional): nombrala EXACTO "HostCrown" en el WBP_NameTag. Solo visible si sos host.
     UPROPERTY(meta = (BindWidgetOptional)) UImage* HostCrown;
-    // Marco del cartel (el UBorder llamado "Border" en WBP_NameTag). Se tiñe de verde (mismo
-    // verde del acierto) para el look del lobby. Opcional: si el WBP no lo tiene, no pasa nada.
-    UPROPERTY(meta = (BindWidgetOptional)) UBorder* Border;
+    // Marco del cartel: el UBorder llamado EXACTO "BorderNameTag" en el WBP_NameTag.
+    UPROPERTY(meta = (BindWidgetOptional)) UBorder* BorderNameTag;
 
-    // Verde del cartel = el mismo que usa el globo de acierto (ShowGuessMessage).
-    static const FLinearColor BorderGreen;
+    // Marco a usar cuando el jugador está LISTO. Asignalo en el WBP_NameTag (Class Defaults →
+    // categoría "NameTag" → Ready Brush) con TU marco/material verde (Image = tu material o textura).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NameTag") FSlateBrush ReadyBrush;
+
+    // Marco original (no listo), capturado del WBP en Initialize para poder restaurarlo.
+    FSlateBrush DefaultBrush;
+    bool bDefaultBrushCaptured = false;
 
     // Color original del NameText (del WBP), para restaurarlo tras un globo verde.
     FLinearColor DefaultColor = FLinearColor::White;
