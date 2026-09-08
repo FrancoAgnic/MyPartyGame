@@ -8,6 +8,10 @@
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Lobby/PTPlayerState.h"
+#include "UI/PTSpectatorHUDWidget.h"
+#include "PTGameUserSettings.h"
+#include "PTTextTable.h"
+#include "Blueprint/UserWidget.h"
 
 UPTSpectatorComponent::UPTSpectatorComponent()
 {
@@ -48,6 +52,15 @@ void UPTSpectatorComponent::Activate2(APlayerController* C)
     C->bShowMouseCursor = false;
     C->SetInputMode(FInputModeGameOnly());
 
+    // Recordar tu idioma para restaurarlo al salir del POV de otro jugador.
+    if (const UPTGameUserSettings* S = UPTGameUserSettings::Get()) SavedLangCode = S->GetLanguageCode();
+    bLangOverridden = false;
+
+    // HUD del espectador (bandera grande centro-derecha). Se crea una vez y arranca oculto.
+    if (!FlagHUD)
+        FlagHUD = CreateWidget<UPTSpectatorHUDWidget>(C, UPTSpectatorHUDWidget::StaticClass());
+    if (FlagHUD && !FlagHUD->IsInViewport()) FlagHUD->AddToViewport(50);
+
     bActive = true;
     PovIndex = -1;
     SetComponentTickEnabled(true);
@@ -58,6 +71,10 @@ void UPTSpectatorComponent::Deactivate2(APlayerController* C)
     SetComponentTickEnabled(false);
     bActive = false;
     PovIndex = -1;
+
+    // Restaurar tu idioma y sacar el HUD del espectador.
+    ClearPovOverrides();
+    if (FlagHUD) { FlagHUD->RemoveFromParent(); FlagHUD = nullptr; }
 
     if (PrevViewTarget.IsValid()) C->SetViewTargetWithBlend(PrevViewTarget.Get(), 0.15f);
     else if (C->GetPawn())        C->SetViewTargetWithBlend(C->GetPawn(), 0.15f);
@@ -92,9 +109,37 @@ TArray<APawn*> UPTSpectatorComponent::GatherPovPawns(APlayerController* C) const
     return Pawns;
 }
 
+void UPTSpectatorComponent::ApplyPovLanguageAndFlag(APlayerController* C, APawn* PovPawn)
+{
+    const APTPlayerState* PT = PovPawn ? Cast<APTPlayerState>(PovPawn->GetPlayerState()) : nullptr;
+    const FString Lang = PT ? PT->Language : FString();
+    if (Lang.IsEmpty()) { ClearPovOverrides(); return; }
+
+    // Traducir la UI al idioma de ese jugador (temporal, sin pisar tu preferencia guardada).
+    if (UPTGameUserSettings* S = UPTGameUserSettings::Get())
+    {
+        S->SetLanguageCodeTransient(Lang);
+        bLangOverridden = true;
+    }
+    // Bandera grande de ese idioma (centro-derecha).
+    if (FlagHUD) FlagHUD->SetFlag(PTText::GetLanguageFlag(Lang));
+}
+
+void UPTSpectatorComponent::ClearPovOverrides()
+{
+    // Volver a tu idioma si lo habíamos cambiado.
+    if (bLangOverridden)
+    {
+        if (UPTGameUserSettings* S = UPTGameUserSettings::Get()) S->SetLanguageCodeTransient(SavedLangCode);
+        bLangOverridden = false;
+    }
+    if (FlagHUD) FlagHUD->SetFlag(nullptr);
+}
+
 void UPTSpectatorComponent::EnterFreeFly(APlayerController* C)
 {
     PovIndex = -1;
+    ClearPovOverrides(); // vuelo libre: sin idioma forzado ni bandera
     // Re-sembrar la cámara libre desde donde estábamos mirando (POV del jugador que dejamos).
     FVector Loc; FRotator Rot;
     C->GetPlayerViewPoint(Loc, Rot);
@@ -115,6 +160,7 @@ void UPTSpectatorComponent::CyclePov(APlayerController* C)
     }
     PovIndex = Next;
     C->SetViewTargetWithBlend(Pawns[PovIndex], 0.3f);
+    ApplyPovLanguageAndFlag(C, Pawns[PovIndex]); // idioma + bandera de ese jugador
 }
 
 void UPTSpectatorComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)

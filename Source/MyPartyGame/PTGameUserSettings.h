@@ -58,6 +58,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void SetLanguageCode(const FString& InLanguageCode);
 
+    /** Cambia el idioma activo SIN guardarlo a disco (uso temporal: espectar el POV de otro jugador en
+     *  SU idioma y volver al tuyo al salir, sin pisar tu preferencia guardada). Re-traduce la UI igual. */
+    void SetLanguageCodeTransient(const FString& InLanguageCode);
+
     // ── Resolución ──────────────────────────────────────────────────────────
     // La resolución real (ResolutionSizeX/Y + modo pantalla) la persiste UGameUserSettings base.
     // Acá solo recordamos si el usuario eligió "Automática (recomendada)" para volver a seguir la

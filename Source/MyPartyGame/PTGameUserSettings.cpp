@@ -79,6 +79,14 @@ void UPTGameUserSettings::SetLanguageCode(const FString& InLanguageCode)
     PTText::OnLanguageChanged().Broadcast(); // refrescar la UI ya construida
 }
 
+void UPTGameUserSettings::SetLanguageCodeTransient(const FString& InLanguageCode)
+{
+    LanguageCode = InLanguageCode;
+    FInternationalization::Get().SetCurrentCulture(LanguageCode);
+    // NO SaveSettings(): es temporal (espectador). Igual re-traducimos la UI en pantalla.
+    PTText::OnLanguageChanged().Broadcast();
+}
+
 int32 UPTGameUserSettings::GetGraphicsQuality() const
 {
     return GetOverallScalabilityLevel();

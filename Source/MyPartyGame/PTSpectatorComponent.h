@@ -47,8 +47,16 @@ private:
     TArray<class APawn*> GatherPovPawns(class APlayerController* C) const;
     void EnterFreeFly(class APlayerController* C); // vuelve al vuelo libre (re-siembra la cámara)
 
+    // POV: al mirar el POV de un jugador, traducir la UI a SU idioma y mostrar su bandera grande
+    // (centro-derecha). Al volver al vuelo libre / salir, se restaura tu idioma.
+    void ApplyPovLanguageAndFlag(class APlayerController* C, class APawn* PovPawn);
+    void ClearPovOverrides();
+
     bool bActive = false;
     UPROPERTY(Transient) AActor* CamActor = nullptr;
+    UPROPERTY(Transient) class UPTSpectatorHUDWidget* FlagHUD = nullptr;
+    FString  SavedLangCode;         // tu idioma, para restaurarlo al salir del POV
+    bool     bLangOverridden = false;
     TWeakObjectPtr<AActor> PrevViewTarget;
     // CamLoc/CamRot = transform REAL de la cámara (lo que se aplica). Target* = objetivo que responde
     // al instante al input; la real interpola hacia el objetivo → suavizado/lag para video.
