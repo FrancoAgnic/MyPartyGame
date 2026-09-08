@@ -1497,8 +1497,8 @@ void APTSculptVolume::ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float
                 (c & 2) ? HalfExtent.Y : -HalfExtent.Y, (c & 4) ? HalfExtent.Z : -HalfExtent.Z));
         if (F.GetPendingBalanceBounds().IsValid) Bounds += F.GetPendingBalanceBounds();
         MarkSVODirtyLocalBounds(Bounds.Min, Bounds.Max);
-        // Glow de arcilla nueva: recordar el bounds (local) de este ADD para hornear UV0.x al re-mallar.
-        if (Mode == EPTEditMode::Add) RecordSVOAddEvent(Bounds);
+        // Glow de arcilla nueva: recordar el CENTRO + RADIO (local) de este ADD para la máscara radial.
+        if (Mode == EPTEditMode::Add) RecordSVOAddEvent(LocalPos, HalfExtent.GetMax());
     }
     else
     {
@@ -1606,12 +1606,12 @@ void APTSculptVolume::ClearSVOChunkMeshes()
     SVOChunkMeshes.Reset();
 }
 
-void APTSculptVolume::RecordSVOAddEvent(const FBox& LocalBounds)
+void APTSculptVolume::RecordSVOAddEvent(const FVector& LocalCenter, float Radius)
 {
     const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
-    // Expandir un poco: los vértices de Marching Cubes de la superficie nueva caen en el borde del sello.
-    const float Pad = FMath::Max(2.f, SVOField.MinCellSize());
-    SVOAddEvents.Add({ LocalBounds.ExpandBy(Pad), Now });
+    // Radio efectivo del sello + un poco (los vértices de Marching Cubes caen en el borde del sello).
+    const float R = FMath::Max(2.f, Radius + SVOField.MinCellSize());
+    SVOAddEvents.Add({ LocalCenter, R, Now });
     // Purgar eventos ya apagados (más viejos que la ventana de glow) para no acumular.
     const float Cutoff = Now - FMath::Max(0.05f, NewClayGlowSeconds);
     SVOAddEvents.RemoveAll([Cutoff](const FPTSVOAddEvent& E) { return E.Time < Cutoff; });
@@ -1622,16 +1622,24 @@ void APTSculptVolume::RecordSVOAddEvent(const FBox& LocalBounds)
 void APTSculptVolume::BuildSVOGlowUVs(const TArray<FVector>& Verts, TArray<FVector2D>& OutUV) const
 {
     OutUV.SetNumUninitialized(Verts.Num());
-    const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
-    const float Cutoff = Now - FMath::Max(0.05f, NewClayGlowSeconds);
-    // Sin eventos vigentes → todo "viejo" (no brilla): UV0.x muy negativo.
+    const float Now     = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+    const float Seconds = FMath::Max(0.05f, NewClayGlowSeconds);
+    const float Cutoff  = Now - Seconds; // UV0.x por debajo de esto → el material ya no lo ilumina
+
     for (int32 i = 0; i < Verts.Num(); ++i)
     {
-        float Best = -1.e9f; // tiempo de add más reciente que cubre este vértice
+        const FVector V = Verts[i];
+        float Best = -1.e9f; // mejor UV0.x (más "nuevo") que le toca a este vértice
         for (const FPTSVOAddEvent& E : SVOAddEvents)
         {
-            if (E.Time < Cutoff || E.Time <= Best) continue; // expirado o no mejora
-            if (E.LocalBounds.IsInsideOrOn(Verts[i])) Best = E.Time;
+            if (E.Time < Cutoff) continue; // evento ya apagado
+            // Máscara RADIAL suave: 1 en el centro del sello → 0 en el borde (círculo, no cuadrado).
+            const float dist01 = (E.Radius > 1e-3f) ? FMath::Clamp((float)(V - E.Center).Size() / E.Radius, 0.f, 1.f) : 1.f;
+            const float mask   = 1.f - FMath::SmoothStep(0.15f, 1.f, dist01); // pleno hasta ~15% del radio
+            if (mask <= 0.f) continue; // fuera del círculo del sello
+            // Codificar la intensidad en el tiempo: al recién agregar, glow = mask; luego se desvanece.
+            const float EffTime = E.Time - (1.f - mask) * Seconds;
+            if (EffTime > Best) Best = EffTime;
         }
         OutUV[i] = FVector2D(Best, 0.f);
     }

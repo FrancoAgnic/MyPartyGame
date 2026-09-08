@@ -321,11 +321,13 @@ private:
     // ── Glow de arcilla nueva en modo SVO ──
     // El octree no guarda "tiempo de agregado" por vóxel (a diferencia del campo clásico). Para que la
     // arcilla recién agregada BRILLE unos segundos igual que el clásico, guardamos los últimos ADD como
-    // {bounds LOCAL, tiempo de mundo}; al re-mallar se hornea UV0.x = el tiempo del add más reciente que
-    // cubre cada vértice, y el material desvanece el brillo con NowTime (mismo material/params que el clásico).
-    struct FPTSVOAddEvent { FBox LocalBounds; float Time; };
+    // {centro LOCAL, radio, tiempo}; al re-mallar se hornea UV0.x por vértice con una MÁSCARA RADIAL
+    // suave (intenso en el centro del sello, cero en el borde → siempre un círculo, no un cuadrado). La
+    // máscara se codifica en el tiempo: UV0.x = Time - (1-mask)*Seconds, así el material clásico
+    // (glow = 1 - (NowTime-UV0.x)/Seconds) la dibuja sin cambios y además desvanece con el tiempo.
+    struct FPTSVOAddEvent { FVector Center; float Radius; float Time; };
     TArray<FPTSVOAddEvent> SVOAddEvents;
-    void RecordSVOAddEvent(const FBox& LocalBounds); // agrega un evento y purga los expirados
+    void RecordSVOAddEvent(const FVector& LocalCenter, float Radius); // agrega un evento y purga los expirados
     void BuildSVOGlowUVs(const TArray<FVector>& Verts, TArray<FVector2D>& OutUV) const; // UV0.x por vértice
     float SVOChunkSize() const { return SVOField.GetRootSize() / (float)SVOChunkDim; }
     // Hojas <= chunk = "finas" (van a chunks); > chunk = grandes (pocas, sección gruesa). Umbral = chunk
