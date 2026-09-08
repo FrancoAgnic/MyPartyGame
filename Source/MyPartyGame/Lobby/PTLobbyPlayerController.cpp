@@ -215,7 +215,9 @@ bool APTLobbyPlayerController::EyedropColorUnderCursor(FLinearColor& OutColor) c
                 RawPaint = HeadVolume->SampleWorldPaintColor(Surf + Dir * Off, bPainted);
                 if (bPainted) break;
             }
-            if (bPainted) { OutColor = FLinearColor::FromSRGBColor(RawPaint.ToFColor(false)); OutColor.A = 1.f; return true; }
+            // SampleWorldPaintColor ya devuelve el color DECODIFICADO (= el del picker); devolverlo tal
+            // cual. Re-decodificarlo cambiaba el brillo (gotero agarraba otro color).
+            if (bPainted) { OutColor = RawPaint; OutColor.A = 1.f; return true; }
 
             FLinearColor Base = HeadVolume->SampleWorldColor(Surf + Dir * CV);
             Base.A = 1.f; OutColor = Base;

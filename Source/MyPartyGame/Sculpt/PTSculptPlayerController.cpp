@@ -869,7 +869,10 @@ bool APTSculptPlayerController::EyedropColorUnderCursor(FLinearColor& OutColor) 
                 RawPaint = Volume->SampleWorldPaintColor(Surf + Dir * Off, bPainted);
                 if (bPainted) break;
             }
-            if (bPainted) { OutColor = FLinearColor::FromSRGBColor(RawPaint.ToFColor(false)); OutColor.A = 1.f; return true; }
+            // SampleWorldPaintColor devuelve FLinearColor(FColor) = sRGB DECODIFICADO = el color del
+            // picker (la pintura se escribió con ToFColor(true) = sRGB encode). Devolverlo TAL CUAL:
+            // volver a decodificar (FromSRGBColor(ToFColor(false))) lo oscurecía → gotero con otro brillo.
+            if (bPainted) { OutColor = RawPaint; OutColor.A = 1.f; return true; }
 
             // 2) Sin Paint → COLOR BASE del campo (Add+color). La arcilla lo renderiza con los bytes
             //    reinterpretados como lineales (SIN decodificar) → devolvemos el color CRUDO tal cual
