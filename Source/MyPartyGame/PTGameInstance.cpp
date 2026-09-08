@@ -282,6 +282,11 @@ void UPTGameInstance::Init()
     // pierde entre mundos, así que lo reponemos en cada mapa.
     FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(this, &UPTGameInstance::OnPostLoadMap);
 
+    // Heartbeat: reconcilia la música con el mapa actual aunque el delegate de arriba no dispare (p. ej.
+    // tras un seamless travel al Lvl-01). Vive por sobre los worlds (FTSTicker global).
+    MusicHeartbeatHandle = FTSTicker::GetCoreTicker().AddTicker(
+        FTickerDelegate::CreateUObject(this, &UPTGameInstance::MusicHeartbeat), 0.5f);
+
     // Invitaciones (F3): el subsistema ya está inicializado tras Super::Init().
     if (UMultiplayerSessionsSubsystem* S = GetSubsystem<UMultiplayerSessionsSubsystem>())
     {
@@ -345,9 +350,41 @@ void UPTGameInstance::TravelToResolvedSession()
     NotifyJoinedServer(TravelURL); // guard anti-flood + arma reintento
 }
 
+void UPTGameInstance::Shutdown()
+{
+    if (MusicHeartbeatHandle.IsValid())
+    {
+        FTSTicker::GetCoreTicker().RemoveTicker(MusicHeartbeatHandle);
+        MusicHeartbeatHandle.Reset();
+    }
+    Super::Shutdown();
+}
+
+bool UPTGameInstance::MusicHeartbeat(float /*Dt*/)
+{
+    EnsureMusicForCurrentMap();
+    return true; // seguir tickeando
+}
+
+void UPTGameInstance::EnsureMusicForCurrentMap()
+{
+    UWorld* W = GetWorld();
+    if (!W) return;
+    const FString Map = W->GetMapName();
+    // Rearmar si cambió el mapa, o si el componente de música quedó colgado de un world viejo (seamless
+    // travel): en ambos casos hay que (re)crear la música/análisis en el world actual.
+    const bool bStale = MenuMusicComp && MenuMusicComp->GetWorld() != W;
+    if (Map != LastMusicMap || bStale)
+    {
+        LastMusicMap = Map;
+        UpdateMenuMusic(W);
+    }
+}
+
 void UPTGameInstance::OnPostLoadMap(UWorld* LoadedWorld)
 {
     ApplyAudioMix();
+    if (LoadedWorld) LastMusicMap = LoadedWorld->GetMapName();
     UpdateMenuMusic(LoadedWorld);
 
     // Terminó de cargar un mapa → cualquier intento de conexión que estuviera en curso YA se resolvió
@@ -404,6 +441,14 @@ void UPTGameInstance::UpdateMenuMusic(UWorld* World)
     bEnvelopeBound = false;
     bSpectrumBound = false;
 
+    // "Sonando de verdad" = existe, está reproduciendo Y pertenece al world ACTUAL. Tras un seamless
+    // travel el componente persistido queda colgado del world viejo (IsPlaying puede dar true pero no se
+    // oye) → lo descartamos para recrearlo en el world nuevo. Así en Lvl-01 vuelve a sonar.
+    if (MenuMusicComp && MenuMusicComp->GetWorld() != World)
+    {
+        MenuMusicComp->Stop();
+        MenuMusicComp = nullptr;
+    }
     const bool bPlaying = MenuMusicComp && MenuMusicComp->IsPlaying();
 
     if (bWantMusic)

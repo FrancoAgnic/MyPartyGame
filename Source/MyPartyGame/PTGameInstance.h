@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
 #include "Engine/EngineTypes.h"
+#include "Containers/Ticker.h" // FTSTicker (heartbeat de música por sobre los worlds)
 #include "PTMatchSettings.h"
 #include "PTGameInstance.generated.h"
 
@@ -185,7 +186,18 @@ private:
     FTimerHandle SpectrumPollHandle;
     // Arranca/corta la música del menú según el mapa cargado (lo llama OnPostLoadMap).
     void UpdateMenuMusic(UWorld* World);
+
+    // Heartbeat (FTSTicker, vive por sobre los worlds): reconcilia la música con el mapa ACTUAL aunque
+    // el delegate PostLoadMapWithWorld no dispare (p. ej. tras un seamless travel al Lvl-01). Rearma la
+    // música/análisis en el world nuevo → arregla que en Lvl-01 no sonara nada.
+    bool MusicHeartbeat(float Dt);
+    void EnsureMusicForCurrentMap();
+    FTSTicker::FDelegateHandle MusicHeartbeatHandle;
+    FString LastMusicMap;
+
 public:
+    virtual void Shutdown() override;
+
 
     // ── Sonidos de esculpido (compartidos gameplay Lvl-01 + editar skins en el lobby) ──────────
     // Se asignan UNA vez acá. Los loops (Add/Erase/Paint) deben ser sonidos LOOPING. Todos 3D si se
