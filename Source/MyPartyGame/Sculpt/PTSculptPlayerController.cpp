@@ -720,9 +720,18 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
                 PaintRingMID = nullptr;
                 if (bTint)
                 {
-                    // Paint: MID para teñir con el color del picker.
-                    if (UMaterialInterface* M = PaintRing->GetMaterial(0))
-                        PaintRingMID = PaintRing->CreateDynamicMaterialInstance(0, M);
+                    // Paint: MID para teñir con el color del picker. Usar un material TINTABLE conocido
+                    // (PreviewMatPaint, o el del Add como fallback) en vez del material propio del mesh
+                    // del anillo, que puede no tener el parámetro "Color" (se veía blanco/emisivo).
+                    UMaterialInterface* RingMat = PreviewMatPaint ? PreviewMatPaint
+                                                : (PreviewMatAdd ? PreviewMatAdd : PaintRing->GetMaterial(0));
+                    if (RingMat)
+                    {
+                        PaintRingMID = PaintRing->CreateDynamicMaterialInstance(0, RingMat);
+                        // Apagar el glow por-tiempo de la arcilla (el preview no tiene ese dato) para que
+                        // no se vea emisivo.
+                        if (PaintRingMID) PaintRingMID->SetScalarParameterValue(TEXT("GlowEnable"), 0.f);
+                    }
                 }
                 else
                 {
