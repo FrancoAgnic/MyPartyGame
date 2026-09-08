@@ -3,6 +3,7 @@
 #include "PTPlayerRowWidget.h"
 #include "PTPlayerState.h"
 #include "PTLobbyPlayerController.h"
+#include "../PTTextTable.h"
 #include "Components/TextBlock.h"
 #include "Components/Image.h"
 #include "Components/Button.h"
@@ -41,6 +42,14 @@ void UPTPlayerRowWidget::SetRow(const FString& Name, bool bHost, bool bReady,
     // Kick: solo visible en las filas de OTROS jugadores cuando el local es el host.
     if (KickButton)
         KickButton->SetVisibility(bCanKick ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+
+    // Banderita del idioma que tiene seteado ESE jugador (viaja replicado en PS->Language).
+    if (LangFlag)
+    {
+        UTexture2D* Flag = Target ? PTText::GetLanguageFlag(Target->Language) : nullptr;
+        if (Flag) { LangFlag->SetBrushFromTexture(Flag); LangFlag->SetVisibility(ESlateVisibility::HitTestInvisible); }
+        else      { LangFlag->SetVisibility(ESlateVisibility::Collapsed); }
+    }
 }
 
 void UPTPlayerRowWidget::OnKickClicked()

@@ -870,9 +870,9 @@ void UPTGameplayHUDWidget::RebuildScoreboard()
     // flash "+N" para que el marcador se rearme cuando aparece Y cuando se vence (y así ocultarlo).
     FString Sig;
     for (APTPlayerState* PT : Players)
-        Sig += FString::Printf(TEXT("%s:%d:%d:%d:%d|"), *NameFor(PT),
+        Sig += FString::Printf(TEXT("%s:%d:%d:%d:%d:%s|"), *NameFor(PT),
                                PT->GameScore, PT == G->CurrentSculptor ? 1 : 0, IsFlashing(PT) ? 1 : 0,
-                               PT->bHasGuessedThisTurn ? 1 : 0);
+                               PT->bHasGuessedThisTurn ? 1 : 0, *PT->Language);
     if (Sig == CachedScoreSig) return;
     CachedScoreSig = Sig;
 
@@ -883,7 +883,7 @@ void UPTGameplayHUDWidget::RebuildScoreboard()
         if (!Row) continue;
         // El nombre se tiñe de verde si ya adivinó (nunca el escultor, que no adivina).
         Row->SetRow(NameFor(PT), PT->GameScore, PT == G->CurrentSculptor,
-                    PT != G->CurrentSculptor && PT->bHasGuessedThisTurn);
+                    PT != G->CurrentSculptor && PT->bHasGuessedThisTurn, PT->Language);
         // "+N" al lado del nombre + conteo animado del puntaje si este jugador acaba de adivinar.
         if (IsFlashing(PT))
         {

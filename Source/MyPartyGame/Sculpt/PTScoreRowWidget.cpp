@@ -1,4 +1,5 @@
 #include "PTScoreRowWidget.h"
+#include "../PTTextTable.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Components/Border.h"
@@ -23,10 +24,18 @@ void UPTScoreRowWidget::ApplyScoreText(int32 Value)
     }
 }
 
-void UPTScoreRowWidget::SetRow(const FString& Name, int32 Score, bool bSculptor, bool bGuessed)
+void UPTScoreRowWidget::SetRow(const FString& Name, int32 Score, bool bSculptor, bool bGuessed, const FString& LangCode)
 {
     RowName    = Name.Left(10);
     FinalScore = Score;
+
+    // Banderita del idioma del jugador (al lado del nombre).
+    if (LangFlag)
+    {
+        UTexture2D* Flag = PTText::GetLanguageFlag(LangCode);
+        if (Flag) { LangFlag->SetBrushFromTexture(Flag); LangFlag->SetVisibility(ESlateVisibility::HitTestInvisible); }
+        else      { LangFlag->SetVisibility(ESlateVisibility::Collapsed); }
+    }
 
     // Cachear una vez el brush de diseño del border ANTES de pisarlo, para restaurarlo cuando el
     // jugador no adivinó. Las filas se recrean en cada rebuild, así que en la primera SetRow el

@@ -23,7 +23,7 @@ public:
     /** Llenar la fila. bSculptor = este jugador esculpe este turno (muestra la imagen
      *  y le pone el contorno amarillo al nombre). bGuessed = ya adivinó la palabra este
      *  turno (tiñe el nombre de verde). */
-    void SetRow(const FString& Name, int32 Score, bool bSculptor, bool bGuessed = false);
+    void SetRow(const FString& Name, int32 Score, bool bSculptor, bool bGuessed = false, const FString& LangCode = FString());
 
     /** Muestra/oculta el "+N" al lado del nombre cuando este jugador acaba de adivinar.
      *  bShow=false lo oculta. Requiere el TextBlock opcional TxtGuessPlus en el WBP de la fila. */
@@ -49,6 +49,9 @@ protected:
     // Border que enmarca el nombre. Se tiñe de verde junto al nombre cuando el jugador adivina
     // (y vuelve a su color de diseño si no). Opcional.
     UPROPERTY(meta=(BindWidgetOptional)) UBorder* BorderBackgroundName;
+    // Banderita del idioma del jugador (al lado del nombre). Nombrala EXACTO "LangFlag" en el WBP; la
+    // textura la pone el código según el idioma de ese jugador. Opcional.
+    UPROPERTY(meta=(BindWidgetOptional)) UImage* LangFlag;
 
     // Animación del rebote del puntaje (creala en la pestaña Animations del WBP con ESTE nombre:
     // "ScorePopAnim"). Si la asignás, se dispara en cada subida del conteo; si no, hay un rebote por

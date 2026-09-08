@@ -35,6 +35,9 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UImage*     HostCrown;
     UPROPERTY(meta = (BindWidgetOptional)) UImage*     ReadyCheck;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*    KickButton;
+    // Banderita del idioma del jugador (al lado del nombre). Nombrala EXACTO "LangFlag" en el WBP; la
+    // textura la pone el código según el idioma que tenga seteado ese jugador. Opcional.
+    UPROPERTY(meta = (BindWidgetOptional)) UImage*     LangFlag;
 
     // Texturas del check (asignar en el WBP de la fila): con tilde = listo; vacía/aspa = no listo.
     UPROPERTY(EditAnywhere, Category = "Row") UTexture2D* ReadyTex    = nullptr;

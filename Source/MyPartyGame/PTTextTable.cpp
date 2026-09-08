@@ -7,6 +7,7 @@
 #include "Components/TextBlock.h"
 #include "Components/RichTextBlock.h"
 #include "Components/EditableTextBox.h"
+#include "Engine/Texture2D.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 
@@ -236,6 +237,15 @@ void PTText::Reload()
     GTexts.Reset();
     GReverse.Reset();
     EnsureLoaded();
+}
+
+UTexture2D* PTText::GetLanguageFlag(const FString& Code)
+{
+    const FString Key = Code.Left(2).ToUpper(); // "es-AR" → "ES"
+    if (Key.IsEmpty()) return nullptr;
+    // /Game/UI/Flags/Flag_ES, Flag_EN, ... (LoadObject encuentra la ya cargada si estaba → barato).
+    const FString Path = FString::Printf(TEXT("/Game/UI/Flags/Flag_%s.Flag_%s"), *Key, *Key);
+    return LoadObject<UTexture2D>(nullptr, *Path);
 }
 
 void PTText::LocalizeWidgetTree(UUserWidget* Widget)
