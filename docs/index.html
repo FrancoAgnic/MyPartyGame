@@ -99,23 +99,34 @@
     <p class="es">Un banco es un archivo <code>.csv</code> (texto) con una palabra por línea, en los distintos idiomas. Lo abrís con el Bloc de notas o Excel. <b>No necesitás Unreal.</b></p>
     <p class="en">A word bank is a <code>.csv</code> (text) file with one word per line, in the different languages. Open it with Notepad or Excel. <b>No Unreal needed.</b></p>
 
-    <p class="es"><b>Formato:</b> una columna por idioma — <code>ES,EN,PT,DE,FR,IT</code> (Español, Inglés, Portugués, Alemán, Francés, Italiano).</p>
-    <p class="en"><b>Format:</b> one column per language — <code>ES,EN,PT,DE,FR,IT</code> (Spanish, English, Portuguese, German, French, Italian).</p>
+    <p class="es"><b>Formato:</b> una columna por idioma. El juego soporta estos <b>6</b>: <code>ES,EN,PT,DE,FR,IT</code> (Español, Inglés, Portugués, Alemán, Francés, Italiano).</p>
+    <p class="en"><b>Format:</b> one column per language. The game supports these <b>6</b>: <code>ES,EN,PT,DE,FR,IT</code> (Spanish, English, Portuguese, German, French, Italian).</p>
     <ul>
-      <li class="es">La <b>primera fila</b> son los códigos de idioma; cada fila siguiente es <b>una palabra</b>.</li>
-      <li class="en">The <b>first row</b> is the language codes; each following row is <b>one word</b>.</li>
-      <li class="es">Completá al menos el <b>Español (ES)</b>. Si dejás un idioma vacío, se usa el español.</li>
-      <li class="en">Fill at least <b>Spanish (ES)</b>. If you leave a language empty, Spanish is used.</li>
-      <li class="es">Podés poner <b>solo los idiomas que quieras</b> (ej: solo ES,EN).</li>
-      <li class="en">You can include <b>only the languages you want</b> (e.g. just ES,EN).</li>
+      <li class="es">La <b>primera fila</b> son los códigos de idioma; cada fila siguiente es <b>una palabra</b> (con su traducción en cada columna).</li>
+      <li class="en">The <b>first row</b> is the language codes; each following row is <b>one word</b> (with its translation in each column).</li>
+      <li class="es"><b>Podés hacerlo en el idioma que quieras</b> y <b>NO es obligatorio traducirlo</b> a todos. Poné solo la(s) columna(s) que quieras (ej: solo <code>EN</code>, o solo <code>ES,PT</code>).</li>
+      <li class="en"><b>You can make it in whatever language you want</b> and you <b>don't have to translate</b> it to all of them. Include only the column(s) you want (e.g. just <code>EN</code>, or just <code>ES,PT</code>).</li>
+      <li class="es">Si un jugador usa un idioma que tu banco <b>no tiene</b>, el juego cae automáticamente a la primera palabra que sí escribiste. Así un banco de un solo idioma funciona igual.</li>
+      <li class="en">If a player uses a language your bank <b>doesn't include</b>, the game automatically falls back to the first word you did write. So a single-language bank works fine.</li>
     </ul>
 
-    <p class="es">Ejemplo (<code>animales.csv</code>):</p>
-    <p class="en">Example (<code>animals.csv</code>):</p>
+    <p class="es">Ejemplo completo — las palabras traducidas a los 6 idiomas (<code>animales.csv</code>):</p>
+    <p class="en">Full example — words translated into all 6 languages (<code>animals.csv</code>):</p>
 <pre>ES,EN,PT,DE,FR,IT
 Perro,Dog,Cachorro,Hund,Chien,Cane
 Gato,Cat,Gato,Katze,Chat,Gatto
-&Aacute;rbol,Tree,&Aacute;rvore,Baum,Arbre,Albero</pre>
+Casa,House,Casa,Haus,Maison,Casa
+&Aacute;rbol,Tree,&Aacute;rvore,Baum,Arbre,Albero
+Sol,Sun,Sol,Sonne,Soleil,Sole</pre>
+
+    <p class="es">Ejemplo de <b>un solo idioma</b> (perfectamente válido) — <code>palabras_en.csv</code>:</p>
+    <p class="en"><b>Single-language</b> example (perfectly valid) — <code>words_en.csv</code>:</p>
+<pre>EN
+Dog
+Cat
+House
+Tree
+Sun</pre>
 
     <p><a class="dl" href="plantilla_palabras.csv" download><span class="es">⬇ Descargar plantilla CSV</span><span class="en">⬇ Download CSV template</span></a></p>
 
@@ -137,6 +148,19 @@ Gato,Cat,Gato,Katze,Chat,Gatto
       <li class="es">La primera vez, Steam te pide aceptar el acuerdo del Workshop.</li>
       <li class="en">The first time, Steam asks you to accept the Workshop agreement.</li>
     </ol>
+
+    <h3 class="es">Etiquetas de idioma (automáticas) 🏷️</h3>
+    <h3 class="en">Language tags (automatic) 🏷️</h3>
+    <p class="es">Al publicar, el juego <b>lee tu CSV y detecta en qué idiomas está</b> (las columnas que tienen palabras) y le pone esas <b>etiquetas de Steam</b> a tu banco — por ejemplo <code>ES</code>, <code>EN</code> — además de la etiqueta <code>WordBank</code>.</p>
+    <p class="en">When you publish, the game <b>reads your CSV and detects which languages it's in</b> (the columns that have words) and adds those <b>Steam tags</b> to your bank — e.g. <code>ES</code>, <code>EN</code> — on top of the <code>WordBank</code> tag.</p>
+    <ul>
+      <li class="es">No tenés que hacer nada: las etiquetas salen solas de las columnas que completaste.</li>
+      <li class="en">You don't have to do anything: the tags come straight from the columns you filled in.</li>
+      <li class="es">Sirven para que otros <b>vean y filtren</b> en qué idiomas está tu banco antes de suscribirse.</li>
+      <li class="en">They let others <b>see and filter</b> which languages your bank is in before subscribing.</li>
+      <li class="es">Si actualizás un banco ya publicado, volvé a publicarlo para que tome los idiomas nuevos.</li>
+      <li class="en">If you update an already-published bank, publish it again so it picks up the new languages.</li>
+    </ul>
 
     <h3 class="es">Cómo usarlo en una partida</h3>
     <h3 class="en">How to use it in a game</h3>
