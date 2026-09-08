@@ -613,7 +613,19 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
             // pinta una esfera de mundo (los dos lados de una costura se pintan juntos → sin cortes).
             const FVector2D From = bHasLastBodyCursor ? LastBodyCursor : Cur;
             const float DistPx   = FVector2D::Distance(From, Cur);
-            const int32 Steps    = bHasLastBodyCursor ? FMath::Clamp(FMath::CeilToInt(DistPx / 6.f), 1, 128) : 1;
+            // Espaciado de muestras PROPORCIONAL al tamaño EN PANTALLA del pincel: con pincel grande las
+            // esferas ya se solapan, así que hacen falta muchas menos muestras. Antes era fijo (6 px, hasta
+            // 128 pasos) → un trazo rápido de lado a lado con pincel grande hacía 100+ raycasts + rasterizados
+            // de todo el mesh por frame y bajaba los FPS. Ahora el espaciado ≈ 0.7× el radio del pincel en px.
+            float SpacingPx = 6.f;
+            if (bHit)
+            {
+                FVector2D C0, C1;
+                const FVector Right = HeadCam ? HeadCam->GetActorRightVector() : FVector::RightVector;
+                if (ProjectWorldLocationToScreen(BPt, C0) && ProjectWorldLocationToScreen(BPt + Right * R, C1))
+                    SpacingPx = FMath::Clamp((float)FVector2D::Distance(C0, C1) * 0.7f, 6.f, 200.f);
+            }
+            const int32 Steps = bHasLastBodyCursor ? FMath::Clamp(FMath::CeilToInt(DistPx / SpacingPx), 1, 64) : 1;
             for (int32 s = 1; s <= Steps; ++s)
             {
                 const FVector2D P = FMath::Lerp(From, Cur, (float)s / (float)Steps);
