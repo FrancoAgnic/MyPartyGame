@@ -41,20 +41,15 @@ void UPTHeadSculptHUDWidget::BuildOnce()
         AddTool(IconEyes,  TEXT("4"), TEXT("TOOL_EYES"));
     }
 
-    // ── Formas (TAB) ── todas muestran TAB; se resalta la equipada.
+    // ── Formas (TAB) ── con el radial, una sola celda-hint "mantener TAB → formas" (igual que el
+    // gameplay). La forma se elige en el menú radial, no ciclando acá.
     if (ShapesBox)
     {
         ShapesBox->ClearChildren();
-        ShapeSlots.Reset();
-        auto AddShape = [&](UTexture2D* Icon, const TCHAR* LabelKey)
-        {
-            if (UPTToolSlotWidget* S = Make(Icon, FText::FromString(TEXT("TAB")), PTText::Get(LabelKey)))
-            { ShapesBox->AddChild(S); ShapeSlots.Add(S); }
-        };
-        AddShape(IconSphere,   TEXT("SHAPE_SPHERE"));
-        AddShape(IconCube,     TEXT("SHAPE_CUBE"));
-        AddShape(IconCylinder, TEXT("SHAPE_CYLINDER"));
-        AddShape(IconCone,     TEXT("SHAPE_CONE"));
+        ShapeSlots.Reset(); // ya no hay 4 celdas por forma
+        ShapeHintSlot = Make(IconShapesHint ? IconShapesHint : IconSphere,
+                             FText::FromString(TEXT("TAB")), PTText::Get(TEXT("SHAPE_HINT")));
+        if (ShapeHintSlot) ShapesBox->AddChild(ShapeHintSlot);
     }
 
     // ── Slots contextuales fijos (color / salir) y cruz WASD ──
@@ -141,17 +136,12 @@ void UPTHeadSculptHUDWidget::Refresh(APTLobbyPlayerController* PC)
             ToolSlots[i]->SetSelected(i == Equipped);
         }
 
-    // ── Formas: solo se muestran con Add/Erase/Paint (no con Ojos); se resalta la equipada ──
+    // ── Formas: la celda-hint (mantener TAB → radial) se muestra solo con herramientas que usan formas.
+    // No hay "forma equipada" que resaltar (se elige en el radial).
     const bool bShowShapes = PC->HeadToolUsesShapes();
     if (ShapesBox)
         ShapesBox->SetVisibility(bShowShapes ? ESlateVisibility::HitTestInvisible
                                              : ESlateVisibility::Collapsed);
-    if (bShowShapes)
-    {
-        const int32 ShapeIdx = (int32)PC->GetHeadStampShape(); // Sphere, Cube, Cylinder, TriPrism
-        for (int32 i = 0; i < ShapeSlots.Num(); ++i)
-            if (ShapeSlots[i]) ShapeSlots[i]->SetSelected(i == ShapeIdx);
-    }
 
     // ── El slot de color se resalta mientras el picker está abierto ──
     if (ColorSlot) ColorSlot->SetSelected(PC->IsHeadColorPickerOpen());

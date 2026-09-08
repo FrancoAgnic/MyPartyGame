@@ -397,7 +397,18 @@ protected:
     // bigote/etc. que NO se fusionan con la cabeza), igual que en el gameplay.
     bool    bHeadStrokeIsDetail = false;
     void OnHeadModeAdd();       void OnHeadModeErase();  void OnHeadModePaint();  void OnHeadModeEyes();
-    void OnHeadCycleShape();    // TAB: cicla Esfera→Cubo→Cilindro→Cono
+    void OnHeadCycleShape();    // (fallback) TAB toque: cicla Esfera→Cubo→Cilindro→Cono si no hay WBP radial
+
+    // ── Menú radial de formas (igual que el gameplay): MANTENER TAB abre el radial; con el mouse elegís
+    //    la forma y al soltar se aplica. La rueda cambia de página. ──
+    UPROPERTY(EditAnywhere, Category="Head|Shapes") TSubclassOf<class UPTShapeRadialWidget> HeadShapeRadialClass;
+    UPROPERTY() class UPTShapeRadialWidget* HeadShapeRadial = nullptr;
+    bool          bHeadShapeRadialActive = false;
+    EPTStampShape HeadShapeBeforeRadial  = EPTStampShape::Sphere; // forma previa (preview en vivo / cancelar en zona muerta)
+    int32         HeadLastShapePage      = 0;                     // recordar la página entre aperturas
+    void OnHeadShapeRadialPressed();   // TAB pressed → abre el radial (o fallback cicla)
+    void OnHeadShapeRadialReleased();  // TAB released → aplica la forma del hover
+    void SetHeadShape(EPTStampShape S); // setea forma + resetea rotación + fuerza rebuild del preview
     // SHIFT (solo en Paint): alterna foco cabeza (arcilla) ↔ cuerpo (piel del personaje).
     bool bBodyPaintMode = false;
     void OnHeadToggleBodyPaint();

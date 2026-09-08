@@ -105,6 +105,8 @@ protected:
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconCube     = nullptr;
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconCylinder = nullptr;
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconCone     = nullptr;
+    // Con el radial, ShapesBox lleva UNA celda-hint ("mantener TAB → formas"), igual que el gameplay.
+    UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconShapesHint = nullptr;
     // Iconos de acciones.
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconColor    = nullptr;
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconExit     = nullptr;
@@ -119,6 +121,7 @@ private:
     void RefreshControlsText();
 
     UPROPERTY() TArray<UPTToolSlotWidget*> ToolSlots;
-    UPROPERTY() TArray<UPTToolSlotWidget*> ShapeSlots;
+    UPROPERTY() TArray<UPTToolSlotWidget*> ShapeSlots;         // (viejo) 4 formas; vacío con el radial
+    UPROPERTY() UPTToolSlotWidget* ShapeHintSlot = nullptr;    // celda-hint "mantener TAB → formas"
     bool bBuilt = false;
 };

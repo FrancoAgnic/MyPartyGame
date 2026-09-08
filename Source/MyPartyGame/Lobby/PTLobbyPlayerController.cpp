@@ -20,6 +20,7 @@
 #include "PTLockerSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "PTHeadSculptHUDWidget.h"
+#include "../Sculpt/PTShapeRadialWidget.h"
 #include "../PTGameUserSettings.h"
 #include "../Multiplayer/MultiplayerSessionsSubsystem.h"
 #include "../PTGameInstance.h"
@@ -435,7 +436,9 @@ void APTLobbyPlayerController::SetupInputComponent()
     InputComponent->BindKey(EKeys::Enter,  IE_Pressed, this, &APTLobbyPlayerController::ConfirmHeadEdit);
     InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &APTLobbyPlayerController::RequestHeadBack);
     // TAB = ciclar la forma del sello (esfera/cubo/cilindro/cono), igual que el gameplay.
-    InputComponent->BindKey(EKeys::Tab,   IE_Pressed, this, &APTLobbyPlayerController::OnHeadCycleShape);
+    // MANTENER TAB → menú radial de formas (como el gameplay); al soltar aplica la forma del hover.
+    InputComponent->BindKey(EKeys::Tab,   IE_Pressed,  this, &APTLobbyPlayerController::OnHeadShapeRadialPressed);
+    InputComponent->BindKey(EKeys::Tab,   IE_Released, this, &APTLobbyPlayerController::OnHeadShapeRadialReleased);
     // Rueda del mouse mantenida = rotar el shape (doble click = reset). Igual que el gameplay.
     InputComponent->BindKey(EKeys::MiddleMouseButton, IE_Pressed,  this, &APTLobbyPlayerController::OnHeadRotatePressed);
     InputComponent->BindKey(EKeys::MiddleMouseButton, IE_Released, this, &APTLobbyPlayerController::OnHeadRotateReleased);
@@ -476,6 +479,16 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
     // Mantener el resaltado de la hotbar al día con la herramienta equipada (1/2/3/4).
     if (HeadHUD) HeadHUD->Refresh(this);
 
+    // Menú radial de formas abierto (TAB mantenido): recalcular el slot bajo el cursor y previsualizar
+    // la forma en vivo. La rueda pagina (se rutea en OnHeadScrollUp/Down).
+    if (bHeadShapeRadialActive && HeadShapeRadial)
+    {
+        HeadShapeRadial->UpdateSelection();
+        EPTStampShape Hover;
+        if (HeadShapeRadial->GetSelectedShape(Hover)) { if (Hover != HeadStampShape) SetHeadShape(Hover); }
+        else if (HeadStampShape != HeadShapeBeforeRadial) SetHeadShape(HeadShapeBeforeRadial);
+    }
+
     // Blend de cámara: mover HeadCam suave hacia el destino (cambio cabeza↔cuerpo y órbita WASD).
     if (HeadCam && bHeadCamInit)
     {
@@ -485,9 +498,10 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
         HeadCam->SetActorRotation(R);
     }
 
-    // Órbita de cámara con WASD (A/D = yaw, W/S = pitch).
-    const float dYaw   = (IsInputKeyDown(EKeys::D) ? 1.f : 0.f) - (IsInputKeyDown(EKeys::A) ? 1.f : 0.f);
-    const float dPitch = (IsInputKeyDown(EKeys::W) ? 1.f : 0.f) - (IsInputKeyDown(EKeys::S) ? 1.f : 0.f);
+    // Órbita de cámara con WASD (A/D = yaw, W/S = pitch). Se congela mientras el radial está abierto
+    // (ahí el mouse elige la forma).
+    const float dYaw   = bHeadShapeRadialActive ? 0.f : (IsInputKeyDown(EKeys::D) ? 1.f : 0.f) - (IsInputKeyDown(EKeys::A) ? 1.f : 0.f);
+    const float dPitch = bHeadShapeRadialActive ? 0.f : (IsInputKeyDown(EKeys::W) ? 1.f : 0.f) - (IsInputKeyDown(EKeys::S) ? 1.f : 0.f);
     if (dYaw != 0.f || dPitch != 0.f)
     {
         HeadOrbitYaw   += dYaw   * HeadOrbitSpeed * DeltaTime;
@@ -880,6 +894,7 @@ bool APTLobbyPlayerController::IsPaintBudgetFull() const
 void APTLobbyPlayerController::OnHeadStampPressed()
 {
     if (!bHeadSculptMode) return;
+    if (bHeadShapeRadialActive) return; // radial de formas abierto: el click no esculpe
     if (bDiscardPopupOpen) return; // popup abierto: los clicks son para sus botones, no para esculpir
     if (bHeadEyesTool) { PlaceEyeAtCursor(); return; } // ojos: un ojo por click (no continuo)
 
@@ -1008,6 +1023,8 @@ void APTLobbyPlayerController::OnHeadColorSave()
 void APTLobbyPlayerController::OnHeadScrollUp()
 {
     if (!bHeadSculptMode) return;
+    // Radial de formas abierto: la rueda cambia de página.
+    if (bHeadShapeRadialActive) { if (HeadShapeRadial) HeadShapeRadial->PrevPage(); return; }
     // Con el color picker abierto, la rueda ajusta el brillo del color (como el gameplay).
     if (bHeadColorActive)
     {
@@ -1019,6 +1036,7 @@ void APTLobbyPlayerController::OnHeadScrollUp()
 void APTLobbyPlayerController::OnHeadScrollDown()
 {
     if (!bHeadSculptMode) return;
+    if (bHeadShapeRadialActive) { if (HeadShapeRadial) HeadShapeRadial->NextPage(); return; }
     if (bHeadColorActive)
     {
         if (UPTColorPickerWidget* CP = Cast<UPTColorPickerWidget>(HeadColorPicker)) CP->QuickAdjustValue(-0.05f);
@@ -1051,18 +1069,70 @@ void APTLobbyPlayerController::OnHeadModeErase()
 }
 void APTLobbyPlayerController::OnHeadModePaint() { if (bHeadSculptMode) { HeadEditMode = EPTEditMode::Paint; bHeadEyesTool = false; } } // Paint arranca en la cabeza; SHIFT lleva al cuerpo
 void APTLobbyPlayerController::OnHeadModeEyes()  { if (bHeadSculptMode && !bHeadSculptBodyOnly) { if (bBodyPaintMode) { bBodyPaintMode = false; UpdateHeadCam(); } bHeadEyesTool = true; } }
+void APTLobbyPlayerController::SetHeadShape(EPTStampShape S)
+{
+    HeadStampShape    = S;
+    HeadStampRotation = FRotator::ZeroRotator; // forma nueva arranca sin rotar (como el gameplay)
+    HeadPreviewSize   = -1.f;                   // forzar reconstruir el mesh del preview con la nueva forma
+}
+
 void APTLobbyPlayerController::OnHeadCycleShape()
 {
     if (!bHeadSculptMode || bHeadEyesTool || bHeadSculptBodyOnly) return; // ojos = esfera; en body-only no hay formas
     switch (HeadStampShape)
     {
-    case EPTStampShape::Sphere:   HeadStampShape = EPTStampShape::Cube;     break;
-    case EPTStampShape::Cube:     HeadStampShape = EPTStampShape::Cylinder; break;
-    case EPTStampShape::Cylinder: HeadStampShape = EPTStampShape::TriPrism; break;
-    default:                      HeadStampShape = EPTStampShape::Sphere;   break;
+    case EPTStampShape::Sphere:   SetHeadShape(EPTStampShape::Cube);     break;
+    case EPTStampShape::Cube:     SetHeadShape(EPTStampShape::Cylinder); break;
+    case EPTStampShape::Cylinder: SetHeadShape(EPTStampShape::TriPrism); break;
+    default:                      SetHeadShape(EPTStampShape::Sphere);   break;
     }
-    HeadStampRotation = FRotator::ZeroRotator; // forma nueva arranca sin rotar (como el gameplay)
-    HeadPreviewSize = -1.f; // forzar reconstruir el mesh del preview con la nueva forma
+}
+
+void APTLobbyPlayerController::OnHeadShapeRadialPressed()
+{
+    if (!bHeadSculptMode || bHeadShapeRadialActive) return;
+    // El radial de formas solo tiene sentido con herramientas que usan formas (Agregar en la cabeza).
+    if (!HeadToolUsesShapes()) return;
+
+    // Sin WBP radial asignado: fallback al comportamiento viejo (un toque cicla la forma).
+    if (!HeadShapeRadialClass) { OnHeadCycleShape(); return; }
+
+    HeadShapeRadial = CreateWidget<UPTShapeRadialWidget>(this, HeadShapeRadialClass);
+    if (!HeadShapeRadial) { OnHeadCycleShape(); return; }
+
+    HeadShapeBeforeRadial = HeadStampShape; // el hover cambia la forma en vivo; en zona muerta se restaura
+    HeadShapeRadial->AddToViewport(20);
+    HeadShapeRadial->BeginRadial(HeadLastShapePage); // reabre en la última página usada
+    SetInputMode(FInputModeGameAndUI());
+    bShowMouseCursor = true;
+
+    // Centrar el cursor: el radial se dibuja centrado y el arrastre define la dirección de elección.
+    int32 VX = 0, VY = 0; GetViewportSize(VX, VY);
+    if (VX > 0 && VY > 0) SetMouseLocation(VX / 2, VY / 2);
+
+    bHeadShapeRadialActive = true;
+    bHeadStamping = false; // no arrastrar un trazo mientras el radial está abierto
+}
+
+void APTLobbyPlayerController::OnHeadShapeRadialReleased()
+{
+    if (!bHeadShapeRadialActive) return;
+    bHeadShapeRadialActive = false;
+
+    if (HeadShapeRadial)
+    {
+        HeadLastShapePage = HeadShapeRadial->GetCurrentPage();
+        // Soltar sobre un slot → esa forma; soltar en el centro (zona muerta) → volver a la de antes.
+        EPTStampShape Selected;
+        if (HeadShapeRadial->GetSelectedShape(Selected)) SetHeadShape(Selected);
+        else                                             SetHeadShape(HeadShapeBeforeRadial);
+
+        HeadShapeRadial->RemoveFromParent(); // NativeDestruct restaura el cursor
+        HeadShapeRadial = nullptr;
+    }
+
+    // Volver al input normal del modo cabeza (sin cursor del SO).
+    ApplyHeadSculptInputMode();
 }
 
 void APTLobbyPlayerController::PlaceEyeAtCursor()
@@ -1599,6 +1669,9 @@ void APTLobbyPlayerController::ExitHeadSculpt(bool bSaveChanges)
     bHeadSculptMode = false;
     bHeadStamping = false;
     bBodyPaintMode = false;
+    // Cerrar el radial de formas si quedó abierto.
+    if (HeadShapeRadial) { HeadShapeRadial->RemoveFromParent(); HeadShapeRadial = nullptr; }
+    bHeadShapeRadialActive = false;
     bHeadRotatingShape = false; bHeadClearHeld = false; HeadClearHoldTime = 0.f;
     bHeadStrokeActive = false; HeadStampRotation = FRotator::ZeroRotator;
     HeadPaintMID = nullptr;
