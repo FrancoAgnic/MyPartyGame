@@ -257,6 +257,13 @@ void APTSculptPlayerController::Server_SetSpectator_Implementation(bool bInSpect
 {
     if (APTPlayerState* PS = GetPlayerState<APTPlayerState>())
         PS->bIsDevSpectator = bInSpectator;
+    // Al pasar a espectador a mitad de un turno, mandarle la palabra actual para verla al espectar
+    // al escultor. Al dejar de espectar, limpiarla.
+    if (APTSculptGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<APTSculptGameMode>() : nullptr)
+    {
+        if (bInSpectator) GM->SendCurrentSpectateWordTo(this);
+        else              Client_ReceiveSpectateWord(FString());
+    }
 }
 
 void APTSculptPlayerController::PTHideUI()
@@ -270,11 +277,6 @@ void APTSculptPlayerController::PTHideNames()
 {
     if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
         GI->SetHideNames(!GI->AreNamesHidden());
-}
-
-void APTSculptPlayerController::PTRevealWord()
-{
-    if (GameplayHUD) GameplayHUD->ToggleRevealWord();
 }
 
 void APTSculptPlayerController::PTHideHotbar()
@@ -1653,6 +1655,11 @@ void APTSculptPlayerController::Client_ReceiveSecretWord_Implementation(const FS
     CurrentSecretWord = Word;
     UE_LOG(LogTemp, Log, TEXT("[SculptPC] Tu palabra a esculpir: %s"), *Word);
     OnSecretWordReceived.Broadcast(Word);
+}
+
+void APTSculptPlayerController::Client_ReceiveSpectateWord_Implementation(const FString& Word)
+{
+    SpectateSecretWord = Word; // para mostrarla al espectar al escultor (dev)
 }
 
 void APTSculptPlayerController::Client_SystemLine_Implementation(FName Key, const FString& Arg0, int32 Arg1)

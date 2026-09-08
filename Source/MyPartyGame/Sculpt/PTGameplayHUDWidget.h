@@ -38,9 +38,6 @@ public:
     void RebuildControls();
 
     // ── Modo captura dev (trailer/screenshots) ──────────────────────────────
-    /** Alterna la palabra secreta entre visible y enmascarada (comando PTRevealWord). Para el escultor
-     *  la muestra/oculta; para el que ya adivinó, muestra su palabra. */
-    void ToggleRevealWord() { bForceRevealWord = !bForceRevealWord; }
     /** Oculta/muestra la barra de herramientas (hotbar) sin tocar el resto del HUD (PTHideHotbar). */
     void ToggleHotbar();
 
@@ -196,8 +193,7 @@ private:
     bool         bChatOpen      = false;
     bool         bInputModeInit = false;
     bool         bWantsGameOnly = false;
-    // Modo captura dev: invierte la visibilidad de la palabra / oculta el hotbar.
-    bool         bForceRevealWord = false;
+    // Modo captura dev: oculta el hotbar.
     bool         bHideHotbar      = false;
 
     APTSculptGameState*        GetGS() const;

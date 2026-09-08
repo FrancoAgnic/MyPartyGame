@@ -325,6 +325,10 @@ void APTSculptGameMode::BeginDrawing(int32 ChoiceIndex)
         if (APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(G->CurrentSculptor->GetOwningController()))
             PC->Client_ReceiveSecretWord(CurrentWord.ForLang(G->CurrentSculptor->GetLanguageIndex()));
 
+    // Los DEV-ESPECTADORES también reciben la palabra (en el idioma del escultor), para verla igual que
+    // él al espectar su POV. Solo a los spectators → NO se filtra a jugadores reales.
+    SendSpectateWordToSpectators(CurrentWord.ForLang(G->CurrentSculptor ? G->CurrentSculptor->GetLanguageIndex() : 0));
+
     // TODO Fase 3: resetear la escultura (limpiar el Volume) acá.
 
     UE_LOG(LogTemp, Log, TEXT("[SculptGM] Esculpiendo '%s' por %.0fs."), *CurrentWord.Primary(), TurnDuration);
@@ -334,10 +338,30 @@ void APTSculptGameMode::BeginDrawing(int32 ChoiceIndex)
                                     TurnDuration, false);
 }
 
+void APTSculptGameMode::SendSpectateWordToSpectators(const FString& Word)
+{
+    if (!GetWorld()) return;
+    for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+    {
+        APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(It->Get());
+        if (!PC) continue;
+        const APTPlayerState* PS = PC->GetPlayerState<APTPlayerState>();
+        if (PS && PS->bIsDevSpectator) PC->Client_ReceiveSpectateWord(Word);
+    }
+}
+
+void APTSculptGameMode::SendCurrentSpectateWordTo(APTSculptPlayerController* PC)
+{
+    APTSculptGameState* G = GS();
+    if (!PC || !G || G->TurnPhase != EPTTurnPhase::Drawing) return;
+    PC->Client_ReceiveSpectateWord(CurrentWord.ForLang(G->CurrentSculptor ? G->CurrentSculptor->GetLanguageIndex() : 0));
+}
+
 void APTSculptGameMode::EndTurn()
 {
     APTSculptGameState* G = GS();
     if (!G) return;
+    SendSpectateWordToSpectators(FString()); // fin del turno: limpiar la palabra de los espectadores
 
     GetWorldTimerManager().ClearTimer(RevealTimer);
     G->TurnPhase  = EPTTurnPhase::TurnEnd;

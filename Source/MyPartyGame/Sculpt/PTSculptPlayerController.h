@@ -237,6 +237,11 @@ public:
     UFUNCTION(Client, Reliable)
     void Client_ReceiveSecretWord(const FString& Word);
 
+    /** El servidor le manda la palabra secreta a un DEV-ESPECTADOR (para que, al espectar al escultor,
+     *  vea la palabra igual que él). Solo se manda a dev-spectators → no filtra la palabra a jugadores. */
+    UFUNCTION(Client, Reliable)
+    void Client_ReceiveSpectateWord(const FString& Word);
+
     /** El servidor manda una línea de sistema SOLO a este jugador (para textos que dependen de su
      *  idioma, como "la palabra era X": cada uno la recibe con su traducción, no la de todos). */
     UFUNCTION(Client, Reliable)
@@ -300,6 +305,9 @@ public:
      *  escultor). El HUD puede leerlas directo, o suscribirse a los delegates de abajo. */
     UPROPERTY(BlueprintReadOnly, Category="Game")
     FString CurrentSecretWord;
+    // Palabra secreta recibida como DEV-ESPECTADOR (para mostrarla al espectar al escultor). Se limpia
+    // al terminar el turno de dibujo.
+    FString SpectateSecretWord;
     UPROPERTY(BlueprintReadOnly, Category="Game")
     TArray<FString> CurrentWordChoices;
 
@@ -315,7 +323,6 @@ public:
     UFUNCTION(Exec) void PTSpectate();          // vuelo libre WASD+mouse on/off (+ nombres → Player N)
     UFUNCTION(Exec) void PTHideUI();            // oculta/muestra todo el HUD
     UFUNCTION(Exec) void PTHideNames();         // oculta/muestra los nombres flotantes
-    UFUNCTION(Exec) void PTRevealWord();        // alterna la palabra secreta visible/máscara
     UFUNCTION(Exec) void PTHideHotbar();        // oculta/muestra la barra de herramientas
     UFUNCTION(Exec) void PTSpecSpeed(float N);  // multiplica la velocidad de la cámara
     UFUNCTION(Exec) void PTSpecSmooth(float N); // suavizado/lag de la cámara (bajo = más suave)

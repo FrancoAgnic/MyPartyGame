@@ -81,6 +81,14 @@ public:
     void RequestPlayAgain(APTPlayerState* Requester);
     void RequestReturnToLobby(APTPlayerState* Requester);
 
+public:
+    /** [server] Manda la palabra secreta actual a TODOS los dev-espectadores (para verla al espectar
+     *  al escultor). Word vacío = limpiar. */
+    void SendSpectateWordToSpectators(const FString& Word);
+    /** [server] Si el turno está en Dibujo, manda la palabra actual a UN controller (cuando pasa a
+     *  espectador a mitad de turno). */
+    void SendCurrentSpectateWordTo(class APTSculptPlayerController* PC);
+
 protected:
     virtual void BeginPlay() override;
     virtual void PostLogin(APlayerController* NewPlayer) override;

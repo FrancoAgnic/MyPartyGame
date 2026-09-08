@@ -327,13 +327,19 @@ void UPTGameplayHUDWidget::RefreshTick()
     APTSculptPlayerController* PC = GetSculptPC();
     const bool bSculptor = G->IsLocalPlayerSculptor();
 
-    // Modo captura dev: la palabra que ESTE cliente conoce (escultor = secreta; el que adivinó = la suya).
+    // ¿Estoy espectando (dev) el POV del escultor? Entonces veo la palabra IGUAL que él.
+    APTLobbyCharacter* SpecChar = Cast<APTLobbyCharacter>(PC ? PC->GetSpectatedPovPawn() : nullptr);
+    const bool bSpectatingSculptor = SpecChar && G->CurrentSculptor && SpecChar == G->CurrentSculptor->GetPawn();
+
+    // La palabra que ESTE cliente puede mostrar: escultor = su secreta; espectando al escultor = la que
+    // le mandó el server (dev); el que adivinó = la suya.
     const FString FullKnownWord = (bSculptor && PC) ? PC->CurrentSecretWord
+                                : (bSpectatingSculptor && PC) ? PC->SpectateSecretWord
                                 : (bLocalGuessed ? LocalGuessedWord : FString());
-    // Quién ve normalmente la palabra completa; PTRevealWord invierte ese estado (si hay palabra que mostrar).
-    const bool bDefaultReveal = bSculptor || bLocalGuessed;
-    bool bRevealWord = bForceRevealWord ? !bDefaultReveal : bDefaultReveal;
-    if (bRevealWord && FullKnownWord.IsEmpty()) bRevealWord = false; // no podés revelar lo que no tenés
+    // Ve la palabra completa (con las pistas en verde): el escultor, quien lo espectás, o quien adivinó.
+    const bool bViewAsSculptor = bSculptor || bSpectatingSculptor;
+    bool bRevealWord = bViewAsSculptor || bLocalGuessed;
+    if (bRevealWord && FullKnownWord.IsEmpty()) bRevealWord = false; // no podés mostrar lo que no tenés
 
     // El "quién esculpe" ya NO va arriba: se muestra en el marcador con el emoji 🖌️.
     // Arriba queda solo el timer + la palabra. Limpiamos TxtSculptor si sigue en el WBP.
@@ -378,12 +384,12 @@ void UPTGameplayHUDWidget::RefreshTick()
     if (TxtWord)
     {
         FString Rich;
-        if (bSculptor && PC && bRevealWord && G->TurnPhase == EPTTurnPhase::Drawing)
+        if (bViewAsSculptor && bRevealWord && G->TurnPhase == EPTTurnPhase::Drawing)
         {
-            // ESCULTOR: palabra completa; las letras ya reveladas a los que adivinan van en VERDE.
+            // ESCULTOR (o espectándolo): palabra completa; las letras ya reveladas van en VERDE.
             // La máscara viene con un espacio entre cada letra ("_ N _ E ..."), así que la recorremos por
             // CELDAS (salteando los espacios) y mapeamos cada celda a su letra del secreto → alineado.
-            const FString& Full = PC->CurrentSecretWord;
+            const FString& Full = FullKnownWord;
             const FString& Mask = G->MaskedWord;
             int32 mi = 0;
             for (int32 i = 0; i < Full.Len(); ++i)
