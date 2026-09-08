@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "PTWordPackSubsystem.h"
+#include "../PTWordBank.h" // detectar idiomas del CSV para taggear el banco
 #include "Misc/Paths.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
@@ -30,14 +31,16 @@ struct FPTWorkshopPublish
 {
     TFunction<void(bool, FString)> Cb;
     FString ContentFolder, PreviewPath, Title, Desc, Diag;
+    TArray<FString> LangTags; // idiomas del banco ("ES","EN"...) → tags de Steam además de "WordBank"
     PublishedFileId_t ItemId = 0;
     CCallResult<FPTWorkshopPublish, CreateItemResult_t>       CreateCR;
     CCallResult<FPTWorkshopPublish, SubmitItemUpdateResult_t> SubmitCR;
 
     void Start(const FString& InFolder, const FString& InPreview, const FString& InTitle,
-               const FString& InDesc, TFunction<void(bool, FString)> InCb)
+               const FString& InDesc, const TArray<FString>& InLangTags, TFunction<void(bool, FString)> InCb)
     {
         Cb = MoveTemp(InCb);
+        LangTags = InLangTags;
         // SetItemContent/SetItemPreview exigen rutas ABSOLUTAS y, en Windows, con separadores NATIVOS
         // (backslashes). Si van relativas o con '/', Steam devuelve InvalidParam=8.
         ContentFolder = FPaths::ConvertRelativePathToFull(InFolder);
@@ -77,9 +80,15 @@ struct FPTWorkshopPublish
         const bool bPrev    = PreviewPath.IsEmpty() || SteamUGC()->SetItemPreview(U, TCHAR_TO_UTF8(*PreviewPath));
         // Item público por defecto (algunos flujos lo requieren explícito).
         const bool bVis     = SteamUGC()->SetItemVisibility(U, k_ERemoteStoragePublishedFileVisibilityPublic);
-        // Tag para poder filtrar solo bancos de palabras en el buscador del juego (AddRequiredTag).
-        const char* Tags[] = { "WordBank" };
-        SteamParamStringArray_t TagArr; TagArr.m_ppStrings = Tags; TagArr.m_nNumStrings = 1;
+        // Tags: "WordBank" (para filtrar solo bancos en el buscador) + un tag por IDIOMA del banco
+        // ("ES","EN"...), así se puede ver/filtrar en qué idiomas está. Los códigos se auto-detectan
+        // del CSV al publicar (columnas con palabras).
+        TArray<FString> AllTags; AllTags.Add(TEXT("WordBank")); AllTags.Append(LangTags);
+        TArray<FTCHARToUTF8> Utf8; Utf8.Reserve(AllTags.Num());
+        for (const FString& T : AllTags) Utf8.Emplace(*T);
+        TArray<const char*> Ptrs; Ptrs.Reserve(Utf8.Num());
+        for (const FTCHARToUTF8& U8 : Utf8) Ptrs.Add(U8.Get());
+        SteamParamStringArray_t TagArr; TagArr.m_ppStrings = Ptrs.GetData(); TagArr.m_nNumStrings = Ptrs.Num();
         const bool bTags    = SteamUGC()->SetItemTags(U, &TagArr);
 
         Diag = FString::Printf(TEXT("U=%d t=%d d=%d c=%d p=%d v=%d tag=%d"),
@@ -623,9 +632,15 @@ void UPTWordPackSubsystem::PublishWordPack(const FString& CsvPath, const FString
     EffectiveTitle.TrimStartAndEndInline();
     if (EffectiveTitle.IsEmpty()) EffectiveTitle = PT_PrettifyName(FPaths::GetBaseFilename(CsvPath));
 
+    // Auto-detectar en qué IDIOMAS está el banco (columnas del CSV con palabras) → tags del Workshop.
+    TArray<FString> LangTags;
+    PTWordBank::DetectLanguagesFromFile(CsvPath, LangTags);
+    UE_LOG(LogPTWordPacks, Log, TEXT("[Publish] Idiomas detectados: %s"),
+        LangTags.Num() ? *FString::Join(LangTags, TEXT(",")) : TEXT("(ninguno)"));
+
     delete Publisher;
     Publisher = new FPTWorkshopPublish();
-    Publisher->Start(Content, UsePreview, EffectiveTitle, Description,
+    Publisher->Start(Content, UsePreview, EffectiveTitle, Description, LangTags,
         [this](bool bOk, FString Info)
         {
             UE_LOG(LogPTWordPacks, Log, TEXT("PublishWordPack: %s (%s)"),

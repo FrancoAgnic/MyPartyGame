@@ -125,3 +125,57 @@ void PTWordBank::Reload()
     GWords.Reset();
     WB_EnsureLoaded();
 }
+
+void PTWordBank::DetectLanguages(const TArray<FString>& Lines, TArray<FString>& Out)
+{
+    Out.Reset();
+    if (Lines.Num() < 2) return;
+
+    TArray<FString> Header;
+    PTText::SplitCsvLine(Lines[0], Header);
+
+    // Mismo mapeo columna->idioma que ParseWordCsv (por nombre de encabezado).
+    TArray<int32> ColToLang;
+    ColToLang.Init(INDEX_NONE, Header.Num());
+    for (int32 c = 0; c < Header.Num(); ++c)
+    {
+        const FString H = Header[c].TrimStartAndEnd();
+        if (H.Equals(TEXT("Category"),   ESearchCase::IgnoreCase)) continue;
+        if (H.Equals(TEXT("Difficulty"), ESearchCase::IgnoreCase)) continue;
+        if (H.Equals(TEXT("Name"),       ESearchCase::IgnoreCase)) continue;
+        if (H.Equals(TEXT("Word"), ESearchCase::IgnoreCase) || H.Equals(TEXT("WordEs"), ESearchCase::IgnoreCase))
+        { ColToLang[c] = 0; continue; }
+        if (H.Equals(TEXT("WordEn"), ESearchCase::IgnoreCase))
+        { ColToLang[c] = FMath::Max(0, PTText::GetLanguageIndex(TEXT("en"))); continue; }
+        const int32 Lang = PTText::GetLanguageIndex(H);
+        if (Lang != INDEX_NONE) ColToLang[c] = Lang;
+    }
+
+    // Un idioma "está" si alguna fila tiene una palabra no vacía en su columna.
+    TSet<int32> Present;
+    TArray<FString> Cells;
+    for (int32 i = 1; i < Lines.Num(); ++i)
+    {
+        if (Lines[i].TrimStartAndEnd().IsEmpty()) continue;
+        PTText::SplitCsvLine(Lines[i], Cells);
+        for (int32 c = 0; c < Cells.Num() && c < ColToLang.Num(); ++c)
+            if (ColToLang[c] != INDEX_NONE && !Cells[c].TrimStartAndEnd().IsEmpty())
+                Present.Add(ColToLang[c]);
+    }
+
+    // Devolver los códigos en MAYÚSCULA, en el orden de los idiomas de la UI.
+    const TArray<FPTLanguage>& Langs = PTText::GetAvailableLanguages();
+    for (int32 idx = 0; idx < Langs.Num(); ++idx)
+        if (Present.Contains(idx)) Out.Add(Langs[idx].Code.ToUpper());
+}
+
+bool PTWordBank::DetectLanguagesFromFile(const FString& CsvPath, TArray<FString>& Out)
+{
+    Out.Reset();
+    FString Content;
+    if (!FFileHelper::LoadFileToString(Content, *CsvPath)) return false; // detecta UTF-8/BOM/UTF-16 solo
+    TArray<FString> Lines;
+    Content.ParseIntoArrayLines(Lines);
+    DetectLanguages(Lines, Out);
+    return true;
+}

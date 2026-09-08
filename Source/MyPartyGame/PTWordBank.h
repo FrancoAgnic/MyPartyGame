@@ -35,4 +35,12 @@ namespace PTWordBank
      *  Acepta el formato con columnas de idioma y también el viejo de una sola columna "Word".
      *  Devuelve true si sacó al menos una palabra. */
     bool ParseWordCsv(const TArray<FString>& Lines, TArray<FPTWordEntry>& OutWords);
+
+    /** Detecta en qué IDIOMAS está un CSV de banco: devuelve los códigos en MAYÚSCULA ("ES","EN"...)
+     *  de las columnas de idioma que tienen al menos una palabra. Se usa para taggear el banco al
+     *  publicarlo al Workshop y para mostrar "en qué idiomas está" en la UI. Orden = el de los idiomas. */
+    void DetectLanguages(const TArray<FString>& Lines, TArray<FString>& OutLangCodesUpper);
+
+    /** Igual que DetectLanguages pero leyendo el CSV desde un archivo. Devuelve false si no pudo leer. */
+    bool DetectLanguagesFromFile(const FString& CsvPath, TArray<FString>& OutLangCodesUpper);
 }
