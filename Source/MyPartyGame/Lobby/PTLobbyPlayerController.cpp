@@ -478,11 +478,11 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
 
-    // Teclas toggle del modo espectador (dev): H=UI del lobby, N=nombres. Solo mientras espectás.
+    // Teclas toggle del modo espectador (dev): 1=UI del lobby, 2=nombres. Solo mientras espectás.
     if (Spectator && Spectator->IsActive())
     {
-        if (WasInputKeyJustPressed(EKeys::H)) PTHideUI();
-        if (WasInputKeyJustPressed(EKeys::N)) PTHideNames();
+        if (WasInputKeyJustPressed(EKeys::One)) PTHideUI();
+        if (WasInputKeyJustPressed(EKeys::Two)) PTHideNames();
     }
     // F9 = screenshot en alta resolución (2x). Disponible siempre (para el trailer/capturas).
     if (WasInputKeyJustPressed(EKeys::F9)) ConsoleCommand(TEXT("HighResShot 2"), true);

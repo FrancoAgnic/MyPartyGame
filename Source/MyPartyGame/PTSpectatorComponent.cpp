@@ -25,6 +25,11 @@ APlayerController* UPTSpectatorComponent::PC() const
     return Cast<APlayerController>(GetOwner());
 }
 
+APawn* UPTSpectatorComponent::GetPovPawn() const
+{
+    return (bActive && PovIndex >= 0) ? HiddenPovPawn.Get() : nullptr;
+}
+
 void UPTSpectatorComponent::Toggle()
 {
     APlayerController* C = PC();

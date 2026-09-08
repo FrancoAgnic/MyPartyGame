@@ -349,6 +349,10 @@ public:
      *  consulta para mantener el cursor visible y poder elegir color mientras se esculpe. */
     bool IsColorPickerOpen() const { return bQuickColorActive; }
 
+    /** Pawn cuyo POV estás espectando (nullptr si no espectás / vuelo libre). Para que el HUD muestre
+     *  el hotbar del jugador que esculpe mientras lo mirás en 1ra persona. */
+    class APawn* GetSpectatedPovPawn() const;
+
     // ── Estado de las tools, para la barra de herramientas del HUD ───────────
     UFUNCTION(BlueprintPure, Category="Sculpt") bool IsEyesToolActive() const   { return bEyesTool; }
     /** true mientras se mantiene ALT (detalle en capa aparte pegado a la superficie). Para el HUD. */
@@ -443,6 +447,7 @@ private:
     UPROPERTY() class UPTShapeRadialWidget* ShapeRadial     = nullptr;
     UPROPERTY() class UPTGameplayHUDWidget* GameplayHUD     = nullptr;
     UPROPERTY() class UPTSpectatorComponent* Spectator      = nullptr;
+    uint8 LastReportedTool = 255; // última herramienta enviada al pawn (para replicar al espectador)
     bool bHudHidden = false;
     UPROPERTY() class UDecalComponent*    ShadowDecal       = nullptr;
     UPROPERTY() class UStaticMeshComponent* HeightStick     = nullptr;

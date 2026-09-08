@@ -232,8 +232,15 @@ public:
     /** Oculta/muestra el cuerpo + cabeza + cartel de nombre SOLO localmente (no se replica), para que
      *  al espectar en 1ra persona el propio cuerpo/cabeza del jugador no tapen su POV. */
     void SetSpectateBodyHiddenLocal(bool bBodyHidden);
+    /** Herramienta que tiene equipada el jugador (0=Add,1=Erase,2=Paint,3=Ojos). Replicada para que el
+     *  ESPECTADOR pueda mostrar el hotbar del jugador que esculpe, con la herramienta resaltada. */
+    uint8 GetReplEquippedTool() const { return ReplEquippedTool; }
+    /** [dueño] Le dice al server su herramienta actual (para replicarla a los espectadores). */
+    UFUNCTION(Server, Reliable) void Server_ReportEquippedTool(uint8 Tool);
+
 protected:
     UPROPERTY(Replicated) float ReplViewPitch = 0.f;
+    UPROPERTY(Replicated) uint8 ReplEquippedTool = 0;
     UFUNCTION(Server, Unreliable) void Server_ReportViewPitch(float InPitch);
     float ViewPitchSendAccum = 0.f;
 

@@ -2,6 +2,7 @@
 #include "PTSculptPlayerController.h"
 #include "PTScoreRowWidget.h"
 #include "../Lobby/PTPlayerState.h"
+#include "../Lobby/PTLobbyCharacter.h"
 #include "Components/TextBlock.h"
 #include "Components/RichTextBlock.h"
 #include "Components/Button.h"
@@ -154,13 +155,21 @@ void UPTGameplayHUDWidget::RefreshToolbar()
     APTSculptGameState* G = GetGS();
     if (!PC) return;
 
-    // La barra es del escultor: solo se ve cuando te toca dibujar. En modo captura (PTHideHotbar) se
-    // fuerza oculta aunque estés dibujando.
-    const bool bSculpting = !bHideHotbar && G && G->TurnPhase == EPTTurnPhase::Drawing && G->IsLocalPlayerSculptor();
+    // ¿Estoy ESPECTANDO el POV de un jugador que esculpe? Si sí, muestro SU hotbar (herramienta
+    // replicada), aunque yo no sea el escultor. La herramienta llega en el pawn (ReplEquippedTool).
+    APTLobbyCharacter* SpecChar = Cast<APTLobbyCharacter>(PC->GetSpectatedPovPawn());
+    const bool bSpectatingSculptor = SpecChar && G && G->CurrentSculptor
+                                   && SpecChar == G->CurrentSculptor->GetPawn();
+
+    // La barra es del escultor: se ve cuando TE toca dibujar, o cuando espectás a quien dibuja.
+    // En modo captura (PTHideHotbar / tecla 3) se fuerza oculta.
+    const bool bSculpting = !bHideHotbar && G && G->TurnPhase == EPTTurnPhase::Drawing
+                          && (G->IsLocalPlayerSculptor() || bSpectatingSculptor);
     const ESlateVisibility Vis = bSculpting ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
     if (ToolsBox)  ToolsBox->SetVisibility(Vis);
-    if (HintsBox)  HintsBox->SetVisibility(Vis);
     if (ClearBox)  ClearBox->SetVisibility(Vis);
+    // Los atajos contextuales solo tienen sentido para VOS (no para lo que espectás): se ocultan al espectar.
+    if (HintsBox)  HintsBox->SetVisibility((bSculpting && !bSpectatingSculptor) ? Vis : ESlateVisibility::Collapsed);
 
     if (!bSculpting)
     {
@@ -168,22 +177,24 @@ void UPTGameplayHUDWidget::RefreshToolbar()
         return;
     }
 
-
-    // ── Tool equipada ──
-    const bool bEyes = PC->IsEyesToolActive();
-    const int32 ToolIdx = bEyes ? 3
+    // ── Tool equipada ── (del jugador espectado si estás en su POV; si no, la tuya)
+    const uint8 SpecTool = bSpectatingSculptor ? SpecChar->GetReplEquippedTool() : 0;
+    const bool bEyes    = bSpectatingSculptor ? (SpecTool == 3) : PC->IsEyesToolActive();
+    const int32 ToolIdx = bSpectatingSculptor ? (int32)SpecTool
+        : (bEyes ? 3
         : (PC->EditMode == EPTEditMode::Add   ? 0
         :  PC->EditMode == EPTEditMode::Erase ? 1
-        :  PC->EditMode == EPTEditMode::Paint ? 2 : -1);
+        :  PC->EditMode == EPTEditMode::Paint ? 2 : -1));
     for (int32 i = 0; i < ToolSlots.Num(); ++i)
         if (ToolSlots[i]) ToolSlots[i]->SetSelected(i == ToolIdx);
 
-    // ── Formas: Agregar, Borrar y Pintar usan la forma elegida (Ojos siempre es esfera) ──
-    // ShapesBox ahora contiene la celda-hint (mantener TAB → radial): visible solo con herramientas
-    // que usan formas. No hay "forma equipada" que resaltar (se elige en el radial).
-    const bool bShowShapes = PC->ToolUsesShapes();
+    // ── Formas: se ven con herramientas que usan formas (Agregar). Ojos/Borrar/Paint no. ──
+    const bool bShowShapes = bSpectatingSculptor ? (SpecTool == 0) : PC->ToolUsesShapes();
     if (ShapesBox) ShapesBox->SetVisibility(bShowShapes ? ESlateVisibility::HitTestInvisible
                                                         : ESlateVisibility::Collapsed);
+
+    // Espectando: no armamos los atajos contextuales (son de tu input); ya mostramos tools + formas.
+    if (bSpectatingSculptor) return;
 
     // ── Atajos contextuales: cambian según lo que tengas equipado ──
     if (!HintsBox || !ToolSlotClass) return;

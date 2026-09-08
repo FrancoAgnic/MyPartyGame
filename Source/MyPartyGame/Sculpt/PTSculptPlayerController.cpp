@@ -282,6 +282,11 @@ void APTSculptPlayerController::PTHideHotbar()
     if (GameplayHUD) GameplayHUD->ToggleHotbar();
 }
 
+APawn* APTSculptPlayerController::GetSpectatedPovPawn() const
+{
+    return (Spectator && Spectator->IsActive()) ? Spectator->GetPovPawn() : nullptr;
+}
+
 void APTSculptPlayerController::PTSpecSpeed(float N)
 {
     if (Spectator) Spectator->SetSpeedScale(N);
@@ -381,13 +386,26 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
 
-    // Teclas toggle del modo espectador (dev): H=HUD, N=nombres, J=hotbar. Solo mientras espectás,
+    // Teclas toggle del modo espectador (dev): 1=HUD, 2=nombres, 3=hotbar. Solo mientras espectás,
     // para no pisar teclas del juego. Reusan las mismas funciones que los comandos de consola.
     if (Spectator && Spectator->IsActive())
     {
-        if (WasInputKeyJustPressed(EKeys::H)) PTHideUI();
-        if (WasInputKeyJustPressed(EKeys::N)) PTHideNames();
-        if (WasInputKeyJustPressed(EKeys::J)) PTHideHotbar();
+        if (WasInputKeyJustPressed(EKeys::One))   PTHideUI();
+        if (WasInputKeyJustPressed(EKeys::Two))   PTHideNames();
+        if (WasInputKeyJustPressed(EKeys::Three)) PTHideHotbar();
+    }
+    else
+    {
+        // Escultor: replicar la herramienta equipada al pawn (solo al cambiar) para que el ESPECTADOR
+        // pueda mostrar tu hotbar con la herramienta resaltada. No se hace mientras espectás.
+        if (APTLobbyCharacter* MyChar = Cast<APTLobbyCharacter>(GetPawn()))
+        {
+            const uint8 Tool = bEyesTool ? 3
+                : (EditMode == EPTEditMode::Add   ? 0
+                :  EditMode == EPTEditMode::Erase ? 1
+                :  EditMode == EPTEditMode::Paint ? 2 : 0);
+            if (Tool != LastReportedTool) { LastReportedTool = Tool; MyChar->Server_ReportEquippedTool(Tool); }
+        }
     }
     // F9 = screenshot en alta resolución (2x). Disponible siempre (para el trailer/capturas).
     if (WasInputKeyJustPressed(EKeys::F9)) ConsoleCommand(TEXT("HighResShot 2"), true);

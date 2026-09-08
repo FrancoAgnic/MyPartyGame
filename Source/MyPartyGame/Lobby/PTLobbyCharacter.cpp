@@ -1074,13 +1074,20 @@ void APTLobbyCharacter::SetFlyingMode(bool bEnable)
 void APTLobbyCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-    // Solo a los OTROS (el dueño usa su control real). Para que el espectador vea el pitch de la vista.
-    DOREPLIFETIME_CONDITION(APTLobbyCharacter, ReplViewPitch, COND_SkipOwner);
+    // Solo a los OTROS (el dueño usa su control/estado real). Para el espectador: pitch de la vista y
+    // la herramienta equipada (para mostrar el hotbar del jugador que esculpe).
+    DOREPLIFETIME_CONDITION(APTLobbyCharacter, ReplViewPitch,    COND_SkipOwner);
+    DOREPLIFETIME_CONDITION(APTLobbyCharacter, ReplEquippedTool, COND_SkipOwner);
 }
 
 void APTLobbyCharacter::Server_ReportViewPitch_Implementation(float InPitch)
 {
     ReplViewPitch = InPitch; // el server lo replica a los espectadores
+}
+
+void APTLobbyCharacter::Server_ReportEquippedTool_Implementation(uint8 Tool)
+{
+    ReplEquippedTool = Tool; // el server lo replica a los espectadores
 }
 
 FVector APTLobbyCharacter::GetSpectateCamLocation() const

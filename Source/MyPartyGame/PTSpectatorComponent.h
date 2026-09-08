@@ -24,6 +24,10 @@ public:
     void Toggle();
     bool IsActive() const { return bActive; }
 
+    /** Pawn cuyo POV estás mirando (nullptr si estás en vuelo libre / inactivo). Para que el HUD
+     *  muestre el hotbar del jugador que esculpe cuando lo espectás. */
+    class APawn* GetPovPawn() const;
+
     /** Multiplica la velocidad base (lo usa el comando PTSpecSpeed). */
     void SetSpeedScale(float InScale) { SpeedScale = FMath::Max(0.05f, InScale); }
     /** Suavizado de la cámara (lag): más BAJO = más suave/con más lag; más ALTO = más directo. */
