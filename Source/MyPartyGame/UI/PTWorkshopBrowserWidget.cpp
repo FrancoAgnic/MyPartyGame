@@ -4,6 +4,7 @@
 #include "PTWorkshopItemRowWidget.h"
 #include "../PTTextTable.h"
 #include "../PTGameInstance.h"
+#include "../PTGameUserSettings.h" // idioma actual → abrir la guía web en ese idioma
 #include "Mods/PTWordPackSubsystem.h"
 #include "Components/PanelWidget.h"
 #include "Components/Button.h"
@@ -220,9 +221,20 @@ void UPTWorkshopBrowserWidget::OnPopupCloseClicked()
 
 void UPTWorkshopBrowserWidget::OnGuideClicked()
 {
-    // Abre la guía (GitHub Pages) en el navegador del sistema.
+    // Abre la guía (GitHub Pages) en el navegador del sistema, EN EL IDIOMA del jugador (?lang=xx).
     if (!GuideUrl.IsEmpty())
-        FPlatformProcess::LaunchURL(*GuideUrl, nullptr, nullptr);
+    {
+        FString Url = GuideUrl;
+        FString Lang = TEXT("en");
+        if (const UPTGameUserSettings* S = UPTGameUserSettings::Get())
+        {
+            const FString Code = S->GetLanguageCode().Left(2).ToLower();
+            if (!Code.IsEmpty()) Lang = Code;
+        }
+        Url += (Url.Contains(TEXT("?")) ? TEXT("&") : TEXT("?"));
+        Url += TEXT("lang=") + Lang;
+        FPlatformProcess::LaunchURL(*Url, nullptr, nullptr);
+    }
 }
 
 void UPTWorkshopBrowserWidget::OnUploadCsvClicked()

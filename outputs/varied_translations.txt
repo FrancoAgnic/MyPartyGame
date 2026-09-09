@@ -1,0 +1,200 @@
+perro|dog|cachorro|Hund|chien|cane
+árbol|tree|árvore|Baum|arbre|albero
+taco|taco|taco|Taco|taco|taco
+manzana|apple|maçã|Apfel|pomme|mela
+casa|house|casa|Haus|maison|casa
+heladera|refrigerator|geladeira|Kühlschrank|réfrigérateur|frigorifero
+remera|T-shirt|camiseta|T-Shirt|tee-shirt|maglietta
+martillo|hammer|martelo|Hammer|marteau|martello
+auto|car|carro|Auto|voiture|automobile
+escuela|school|escola|Schule|école|scuola
+médico|doctor|médico|Arzt|médecin|medico
+fútbol|soccer|futebol|Fußball|football|calcio
+correr|run|correr|rennen|courir|correre
+cabeza|head|cabeça|Kopf|tête|testa
+lápiz|pencil|lápis|Bleistift|crayon|matita
+celular|cell phone|celular|Handy|téléphone portable|cellulare
+guitarra|guitar|violão|Gitarre|guitare|chitarra
+dragón|dragon|dragão|Drache|dragon|drago
+tiburón|shark|tubarão|Hai|requin|squalo
+lavarse las manos|wash your hands|lavar as mãos|Hände waschen|se laver les mains|lavarsi le mani
+elefante|elephant|elefante|Elefant|éléphant|elefante
+pasto|grass|grama|Gras|herbe|erba
+arepa|arepa|arepa|Arepa|arepa|arepa
+pera|pear|pera|Birne|poire|pera
+edificio|building|prédio|Gebäude|immeuble|edificio
+microondas|microwave|micro-ondas|Mikrowelle|micro-ondes|microonde
+blusa|blouse|blusa|Bluse|chemisier|camicetta
+tornillo|screw|parafuso|Schraube|vis|vite
+camión|truck|caminhão|Lastwagen|camion|camion
+farmacia|pharmacy|farmácia|Apotheke|pharmacie|farmacia
+dentista|dentist|dentista|Zahnarzt|dentiste|dentista
+vóley|volleyball|vôlei|Volleyball|volley-ball|pallavolo
+caminar|walk|caminhar|gehen|marcher|camminare
+ojo|eye|olho|Auge|œil|occhio
+marcador|marker|canetinha|Filzstift|feutre|pennarello
+notebook|laptop|notebook|Laptop|ordinateur portable|portatile
+violonchelo|cello|violoncelo|Cello|violoncelle|violoncello
+sirena|mermaid|sereia|Meerjungfrau|sirène|sirena
+ballena|whale|baleia|Wal|baleine|balena
+atarse los cordones|tie your shoelaces|amarrar os cadarços|Schnürsenkel binden|faire ses lacets|allacciarsi le scarpe
+tigre|tiger|tigre|Tiger|tigre|tigre
+raíz|root|raiz|Wurzel|racine|radice
+quesadilla|quesadilla|quesadilla|Quesadilla|quesadilla|quesadilla
+limón|lemon|limão-siciliano|Zitrone|citron|limone
+ventana|window|janela|Fenster|fenêtre|finestra
+tostadora|toaster|torradeira|Toaster|grille-pain|tostapane
+campera|jacket|jaqueta|Jacke|veste|giacca
+serrucho|handsaw|serrote|Handsäge|scie à main|sega a mano
+ambulancia|ambulance|ambulância|Krankenwagen|ambulance|ambulanza
+verdulería|greengrocer's shop|sacolão|Gemüseladen|magasin de primeurs|negozio di ortofrutta
+policía|police officer|policial|Polizist|policier|poliziotto
+rugby|rugby|rúgbi|Rugby|rugby|rugby
+nadar|swim|nadar|schwimmen|nager|nuotare
+oreja|ear|orelha|Ohr|oreille|orecchio
+pincel|paintbrush|pincel|Pinsel|pinceau|pennello
+mouse|computer mouse|mouse|Computermaus|souris d'ordinateur|mouse
+teclado musical|musical keyboard|teclado musical|Keyboard|clavier musical|tastiera musicale
+fénix|phoenix|fênix|Phönix|phénix|fenice
+morsa|walrus|morsa|Walross|morse|tricheco
+sacar la basura|take out the trash|levar o lixo para fora|Müll rausbringen|sortir les poubelles|portare fuori la spazzatura
+conejo|rabbit|coelho|Kaninchen|lapin|coniglio
+helecho|fern|samambaia|Farn|fougère|felce
+ceviche|ceviche|ceviche|Ceviche|ceviche|ceviche
+piña|pineapple|abacaxi|Ananas|ananas|ananas
+patio|courtyard|pátio|Innenhof|cour|cortile
+colador|strainer|coador|Sieb|passoire|colino
+chaleco|vest|colete|Weste|gilet|gilet
+tuerca|nut|porca|Mutter|écrou|dado
+moto|motorcycle|moto|Motorrad|moto|motocicletta
+taller mecánico|auto repair shop|oficina mecânica|Autowerkstatt|garage automobile|officina meccanica
+carnicero|butcher|açougueiro|Metzger|boucher|macellaio
+judo|judo|judô|Judo|judo|judo
+remar|row|remar|rudern|ramer|remare
+ceja|eyebrow|sobrancelha|Augenbraue|sourcil|sopracciglio
+transportador|protractor|transferidor|Winkelmesser|rapporteur|goniometro
+auriculares|headphones|fones de ouvido|Kopfhörer|casque audio|cuffie
+pandereta|tambourine|pandeiro|Tamburin|tambourin|tamburello
+elfo|elf|elfo|Elf|elfe|elfo
+caballito de mar|seahorse|cavalo-marinho|Seepferdchen|hippocampe|cavalluccio marino
+hacer un asado|have a barbecue|fazer um churrasco|grillen|faire un barbecue|fare una grigliata
+murciélago|bat|morcego|Fledermaus|chauve-souris|pipistrello
+tulipán|tulip|tulipa|Tulpe|tulipe|tulipano
+locro|locro stew|locro|Locro-Eintopf|ragoût locro|stufato locro
+frutilla|strawberry|morango|Erdbeere|fraise|fragola
+living|living room|sala de estar|Wohnzimmer|salon|soggiorno
+espátula|spatula|espátula|Pfannenwender|spatule|spatola
+bermuda|Bermuda shorts|bermuda|Bermudashorts|bermuda|bermuda
+lija|sandpaper|lixa|Schleifpapier|papier de verre|carta vetrata
+patines|roller skates|patins|Rollschuhe|patins à roulettes|pattini a rotelle
+estación de tren|train station|estação de trem|Bahnhof|gare|stazione ferroviaria
+piloto|pilot|piloto|Pilot|pilote|pilota
+surf|surfing|surfe|Surfen|surf|surf
+saludar|greet|cumprimentar|grüßen|saluer|salutare
+cuello|neck|pescoço|Hals|cou|collo
+cartulina|cardstock|cartolina|Tonkarton|papier cartonné|cartoncino
+control remoto|remote control|controle remoto|Fernbedienung|télécommande|telecomando
+trompeta|trumpet|trompete|Trompete|trompette|tromba
+mago|wizard|mago|Zauberer|magicien|mago
+erizo de mar|sea urchin|ouriço-do-mar|Seeigel|oursin|riccio di mare
+hacer una fogata|build a campfire|fazer uma fogueira|Lagerfeuer machen|faire un feu de camp|accendere un falò
+gallina|hen|galinha|Henne|poule|gallina
+montaña|mountain|montanha|Berg|montagne|montagna
+mofongo|mofongo|mofongo|Mofongo|mofongo|mofongo
+coco|coconut|coco|Kokosnuss|noix de coco|cocco
+cama|bed|cama|Bett|lit|letto
+molde|baking mold|forma de bolo|Backform|moule à gâteau|stampo da forno
+cinturón|belt|cinto|Gürtel|ceinture|cintura
+espátula de albañil|masonry trowel|colher de pedreiro|Maurerkelle|truelle|cazzuola
+funicular|funicular|funicular|Standseilbahn|funiculaire|funicolare
+cine|movie theater|cinema|Kino|cinéma|cinema
+jardinero|gardener|jardineiro|Gärtner|jardinier|giardiniere
+motocross|motocross|motocross|Motocross|motocross|motocross
+gritar|shout|gritar|schreien|crier|gridare
+mano|hand|mão|Hand|main|mano
+borrador de pizarrón|board eraser|apagador de quadro|Tafelschwamm|brosse à tableau|cancellino
+cargador|charger|carregador|Ladegerät|chargeur|caricabatterie
+xilófono|xylophone|xilofone|Xylofon|xylophone|xilofono
+momia|mummy|múmia|Mumie|momie|mummia
+almeja|clam|amêijoa|Venusmuschel|palourde|vongola
+saltar la soga|jump rope|pular corda|Seilspringen|sauter à la corde|saltare la corda
+tucán|toucan|tucano|Tukan|toucan|tucano
+cueva|cave|caverna|Höhle|grotte|grotta
+tequeño|tequeño|tequeño|Tequeño|tequeño|tequeño
+zanahoria|carrot|cenoura|Karotte|carotte|carota
+cortina|curtain|cortina|Vorhang|rideau|tenda
+plato|plate|prato|Teller|assiette|piatto
+botas|boots|botas|Stiefel|bottes|stivali
+carretilla|wheelbarrow|carrinho de mão|Schubkarre|brouette|carriola
+dirigible|airship|dirigível|Luftschiff|dirigeable|dirigibile
+comisaría|police station|delegacia|Polizeiwache|commissariat|commissariato
+mecánico|mechanic|mecânico|Mechaniker|mécanicien|meccanico
+lanzamiento de jabalina|javelin throw|lançamento de dardo|Speerwurf|lancer du javelot|lancio del giavellotto
+roncar|snore|roncar|schnarchen|ronfler|russare
+panza|belly|barriga|Bauch|ventre|pancia
+ábaco|abacus|ábaco|Abakus|boulier|abaco
+tarjeta de memoria|memory card|cartão de memória|Speicherkarte|carte mémoire|scheda di memoria
+bailarina|ballerina|bailarina|Ballerina|ballerine|ballerina
+ninja|ninja|ninja|Ninja|ninja|ninja
+atún|tuna|atum|Thunfisch|thon|tonno
+tirar una moneda|flip a coin|jogar uma moeda|Münze werfen|lancer une pièce|lanciare una moneta
+mariposa|butterfly|borboleta|Schmetterling|papillon|farfalla
+playa|beach|praia|Strand|plage|spiaggia
+pizza|pizza|pizza|Pizza|pizza|pizza
+alfajor|alfajor|alfajor|Alfajor|alfajor|alfajor
+maceta|flowerpot|vaso de planta|Blumentopf|pot de fleurs|vaso da fiori
+termo|thermos|garrafa térmica|Thermoskanne|bouteille isotherme|thermos
+gorra|cap|boné|Kappe|casquette|berretto
+manguera|hose|mangueira|Schlauch|tuyau d'arrosage|tubo da giardino
+canoa|canoe|canoa|Kanu|canoë|canoa
+banco|bank|banco|Bank|banque|banca
+barbero|barber|barbeiro|Barbier|barbier|barbiere
+polo|polo|polo|Polo|polo|polo
+oler|smell|cheirar|riechen|sentir|annusare
+tobillo|ankle|tornozelo|Knöchel|cheville|caviglia
+brújula|compass|bússola|Kompass|boussole|bussola
+consola de videojuegos|game console|videogame|Spielkonsole|console de jeux|console per videogiochi
+caballete|easel|cavalete|Staffelei|chevalet|cavalletto
+castillo|castle|castelo|Burg|château|castello
+vaca|cow|vaca|Kuh|vache|mucca
+esperar en una fila|wait in line|esperar na fila|Schlange stehen|faire la queue|aspettare in fila
+libélula|dragonfly|libélula|Libelle|libellule|libellula
+glaciar|glacier|geleira|Gletscher|glacier|ghiacciaio
+fideos|noodles|macarrão|Nudeln|nouilles|pasta
+chocolate|chocolate|chocolate|Schokolade|chocolat|cioccolato
+perchero|coat rack|cabideiro|Garderobenständer|portemanteau|attaccapanni
+servilleta|napkin|guardanapo|Serviette|serviette de table|tovagliolo
+paraguas|umbrella|guarda-chuva|Regenschirm|parapluie|ombrello
+tornillo de banco|bench vise|morsa de bancada|Schraubstock|étau|morsa da banco
+ferry|ferry|balsa|Fähre|ferry|traghetto
+plaza|town square|praça|Stadtplatz|place publique|piazza
+camarógrafo|camera operator|cinegrafista|Kameramann|cadreur|cameraman
+bowling|bowling|boliche|Bowling|bowling|bowling
+dibujar|draw|desenhar|zeichnen|dessiner|disegnare
+pulmón|lung|pulmão|Lunge|poumon|polmone
+péndulo|pendulum|pêndulo|Pendel|pendule|pendolo
+dron|drone|drone|Drohne|drone|drone
+disfraz|costume|fantasia|Kostüm|déguisement|costume
+mapa del tesoro|treasure map|mapa do tesouro|Schatzkarte|carte au trésor|mappa del tesoro
+burro|donkey|burro|Esel|âne|asino
+cambiar una lamparita|change a light bulb|trocar uma lâmpada|Glühbirne wechseln|changer une ampoule|cambiare una lampadina
+iguana|iguana|iguana|Leguan|iguane|iguana
+terremoto|earthquake|terremoto|Erdbeben|tremblement de terre|terremoto
+albóndigas|meatballs|almôndegas|Fleischbällchen|boulettes de viande|polpette
+dona|doughnut|rosquinha|Donut|donut|ciambella
+timbre|doorbell|campainha|Türklingel|sonnette|campanello
+lavarropas|washing machine|máquina de lavar|Waschmaschine|lave-linge|lavatrice
+cartera|handbag|bolsa|Handtasche|sac à main|borsa
+gato hidráulico|hydraulic jack|macaco hidráulico|hydraulischer Wagenheber|cric hydraulique|cric idraulico
+carro de supermercado|shopping cart|carrinho de supermercado|Einkaufswagen|chariot de courses|carrello della spesa
+parque acuático|water park|parque aquático|Wasserpark|parc aquatique|parco acquatico
+recolector de basura|garbage collector|coletor de lixo|Müllwerker|éboueur|netturbino
+yo-yo|yo-yo|ioiô|Jo-Jo|yoyo|yo-yo
+planchar|iron|passar roupa|bügeln|repasser|stirare
+jeringa|syringe|seringa|Spritze|seringue|siringa
+satélite|satellite|satélite|Satellit|satellite|satellite
+videollamada|video call|videochamada|Videoanruf|appel vidéo|videochiamata
+vela de cumpleaños|birthday candle|vela de aniversário|Geburtstagskerze|bougie d'anniversaire|candelina di compleanno
+caldero|cauldron|caldeirão|Kessel|chaudron|calderone
+silo|silo|silo|Silo|silo|silo
+buscar las llaves|look for the keys|procurar as chaves|Schlüssel suchen|chercher les clés|cercare le chiavi

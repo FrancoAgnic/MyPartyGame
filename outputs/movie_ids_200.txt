@@ -1,0 +1,200 @@
+Alien|348
+Amadeus|279
+Amélie|194
+American Pie|2105
+Amores perros|55
+Anastasia|9444
+Ant-Man|102899
+Apolo 13|568
+Aquaman|297802
+Armageddon|95
+Arma Mortal|941
+Avengers|299534
+Bajo La Misma Estrella|222935
+Bambi|3170
+Barbie|346698
+Bastardos sin gloria|16869
+Batman|155
+Beetlejuice|4011
+Belleza Americana|14
+Ben-Hur|665
+Bichos|9487
+Birdman|194662
+Blade Runner|78
+Blancanieves|408
+Bohemian Rhapsody|424694
+Buenos Muchachos|769
+Buscando a Nemo|12
+Búsqueda implacable|8681
+Cantando bajo la lluvia|872
+Capitana Marvel|299537
+Capitán América|271110
+Caracortada|111
+Carrie|133805
+Cars|920
+Casablanca|289
+Casino Royale|36557
+Casper|8839
+Chicago|1574
+Chicas Pesadas|10625
+Cincuenta Sombras de Grey|216015
+Cinema Paradiso|11216
+Ciudad de Dios|598
+Click|9339
+Coco|354912
+Coraline|14836
+Corazón Valiente|197
+Crepúsculo|8966
+Cruella|337404
+Destino Final|9532
+Diamante de Sangre|1372
+Diario de una pasión|11036
+Divergente|157350
+Django sin Cadenas|68718
+Doctor Strange|284052
+Donnie Darko|141
+Drácula|6114
+Drive|64690
+Dumbo|11360
+Duna|438631
+Dunkerque|374720
+Duro de matar|562
+El cisne negro|44214
+El Ciudadano Kane|15
+El Código Da Vinci|591
+El código enigma|205596
+El Conjuro|138843
+El Cuervo|9495
+El Discurso del Rey|45269
+Elementos|976573
+El Exorcista|9552
+Elf|10719
+El fugitivo|5503
+El Gran Dictador|914
+El gran Gatsby|64682
+El Gran Hotel Budapest|120467
+El Gran Lebowski|115
+El gran Showman|316029
+El Gran Truco|1124
+El Grinch|8871
+El Guardaespaldas|619
+El hombre araña|557
+El hombre de acero|49521
+El laberinto del fauno|1417
+El origen|27205
+El padrino|238
+El Perfecto Asesino|101
+El Pianista|423
+El Quinto Elemento|18
+El resplandor|694
+El rey león|8587
+El Sexto Sentido|745
+El Último Samurái|616
+El viaje de Chihiro|129
+Encanto|568124
+Enredados|38757
+Escuadrón Suicida|297761
+Escuela de Rock|1584
+Espartaco|967
+E.T.|601
+Exterminio|170
+Fargo|275
+Filadelfia|9800
+Forrest Gump|13
+Fragmentado|381288
+Francotirador|190859
+Free Guy|550988
+Frozen|109445
+Furia de Titanes|18823
+Gandhi|783
+Ghost|251
+Gigantes de Acero|39254
+Gladiador|98
+Golpes del Destino|70
+Grandes Héroes|177572
+Gran Torino|13223
+Gravedad|49047
+Green Book|490132
+Guardianes de la galaxia|118340
+Guerra mundial Z|72190
+Halloween|948
+Hancock|8960
+Happy Feet|9836
+Harry Potter|671
+Hasta el Último Hombre|324786
+Hechizo del tiempo|137
+Hércules|11970
+Historias Cruzadas|50014
+Hitch|8488
+Hombres de negro|607
+Hotel Transylvania|76492
+Hulk|1724
+¡Huye!|419430
+Indiana Jones|85
+Intensamente|150540
+Interestelar|157336
+Iron Man|1726
+It|346364
+John Wick|245891
+Jumanji|8844
+Karate Kid|1885
+Kill Bill|24
+King Kong|254
+Kingsman|207703
+Kung Fu Panda|9502
+La bella durmiente|10882
+La Cenicienta|11224
+La era de hielo|425
+La forma del agua|399055
+La Gran Apuesta|318846
+La Máscara|854
+La Momia|564
+La sirenita|10144
+La Vida es Bella|637
+Legalmente Rubia|8835
+Los Cazafantasmas|620
+Los increíbles|9806
+Los Locos Addams|2907
+Madagascar|953
+Mamma Mia!|11631
+Matilda|10830
+Matrix|603
+Metrópolis|19
+Mi pobre angelito|771
+Misión imposible|954
+Mi villano favorito|20352
+Moana|277834
+Monsters Inc.|585
+Moulin Rouge|824
+Mujer bonita|114
+Mulán|10674
+No se Aceptan Devoluciones|211954
+Nosotros los nobles|180147
+Nueve reinas|18079
+Oppenheimer|872585
+Parque Jurásico|329
+Pinocho|10895
+Piratas del Caribe|22
+Pocahontas|10530
+Psicosis|539
+Rambo|1368
+Rápido y furioso|9799
+Ratatouille|2062
+RoboCop|5548
+Rocky|1366
+Sangre por Sangre|9702
+Selena|16052
+Shrek|808
+Sonic|454626
+Space Jam|2300
+Star Wars|11
+Super Mario Bros.|502356
+Tarzán|37135
+Terminator|280
+Tiburón|578
+Titanic|597
+Top Gun|744
+Toy Story|862
+Vaselina|621
+Volver al Futuro|105
+WALL-E|10681

@@ -28,7 +28,7 @@ SETTINGS_TITLE,Configuración,Settings,Configurações,Einstellungen,Paramètres
 SETTINGS_VOLUME,Volumen,Volume,Volume,Lautstärke,Volume,Volume
 SETTINGS_LANGUAGE,Idioma,Language,Idioma,Sprache,Langue,Lingua
 SETTINGS_GRAPHICS,Calidad gráfica,Graphics Quality,Qualidade gráfica,Grafikqualität,Qualité graphique,Qualità grafica
-SETTINGS_VSYNC,Sincronización vertical,VSync,Sincronização vertical,VSync,VSync,VSync
+SETTINGS_VSYNC,Vsync,Vsync,Vsync,Vsync,Vsync,Vsync
 SETTINGS_FULLSCREEN,Pantalla completa,Fullscreen,Tela cheia,Vollbild,Plein écran,Schermo intero
 SETTINGS_APPLY,Aplicar,Apply,Aplicar,Anwenden,Appliquer,Applica
 SETTINGS_CLOSE,Cerrar,Close,Fechar,Schließen,Fermer,Chiudi
@@ -216,3 +216,14 @@ SV_YES,Sí,Yes,Sim,Ja,Oui,Sì
 SV_NO,No,No,Não,Nein,Non,No
 HEAD_SWITCH_TO_BODY,Ir al cuerpo,To body,Ir ao corpo,Zum Körper,Au corps,Al corpo
 HEAD_SWITCH_TO_HEAD,Ir a la cabeza,To head,Ir à cabeça,Zum Kopf,À la tête,Alla testa
+MENU_HOST_GAME,Crear partida,Host Game,Criar partida,Spiel erstellen,Créer une partie,Crea partita
+MENU_FIND_GAME,Buscar partidas,Find Game,Procurar partidas,Spiele suchen,Rechercher une partie,Cerca partite
+SETTINGS_EFFECTS,Efectos,Effects,Efeitos,Effekte,Effets,Effetti
+SETTINGS_MUSIC,Música,Music,Música,Musik,Musique,Musica
+SETTINGS_GRAPHICS_LABEL,Gráficos,Graphics,Gráficos,Grafik,Graphismes,Grafica
+SETTINGS_RESOLUTIONS,Resolución,Resolutions,Resolução,Auflösung,Résolution,Risoluzione
+LOBBY_TURNTIME_LABEL,Tiempo por turno,TurnTime,Tempo por turno,Zugzeit,Temps par tour,Tempo per turno
+LOBBY_REVEAL_WORD,Revelar palabra,Reveal Word,Revelar palavra,Wort aufdecken,Révéler le mot,Rivela parola
+LOBBY_LIBRARY_MODS,Mods de biblioteca,Librery Mods,Mods da biblioteca,Bibliotheks-Mods,Mods de bibliothèque,Mod libreria
+GUIDE_BUTTON,Guía,Guide,Guia,Anleitung,Guide,Guida
+WORDPACK_TITLE_HINT,Título del banco,Bank title,Título do banco,Bank-Titel,Titre de la banque,Titolo della banca

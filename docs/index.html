@@ -34,7 +34,7 @@
   .logo{width:min(460px,82%);height:auto;filter:drop-shadow(0 8px 18px rgba(0,0,0,.35))}
   .sub{color:#fff;margin-top:2px;font-weight:600;text-shadow:0 2px 8px rgba(0,0,0,.5)}
 
-  .lang{display:flex;gap:10px;justify-content:center;margin:16px 0 4px}
+  .lang{display:flex;gap:10px;justify-content:center;margin:16px 0 4px;flex-wrap:wrap}
   .lang button{
     font-weight:800;font-size:.95rem;cursor:pointer;color:var(--ink);
     background:var(--cream);border:0;border-bottom:4px solid #e7c49c;
@@ -70,8 +70,16 @@
   .madeby img{width:min(340px,70%);height:auto;filter:drop-shadow(0 6px 16px rgba(0,0,0,.45))}
   footer{text-align:center;color:#fff;margin-top:14px;font-size:.92rem;text-shadow:0 2px 8px rgba(0,0,0,.5)}
 
-  html[data-lang="es"] .en{display:none}
-  html[data-lang="en"] .es{display:none}
+  /* Multi-idioma: por defecto se ocultan TODOS los idiomas; se muestra solo el activo.
+     display:revert restaura el display propio de cada elemento (block para <p>, list-item para <li>,
+     inline para <span>), así el layout no se rompe. */
+  .es,.en,.pt,.de,.fr,.it{display:none}
+  html[data-lang="es"] .es,
+  html[data-lang="en"] .en,
+  html[data-lang="pt"] .pt,
+  html[data-lang="de"] .de,
+  html[data-lang="fr"] .fr,
+  html[data-lang="it"] .it{display:revert}
   a{color:var(--accentink);font-weight:700}
 </style>
 </head>
@@ -79,10 +87,21 @@
 <div class="wrap">
   <header>
     <img class="logo" src="img/logo.png" alt="Sculpturillo">
-    <div class="sub" data-es="Cómo crear y compartir contenido de la comunidad" data-en="How to create & share community content"></div>
+    <div class="sub">
+      <span class="es">Cómo crear y compartir contenido de la comunidad</span>
+      <span class="en">How to create &amp; share community content</span>
+      <span class="pt">Como criar e compartilhar conteúdo da comunidade</span>
+      <span class="de">Community-Inhalte erstellen und teilen</span>
+      <span class="fr">Comment créer et partager du contenu communautaire</span>
+      <span class="it">Come creare e condividere contenuti della community</span>
+    </div>
     <div class="lang">
-      <button id="btn-es" onclick="setLang('es')">Español</button>
-      <button id="btn-en" class="active" onclick="setLang('en')">English</button>
+      <button data-l="es" onclick="setLang('es')">Español</button>
+      <button data-l="en" class="active" onclick="setLang('en')">English</button>
+      <button data-l="pt" onclick="setLang('pt')">Português</button>
+      <button data-l="de" onclick="setLang('de')">Deutsch</button>
+      <button data-l="fr" onclick="setLang('fr')">Français</button>
+      <button data-l="it" onclick="setLang('it')">Italiano</button>
     </div>
   </header>
 
@@ -90,28 +109,56 @@
   <div class="card">
     <p class="es">En Sculpturillo podés crear tu propio contenido y compartirlo por el <b>Steam Workshop</b>: otros se suscriben, lo descargan y lo usan en sus partidas. Hoy podés crear <b>bancos de palabras</b>; los <b>mapas</b> llegarán pronto.</p>
     <p class="en">In Sculpturillo you can create your own content and share it through the <b>Steam Workshop</b>: others subscribe, download it, and use it in their games. Today you can make <b>word banks</b>; <b>maps</b> are coming soon.</p>
+    <p class="pt">No Sculpturillo você pode criar seu próprio conteúdo e compartilhá-lo pela <b>Steam Workshop</b>: outros se inscrevem, baixam e usam nas partidas. Hoje você pode criar <b>bancos de palavras</b>; os <b>mapas</b> chegam em breve.</p>
+    <p class="de">In Sculpturillo kannst du eigene Inhalte erstellen und über den <b>Steam Workshop</b> teilen: andere abonnieren sie, laden sie herunter und nutzen sie in ihren Spielen. Heute kannst du <b>Wortbänke</b> erstellen; <b>Karten</b> folgen bald.</p>
+    <p class="fr">Dans Sculpturillo, tu peux créer ton propre contenu et le partager via le <b>Steam Workshop</b> : d'autres s'y abonnent, le téléchargent et l'utilisent dans leurs parties. Aujourd'hui tu peux créer des <b>banques de mots</b> ; les <b>cartes</b> arrivent bientôt.</p>
+    <p class="it">In Sculpturillo puoi creare i tuoi contenuti e condividerli tramite lo <b>Steam Workshop</b>: altri si iscrivono, li scaricano e li usano nelle partite. Oggi puoi creare <b>banche di parole</b>; le <b>mappe</b> arriveranno presto.</p>
   </div>
 
   <!-- WORD BANKS -->
   <div class="card">
-    <h2><span class="es">Bancos de palabras</span><span class="en">Word banks</span> <span class="pill">tag: WordBank</span></h2>
+    <h2><span class="es">Bancos de palabras</span><span class="en">Word banks</span><span class="pt">Bancos de palavras</span><span class="de">Wortbänke</span><span class="fr">Banques de mots</span><span class="it">Banche di parole</span> <span class="pill">tag: WordBank</span></h2>
 
     <p class="es">Un banco es un archivo <code>.csv</code> (texto) con una palabra por línea, en los distintos idiomas. Lo abrís con el Bloc de notas o Excel. <b>No necesitás Unreal.</b></p>
     <p class="en">A word bank is a <code>.csv</code> (text) file with one word per line, in the different languages. Open it with Notepad or Excel. <b>No Unreal needed.</b></p>
+    <p class="pt">Um banco é um arquivo <code>.csv</code> (texto) com uma palavra por linha, nos diferentes idiomas. Abra com o Bloco de Notas ou Excel. <b>Não precisa do Unreal.</b></p>
+    <p class="de">Eine Wortbank ist eine <code>.csv</code>-Datei (Text) mit einem Wort pro Zeile, in den verschiedenen Sprachen. Öffne sie mit dem Editor oder Excel. <b>Kein Unreal nötig.</b></p>
+    <p class="fr">Une banque de mots est un fichier <code>.csv</code> (texte) avec un mot par ligne, dans les différentes langues. Ouvre-le avec le Bloc-notes ou Excel. <b>Pas besoin d'Unreal.</b></p>
+    <p class="it">Una banca è un file <code>.csv</code> (testo) con una parola per riga, nelle varie lingue. Aprilo con il Blocco note o Excel. <b>Non serve Unreal.</b></p>
 
     <p class="es"><b>Formato:</b> una columna por idioma. El juego soporta estos <b>6</b>: <code>ES,EN,PT,DE,FR,IT</code> (Español, Inglés, Portugués, Alemán, Francés, Italiano).</p>
     <p class="en"><b>Format:</b> one column per language. The game supports these <b>6</b>: <code>ES,EN,PT,DE,FR,IT</code> (Spanish, English, Portuguese, German, French, Italian).</p>
+    <p class="pt"><b>Formato:</b> uma coluna por idioma. O jogo suporta estes <b>6</b>: <code>ES,EN,PT,DE,FR,IT</code> (Espanhol, Inglês, Português, Alemão, Francês, Italiano).</p>
+    <p class="de"><b>Format:</b> eine Spalte pro Sprache. Das Spiel unterstützt diese <b>6</b>: <code>ES,EN,PT,DE,FR,IT</code> (Spanisch, Englisch, Portugiesisch, Deutsch, Französisch, Italienisch).</p>
+    <p class="fr"><b>Format :</b> une colonne par langue. Le jeu prend en charge ces <b>6</b> : <code>ES,EN,PT,DE,FR,IT</code> (espagnol, anglais, portugais, allemand, français, italien).</p>
+    <p class="it"><b>Formato:</b> una colonna per lingua. Il gioco supporta queste <b>6</b>: <code>ES,EN,PT,DE,FR,IT</code> (spagnolo, inglese, portoghese, tedesco, francese, italiano).</p>
     <ul>
       <li class="es">La <b>primera fila</b> son los códigos de idioma; cada fila siguiente es <b>una palabra</b> (con su traducción en cada columna).</li>
       <li class="en">The <b>first row</b> is the language codes; each following row is <b>one word</b> (with its translation in each column).</li>
+      <li class="pt">A <b>primeira linha</b> são os códigos de idioma; cada linha seguinte é <b>uma palavra</b> (com sua tradução em cada coluna).</li>
+      <li class="de">Die <b>erste Zeile</b> sind die Sprachcodes; jede weitere Zeile ist <b>ein Wort</b> (mit seiner Übersetzung in jeder Spalte).</li>
+      <li class="fr">La <b>première ligne</b> contient les codes de langue ; chaque ligne suivante est <b>un mot</b> (avec sa traduction dans chaque colonne).</li>
+      <li class="it">La <b>prima riga</b> sono i codici lingua; ogni riga successiva è <b>una parola</b> (con la sua traduzione in ogni colonna).</li>
       <li class="es"><b>Podés hacerlo en el idioma que quieras</b> y <b>NO es obligatorio traducirlo</b> a todos. Poné solo la(s) columna(s) que quieras (ej: solo <code>EN</code>, o solo <code>ES,PT</code>).</li>
       <li class="en"><b>You can make it in whatever language you want</b> and you <b>don't have to translate</b> it to all of them. Include only the column(s) you want (e.g. just <code>EN</code>, or just <code>ES,PT</code>).</li>
+      <li class="pt"><b>Você pode fazer no idioma que quiser</b> e <b>NÃO é obrigatório traduzir</b> para todos. Inclua só a(s) coluna(s) que quiser (ex.: só <code>EN</code>, ou só <code>ES,PT</code>).</li>
+      <li class="de"><b>Du kannst sie in jeder beliebigen Sprache erstellen</b> und musst sie <b>NICHT</b> in alle übersetzen. Nimm nur die gewünschte(n) Spalte(n) (z. B. nur <code>EN</code> oder nur <code>ES,PT</code>).</li>
+      <li class="fr"><b>Tu peux la faire dans la langue que tu veux</b> et tu <b>n'es pas obligé de la traduire</b> dans toutes. Mets seulement la ou les colonnes voulues (ex. : seulement <code>EN</code>, ou seulement <code>ES,PT</code>).</li>
+      <li class="it"><b>Puoi farla nella lingua che vuoi</b> e <b>NON è obbligatorio tradurla</b> in tutte. Includi solo la/le colonna/e che vuoi (es.: solo <code>EN</code>, o solo <code>ES,PT</code>).</li>
       <li class="es">Si un jugador usa un idioma que tu banco <b>no tiene</b>, el juego cae automáticamente a la primera palabra que sí escribiste. Así un banco de un solo idioma funciona igual.</li>
       <li class="en">If a player uses a language your bank <b>doesn't include</b>, the game automatically falls back to the first word you did write. So a single-language bank works fine.</li>
+      <li class="pt">Se um jogador usar um idioma que seu banco <b>não tem</b>, o jogo cai automaticamente na primeira palavra que você escreveu. Assim um banco de um só idioma funciona igual.</li>
+      <li class="de">Wenn ein Spieler eine Sprache nutzt, die deine Bank <b>nicht enthält</b>, greift das Spiel automatisch auf das erste vorhandene Wort zurück. So funktioniert auch eine einsprachige Bank.</li>
+      <li class="fr">Si un joueur utilise une langue que ta banque <b>n'a pas</b>, le jeu revient automatiquement au premier mot que tu as écrit. Une banque monolingue fonctionne donc très bien.</li>
+      <li class="it">Se un giocatore usa una lingua che la tua banca <b>non ha</b>, il gioco ripiega automaticamente sulla prima parola che hai scritto. Così una banca in una sola lingua funziona lo stesso.</li>
     </ul>
 
     <p class="es">Ejemplo completo — las palabras traducidas a los 6 idiomas (<code>animales.csv</code>):</p>
     <p class="en">Full example — words translated into all 6 languages (<code>animals.csv</code>):</p>
+    <p class="pt">Exemplo completo — as palavras traduzidas nos 6 idiomas (<code>animais.csv</code>):</p>
+    <p class="de">Vollständiges Beispiel — die Wörter in alle 6 Sprachen übersetzt (<code>tiere.csv</code>):</p>
+    <p class="fr">Exemple complet — les mots traduits dans les 6 langues (<code>animaux.csv</code>) :</p>
+    <p class="it">Esempio completo — le parole tradotte nelle 6 lingue (<code>animali.csv</code>):</p>
 <pre>ES,EN,PT,DE,FR,IT
 Perro,Dog,Cachorro,Hund,Chien,Cane
 Gato,Cat,Gato,Katze,Chat,Gatto
@@ -121,6 +168,10 @@ Sol,Sun,Sol,Sonne,Soleil,Sole</pre>
 
     <p class="es">Ejemplo de <b>un solo idioma</b> (perfectamente válido) — <code>palabras_en.csv</code>:</p>
     <p class="en"><b>Single-language</b> example (perfectly valid) — <code>words_en.csv</code>:</p>
+    <p class="pt">Exemplo de <b>um só idioma</b> (perfeitamente válido) — <code>palavras_en.csv</code>:</p>
+    <p class="de">Beispiel für <b>eine einzige Sprache</b> (völlig gültig) — <code>woerter_en.csv</code>:</p>
+    <p class="fr">Exemple en <b>une seule langue</b> (parfaitement valide) — <code>mots_en.csv</code> :</p>
+    <p class="it">Esempio in <b>una sola lingua</b> (perfettamente valido) — <code>parole_en.csv</code>:</p>
 <pre>EN
 Dog
 Cat
@@ -128,57 +179,121 @@ House
 Tree
 Sun</pre>
 
-    <p><a class="dl" href="plantilla_palabras.csv" download><span class="es">⬇ Descargar plantilla CSV</span><span class="en">⬇ Download CSV template</span></a></p>
+    <p><a class="dl" href="plantilla_palabras.csv" download><span class="es">⬇ Descargar plantilla CSV</span><span class="en">⬇ Download CSV template</span><span class="pt">⬇ Baixar modelo CSV</span><span class="de">⬇ CSV-Vorlage herunterladen</span><span class="fr">⬇ Télécharger le modèle CSV</span><span class="it">⬇ Scarica il modello CSV</span></a></p>
 
     <div class="step">
-      <b class="es">Guardalo como UTF-8</b><b class="en">Save it as UTF-8</b>
+      <b class="es">Guardalo como UTF-8</b><b class="en">Save it as UTF-8</b><b class="pt">Salve como UTF-8</b><b class="de">Als UTF-8 speichern</b><b class="fr">Enregistre-le en UTF-8</b><b class="it">Salvalo come UTF-8</b>
       <span class="es"> para que los acentos y la ñ se vean bien.</span>
       <span class="en"> so accents and special characters display correctly.</span>
+      <span class="pt"> para que os acentos e caracteres especiais apareçam certo.</span>
+      <span class="de"> damit Umlaute und Sonderzeichen korrekt angezeigt werden.</span>
+      <span class="fr"> pour que les accents et caractères spéciaux s'affichent correctement.</span>
+      <span class="it"> così accenti e caratteri speciali si vedono bene.</span>
     </div>
 
     <h3 class="es">Cómo publicarlo</h3>
     <h3 class="en">How to publish it</h3>
+    <h3 class="pt">Como publicar</h3>
+    <h3 class="de">So veröffentlichst du sie</h3>
+    <h3 class="fr">Comment le publier</h3>
+    <h3 class="it">Come pubblicarla</h3>
     <ol>
       <li class="es">Abrí el juego → <b>Workshop</b> (menú principal).</li>
       <li class="en">Open the game → <b>Workshop</b> (main menu).</li>
+      <li class="pt">Abra o jogo → <b>Workshop</b> (menu principal).</li>
+      <li class="de">Öffne das Spiel → <b>Workshop</b> (Hauptmenü).</li>
+      <li class="fr">Ouvre le jeu → <b>Workshop</b> (menu principal).</li>
+      <li class="it">Apri il gioco → <b>Workshop</b> (menu principale).</li>
       <li class="es">Pestaña <b>Bancos de palabras</b> → botón <b>Publicar CSV</b>.</li>
       <li class="en"><b>Word banks</b> tab → <b>Publish CSV</b> button.</li>
+      <li class="pt">Aba <b>Bancos de palavras</b> → botão <b>Publicar CSV</b>.</li>
+      <li class="de">Reiter <b>Wortbänke</b> → Schaltfläche <b>CSV veröffentlichen</b>.</li>
+      <li class="fr">Onglet <b>Banques de mots</b> → bouton <b>Publier CSV</b>.</li>
+      <li class="it">Scheda <b>Banche di parole</b> → pulsante <b>Pubblica CSV</b>.</li>
       <li class="es">Elegí tu archivo <code>.csv</code> → se sube a tu Workshop.</li>
       <li class="en">Pick your <code>.csv</code> file → it uploads to your Workshop.</li>
+      <li class="pt">Escolha seu arquivo <code>.csv</code> → ele é enviado ao seu Workshop.</li>
+      <li class="de">Wähle deine <code>.csv</code>-Datei → sie wird in deinen Workshop hochgeladen.</li>
+      <li class="fr">Choisis ton fichier <code>.csv</code> → il est envoyé sur ton Workshop.</li>
+      <li class="it">Scegli il tuo file <code>.csv</code> → viene caricato sul tuo Workshop.</li>
       <li class="es">La primera vez, Steam te pide aceptar el acuerdo del Workshop.</li>
       <li class="en">The first time, Steam asks you to accept the Workshop agreement.</li>
+      <li class="pt">Na primeira vez, a Steam pede para aceitar o acordo do Workshop.</li>
+      <li class="de">Beim ersten Mal bittet dich Steam, die Workshop-Vereinbarung zu akzeptieren.</li>
+      <li class="fr">La première fois, Steam te demande d'accepter l'accord du Workshop.</li>
+      <li class="it">La prima volta, Steam ti chiede di accettare l'accordo del Workshop.</li>
     </ol>
 
     <h3 class="es">Etiquetas de idioma (automáticas) 🏷️</h3>
     <h3 class="en">Language tags (automatic) 🏷️</h3>
+    <h3 class="pt">Etiquetas de idioma (automáticas) 🏷️</h3>
+    <h3 class="de">Sprach-Tags (automatisch) 🏷️</h3>
+    <h3 class="fr">Étiquettes de langue (automatiques) 🏷️</h3>
+    <h3 class="it">Etichette di lingua (automatiche) 🏷️</h3>
     <p class="es">Al publicar, el juego <b>lee tu CSV y detecta en qué idiomas está</b> (las columnas que tienen palabras) y le pone esas <b>etiquetas de Steam</b> a tu banco — por ejemplo <code>ES</code>, <code>EN</code> — además de la etiqueta <code>WordBank</code>.</p>
     <p class="en">When you publish, the game <b>reads your CSV and detects which languages it's in</b> (the columns that have words) and adds those <b>Steam tags</b> to your bank — e.g. <code>ES</code>, <code>EN</code> — on top of the <code>WordBank</code> tag.</p>
+    <p class="pt">Ao publicar, o jogo <b>lê seu CSV e detecta em quais idiomas ele está</b> (as colunas com palavras) e adiciona essas <b>etiquetas da Steam</b> ao seu banco — por exemplo <code>ES</code>, <code>EN</code> — além da etiqueta <code>WordBank</code>.</p>
+    <p class="de">Beim Veröffentlichen <b>liest das Spiel deine CSV und erkennt, in welchen Sprachen sie ist</b> (die Spalten mit Wörtern) und fügt deiner Bank diese <b>Steam-Tags</b> hinzu — z. B. <code>ES</code>, <code>EN</code> — zusätzlich zum Tag <code>WordBank</code>.</p>
+    <p class="fr">À la publication, le jeu <b>lit ton CSV et détecte dans quelles langues il est</b> (les colonnes remplies) et ajoute ces <b>étiquettes Steam</b> à ta banque — par exemple <code>ES</code>, <code>EN</code> — en plus de l'étiquette <code>WordBank</code>.</p>
+    <p class="it">Alla pubblicazione, il gioco <b>legge il tuo CSV e rileva in quali lingue è</b> (le colonne con parole) e aggiunge quelle <b>etichette Steam</b> alla tua banca — ad esempio <code>ES</code>, <code>EN</code> — oltre all'etichetta <code>WordBank</code>.</p>
     <ul>
       <li class="es">No tenés que hacer nada: las etiquetas salen solas de las columnas que completaste.</li>
       <li class="en">You don't have to do anything: the tags come straight from the columns you filled in.</li>
+      <li class="pt">Você não precisa fazer nada: as etiquetas saem sozinhas das colunas que você preencheu.</li>
+      <li class="de">Du musst nichts tun: Die Tags ergeben sich direkt aus den ausgefüllten Spalten.</li>
+      <li class="fr">Tu n'as rien à faire : les étiquettes proviennent directement des colonnes remplies.</li>
+      <li class="it">Non devi fare nulla: le etichette derivano dalle colonne che hai compilato.</li>
       <li class="es">Sirven para que otros <b>vean y filtren</b> en qué idiomas está tu banco antes de suscribirse.</li>
       <li class="en">They let others <b>see and filter</b> which languages your bank is in before subscribing.</li>
+      <li class="pt">Servem para que outros <b>vejam e filtrem</b> em quais idiomas está seu banco antes de se inscrever.</li>
+      <li class="de">So können andere <b>sehen und filtern</b>, in welchen Sprachen deine Bank ist, bevor sie sie abonnieren.</li>
+      <li class="fr">Elles permettent aux autres de <b>voir et filtrer</b> les langues de ta banque avant de s'y abonner.</li>
+      <li class="it">Servono agli altri per <b>vedere e filtrare</b> in quali lingue è la tua banca prima di iscriversi.</li>
       <li class="es">Si actualizás un banco ya publicado, volvé a publicarlo para que tome los idiomas nuevos.</li>
       <li class="en">If you update an already-published bank, publish it again so it picks up the new languages.</li>
+      <li class="pt">Se atualizar um banco já publicado, publique de novo para que ele pegue os novos idiomas.</li>
+      <li class="de">Wenn du eine bereits veröffentlichte Bank aktualisierst, veröffentliche sie erneut, damit die neuen Sprachen übernommen werden.</li>
+      <li class="fr">Si tu mets à jour une banque déjà publiée, republie-la pour qu'elle prenne en compte les nouvelles langues.</li>
+      <li class="it">Se aggiorni una banca già pubblicata, ripubblicala così prende le nuove lingue.</li>
     </ul>
 
     <h3 class="es">Cómo usarlo en una partida</h3>
     <h3 class="en">How to use it in a game</h3>
+    <h3 class="pt">Como usar em uma partida</h3>
+    <h3 class="de">So nutzt du sie im Spiel</h3>
+    <h3 class="fr">Comment l'utiliser en partie</h3>
+    <h3 class="it">Come usarla in partita</h3>
     <ol>
       <li class="es">Suscribite a un banco desde el <b>Workshop</b> (botón Añadir).</li>
       <li class="en">Subscribe to a bank from the <b>Workshop</b> (Add button).</li>
+      <li class="pt">Inscreva-se em um banco no <b>Workshop</b> (botão Adicionar).</li>
+      <li class="de">Abonniere eine Bank im <b>Workshop</b> (Schaltfläche Hinzufügen).</li>
+      <li class="fr">Abonne-toi à une banque depuis le <b>Workshop</b> (bouton Ajouter).</li>
+      <li class="it">Iscriviti a una banca dal <b>Workshop</b> (pulsante Aggiungi).</li>
       <li class="es">Creá una partida → <b>Game Settings → Biblioteca</b>.</li>
       <li class="en">Host a game → <b>Game Settings → Library</b>.</li>
+      <li class="pt">Crie uma partida → <b>Game Settings → Biblioteca</b>.</li>
+      <li class="de">Erstelle ein Spiel → <b>Game Settings → Bibliothek</b>.</li>
+      <li class="fr">Crée une partie → <b>Game Settings → Bibliothèque</b>.</li>
+      <li class="it">Crea una partita → <b>Game Settings → Libreria</b>.</li>
       <li class="es">Pestaña <b>Palabras</b> → <b>Usar</b> el banco que quieras.</li>
       <li class="en"><b>Words</b> tab → <b>Use</b> the bank you want.</li>
+      <li class="pt">Aba <b>Palavras</b> → <b>Usar</b> o banco que quiser.</li>
+      <li class="de">Reiter <b>Wörter</b> → gewünschte Bank <b>Verwenden</b>.</li>
+      <li class="fr">Onglet <b>Mots</b> → <b>Utiliser</b> la banque voulue.</li>
+      <li class="it">Scheda <b>Parole</b> → <b>Usa</b> la banca che vuoi.</li>
     </ol>
   </div>
 
   <!-- MAPS -->
   <div class="card">
-    <h2><span class="es">Mapas</span><span class="en">Maps</span> <span class="pill soon"><span class="es">Próximamente</span><span class="en">Coming soon</span></span> <span class="pill">tag: Map</span></h2>
+    <h2><span class="es">Mapas</span><span class="en">Maps</span><span class="pt">Mapas</span><span class="de">Karten</span><span class="fr">Cartes</span><span class="it">Mappe</span> <span class="pill soon"><span class="es">Próximamente</span><span class="en">Coming soon</span><span class="pt">Em breve</span><span class="de">Demnächst</span><span class="fr">Bientôt</span><span class="it">Prossimamente</span></span> <span class="pill">tag: Map</span></h2>
     <p class="es">Los mapas custom (con su propio escenario) van a necesitar Unreal Engine y un kit de modding. Estamos trabajando en eso — cuando esté, actualizamos esta guía.</p>
     <p class="en">Custom maps (with their own scenery) will need Unreal Engine and a modding kit. We're working on it — this guide will be updated when it's ready.</p>
+    <p class="pt">Os mapas personalizados (com cenário próprio) vão precisar da Unreal Engine e de um kit de modding. Estamos trabalhando nisso — quando estiver pronto, atualizamos este guia.</p>
+    <p class="de">Eigene Karten (mit eigener Szenerie) benötigen die Unreal Engine und ein Modding-Kit. Wir arbeiten daran — sobald es fertig ist, aktualisieren wir diese Anleitung.</p>
+    <p class="fr">Les cartes personnalisées (avec leur propre décor) nécessiteront Unreal Engine et un kit de modding. On y travaille — ce guide sera mis à jour quand ce sera prêt.</p>
+    <p class="it">Le mappe personalizzate (con scenario proprio) richiederanno Unreal Engine e un kit di modding. Ci stiamo lavorando — quando sarà pronto aggiorneremo questa guida.</p>
   </div>
 
   <div class="madeby">
@@ -187,18 +302,26 @@ Sun</pre>
   <footer>
     <span class="es">¡Gracias por crear para Sculpturillo! 🎨</span>
     <span class="en">Thanks for creating for Sculpturillo! 🎨</span>
+    <span class="pt">Obrigado por criar para Sculpturillo! 🎨</span>
+    <span class="de">Danke, dass du für Sculpturillo erstellst! 🎨</span>
+    <span class="fr">Merci de créer pour Sculpturillo ! 🎨</span>
+    <span class="it">Grazie per aver creato per Sculpturillo! 🎨</span>
   </footer>
 </div>
 
 <script>
+  var LANGS = ['es','en','pt','de','fr','it'];
   function setLang(l){
+    if (LANGS.indexOf(l) === -1) l = 'en';
     document.documentElement.setAttribute('lang', l);
     document.documentElement.setAttribute('data-lang', l);
-    document.querySelectorAll('[data-es]').forEach(e=>e.textContent = (l==='es')?e.dataset.es:e.dataset.en);
-    document.getElementById('btn-es').classList.toggle('active',l==='es');
-    document.getElementById('btn-en').classList.toggle('active',l==='en');
+    document.querySelectorAll('.lang button').forEach(function(b){
+      b.classList.toggle('active', b.dataset.l === l);
+    });
   }
-  setLang('en');
+  // Idioma inicial: ?lang=xx (lo pasa el juego según tu idioma), si no inglés.
+  var p = new URLSearchParams(location.search).get('lang');
+  setLang(p ? p.slice(0,2).toLowerCase() : 'en');
 </script>
 </body>
 </html>
