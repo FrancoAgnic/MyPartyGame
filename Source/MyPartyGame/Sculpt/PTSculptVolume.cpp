@@ -2363,14 +2363,6 @@ FVector APTSculptVolume::ClampInsideCanvas(FVector WorldPos, float InsetRadius) 
     return T.TransformPosition(L);
 }
 
-bool APTSculptVolume::GetCanvasBox(FTransform& OutXform, FVector& OutUnscaledExtent) const
-{
-    if (!BoundsBox) return false;
-    OutXform = BoundsBox->GetComponentTransform();
-    OutUnscaledExtent = BoundsBox->GetUnscaledBoxExtent();
-    return true;
-}
-
 // ─── Ojos (replicados) ─────────────────────────────────────────────────────────
 void APTSculptVolume::AddEye(FVector WorldPos, float Radius)
 {

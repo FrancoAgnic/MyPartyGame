@@ -164,10 +164,6 @@ public:
     UFUNCTION(BlueprintPure, Category="Sculpt")
     FVector ClampInsideCanvas(FVector WorldPos, float InsetRadius) const;
 
-    /** Cubo de esculpido (BoundsBox): su transform (con rotación/escala) y el half-extent SIN escalar.
-     *  Para proyectar las guías de profundidad del pincel a las 6 caras. false si no hay BoundsBox. */
-    bool GetCanvasBox(FTransform& OutXform, FVector& OutUnscaledExtent) const;
-
     float        SampleWorldDensity(FVector WorldPos) const;
     FLinearColor SampleWorldColor  (FVector WorldPos) const;
     // Color PINTADO (atlas) en esa posición del mundo. bOutPainted=false si ese punto no fue

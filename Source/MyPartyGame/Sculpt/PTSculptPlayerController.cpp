@@ -204,27 +204,6 @@ void APTSculptPlayerController::BeginPlay()
         HeightStick->RegisterComponent();
         HeightStick->SetVisibility(false);
 
-        // 3 varillas-guía (X/Y/Z) que cruzan el pincel y llegan a las 6 caras del cubo (profundidad 3D).
-        {
-            UStaticMesh* StickMesh = HeightStickMesh;
-            if (!StickMesh)
-                StickMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-            for (int32 i = 0; i < 3; ++i)
-            {
-                UStaticMeshComponent* G = NewObject<UStaticMeshComponent>(PreviewActor,
-                    *FString::Printf(TEXT("GuideStick%d"), i));
-                G->SetupAttachment(PreviewMesh);
-                G->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-                G->SetCastShadow(false);
-                G->SetReceivesDecals(false);
-                if (StickMesh) G->SetStaticMesh(StickMesh);
-                if (HeightStickMaterial) G->SetMaterial(0, HeightStickMaterial);
-                G->RegisterComponent();
-                G->SetVisibility(false);
-                GuideSticks.Add(G);
-            }
-        }
-
         // Límite del área de esculpido: box con grilla (aparece cerca del cursor).
         BoundaryMesh = NewObject<UStaticMeshComponent>(PreviewActor, TEXT("BoundaryMesh"));
         BoundaryMesh->SetupAttachment(PreviewMesh);
@@ -705,9 +684,6 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         }
     }
 
-    // Guías de profundidad: 3 varillas (X/Y/Z) que cruzan el pincel y llegan a las 6 caras del cubo.
-    UpdateDepthGuides(StampPos);
-
     // Límite del área: ubicar el box en el BoundsBox del volumen y pasarle el cursor al
     // material (la grilla aparece cerca del cursor). El cubo básico del motor mide 100³
     // (semi-extensión 50), así que la escala = extensión del box / 50.
@@ -869,45 +845,6 @@ void APTSculptPlayerController::SetPreviewXrayEnabled(bool bOn)
 }
 
 // ── Lógica de cursor ─────────────────────────────────────────────────────────
-
-void APTSculptPlayerController::UpdateDepthGuides(const FVector& StampPos)
-{
-    // Solo con las herramientas que ponen el sello EN EL AIRE (Add/Erase): ahí es difícil ubicar la
-    // profundidad. Paint/Ojos van sobre la superficie (se ve claro) → sin guías.
-    const bool bWant = Volume && !bEyesTool &&
-                       (EditMode == EPTEditMode::Add || EditMode == EPTEditMode::Erase);
-    FTransform BX; FVector E;
-    if (!bWant || !Volume->GetCanvasBox(BX, E))
-    {
-        for (UStaticMeshComponent* G : GuideSticks) if (G) G->SetVisibility(false);
-        return;
-    }
-
-    // Posición del pincel en el espacio LOCAL del cubo, clampeada adentro.
-    FVector L = BX.InverseTransformPosition(StampPos);
-    L.X = FMath::Clamp(L.X, -E.X, E.X);
-    L.Y = FMath::Clamp(L.Y, -E.Y, E.Y);
-    L.Z = FMath::Clamp(L.Z, -E.Z, E.Z);
-
-    const float MeshLen = FMath::Max(1.f, HeightStickMeshLength);
-    for (int32 a = 0; a < 3 && a < GuideSticks.Num(); ++a)
-    {
-        UStaticMeshComponent* G = GuideSticks[a];
-        if (!G) continue;
-        // Varilla del eje 'a': de una cara a la opuesta, pasando por el pincel.
-        FVector A = L, B = L;
-        A[a] = -E[a];  B[a] = E[a];
-        const FVector Aw = BX.TransformPosition(A);
-        const FVector Bw = BX.TransformPosition(B);
-        const FVector Dir = Bw - Aw;
-        const float Len = Dir.Size();
-        if (Len < 2.f) { G->SetVisibility(false); continue; }
-        G->SetVisibility(true);
-        G->SetWorldLocation((Aw + Bw) * 0.5f);
-        G->SetWorldRotation(FRotationMatrix::MakeFromZ(Dir / Len).Rotator()); // el mesh (cilindro) es eje Z
-        G->SetWorldScale3D(FVector(HeightStickThickness, HeightStickThickness, Len / MeshLen));
-    }
-}
 
 bool APTSculptPlayerController::GetCameraRay(FVector& Start, FVector& Dir) const
 {
