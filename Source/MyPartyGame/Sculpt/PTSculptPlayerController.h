@@ -109,6 +109,9 @@ public:
     /** Tamaño de brocha (StampSize) al que el radio vale SculptGridRadius. El radio escala proporcional. */
     UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="1"))
     float SculptGridRefBrushSize = 160.f;
+    /** Tope del radio efectivo (UU): con brochas grandes la grilla no crece más que esto (no inunda la pantalla). */
+    UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="10"))
+    float SculptGridMaxRadius = 500.f;
     /** Tamaño de la región teñida alrededor del contacto con la arcilla, en múltiplos del radio de brocha. */
     UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="0.1"))
     float SculptGridTintScale = 2.0f;
