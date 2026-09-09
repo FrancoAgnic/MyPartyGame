@@ -103,9 +103,15 @@ public:
      *  esfera (usa la geometría de la esfera) y desvanecer en el borde. Translucent, Two-Sided. */
     UPROPERTY(EditAnywhere, Category="Sculpt|Grid")
     UMaterialInterface* SculptGridMaterial = nullptr;
-    /** Radio de la bola visible alrededor del pincel (UU). Fuera de esto la grilla no se ve. */
+    /** Radio de la bola visible al TAMAÑO de brocha de referencia. El radio real escala con la brocha. */
     UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="10"))
     float SculptGridRadius = 300.f;
+    /** Tamaño de brocha (StampSize) al que el radio vale SculptGridRadius. El radio escala proporcional. */
+    UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="1"))
+    float SculptGridRefBrushSize = 160.f;
+    /** Rango del SDF (0..1) para el "termómetro": a esta distancia de la superficie ya está en frío. */
+    UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="0.05"))
+    float SculptGridContactRange = 0.5f;
     /** Separación entre líneas (UU) = tamaño de cada cubito. */
     UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="10"))
     float SculptGridCell = 80.f;
@@ -478,12 +484,9 @@ private:
     bool bHudHidden = false;
     UPROPERTY() class UDecalComponent*    ShadowDecal       = nullptr;
     UPROPERTY() class UStaticMeshComponent* HeightStick     = nullptr;
-    // Guías de profundidad: 3 varillas (X/Y/Z) que cruzan el pincel y llegan a las 6 caras del cubo de
-    // esculpido → se ve la posición XYZ y la distancia a cámara. Reusan HeightStickMesh/Material.
-    UPROPERTY() TArray<class UStaticMeshComponent*> GuideSticks;
-    void UpdateDepthGuides(const FVector& StampPos); // posiciona las 3 varillas cada frame
     UPROPERTY() class UProceduralMeshComponent* SculptGrid = nullptr;
     UPROPERTY() class UMaterialInstanceDynamic* SculptGridMID = nullptr;
+    float GridBuiltRadius = -1.f;                    // radio con el que está construida la malla actual
     void UpdateSculptGrid(const FVector& StampPos); // bola de grilla en el pincel + color por cercanía
     void BuildSculptGridMesh();                     // genera la retícula 3D de líneas finas (geometría real)
     UPROPERTY() class UStaticMeshComponent* BoundaryMesh    = nullptr;

@@ -205,27 +205,6 @@ void APTSculptPlayerController::BeginPlay()
         HeightStick->RegisterComponent();
         HeightStick->SetVisibility(false);
 
-        // 3 varillas-guía (X/Y/Z) que cruzan el pincel y llegan a las 6 caras del cubo (profundidad 3D).
-        {
-            UStaticMesh* StickMesh = HeightStickMesh;
-            if (!StickMesh)
-                StickMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-            for (int32 i = 0; i < 3; ++i)
-            {
-                UStaticMeshComponent* G = NewObject<UStaticMeshComponent>(PreviewActor,
-                    *FString::Printf(TEXT("GuideStick%d"), i));
-                G->SetupAttachment(PreviewMesh);
-                G->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-                G->SetCastShadow(false);
-                G->SetReceivesDecals(false);
-                if (StickMesh) G->SetStaticMesh(StickMesh);
-                if (HeightStickMaterial) G->SetMaterial(0, HeightStickMaterial);
-                G->RegisterComponent();
-                G->SetVisibility(false);
-                GuideSticks.Add(G);
-            }
-        }
-
         // Límite del área de esculpido: box con grilla (aparece cerca del cursor).
         BoundaryMesh = NewObject<UStaticMeshComponent>(PreviewActor, TEXT("BoundaryMesh"));
         BoundaryMesh->SetupAttachment(PreviewMesh);
@@ -259,6 +238,7 @@ void APTSculptPlayerController::BeginPlay()
         SculptGrid->bUseComplexAsSimpleCollision = false;
         SculptGrid->RegisterComponent();
         SculptGrid->SetTranslucentSortPriority(-90);
+        GridBuiltRadius = SculptGridRadius;
         BuildSculptGridMesh();
         if (SculptGridMaterial)
         {
@@ -725,9 +705,6 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         }
     }
 
-    // Guías de profundidad: 3 varillas (X/Y/Z) que cruzan el pincel y llegan a las 6 caras del cubo.
-    UpdateDepthGuides(StampPos);
-
     // Grilla volumétrica (bola en el pincel) + color según cercanía a la arcilla.
     UpdateSculptGrid(StampPos);
 
@@ -893,45 +870,6 @@ void APTSculptPlayerController::SetPreviewXrayEnabled(bool bOn)
 
 // ── Lógica de cursor ─────────────────────────────────────────────────────────
 
-void APTSculptPlayerController::UpdateDepthGuides(const FVector& StampPos)
-{
-    // Solo con las herramientas que ponen el sello EN EL AIRE (Add/Erase): ahí es difícil ubicar la
-    // profundidad. Paint/Ojos van sobre la superficie (se ve claro) → sin guías.
-    const bool bWant = Volume && !bEyesTool &&
-                       (EditMode == EPTEditMode::Add || EditMode == EPTEditMode::Erase);
-    FTransform BX; FVector E;
-    if (!bWant || !Volume->GetCanvasBox(BX, E))
-    {
-        for (UStaticMeshComponent* G : GuideSticks) if (G) G->SetVisibility(false);
-        return;
-    }
-
-    // Posición del pincel en el espacio LOCAL del cubo, clampeada adentro.
-    FVector L = BX.InverseTransformPosition(StampPos);
-    L.X = FMath::Clamp(L.X, -E.X, E.X);
-    L.Y = FMath::Clamp(L.Y, -E.Y, E.Y);
-    L.Z = FMath::Clamp(L.Z, -E.Z, E.Z);
-
-    const float MeshLen = FMath::Max(1.f, HeightStickMeshLength);
-    for (int32 a = 0; a < 3 && a < GuideSticks.Num(); ++a)
-    {
-        UStaticMeshComponent* G = GuideSticks[a];
-        if (!G) continue;
-        // Varilla del eje 'a': de una cara a la opuesta, pasando por el pincel.
-        FVector A = L, B = L;
-        A[a] = -E[a];  B[a] = E[a];
-        const FVector Aw = BX.TransformPosition(A);
-        const FVector Bw = BX.TransformPosition(B);
-        const FVector Dir = Bw - Aw;
-        const float Len = Dir.Size();
-        if (Len < 2.f) { G->SetVisibility(false); continue; }
-        G->SetVisibility(true);
-        G->SetWorldLocation((Aw + Bw) * 0.5f);
-        G->SetWorldRotation(FRotationMatrix::MakeFromZ(Dir / Len).Rotator()); // el mesh (cilindro) es eje Z
-        G->SetWorldScale3D(FVector(HeightStickThickness, HeightStickThickness, Len / MeshLen));
-    }
-}
-
 void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
 {
     if (!SculptGrid) return;
@@ -942,6 +880,22 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
 
     SculptGrid->SetVisibility(true);
     SculptGrid->SetWorldScale3D(FVector(1.f));
+
+    // Radio efectivo: escala con el TAMAÑO de la brocha (StampSize · mayor eje de StampScale) respecto del
+    // tamaño de referencia. Brocha grande → bola grande, y viceversa.
+    const float BrushWorld = FMath::Max(1.f, StampSize) *
+        FMath::Max3(StampScale.X, StampScale.Y, StampScale.Z);
+    const float RadRef = FMath::Max(1.f, SculptGridRefBrushSize);
+    const float EffRadius = FMath::Max(10.f, SculptGridRadius * (BrushWorld / RadRef));
+
+    // La malla es geometría estática construida a un radio fijo. Si el radio efectivo se aleja del construido
+    // (cambiaste el tamaño de brocha), la reconstruimos (es infrecuente: solo al escalar la brocha).
+    if (FMath::Abs(EffRadius - GridBuiltRadius) > FMath::Max(10.f, SculptGridCell) * 0.5f)
+    {
+        GridBuiltRadius = EffRadius;
+        BuildSculptGridMesh();
+    }
+
     // La retícula es geometría estática. Para que las líneas NO se muevan con el cursor (se ven fijas en el
     // mundo), enganchamos el componente a la grilla de celdas: así cada línea cae siempre en el mismo múltiplo
     // de celda en el mundo. La "bola" que se ve alrededor del pincel la recorta el material (CursorPos real).
@@ -951,13 +905,14 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
                           FMath::GridSnap(StampPos.Z, Cell));
     SculptGrid->SetWorldLocation(Snapped);
 
-    // Contact: 0 lejos de la arcilla → 1 tocándola/adentro. Del SDF del volumen (barato, sin parpadeo).
-    // En SVO el Sample está clampeado [-1,1] (>0 dentro, <0 fuera). Mapeo a 0..1 alrededor de la superficie.
+    // Contact: 0 lejos de la arcilla → 1 tocándola. Del SDF del volumen (barato, sin parpadeo). En SVO el
+    // Sample está clampeado [-1,1] (>0 dentro, <0 fuera). Contact=1 al tocar la superficie (Dens≈0).
     const float Dens = Volume->SampleWorldDensity(StampPos);
-    const float Contact = FMath::Clamp((Dens + 0.25f) / 0.5f, 0.f, 1.f);
+    const float Range = FMath::Max(0.05f, SculptGridContactRange);
+    const float Contact = FMath::Clamp((Dens + Range) / Range, 0.f, 1.f);
 
     SculptGridMID->SetVectorParameterValue(TEXT("CursorPos"),  StampPos);
-    SculptGridMID->SetScalarParameterValue(TEXT("GridRadius"), FMath::Max(10.f, SculptGridRadius));
+    SculptGridMID->SetScalarParameterValue(TEXT("GridRadius"), EffRadius);
     SculptGridMID->SetScalarParameterValue(TEXT("Glow"),       SculptGridGlow);
     SculptGridMID->SetScalarParameterValue(TEXT("Contact"),    Contact);
 }
@@ -970,7 +925,7 @@ void APTSculptPlayerController::BuildSculptGridMesh()
     if (!SculptGrid) return;
 
     const float Cell   = FMath::Max(10.f, SculptGridCell);
-    const float Radius = FMath::Max(10.f, SculptGridRadius);
+    const float Radius = FMath::Max(10.f, GridBuiltRadius > 0.f ? GridBuiltRadius : SculptGridRadius);
     const float T      = FMath::Max(0.1f, SculptGridThickness); // media-anchura de cada línea (UU)
     // Media-extensión: cubre la bola aun con el snapping (hasta media celda de corrimiento).
     const int32 N = FMath::CeilToInt((Radius + Cell) / Cell); // líneas a cada lado del centro
