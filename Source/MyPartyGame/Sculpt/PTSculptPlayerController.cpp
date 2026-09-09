@@ -8,6 +8,7 @@
 #include "Engine/GameViewportClient.h" // SetHardwareCursor (cursor dot del radial)
 #include "Blueprint/UserWidget.h"
 #include "Components/StaticMeshComponent.h"
+#include "ProceduralMeshComponent.h"
 #include "Components/DecalComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -247,23 +248,23 @@ void APTSculptPlayerController::BeginPlay()
             BoundaryMID = BoundaryMesh->CreateDynamicMaterialInstance(0, BoundaryMaterial);
         BoundaryMesh->SetVisibility(false);
 
-        // Grilla VOLUMÉTRICA: una esfera alrededor del pincel; su material raymarchea la grilla 3D
-        // adentro y la desvanece en el borde. Se ilumina/tiñe según la cercanía a la arcilla. Solo escultor.
-        SculptGrid = NewObject<UStaticMeshComponent>(PreviewActor, TEXT("SculptGrid"));
+        // Grilla VOLUMÉTRICA 3D: retícula de líneas FINAS de geometría real (cubitos apilados en los 3 ejes).
+        // Es estática en el mundo (se "engancha" a la grilla de celdas), y el material solo la muestra en una
+        // bola alrededor del pincel y la tiñe según la cercanía a la arcilla. Solo el escultor la ve.
+        SculptGrid = NewObject<UProceduralMeshComponent>(PreviewActor, TEXT("SculptGrid"));
         SculptGrid->SetupAttachment(PreviewMesh);
         SculptGrid->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         SculptGrid->SetCastShadow(false);
         SculptGrid->SetReceivesDecals(false);
-        {
-            UStaticMesh* SphereMesh = SculptGridMesh;
-            if (!SphereMesh)
-                SphereMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
-            if (SphereMesh) SculptGrid->SetStaticMesh(SphereMesh);
-        }
+        SculptGrid->bUseComplexAsSimpleCollision = false;
         SculptGrid->RegisterComponent();
         SculptGrid->SetTranslucentSortPriority(-90);
+        BuildSculptGridMesh();
         if (SculptGridMaterial)
-            SculptGridMID = SculptGrid->CreateDynamicMaterialInstance(0, SculptGridMaterial);
+        {
+            SculptGridMID = UMaterialInstanceDynamic::Create(SculptGridMaterial, this);
+            SculptGrid->SetMaterial(0, SculptGridMID);
+        }
         SculptGrid->SetVisibility(false);
     }
 
@@ -940,9 +941,15 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
     if (!bWant) { SculptGrid->SetVisibility(false); return; }
 
     SculptGrid->SetVisibility(true);
-    // Esfera básica del motor: radio nativo 50 → escala = radio deseado / 50.
-    SculptGrid->SetWorldLocation(StampPos);
-    SculptGrid->SetWorldScale3D(FVector(FMath::Max(10.f, SculptGridRadius) / 50.f));
+    SculptGrid->SetWorldScale3D(FVector(1.f));
+    // La retícula es geometría estática. Para que las líneas NO se muevan con el cursor (se ven fijas en el
+    // mundo), enganchamos el componente a la grilla de celdas: así cada línea cae siempre en el mismo múltiplo
+    // de celda en el mundo. La "bola" que se ve alrededor del pincel la recorta el material (CursorPos real).
+    const float Cell = FMath::Max(10.f, SculptGridCell);
+    const FVector Snapped(FMath::GridSnap(StampPos.X, Cell),
+                          FMath::GridSnap(StampPos.Y, Cell),
+                          FMath::GridSnap(StampPos.Z, Cell));
+    SculptGrid->SetWorldLocation(Snapped);
 
     // Contact: 0 lejos de la arcilla → 1 tocándola/adentro. Del SDF del volumen (barato, sin parpadeo).
     // En SVO el Sample está clampeado [-1,1] (>0 dentro, <0 fuera). Mapeo a 0..1 alrededor de la superficie.
@@ -953,6 +960,60 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
     SculptGridMID->SetScalarParameterValue(TEXT("GridRadius"), FMath::Max(10.f, SculptGridRadius));
     SculptGridMID->SetScalarParameterValue(TEXT("Glow"),       SculptGridGlow);
     SculptGridMID->SetScalarParameterValue(TEXT("Contact"),    Contact);
+}
+
+// Construye la retícula 3D: líneas finas (prismas delgados) a lo largo de los 3 ejes, en múltiplos de celda,
+// centradas en el origen local. El componente luego se ubica en un múltiplo de celda del mundo (snapping),
+// así las líneas quedan siempre fijas en el mundo. Se genera una sola vez.
+void APTSculptPlayerController::BuildSculptGridMesh()
+{
+    if (!SculptGrid) return;
+
+    const float Cell   = FMath::Max(10.f, SculptGridCell);
+    const float Radius = FMath::Max(10.f, SculptGridRadius);
+    const float T      = FMath::Max(0.1f, SculptGridThickness); // media-anchura de cada línea (UU)
+    // Media-extensión: cubre la bola aun con el snapping (hasta media celda de corrimiento).
+    const int32 N = FMath::CeilToInt((Radius + Cell) / Cell); // líneas a cada lado del centro
+    const float H = N * Cell;
+
+    TArray<FVector> Verts;
+    TArray<int32>   Tris;
+    Verts.Reserve((2 * N + 1) * (2 * N + 1) * 3 * 8);
+    Tris.Reserve((2 * N + 1) * (2 * N + 1) * 3 * 36);
+
+    auto AddBox = [&Verts, &Tris](const FVector& C, const FVector& E)
+    {
+        const int32 b = Verts.Num();
+        Verts.Add(C + FVector(-E.X, -E.Y, -E.Z));
+        Verts.Add(C + FVector(+E.X, -E.Y, -E.Z));
+        Verts.Add(C + FVector(+E.X, +E.Y, -E.Z));
+        Verts.Add(C + FVector(-E.X, +E.Y, -E.Z));
+        Verts.Add(C + FVector(-E.X, -E.Y, +E.Z));
+        Verts.Add(C + FVector(+E.X, -E.Y, +E.Z));
+        Verts.Add(C + FVector(+E.X, +E.Y, +E.Z));
+        Verts.Add(C + FVector(-E.X, +E.Y, +E.Z));
+        const int32 Idx[36] = {
+            0,1,2, 0,2,3,   4,6,5, 4,7,6,   0,5,1, 0,4,5,
+            3,2,6, 3,6,7,   0,3,7, 0,7,4,   1,5,6, 1,6,2 };
+        for (int32 k = 0; k < 36; ++k) Tris.Add(b + Idx[k]);
+    };
+
+    for (int32 i = -N; i <= N; ++i)
+    for (int32 j = -N; j <= N; ++j)
+    {
+        const float a = i * Cell;
+        const float c = j * Cell;
+        // Línea paralela a X (fina en Y,Z), a Y (fina en X,Z), a Z (fina en X,Y).
+        AddBox(FVector(0.f, a, c), FVector(H, T, T));
+        AddBox(FVector(a, 0.f, c), FVector(T, H, T));
+        AddBox(FVector(a, c, 0.f), FVector(T, T, H));
+    }
+
+    const TArray<FVector> NoNormals;
+    const TArray<FVector2D> NoUV;
+    const TArray<FColor> NoColors;
+    const TArray<FProcMeshTangent> NoTangents;
+    SculptGrid->CreateMeshSection(0, Verts, Tris, NoNormals, NoUV, NoColors, NoTangents, false);
 }
 
 bool APTSculptPlayerController::GetCameraRay(FVector& Start, FVector& Dir) const

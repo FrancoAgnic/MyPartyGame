@@ -103,12 +103,15 @@ public:
      *  esfera (usa la geometría de la esfera) y desvanecer en el borde. Translucent, Two-Sided. */
     UPROPERTY(EditAnywhere, Category="Sculpt|Grid")
     UMaterialInterface* SculptGridMaterial = nullptr;
-    /** Mesh de la bola (si null, usa la esfera básica del motor, radio nativo 50). */
-    UPROPERTY(EditAnywhere, Category="Sculpt|Grid")
-    UStaticMesh* SculptGridMesh = nullptr;
-    /** Radio de la bola de grilla alrededor del pincel (UU). */
+    /** Radio de la bola visible alrededor del pincel (UU). Fuera de esto la grilla no se ve. */
     UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="10"))
     float SculptGridRadius = 300.f;
+    /** Separación entre líneas (UU) = tamaño de cada cubito. */
+    UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="10"))
+    float SculptGridCell = 80.f;
+    /** Grosor (medio) de las líneas en UU. Bajo = líneas más finas/definidas. */
+    UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="0.1"))
+    float SculptGridThickness = 1.0f;
     /** Intensidad global (0..1+). */
     UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="0.0"))
     float SculptGridGlow = 1.f;
@@ -479,9 +482,10 @@ private:
     // esculpido → se ve la posición XYZ y la distancia a cámara. Reusan HeightStickMesh/Material.
     UPROPERTY() TArray<class UStaticMeshComponent*> GuideSticks;
     void UpdateDepthGuides(const FVector& StampPos); // posiciona las 3 varillas cada frame
-    UPROPERTY() class UStaticMeshComponent* SculptGrid = nullptr;
+    UPROPERTY() class UProceduralMeshComponent* SculptGrid = nullptr;
     UPROPERTY() class UMaterialInstanceDynamic* SculptGridMID = nullptr;
     void UpdateSculptGrid(const FVector& StampPos); // bola de grilla en el pincel + color por cercanía
+    void BuildSculptGridMesh();                     // genera la retícula 3D de líneas finas (geometría real)
     UPROPERTY() class UStaticMeshComponent* BoundaryMesh    = nullptr;
     UPROPERTY() class UMaterialInstanceDynamic* BoundaryMID = nullptr;
 
