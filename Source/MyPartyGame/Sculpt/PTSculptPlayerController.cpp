@@ -223,8 +223,16 @@ void APTSculptPlayerController::BeginPlay()
         BoundaryMesh->SetTranslucentSortPriority(-100);
         // El MID se crea DESPUÉS de registrar, si no el render se queda con el material
         // base (CursorPos en 0 → grilla estática) e ignora las updates del C++.
-        if (BoundaryMaterial)
-            BoundaryMID = BoundaryMesh->CreateDynamicMaterialInstance(0, BoundaryMaterial);
+        // El límite usa el MISMO material de la grilla (M_SculptGrid) con el flag IsBoundary=1 → pinta la
+        // sombra radial en las paredes. Fallback a BoundaryMaterial si no hay material de grilla.
+        {
+            UMaterialInterface* BMat = SculptGridMaterial ? SculptGridMaterial : BoundaryMaterial;
+            if (BMat)
+            {
+                BoundaryMID = BoundaryMesh->CreateDynamicMaterialInstance(0, BMat);
+                if (BoundaryMID) BoundaryMID->SetScalarParameterValue(TEXT("IsBoundary"), 1.f);
+            }
+        }
         BoundaryMesh->SetVisibility(false);
 
         // Grilla VOLUMÉTRICA 3D: retícula de líneas FINAS de geometría real (cubitos apilados en los 3 ejes).
@@ -244,6 +252,7 @@ void APTSculptPlayerController::BeginPlay()
         if (SculptGridMaterial)
         {
             SculptGridMID = UMaterialInstanceDynamic::Create(SculptGridMaterial, this);
+            SculptGridMID->SetScalarParameterValue(TEXT("IsBoundary"), 0.f); // este es la grilla, no el límite
             SculptGrid->SetMaterial(0, SculptGridMID);
         }
         SculptGrid->SetVisibility(false);
@@ -709,19 +718,7 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
     // Grilla volumétrica (bola en el pincel) + color según cercanía a la arcilla.
     UpdateSculptGrid(StampPos);
 
-    // Límite del área: ubicar el box en el BoundsBox del volumen y pasarle el cursor al
-    // material (la grilla aparece cerca del cursor). El cubo básico del motor mide 100³
-    // (semi-extensión 50), así que la escala = extensión del box / 50.
-    if (BoundaryMesh && BoundaryMID)
-    {
-        if (UBoxComponent* Box = Volume->FindComponentByClass<UBoxComponent>())
-        {
-            BoundaryMesh->SetVisibility(true);
-            BoundaryMesh->SetWorldLocationAndRotation(Box->GetComponentLocation(), Box->GetComponentRotation());
-            BoundaryMesh->SetWorldScale3D(Box->GetScaledBoxExtent() / 50.f);
-            BoundaryMID->SetVectorParameterValue(TEXT("CursorPos"), StampPos);
-        }
-    }
+    // (El límite/boundary de la zona de esculpido ahora lo maneja UpdateSculptGrid con el mismo material.)
 
     // Preview de superficie (Paint por shape + color; Smooth su propio mesh):
     // alineado a la normal, escalado con la brocha.
@@ -877,7 +874,13 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
     // Se muestra con las herramientas que ponen el sello en el aire (Add/Erase): ahí importa la profundidad.
     const bool bWant = Volume && SculptGridMID && !bEyesTool &&
                        (EditMode == EPTEditMode::Add || EditMode == EPTEditMode::Erase);
-    if (!bWant) { SculptGrid->SetVisibility(false); return; }
+    if (!bWant)
+    {
+        SculptGrid->SetVisibility(false);
+        if (BoundaryMesh) BoundaryMesh->SetVisibility(false); // el límite (sombra) acompaña a la grilla
+        bGridActive = false;
+        return;
+    }
 
     SculptGrid->SetVisibility(true);
     SculptGrid->SetWorldScale3D(FVector(1.f));
@@ -995,6 +998,27 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
     SculptGridMID->SetScalarParameterValue(TEXT("TintRadius"), TintRadius);
     SculptGridMID->SetScalarParameterValue(TEXT("Touching"),  Touching);
     SculptGridMID->SetScalarParameterValue(TEXT("Glow"),       SculptGridGlow);
+
+    // Límite de la zona de esculpido: el MISMO material (flag IsBoundary=1) sobre el cubo del volumen, que
+    // pinta una sombra radial oscura en las paredes alrededor del cursor → marca el límite detrás de las
+    // aristas brillantes de la grilla. Reemplaza a M_SculptBoundary.
+    bGridActive   = true;
+    GridEffRadius = EffRadius;
+    if (BoundaryMesh && BoundaryMID)
+    {
+        if (UBoxComponent* Box = Volume->FindComponentByClass<UBoxComponent>())
+        {
+            BoundaryMesh->SetVisibility(true);
+            BoundaryMesh->SetWorldLocationAndRotation(Box->GetComponentLocation(), Box->GetComponentRotation());
+            BoundaryMesh->SetWorldScale3D(Box->GetScaledBoxExtent() / 50.f); // cubo básico = semi-extensión 50
+            BoundaryMID->SetVectorParameterValue(TEXT("CursorPos"),  StampPos);
+            BoundaryMID->SetVectorParameterValue(TEXT("BoxCenter"),  BoxCenter);
+            BoundaryMID->SetVectorParameterValue(TEXT("BoxExtent"),  BoxExtent);
+            BoundaryMID->SetScalarParameterValue(TEXT("GridRadius"), EffRadius);
+            BoundaryMID->SetScalarParameterValue(TEXT("Glow"),       SculptGridGlow);
+        }
+        else BoundaryMesh->SetVisibility(false);
+    }
 }
 
 // Construye la retícula 3D: líneas finas (prismas delgados) a lo largo de los 3 ejes, en múltiplos de celda,
