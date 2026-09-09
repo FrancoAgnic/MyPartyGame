@@ -888,9 +888,11 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
     const float BrushWorld = FMath::Max(1.f, StampSize) *
         FMath::Max3(StampScale.X, StampScale.Y, StampScale.Z);
     const float Ratio     = BrushWorld / FMath::Max(1.f, SculptGridRefBrushSize);
-    // Radio proporcional a la brocha, pero con TOPE: con brochas grandes la grilla no inunda la pantalla.
-    const float MaxR      = FMath::Max(10.f, SculptGridMaxRadius);
-    const float EffRadius = FMath::Clamp(SculptGridRadius * Ratio, 10.f, MaxR);
+    // Radio proporcional a la brocha, pero con PISO y TOPE: con brochas chicas no desaparece y con brochas
+    // grandes no inunda la pantalla.
+    const float MinR      = FMath::Max(10.f, SculptGridMinRadius);
+    const float MaxR      = FMath::Max(MinR, SculptGridMaxRadius);
+    const float EffRadius = FMath::Clamp(SculptGridRadius * Ratio, MinR, MaxR);
     const float Cell      = FMath::Max(10.f, SculptGridCell); // celda FIJA (solo escala el radio)
 
     // La malla es geometría estática construida a un radio fijo. Si el radio efectivo cambió (escalaste la
