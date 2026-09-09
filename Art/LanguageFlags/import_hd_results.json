@@ -1,0 +1,32 @@
+[
+  {
+    "asset": "/Game/UI/Flags/Flag_ES_512.Flag_ES_512",
+    "width": 512,
+    "height": 512
+  },
+  {
+    "asset": "/Game/UI/Flags/Flag_EN_512.Flag_EN_512",
+    "width": 512,
+    "height": 512
+  },
+  {
+    "asset": "/Game/UI/Flags/Flag_PT_512.Flag_PT_512",
+    "width": 512,
+    "height": 512
+  },
+  {
+    "asset": "/Game/UI/Flags/Flag_DE_512.Flag_DE_512",
+    "width": 512,
+    "height": 512
+  },
+  {
+    "asset": "/Game/UI/Flags/Flag_FR_512.Flag_FR_512",
+    "width": 512,
+    "height": 512
+  },
+  {
+    "asset": "/Game/UI/Flags/Flag_IT_512.Flag_IT_512",
+    "width": 512,
+    "height": 512
+  }
+]

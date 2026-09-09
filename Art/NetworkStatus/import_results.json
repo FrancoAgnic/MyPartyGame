@@ -1,0 +1,17 @@
+[
+  {
+    "asset": "/Game/UI/NetworkStatus/T_Net_HighLatency_24.T_Net_HighLatency_24",
+    "width": 24,
+    "height": 24
+  },
+  {
+    "asset": "/Game/UI/NetworkStatus/T_Net_Disconnected_24.T_Net_Disconnected_24",
+    "width": 24,
+    "height": 24
+  },
+  {
+    "asset": "/Game/UI/NetworkStatus/T_Net_PacketLoss_24.T_Net_PacketLoss_24",
+    "width": 24,
+    "height": 24
+  }
+]
