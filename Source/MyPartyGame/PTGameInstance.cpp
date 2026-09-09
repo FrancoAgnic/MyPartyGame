@@ -371,9 +371,8 @@ void UPTGameInstance::EnsureMusicForCurrentMap()
     UWorld* W = GetWorld();
     if (!W) return;
     const FString Map = W->GetMapName();
-    // Rearmar si cambió el mapa, o si el componente de música quedó colgado de un world viejo (seamless
-    // travel): en ambos casos hay que (re)crear la música/análisis en el world actual.
-    const bool bStale = MenuMusicComp && MenuMusicComp->GetWorld() != W;
+    // Rearmar si cambió el mapa, o si el componente de música quedó de un world viejo (seamless travel).
+    const bool bStale = MenuMusicComp && MusicCreatedWorld.Get() != W;
     if (Map != LastMusicMap || bStale)
     {
         LastMusicMap = Map;
@@ -441,10 +440,10 @@ void UPTGameInstance::UpdateMenuMusic(UWorld* World)
     bEnvelopeBound = false;
     bSpectrumBound = false;
 
-    // "Sonando de verdad" = existe, está reproduciendo Y pertenece al world ACTUAL. Tras un seamless
-    // travel el componente persistido queda colgado del world viejo (IsPlaying puede dar true pero no se
-    // oye) → lo descartamos para recrearlo en el world nuevo. Así en Lvl-01 vuelve a sonar.
-    if (MenuMusicComp && MenuMusicComp->GetWorld() != World)
+    // "Sonando de verdad" = existe, reproduce Y se creó en el world ACTUAL. Tras un seamless travel el
+    // componente persistido quedó del world viejo (IsPlaying puede dar true pero no se oye) → lo
+    // descartamos para recrearlo en el world nuevo. Usamos MusicCreatedWorld (confiable), NO comp->GetWorld().
+    if (MenuMusicComp && MusicCreatedWorld.Get() != World)
     {
         MenuMusicComp->Stop();
         MenuMusicComp = nullptr;
@@ -464,6 +463,7 @@ void UPTGameInstance::UpdateMenuMusic(UWorld* World)
                 /*bPersistAcrossLevelTransition=*/true, /*bAutoDestroy=*/true);
             if (MenuMusicComp)
             {
+                MusicCreatedWorld = World;                     // world de creación (para detectar el "colgado")
                 MusicStartWorldTime = World->GetTimeSeconds(); // t0 para la fase por BPM
                 MenuMusicComp->FadeIn(FMath::Max(0.f, MenuMusicFadeInSeconds), 1.f, 0.f, EAudioFaderCurve::Linear);
             }

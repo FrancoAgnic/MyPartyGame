@@ -194,6 +194,9 @@ private:
     void EnsureMusicForCurrentMap();
     FTSTicker::FDelegateHandle MusicHeartbeatHandle;
     FString LastMusicMap;
+    // World en el que se creó MenuMusicComp (confiable, a diferencia de comp->GetWorld() en un Sound2D):
+    // si difiere del world actual, el componente quedó del world viejo (seamless travel) → recrear.
+    TWeakObjectPtr<UWorld> MusicCreatedWorld;
 
 public:
     virtual void Shutdown() override;
