@@ -487,6 +487,7 @@ private:
     UPROPERTY() class UProceduralMeshComponent* SculptGrid = nullptr;
     UPROPERTY() class UMaterialInstanceDynamic* SculptGridMID = nullptr;
     float GridBuiltRadius = -1.f;                    // radio con el que está construida la malla actual
+    float GridBuiltCell   = -1.f;                    // celda con la que está construida la malla actual
     void UpdateSculptGrid(const FVector& StampPos); // bola de grilla en el pincel + color por cercanía
     void BuildSculptGridMesh();                     // genera la retícula 3D de líneas finas (geometría real)
     UPROPERTY() class UStaticMeshComponent* BoundaryMesh    = nullptr;

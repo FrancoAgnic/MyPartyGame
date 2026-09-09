@@ -239,6 +239,7 @@ void APTSculptPlayerController::BeginPlay()
         SculptGrid->RegisterComponent();
         SculptGrid->SetTranslucentSortPriority(-90);
         GridBuiltRadius = SculptGridRadius;
+        GridBuiltCell   = SculptGridCell;
         BuildSculptGridMesh();
         if (SculptGridMaterial)
         {
@@ -881,40 +882,79 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
     SculptGrid->SetVisibility(true);
     SculptGrid->SetWorldScale3D(FVector(1.f));
 
-    // Radio efectivo: escala con el TAMAÑO de la brocha (StampSize · mayor eje de StampScale) respecto del
-    // tamaño de referencia. Brocha grande → bola grande, y viceversa.
+    // Radio y celda efectivos: escalan con el TAMAÑO de la brocha (StampSize · mayor eje de StampScale)
+    // respecto del tamaño de referencia. Brocha grande → bola y cubitos grandes; brocha chica → chicos
+    // (así con brocha chica la grilla se sigue viendo).
     const float BrushWorld = FMath::Max(1.f, StampSize) *
         FMath::Max3(StampScale.X, StampScale.Y, StampScale.Z);
-    const float RadRef = FMath::Max(1.f, SculptGridRefBrushSize);
-    const float EffRadius = FMath::Max(10.f, SculptGridRadius * (BrushWorld / RadRef));
+    const float Ratio     = BrushWorld / FMath::Max(1.f, SculptGridRefBrushSize);
+    const float EffRadius = FMath::Max(10.f, SculptGridRadius * Ratio);
+    const float Cell      = FMath::Max(10.f, SculptGridCell * Ratio);
 
-    // La malla es geometría estática construida a un radio fijo. Si el radio efectivo se aleja del construido
-    // (cambiaste el tamaño de brocha), la reconstruimos (es infrecuente: solo al escalar la brocha).
-    if (FMath::Abs(EffRadius - GridBuiltRadius) > FMath::Max(10.f, SculptGridCell) * 0.5f)
+    // La malla es geometría estática construida a un radio/celda fijos. Si cambian (escalaste la brocha),
+    // la reconstruimos (es infrecuente: solo al escalar la brocha, no cada frame).
+    if (FMath::Abs(EffRadius - GridBuiltRadius) > Cell * 0.5f ||
+        FMath::Abs(Cell - GridBuiltCell) > 2.f)
     {
         GridBuiltRadius = EffRadius;
+        GridBuiltCell   = Cell;
         BuildSculptGridMesh();
     }
 
     // La retícula es geometría estática. Para que las líneas NO se muevan con el cursor (se ven fijas en el
     // mundo), enganchamos el componente a la grilla de celdas: así cada línea cae siempre en el mismo múltiplo
     // de celda en el mundo. La "bola" que se ve alrededor del pincel la recorta el material (CursorPos real).
-    const float Cell = FMath::Max(10.f, SculptGridCell);
     const FVector Snapped(FMath::GridSnap(StampPos.X, Cell),
                           FMath::GridSnap(StampPos.Y, Cell),
                           FMath::GridSnap(StampPos.Z, Cell));
     SculptGrid->SetWorldLocation(Snapped);
 
-    // Contact: 0 lejos de la arcilla → 1 tocándola. Del SDF del volumen (barato, sin parpadeo). En SVO el
-    // Sample está clampeado [-1,1] (>0 dentro, <0 fuera). Contact=1 al tocar la superficie (Dens≈0).
-    const float Dens = Volume->SampleWorldDensity(StampPos);
+    // Densidad del SDF en el cursor (>0 dentro de la arcilla, <0 fuera, ≈0 en la superficie).
+    const float Dens  = Volume->SampleWorldDensity(StampPos);
     const float Range = FMath::Max(0.05f, SculptGridContactRange);
-    const float Contact = FMath::Clamp((Dens + Range) / Range, 0.f, 1.f);
+
+    // Termómetro por cubo: hay que ubicar la superficie de la arcilla MÁS CERCANA al cursor, así el material
+    // puede teñir cada cubo por su distancia real a la arcilla (no solo cuando el cursor la toca).
+    //  - Dens>=0  → el cursor ya está dentro/tocando → overlap total (verde), la arcilla está "en" el cursor.
+    //  - Dens<0   → seguimos el gradiente del SDF (apunta hacia densidad creciente = hacia la arcilla) y
+    //               trazamos un rayo real hasta la malla para obtener el punto de contacto en UU.
+    //  - Sin arcilla cerca (gradiente ~0 o sin hit) → ClayPos lejísimos → todos los cubos quedan en frío.
+    FVector ClayPos = StampPos + FVector(0.f, 0.f, 1.0e6f);
+    float   Overlap = 0.f;
+    if (Dens >= 0.f)
+    {
+        ClayPos = StampPos;
+        Overlap = 1.f;
+    }
+    else
+    {
+        const float e = FMath::Max(2.f, Cell * 0.25f);
+        const FVector G(
+            Volume->SampleWorldDensity(StampPos + FVector(e,0,0)) - Volume->SampleWorldDensity(StampPos - FVector(e,0,0)),
+            Volume->SampleWorldDensity(StampPos + FVector(0,e,0)) - Volume->SampleWorldDensity(StampPos - FVector(0,e,0)),
+            Volume->SampleWorldDensity(StampPos + FVector(0,0,e)) - Volume->SampleWorldDensity(StampPos - FVector(0,0,e)));
+        if (!G.IsNearlyZero())
+        {
+            const FVector Dir = G.GetSafeNormal(); // hacia la arcilla
+            FHitResult Hit;
+            FCollisionQueryParams QP; QP.bTraceComplex = true;
+            if (PreviewActor)                QP.AddIgnoredActor(PreviewActor);
+            if (const APawn* Pw = GetPawn())  QP.AddIgnoredActor(Pw);
+            const FVector End = StampPos + Dir * (EffRadius * 3.f);
+            if (GetWorld()->LineTraceSingleByChannel(Hit, StampPos, End, ECC_Visibility, QP))
+            {
+                ClayPos = Hit.ImpactPoint;
+                // Overlap: 0 lejos → 1 al tocar. Del SDF (sube al acercarse a la superficie).
+                Overlap = FMath::Clamp((Dens + Range) / Range, 0.f, 1.f);
+            }
+        }
+    }
 
     SculptGridMID->SetVectorParameterValue(TEXT("CursorPos"),  StampPos);
+    SculptGridMID->SetVectorParameterValue(TEXT("ClayPos"),    ClayPos);
     SculptGridMID->SetScalarParameterValue(TEXT("GridRadius"), EffRadius);
     SculptGridMID->SetScalarParameterValue(TEXT("Glow"),       SculptGridGlow);
-    SculptGridMID->SetScalarParameterValue(TEXT("Contact"),    Contact);
+    SculptGridMID->SetScalarParameterValue(TEXT("Overlap"),    Overlap);
 }
 
 // Construye la retícula 3D: líneas finas (prismas delgados) a lo largo de los 3 ejes, en múltiplos de celda,
@@ -924,9 +964,12 @@ void APTSculptPlayerController::BuildSculptGridMesh()
 {
     if (!SculptGrid) return;
 
-    const float Cell   = FMath::Max(10.f, SculptGridCell);
+    const float Cell   = FMath::Max(10.f, GridBuiltCell   > 0.f ? GridBuiltCell   : SculptGridCell);
     const float Radius = FMath::Max(10.f, GridBuiltRadius > 0.f ? GridBuiltRadius : SculptGridRadius);
-    const float T      = FMath::Max(0.1f, SculptGridThickness); // media-anchura de cada línea (UU)
+    // El grosor acompaña a la escala de celda (Cell/SculptGridCell) → líneas finas y proporcionales aun con
+    // brocha chica.
+    const float TScale = Cell / FMath::Max(10.f, SculptGridCell);
+    const float T      = FMath::Max(0.1f, SculptGridThickness * TScale); // media-anchura de cada línea (UU)
     // Media-extensión: cubre la bola aun con el snapping (hasta media celda de corrimiento).
     const int32 N = FMath::CeilToInt((Radius + Cell) / Cell); // líneas a cada lado del centro
     const float H = N * Cell;
