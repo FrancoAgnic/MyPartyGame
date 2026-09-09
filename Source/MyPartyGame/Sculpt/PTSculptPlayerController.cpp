@@ -920,7 +920,8 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
     // dentro/tocando (>=0). El cursor mismo (0,0,0) entra en el escaneo → si está adentro, ClayPos = cursor.
     //  - Proximity: 0 = arcilla lejos en la bola (azul) → 1 = pincel encima (verde). Transición por distancia.
     //  - Sin arcilla en rango → ClayPos lejísimos → el material deja todo blanco.
-    FVector ClayPos = StampPos + FVector(0.f, 0.f, 1.0e6f);
+    FVector ClayPos  = StampPos + FVector(0.f, 0.f, 1.0e6f);
+    float   Touching = 0.f; // 1 = el preview (esfera de radio BrushRadius) toca/overlapea la arcilla
     {
         // Paso 1 — escaneo grueso: hallar el punto muestreado más cercano que esté dentro de la arcilla.
         const int32 K = FMath::Clamp(FMath::CeilToInt(EffRadius / Cell), 1, 4); // ~4 → 9³=729 muestras máx
@@ -967,6 +968,9 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
             }
             else { Gap = 0.f; } // cursor dentro de la arcilla
             ClayPos = StampPos + Dir * Gap;
+            // El preview toca la arcilla cuando la superficie está a ≤ radio de brocha (con un pequeño
+            // margen suave para que el brillo no aparezca de golpe).
+            Touching = 1.f - FMath::SmoothStep(BrushRadius, BrushRadius * 1.25f, Gap);
         }
     }
 
@@ -989,6 +993,7 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
     SculptGridMID->SetVectorParameterValue(TEXT("BoxExtent"),  BoxExtent);
     SculptGridMID->SetScalarParameterValue(TEXT("GridRadius"), EffRadius);
     SculptGridMID->SetScalarParameterValue(TEXT("TintRadius"), TintRadius);
+    SculptGridMID->SetScalarParameterValue(TEXT("Touching"),  Touching);
     SculptGridMID->SetScalarParameterValue(TEXT("Glow"),       SculptGridGlow);
 }
 
