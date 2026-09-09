@@ -458,6 +458,10 @@ private:
     bool bHudHidden = false;
     UPROPERTY() class UDecalComponent*    ShadowDecal       = nullptr;
     UPROPERTY() class UStaticMeshComponent* HeightStick     = nullptr;
+    // Guías de profundidad: 3 varillas (X/Y/Z) que cruzan el pincel y llegan a las 6 caras del cubo de
+    // esculpido → se ve la posición XYZ y la distancia a cámara. Reusan HeightStickMesh/Material.
+    UPROPERTY() TArray<class UStaticMeshComponent*> GuideSticks;
+    void UpdateDepthGuides(const FVector& StampPos); // posiciona las 3 varillas cada frame
     UPROPERTY() class UStaticMeshComponent* BoundaryMesh    = nullptr;
     UPROPERTY() class UMaterialInstanceDynamic* BoundaryMID = nullptr;
 
