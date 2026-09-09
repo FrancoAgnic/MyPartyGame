@@ -96,6 +96,23 @@ public:
     UPROPERTY(EditAnywhere, Category="Sculpt|Boundary")
     UStaticMesh* BoundaryBoxMesh = nullptr;
 
+    // ── Grilla VOLUMÉTRICA de profundidad (bola alrededor del pincel; solo el escultor) ─────────
+    /** Material de la grilla 3D (cubitos apilados) que se dibuja en una bola alrededor del preview.
+     *  Params que alimenta el C++: Vector "CursorPos", Scalar "GridRadius", Scalar "Glow",
+     *  Scalar "Contact" (0 lejos de la arcilla → 1 tocándola). Debe hacer el raymarch DENTRO de la
+     *  esfera (usa la geometría de la esfera) y desvanecer en el borde. Translucent, Two-Sided. */
+    UPROPERTY(EditAnywhere, Category="Sculpt|Grid")
+    UMaterialInterface* SculptGridMaterial = nullptr;
+    /** Mesh de la bola (si null, usa la esfera básica del motor, radio nativo 50). */
+    UPROPERTY(EditAnywhere, Category="Sculpt|Grid")
+    UStaticMesh* SculptGridMesh = nullptr;
+    /** Radio de la bola de grilla alrededor del pincel (UU). */
+    UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="10"))
+    float SculptGridRadius = 300.f;
+    /** Intensidad global (0..1+). */
+    UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="0.0"))
+    float SculptGridGlow = 1.f;
+
     /** Overlay que resalta al escultor del turno (amarillo). Se pone sobre su mesh en
      *  todos los clientes para que todos sepan quién esculpe. Asignar M_SculptorHighlight. */
     UPROPERTY(EditAnywhere, Category="Game")
@@ -462,6 +479,9 @@ private:
     // esculpido → se ve la posición XYZ y la distancia a cámara. Reusan HeightStickMesh/Material.
     UPROPERTY() TArray<class UStaticMeshComponent*> GuideSticks;
     void UpdateDepthGuides(const FVector& StampPos); // posiciona las 3 varillas cada frame
+    UPROPERTY() class UStaticMeshComponent* SculptGrid = nullptr;
+    UPROPERTY() class UMaterialInstanceDynamic* SculptGridMID = nullptr;
+    void UpdateSculptGrid(const FVector& StampPos); // bola de grilla en el pincel + color por cercanía
     UPROPERTY() class UStaticMeshComponent* BoundaryMesh    = nullptr;
     UPROPERTY() class UMaterialInstanceDynamic* BoundaryMID = nullptr;
 

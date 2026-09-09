@@ -246,6 +246,25 @@ void APTSculptPlayerController::BeginPlay()
         if (BoundaryMaterial)
             BoundaryMID = BoundaryMesh->CreateDynamicMaterialInstance(0, BoundaryMaterial);
         BoundaryMesh->SetVisibility(false);
+
+        // Grilla VOLUMÉTRICA: una esfera alrededor del pincel; su material raymarchea la grilla 3D
+        // adentro y la desvanece en el borde. Se ilumina/tiñe según la cercanía a la arcilla. Solo escultor.
+        SculptGrid = NewObject<UStaticMeshComponent>(PreviewActor, TEXT("SculptGrid"));
+        SculptGrid->SetupAttachment(PreviewMesh);
+        SculptGrid->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        SculptGrid->SetCastShadow(false);
+        SculptGrid->SetReceivesDecals(false);
+        {
+            UStaticMesh* SphereMesh = SculptGridMesh;
+            if (!SphereMesh)
+                SphereMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+            if (SphereMesh) SculptGrid->SetStaticMesh(SphereMesh);
+        }
+        SculptGrid->RegisterComponent();
+        SculptGrid->SetTranslucentSortPriority(-90);
+        if (SculptGridMaterial)
+            SculptGridMID = SculptGrid->CreateDynamicMaterialInstance(0, SculptGridMaterial);
+        SculptGrid->SetVisibility(false);
     }
 
     // HUD de la partida: solo el jugador local lo crea. Maneja fase/reloj/chat/elección
@@ -708,6 +727,9 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
     // Guías de profundidad: 3 varillas (X/Y/Z) que cruzan el pincel y llegan a las 6 caras del cubo.
     UpdateDepthGuides(StampPos);
 
+    // Grilla volumétrica (bola en el pincel) + color según cercanía a la arcilla.
+    UpdateSculptGrid(StampPos);
+
     // Límite del área: ubicar el box en el BoundsBox del volumen y pasarle el cursor al
     // material (la grilla aparece cerca del cursor). El cubo básico del motor mide 100³
     // (semi-extensión 50), así que la escala = extensión del box / 50.
@@ -907,6 +929,30 @@ void APTSculptPlayerController::UpdateDepthGuides(const FVector& StampPos)
         G->SetWorldRotation(FRotationMatrix::MakeFromZ(Dir / Len).Rotator()); // el mesh (cilindro) es eje Z
         G->SetWorldScale3D(FVector(HeightStickThickness, HeightStickThickness, Len / MeshLen));
     }
+}
+
+void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
+{
+    if (!SculptGrid) return;
+    // Se muestra con las herramientas que ponen el sello en el aire (Add/Erase): ahí importa la profundidad.
+    const bool bWant = Volume && SculptGridMID && !bEyesTool &&
+                       (EditMode == EPTEditMode::Add || EditMode == EPTEditMode::Erase);
+    if (!bWant) { SculptGrid->SetVisibility(false); return; }
+
+    SculptGrid->SetVisibility(true);
+    // Esfera básica del motor: radio nativo 50 → escala = radio deseado / 50.
+    SculptGrid->SetWorldLocation(StampPos);
+    SculptGrid->SetWorldScale3D(FVector(FMath::Max(10.f, SculptGridRadius) / 50.f));
+
+    // Contact: 0 lejos de la arcilla → 1 tocándola/adentro. Del SDF del volumen (barato, sin parpadeo).
+    // En SVO el Sample está clampeado [-1,1] (>0 dentro, <0 fuera). Mapeo a 0..1 alrededor de la superficie.
+    const float Dens = Volume->SampleWorldDensity(StampPos);
+    const float Contact = FMath::Clamp((Dens + 0.25f) / 0.5f, 0.f, 1.f);
+
+    SculptGridMID->SetVectorParameterValue(TEXT("CursorPos"),  StampPos);
+    SculptGridMID->SetScalarParameterValue(TEXT("GridRadius"), FMath::Max(10.f, SculptGridRadius));
+    SculptGridMID->SetScalarParameterValue(TEXT("Glow"),       SculptGridGlow);
+    SculptGridMID->SetScalarParameterValue(TEXT("Contact"),    Contact);
 }
 
 bool APTSculptPlayerController::GetCameraRay(FVector& Start, FVector& Dir) const
