@@ -34,6 +34,10 @@ struct FPTWordPack
     UPROPERTY(BlueprintReadOnly, Category="WordPack") FString Description;
     UPROPERTY(BlueprintReadOnly, Category="WordPack") FString PreviewURL;
     UPROPERTY(BlueprintReadOnly, Category="WordPack") FString Tags;
+    // Miniatura LOCAL (preview.png en la carpeta del pack) — para packs oficiales/locales sin URL.
+    UPROPERTY(BlueprintReadOnly, Category="WordPack") FString PreviewPath;
+    // Banco OFICIAL del juego (viene en Content/WordPacks): siempre arriba en la lista.
+    UPROPERTY(BlueprintReadOnly, Category="WordPack") bool    bOfficial = false;
 };
 
 // Un item del catálogo del Workshop (resultado de una búsqueda), para el Browser.
@@ -89,7 +93,8 @@ public:
 
 private:
     // Agrega un pack desde una carpeta si tiene words.csv válido. bWorkshop marca el origen.
-    void AddPackFromFolder(const FString& Folder, const FString& Id, bool bWorkshop);
+    void AddPackFromFolder(const FString& Folder, const FString& Id, bool bWorkshop, bool bOfficial = false);
+    void ScanOfficialPacks(); // Content/WordPacks/* (oficiales, van en la build y arriba de todo)
     void ScanLocalPacks();
     void ScanWorkshopPacks();
     // Pide a Steam (por los ids) descripción/preview/tags de los packs del Workshop y re-broadcast.

@@ -56,7 +56,19 @@ void UPTWordPackRowWidget::Init(const FPTWordPack& InPack, bool bSelected, UPTWo
             ? TEXT("WORKSHOP_TAG_MAP") : TEXT("WORKSHOP_TAG_WORDBANK")));
 
     if (ThumbnailImage) ThumbnailImage->SetVisibility(ESlateVisibility::Collapsed);
-    DownloadThumbnail(InPack.PreviewURL); // vacío en packs locales → no hace nada
+    // Miniatura: los oficiales/locales usan un preview.png del disco; los del Workshop, la URL.
+    if (!InPack.PreviewPath.IsEmpty() && ThumbnailImage)
+    {
+        if (UTexture2D* Tex = FImageUtils::ImportFileAsTexture2D(InPack.PreviewPath))
+        {
+            ThumbnailImage->SetBrushFromTexture(Tex, /*bMatchSize=*/false);
+            ThumbnailImage->SetVisibility(ESlateVisibility::Visible);
+        }
+    }
+    else
+    {
+        DownloadThumbnail(InPack.PreviewURL); // vacío en packs locales → no hace nada
+    }
 }
 
 void UPTWordPackRowWidget::DownloadThumbnail(const FString& Url)

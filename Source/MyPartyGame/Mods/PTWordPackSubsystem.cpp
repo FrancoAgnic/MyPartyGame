@@ -334,6 +334,7 @@ const FPTWordPack* UPTWordPackSubsystem::FindPack(const FString& Id) const
 void UPTWordPackSubsystem::RescanPacks()
 {
     Packs.Reset();
+    ScanOfficialPacks(); // primero → los oficiales quedan SIEMPRE arriba de la lista
     ScanLocalPacks();
     ScanWorkshopPacks();
     UE_LOG(LogPTWordPacks, Log, TEXT("RescanPacks: %d banco(s) de palabras."), Packs.Num());
@@ -379,27 +380,54 @@ void UPTWordPackSubsystem::FetchWorkshopDetails()
 #endif
 }
 
-void UPTWordPackSubsystem::AddPackFromFolder(const FString& Folder, const FString& Id, bool bWorkshop)
+void UPTWordPackSubsystem::AddPackFromFolder(const FString& Folder, const FString& Id, bool bWorkshop, bool bOfficial)
 {
     const FString CsvPath = FPaths::Combine(Folder, TEXT("words.csv"));
     if (!FPaths::FileExists(CsvPath)) return; // sin words.csv no es un banco válido
 
     FPTWordPack Pack;
-    Pack.Id           = Id;
-    Pack.CsvPath      = CsvPath;
+    Pack.Id            = Id;
+    Pack.CsvPath       = CsvPath;
     Pack.bFromWorkshop = bWorkshop;
+    Pack.bOfficial     = bOfficial;
 
-    // Título/autor: pack.txt (línea 1 = título, línea 2 = autor). Fallback: nombre de la carpeta.
+    // Título/autor/descripción: pack.txt (1=título, 2=autor, 3+=descripción). Fallback: nombre de carpeta.
     const FString PackTxt = FPaths::Combine(Folder, TEXT("pack.txt"));
     TArray<FString> Lines;
     if (FFileHelper::LoadFileToStringArray(Lines, *PackTxt))
     {
         if (Lines.Num() > 0) Pack.Title  = Lines[0].TrimStartAndEnd();
         if (Lines.Num() > 1) Pack.Author = Lines[1].TrimStartAndEnd();
+        // Descripción: el resto de las líneas juntas (los packs del Workshop la sobreescriben con la de Steam).
+        for (int32 i = 2; i < Lines.Num(); ++i)
+        {
+            if (!Pack.Description.IsEmpty()) Pack.Description += TEXT(" ");
+            Pack.Description += Lines[i].TrimStartAndEnd();
+        }
     }
     if (Pack.Title.IsEmpty()) Pack.Title = FPaths::GetCleanFilename(Folder);
 
+    // Miniatura local (preview.png) para packs oficiales/locales (los del Workshop usan PreviewURL).
+    const FString Prev = FPaths::Combine(Folder, TEXT("preview.png"));
+    if (FPaths::FileExists(Prev)) Pack.PreviewPath = Prev;
+
     Packs.Add(MoveTemp(Pack));
+}
+
+void UPTWordPackSubsystem::ScanOfficialPacks()
+{
+    // Bancos OFICIALES del juego: Content/WordPacks/*  (se stagean en la build vía DirectoriesToAlwaysStageAsUFS).
+    const FString Root = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("WordPacks"));
+    if (!FPaths::DirectoryExists(Root)) return;
+
+    TArray<FString> SubDirs;
+    IFileManager::Get().FindFiles(SubDirs, *(Root / TEXT("*")), /*Files=*/false, /*Directories=*/true);
+    SubDirs.Sort(); // orden estable/alfabético entre los oficiales
+    for (const FString& Name : SubDirs)
+    {
+        if (Name == TEXT(".") || Name == TEXT("..")) continue;
+        AddPackFromFolder(FPaths::Combine(Root, Name), TEXT("official:") + Name, /*bWorkshop=*/false, /*bOfficial=*/true);
+    }
 }
 
 void UPTWordPackSubsystem::ScanLocalPacks()
