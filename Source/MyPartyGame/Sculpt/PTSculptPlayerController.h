@@ -109,9 +109,9 @@ public:
     /** Tamaño de brocha (StampSize) al que el radio vale SculptGridRadius. El radio escala proporcional. */
     UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="1"))
     float SculptGridRefBrushSize = 160.f;
-    /** Rango del SDF (0..1) para el "termómetro": a esta distancia de la superficie ya está en frío. */
-    UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="0.05"))
-    float SculptGridContactRange = 0.5f;
+    /** Tamaño de la región teñida alrededor del contacto con la arcilla, en múltiplos del radio de brocha. */
+    UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="0.1"))
+    float SculptGridTintScale = 2.0f;
     /** Separación entre líneas (UU) = tamaño de cada cubito. */
     UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="10"))
     float SculptGridCell = 80.f;

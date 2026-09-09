@@ -910,51 +910,58 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
     SculptGrid->SetWorldLocation(Snapped);
 
     // Densidad del SDF en el cursor (>0 dentro de la arcilla, <0 fuera, ≈0 en la superficie).
-    const float Dens  = Volume->SampleWorldDensity(StampPos);
-    const float Range = FMath::Max(0.05f, SculptGridContactRange);
+    const float Dens = Volume->SampleWorldDensity(StampPos);
+    const float BrushRadius = FMath::Max(1.f, BrushWorld * 0.5f);
 
-    // Termómetro por cubo: hay que ubicar la superficie de la arcilla MÁS CERCANA al cursor, así el material
-    // puede teñir cada cubo por su distancia real a la arcilla (no solo cuando el cursor la toca).
-    //  - Dens>=0  → el cursor ya está dentro/tocando → overlap total (verde), la arcilla está "en" el cursor.
-    //  - Dens<0   → seguimos el gradiente del SDF (apunta hacia densidad creciente = hacia la arcilla) y
-    //               trazamos un rayo real hasta la malla para obtener el punto de contacto en UU.
-    //  - Sin arcilla cerca (gradiente ~0 o sin hit) → ClayPos lejísimos → todos los cubos quedan en frío.
-    FVector ClayPos = StampPos + FVector(0.f, 0.f, 1.0e6f);
-    float   Overlap = 0.f;
+    // Ubicar el punto de arcilla MÁS CERCANO al cursor con TRACES reales contra la malla (robusto; el
+    // gradiente del SDF no sirve porque en el SVO está clampeado y da 0 salvo pegado a la superficie).
+    // Se lanzan rayos en 14 direcciones (6 ejes + 8 diagonales) hasta el borde de la bola y se filtra que
+    // el hit sea el propio volumen de arcilla (no el piso ni las paredes ni el preview).
+    //  - Proximity: 0 = arcilla en la bola pero lejos del pincel (azul) → 1 = overlapeando (verde).
+    //  - Sin arcilla en rango → ClayPos lejísimos → el material deja todo blanco.
+    FVector ClayPos   = StampPos + FVector(0.f, 0.f, 1.0e6f);
+    float   Proximity = 0.f;
     if (Dens >= 0.f)
     {
+        // El cursor ya está dentro/tocando la arcilla → overlap total.
         ClayPos = StampPos;
-        Overlap = 1.f;
+        Proximity = 1.f;
     }
     else
     {
-        const float e = FMath::Max(2.f, Cell * 0.25f);
-        const FVector G(
-            Volume->SampleWorldDensity(StampPos + FVector(e,0,0)) - Volume->SampleWorldDensity(StampPos - FVector(e,0,0)),
-            Volume->SampleWorldDensity(StampPos + FVector(0,e,0)) - Volume->SampleWorldDensity(StampPos - FVector(0,e,0)),
-            Volume->SampleWorldDensity(StampPos + FVector(0,0,e)) - Volume->SampleWorldDensity(StampPos - FVector(0,0,e)));
-        if (!G.IsNearlyZero())
+        static const FVector Dirs[14] = {
+            { 1, 0, 0}, {-1, 0, 0}, { 0, 1, 0}, { 0,-1, 0}, { 0, 0, 1}, { 0, 0,-1},
+            { 1, 1, 1}, { 1, 1,-1}, { 1,-1, 1}, { 1,-1,-1},
+            {-1, 1, 1}, {-1, 1,-1}, {-1,-1, 1}, {-1,-1,-1} };
+        FCollisionQueryParams QP; QP.bTraceComplex = true;
+        if (PreviewActor)                QP.AddIgnoredActor(PreviewActor);
+        if (const APawn* Pw = GetPawn())  QP.AddIgnoredActor(Pw);
+        float Best = TNumericLimits<float>::Max();
+        for (const FVector& D : Dirs)
         {
-            const FVector Dir = G.GetSafeNormal(); // hacia la arcilla
             FHitResult Hit;
-            FCollisionQueryParams QP; QP.bTraceComplex = true;
-            if (PreviewActor)                QP.AddIgnoredActor(PreviewActor);
-            if (const APawn* Pw = GetPawn())  QP.AddIgnoredActor(Pw);
-            const FVector End = StampPos + Dir * (EffRadius * 3.f);
-            if (GetWorld()->LineTraceSingleByChannel(Hit, StampPos, End, ECC_Visibility, QP))
+            const FVector End = StampPos + D.GetSafeNormal() * EffRadius;
+            if (GetWorld()->LineTraceSingleByChannel(Hit, StampPos, End, ECC_Visibility, QP)
+                && Hit.GetActor() == Volume && Hit.Distance < Best)
             {
+                Best = Hit.Distance;
                 ClayPos = Hit.ImpactPoint;
-                // Overlap: 0 lejos → 1 al tocar. Del SDF (sube al acercarse a la superficie).
-                Overlap = FMath::Clamp((Dens + Range) / Range, 0.f, 1.f);
             }
         }
+        if (Best < TNumericLimits<float>::Max())
+            // El preview (esfera de radio BrushRadius) toca la arcilla cuando la distancia ≤ BrushRadius.
+            Proximity = FMath::Clamp((BrushRadius - Best) / BrushRadius, 0.f, 1.f);
     }
+
+    // Radio de la región teñida alrededor del contacto (fuera de esto los cubos quedan blancos).
+    const float TintRadius = BrushRadius * FMath::Max(0.1f, SculptGridTintScale);
 
     SculptGridMID->SetVectorParameterValue(TEXT("CursorPos"),  StampPos);
     SculptGridMID->SetVectorParameterValue(TEXT("ClayPos"),    ClayPos);
     SculptGridMID->SetScalarParameterValue(TEXT("GridRadius"), EffRadius);
+    SculptGridMID->SetScalarParameterValue(TEXT("TintRadius"), TintRadius);
     SculptGridMID->SetScalarParameterValue(TEXT("Glow"),       SculptGridGlow);
-    SculptGridMID->SetScalarParameterValue(TEXT("Overlap"),    Overlap);
+    SculptGridMID->SetScalarParameterValue(TEXT("Proximity"),  Proximity);
 }
 
 // Construye la retícula 3D: líneas finas (prismas delgados) a lo largo de los 3 ejes, en múltiplos de celda,
