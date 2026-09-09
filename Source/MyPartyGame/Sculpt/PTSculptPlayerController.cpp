@@ -225,6 +225,25 @@ void APTSculptPlayerController::BeginPlay()
         if (BoundaryMaterial)
             BoundaryMID = BoundaryMesh->CreateDynamicMaterialInstance(0, BoundaryMaterial);
         BoundaryMesh->SetVisibility(false);
+
+        // Niebla/grilla VOLUMÉTRICA que llena el cubo (sutil; se ilumina/deforma cerca del pincel). Solo
+        // la ve el escultor (la crea su propio controller). Solo se muestra si asignaste SculptFogMaterial.
+        SculptFog = NewObject<UStaticMeshComponent>(PreviewActor, TEXT("SculptFog"));
+        SculptFog->SetupAttachment(PreviewMesh);
+        SculptFog->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        SculptFog->SetCastShadow(false);
+        SculptFog->SetReceivesDecals(false);
+        {
+            UStaticMesh* FogMesh = SculptFogMesh;
+            if (!FogMesh)
+                FogMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+            if (FogMesh) SculptFog->SetStaticMesh(FogMesh);
+        }
+        SculptFog->RegisterComponent();
+        SculptFog->SetTranslucentSortPriority(-200); // bien atrás: es ambiente, no debe tapar nada
+        if (SculptFogMaterial)
+            SculptFogMID = SculptFog->CreateDynamicMaterialInstance(0, SculptFogMaterial);
+        SculptFog->SetVisibility(false);
     }
 
     // HUD de la partida: solo el jugador local lo crea. Maneja fase/reloj/chat/elección
@@ -698,6 +717,9 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         }
     }
 
+    // Niebla/grilla volumétrica: llena el cubo y se ilumina/deforma cerca del pincel (sutil, solo escultor).
+    UpdateSculptFog(StampPos);
+
     // Preview de superficie (Paint por shape + color; Smooth su propio mesh):
     // alineado a la normal, escalado con la brocha.
     if (PaintRing)
@@ -845,6 +867,27 @@ void APTSculptPlayerController::SetPreviewXrayEnabled(bool bOn)
 }
 
 // ── Lógica de cursor ─────────────────────────────────────────────────────────
+
+void APTSculptPlayerController::UpdateSculptFog(const FVector& StampPos)
+{
+    if (!SculptFog) return;
+    UBoxComponent* Box = Volume ? Volume->FindComponentByClass<UBoxComponent>() : nullptr;
+    if (!SculptFogMID || !Box)
+    {
+        SculptFog->SetVisibility(false);
+        return;
+    }
+    // Encajar el cubo de niebla al BoundsBox del volumen (cubo básico = 100³ → escala = extent/50).
+    SculptFog->SetVisibility(true);
+    SculptFog->SetWorldLocationAndRotation(Box->GetComponentLocation(), Box->GetComponentRotation());
+    SculptFog->SetWorldScale3D(Box->GetScaledBoxExtent() / 50.f);
+
+    // Alimentar el material: posición del pincel (mundo), radio, e intensidad. El material hace el resto
+    // (grilla/niebla sutil + iluminar/deformar apenas cerca del cursor).
+    SculptFogMID->SetVectorParameterValue(TEXT("CursorPos"),    StampPos);
+    SculptFogMID->SetScalarParameterValue(TEXT("CursorRadius"), FMath::Max(1.f, StampSize * 0.5f));
+    SculptFogMID->SetScalarParameterValue(TEXT("Glow"),         SculptFogGlow);
+}
 
 bool APTSculptPlayerController::GetCameraRay(FVector& Start, FVector& Dir) const
 {
