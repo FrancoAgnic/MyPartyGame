@@ -110,10 +110,10 @@ public:
     UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="1"))
     float SculptGridRefBrushSize = 160.f;
     /** Piso del radio efectivo (UU): con brochas chicas la grilla no se achica más que esto (no desaparece). */
-    UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="10"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt|Grid", meta=(ClampMin="10"))
     float SculptGridMinRadius = 150.f;
     /** Tope del radio efectivo (UU): con brochas grandes la grilla no crece más que esto (no inunda la pantalla). */
-    UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="10"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt|Grid", meta=(ClampMin="10"))
     float SculptGridMaxRadius = 500.f;
     /** Tamaño de la región teñida alrededor del contacto con la arcilla, en múltiplos del radio de brocha. */
     UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="0.1"))

@@ -980,8 +980,20 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
     // Radio de la región teñida alrededor del contacto (fuera de esto los cubos quedan blancos).
     const float TintRadius = BrushRadius * FMath::Max(0.1f, SculptGridTintScale);
 
+    // Límites del cubo de esculpido → el material recorta la grilla al interior y resalta las aristas del
+    // borde. Si no hay box, extensión enorme = sin recorte.
+    FVector BoxCenter = StampPos;
+    FVector BoxExtent(1.0e6f);
+    if (UBoxComponent* Box = Volume->FindComponentByClass<UBoxComponent>())
+    {
+        BoxCenter = Box->GetComponentLocation();
+        BoxExtent = Box->GetScaledBoxExtent();
+    }
+
     SculptGridMID->SetVectorParameterValue(TEXT("CursorPos"),  StampPos);
     SculptGridMID->SetVectorParameterValue(TEXT("ClayPos"),    ClayPos);
+    SculptGridMID->SetVectorParameterValue(TEXT("BoxCenter"),  BoxCenter);
+    SculptGridMID->SetVectorParameterValue(TEXT("BoxExtent"),  BoxExtent);
     SculptGridMID->SetScalarParameterValue(TEXT("GridRadius"), EffRadius);
     SculptGridMID->SetScalarParameterValue(TEXT("TintRadius"), TintRadius);
     SculptGridMID->SetScalarParameterValue(TEXT("Glow"),       SculptGridGlow);
