@@ -127,8 +127,8 @@ void UPTSpectatorComponent::ApplyPovLanguageAndFlag(APlayerController* C, APawn*
         S->SetLanguageCodeTransient(Lang);
         bLangOverridden = true;
     }
-    // Bandera grande de ese idioma (centro-derecha).
-    if (FlagHUD) FlagHUD->SetFlag(PTText::GetLanguageFlag(Lang));
+    // Bandera grande de ese idioma (centro-derecha). Hi-res (512x512) porque se muestra grande.
+    if (FlagHUD) FlagHUD->SetFlag(PTText::GetLanguageFlag(Lang, /*bHiRes=*/true));
 
     // Ocultar LOCALMENTE el cuerpo + cabeza del jugador que espectás (en 1ra persona tapan su POV).
     // Restaurar primero el anterior (si veníamos de otro POV) y ocultar el nuevo.

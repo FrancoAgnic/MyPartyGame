@@ -437,6 +437,26 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
 
+    // Mantener el modo espectador tras el viaje lobby → Lvl-01: si tu PlayerState viene con
+    // bIsDevSpectator (persiste por CopyProperties), activar el free-cam automáticamente. One-shot,
+    // con una ventana de gracia para esperar a que el flag replique (en clientes puede tardar 1-2 frames).
+    if (!bAutoSpectateApplied && Spectator && IsLocalController())
+    {
+        SpectateSyncTimer += DeltaTime;
+        const APTPlayerState* PS = GetPlayerState<APTPlayerState>();
+        if (PS && PS->bIsDevSpectator && !Spectator->IsActive())
+        {
+            Spectator->Toggle(); // activa el vuelo libre (el flag ya está true en el server)
+            if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
+                GI->SetCaptureMode(true);
+            bAutoSpectateApplied = true;
+        }
+        else if (SpectateSyncTimer > 5.f)
+        {
+            bAutoSpectateApplied = true; // no era espectador → dejar de chequear
+        }
+    }
+
     // Teclas toggle del modo espectador (dev): 1=HUD, 2=nombres, 3=hotbar. Solo mientras espectás,
     // para no pisar teclas del juego. Reusan las mismas funciones que los comandos de consola.
     if (Spectator && Spectator->IsActive())

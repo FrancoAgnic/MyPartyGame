@@ -68,9 +68,10 @@ public:
     // ------------------------------------------------------------------
     void Login();
 
-    // Rango de jugadores que el template permite por sala (UI: Host Game "Range: 2-10").
+    // Rango de jugadores que el template permite por sala (UI: Host Game "Range: 2-12").
+    // Tope 12 = 10 jugadores + 2 espectadores dev (para grabar el trailer con la sala llena).
     static constexpr int32 MinPlayersAllowed = 2;
-    static constexpr int32 MaxPlayersAllowed = 10;
+    static constexpr int32 MaxPlayersAllowed = 12;
 
     // Visibilidad de la sesión (reemplaza al viejo sistema de código):
     //   bFriendsOnly=false → PÚBLICA: aparece en la pestaña "Públicas" del Find Game; cualquiera entra.

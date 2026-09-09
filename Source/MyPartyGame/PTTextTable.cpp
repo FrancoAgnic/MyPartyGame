@@ -239,13 +239,18 @@ void PTText::Reload()
     EnsureLoaded();
 }
 
-UTexture2D* PTText::GetLanguageFlag(const FString& Code)
+UTexture2D* PTText::GetLanguageFlag(const FString& Code, bool bHiRes)
 {
     const FString Key = Code.Left(2).ToUpper(); // "es-AR" → "ES"
     if (Key.IsEmpty()) return nullptr;
     // /Game/UI/Flags/Flag_ES, Flag_EN, ... (LoadObject encuentra la ya cargada si estaba → barato).
-    const FString Path = FString::Printf(TEXT("/Game/UI/Flags/Flag_%s.Flag_%s"), *Key, *Key);
-    return LoadObject<UTexture2D>(nullptr, *Path);
+    // bHiRes → Flag_ES_512 (512x512) para banderas grandes; si no existe, cae a la normal.
+    const FString Suffix = bHiRes ? TEXT("_512") : TEXT("");
+    const FString Name = FString::Printf(TEXT("Flag_%s%s"), *Key, *Suffix);
+    const FString Path = FString::Printf(TEXT("/Game/UI/Flags/%s.%s"), *Name, *Name);
+    if (UTexture2D* Tex = LoadObject<UTexture2D>(nullptr, *Path)) return Tex;
+    if (bHiRes) return GetLanguageFlag(Code, false); // fallback a la normal si falta la _512
+    return nullptr;
 }
 
 void PTText::LocalizeWidgetTree(UUserWidget* Widget)

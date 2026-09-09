@@ -489,6 +489,10 @@ private:
     UPROPERTY() class UPTSpectatorComponent* Spectator      = nullptr;
     uint8 LastReportedTool = 255; // última herramienta enviada al pawn (para replicar al espectador)
     bool bHudHidden = false;
+    // Al llegar a Lvl-01 desde el lobby, si venías de espectador (bIsDevSpectator persiste por CopyProperties)
+    // re-activamos el free-cam automáticamente. One-shot con ventana para esperar la replicación del flag.
+    bool  bAutoSpectateApplied = false;
+    float SpectateSyncTimer    = 0.f;
     UPROPERTY() class UDecalComponent*    ShadowDecal       = nullptr;
     UPROPERTY() class UStaticMeshComponent* HeightStick     = nullptr;
     UPROPERTY() class UProceduralMeshComponent* SculptGrid = nullptr;

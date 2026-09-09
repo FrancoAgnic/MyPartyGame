@@ -68,8 +68,9 @@ namespace PTText
     MYPARTYGAME_API int32 GetLanguageIndex(const FString& Code);
 
     /** Banderita del idioma (código "es"/"en"/"pt"/...). Carga /Game/UI/Flags/Flag_XX. nullptr si no hay.
-     *  Para mostrar la bandera del país al lado del nombre en las listas de jugadores. */
-    MYPARTYGAME_API class UTexture2D* GetLanguageFlag(const FString& Code);
+     *  Para mostrar la bandera del país al lado del nombre en las listas de jugadores.
+     *  bHiRes=true carga la versión Flag_XX_512 (512x512) para banderas grandes (ej. HUD del espectador). */
+    MYPARTYGAME_API class UTexture2D* GetLanguageFlag(const FString& Code, bool bHiRes = false);
 
     /** Parte una línea de CSV respetando comillas (para que un texto pueda llevar comas).
      *  Vive acá porque lo usan tanto los textos como el banco de palabras. */
