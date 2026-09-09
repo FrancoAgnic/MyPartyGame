@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-// Helper de diagnóstico de red del jugador local: ping (ms) + packet loss (%).
-// Header-only para poder usarlo desde cualquier HUD sin duplicar la lógica.
+// Diagnóstico de red del jugador local: ping (ms) + packet loss (%) + estado de conexión.
+// Header-only para usarlo desde cualquier HUD sin duplicar la lógica. El HUD lo consulta y muestra
+// ICONOS chiquitos (arriba a la izquierda) solo cuando hay un problema (no un texto de debug).
 
 #pragma once
 #include "CoreMinimal.h"
@@ -12,46 +13,47 @@
 
 namespace PTNetStats
 {
-    struct FLine
+    // Umbrales (compartidos por todos los HUDs).
+    constexpr int32  HighPingMs   = 500;   // > esto = latencia alta
+    constexpr float  LossWarnPct  = 2.0f;  // >= esto (%) = paquetes perdidos
+    constexpr double LostSeconds  = 3.0;   // sin recibir datos por más de esto = conexión caída
+
+    struct FStatus
     {
-        FString Text;
-        FColor  Color = FColor::Cyan;
+        int32 PingMs      = 0;
+        float LossPct     = 0.f;     // el peor de in/out
+        bool  bRemote     = false;   // sos cliente conectado a un server (en host/standalone = false)
+        bool  bHighPing   = false;   // ping > HighPingMs
+        bool  bPacketLoss = false;   // loss >= LossWarnPct
+        bool  bLost       = false;   // conexión caída / se fue internet / cayó el server
     };
 
-    // Arma una línea "Ping X ms  Loss in Y% / out Z%" del jugador local.
-    //  - Ping: lo mide el servidor y lo replica al PlayerState (así que es "tu lag" real).
-    //  - Packet loss: de la conexión cliente→servidor. Viene como fracción 0..1 → *100 para %.
-    //  - En host/standalone no hay ServerConnection (todo local) → solo ping (0).
-    // Color tipo semáforo según lo peor entre ping y loss (verde/amarillo/rojo).
-    inline FLine Build(const APlayerController* PC)
+    inline FStatus Query(const APlayerController* PC)
     {
-        FLine Out;
-        if (!PC) return Out;
+        FStatus S;
+        if (!PC) return S;
 
-        int32 PingMs = 0;
         if (const APlayerState* PS = PC->PlayerState)
-            PingMs = FMath::RoundToInt(PS->GetPingInMilliseconds());
+            S.PingMs = FMath::RoundToInt(PS->GetPingInMilliseconds());
 
         const UWorld* W = PC->GetWorld();
-        UNetConnection* Conn = (W && W->GetNetDriver()) ? W->GetNetDriver()->ServerConnection : nullptr;
-
-        float InLoss = 0.f, OutLoss = 0.f;
+        UNetDriver* ND = (W ? W->GetNetDriver() : nullptr);
+        UNetConnection* Conn = ND ? ND->ServerConnection : nullptr;
         if (Conn)
         {
-            InLoss  = Conn->GetInLossPercentage().GetAvgLossPercentage()  * 100.f;
-            OutLoss = Conn->GetOutLossPercentage().GetAvgLossPercentage() * 100.f;
-            Out.Text = FString::Printf(TEXT("Ping %d ms   Loss in %.1f%% / out %.1f%%"),
-                                       PingMs, InLoss, OutLoss);
-        }
-        else
-        {
-            Out.Text = FString::Printf(TEXT("Ping %d ms   (host local)"), PingMs);
+            S.bRemote = true;
+            const float In  = Conn->GetInLossPercentage().GetAvgLossPercentage()  * 100.f;
+            const float Out = Conn->GetOutLossPercentage().GetAvgLossPercentage() * 100.f;
+            S.LossPct = FMath::Max(In, Out);
+
+            // "Caída": la conexión cerró, o hace rato que no llega NADA del server (se fue internet / se
+            // cayó el server, antes de que el motor dispare el network failure).
+            const double SinceRecv = ND->GetElapsedTime() - Conn->LastReceiveTime;
+            S.bLost = (Conn->GetConnectionState() == USOCK_Closed) || (SinceRecv > LostSeconds);
         }
 
-        const float WorstLoss = FMath::Max(InLoss, OutLoss);
-        if      (PingMs >= 150 || WorstLoss >= 5.f) Out.Color = FColor(230,  70,  70); // rojo
-        else if (PingMs >=  80 || WorstLoss >= 2.f) Out.Color = FColor(235, 200,  70); // amarillo
-        else                                        Out.Color = FColor( 90, 210, 120); // verde
-        return Out;
+        S.bHighPing   = S.PingMs  >  HighPingMs;
+        S.bPacketLoss = S.LossPct >= LossWarnPct;
+        return S;
     }
 }

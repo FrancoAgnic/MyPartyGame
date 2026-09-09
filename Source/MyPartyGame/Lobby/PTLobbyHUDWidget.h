@@ -59,6 +59,12 @@ protected:
     // Visible solo mientras APTGameState::CountdownSecondsRemaining >= 0.
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   CountdownText;
 
+    // Iconos de estado de red (arriba a la izquierda). Solo se muestran cuando hay problema. Poné tus
+    // texturas 24x24 en estos Image del WBP (nombres EXACTOS); el código los prende/apaga.
+    UPROPERTY(meta = (BindWidgetOptional)) class UImage* IconPacketLoss;
+    UPROPERTY(meta = (BindWidgetOptional)) class UImage* IconHighPing;
+    UPROPERTY(meta = (BindWidgetOptional)) class UImage* IconDisconnected;
+
     UFUNCTION() void OnCopyCodeClicked();
     UFUNCTION() void OnLeaveGameClicked();
     UFUNCTION() void OnStartGameClicked();

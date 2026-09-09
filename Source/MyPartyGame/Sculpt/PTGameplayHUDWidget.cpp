@@ -491,14 +491,20 @@ void UPTGameplayHUDWidget::RefreshTick()
     if (ChatScroll)
         ChatScroll->SetVisibility(bColorPicker ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Visible);
 
-    // ── Diagnóstico de red (ping + packet loss) ──
-    // On-screen (visible en build Development). Sirve para ver el lag en el test con un amigo.
-    if (GEngine)
+    // ── Estado de red: iconos arriba a la izquierda, SOLO cuando hay problema (sin texto de debug). ──
+    UpdateNetIcons();
+}
+
+void UPTGameplayHUDWidget::UpdateNetIcons()
+{
+    const PTNetStats::FStatus NS = PTNetStats::Query(GetOwningPlayer());
+    auto Show = [](UImage* Img, bool bOn)
     {
-        const PTNetStats::FLine NS = PTNetStats::Build(GetOwningPlayer());
-        if (!NS.Text.IsEmpty())
-            GEngine->AddOnScreenDebugMessage(987711, 1.5f, NS.Color, NS.Text);
-    }
+        if (Img) Img->SetVisibility(bOn ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+    };
+    Show(IconPacketLoss,   NS.bRemote && NS.bPacketLoss);
+    Show(IconHighPing,     NS.bRemote && NS.bHighPing);
+    Show(IconDisconnected, NS.bRemote && NS.bLost);
 }
 
 void UPTGameplayHUDWidget::FocusChat()

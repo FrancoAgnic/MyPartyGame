@@ -93,6 +93,12 @@ protected:
     // brush de este Image dentro del WBP; C++ solo lo muestra/oculta.
     UPROPERTY(meta=(BindWidgetOptional)) class UImage* OutOfBoundsIcon;
 
+    // ── Iconos de estado de red (arriba a la izquierda). Se muestran SOLO cuando hay problema. Poné tus
+    //    texturas 24x24 en estos Image del WBP (nombres EXACTOS); el código los prende/apaga. ──
+    UPROPERTY(meta=(BindWidgetOptional)) class UImage* IconPacketLoss;   // paquetes perdidos
+    UPROPERTY(meta=(BindWidgetOptional)) class UImage* IconHighPing;     // latencia alta (>500 ms)
+    UPROPERTY(meta=(BindWidgetOptional)) class UImage* IconDisconnected; // se cayó el server / se fue internet
+
     /** WBP del cuadrito (derivado de UPTToolSlotWidget). */
     UPROPERTY(EditAnywhere, Category="UI")
     TSubclassOf<class UPTToolSlotWidget> ToolSlotClass;
@@ -200,6 +206,7 @@ private:
     APTSculptPlayerController* GetSculptPC() const;
 
     void RefreshTick();          // polling: pinta estado/reloj/panel/input según la fase
+    void UpdateNetIcons();       // prende/apaga los iconos de red (packet loss / ping alto / caída)
     void ChooseWord(int32 Index);
     void ApplyInputMode(bool bGameOnly);
     FString BuildScoreboard() const; // "Nombre: pts" ordenado por puntaje desc. (para resultados)

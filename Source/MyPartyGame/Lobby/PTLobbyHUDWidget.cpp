@@ -20,6 +20,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Engine/Engine.h"
 #include "../PTNetStats.h"
+#include "Components/Image.h"
 #include "../PTGameInstance.h" // modo captura dev (Player N)
 #include "../PTGameInstance.h"
 #include "../PTWordBank.h"
@@ -235,13 +236,16 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
     // (El texto de cuenta regresiva se unificó en LobbyStatusText; ya no se usa un CountdownText aparte.)
     if (CountdownText) CountdownText->SetVisibility(ESlateVisibility::Collapsed);
 
-    // ── Diagnóstico de red (ping + packet loss) ──
-    // On-screen (visible en build Development). Ya en el lobby ves tu ping antes de arrancar.
-    if (GEngine)
+    // ── Estado de red: iconos arriba a la izquierda, SOLO cuando hay problema (sin texto de debug). ──
     {
-        const PTNetStats::FLine NS = PTNetStats::Build(GetOwningPlayer());
-        if (!NS.Text.IsEmpty())
-            GEngine->AddOnScreenDebugMessage(987710, 1.5f, NS.Color, NS.Text);
+        const PTNetStats::FStatus NS = PTNetStats::Query(GetOwningPlayer());
+        auto Show = [](UImage* Img, bool bOn)
+        {
+            if (Img) Img->SetVisibility(bOn ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+        };
+        Show(IconPacketLoss,   NS.bRemote && NS.bPacketLoss);
+        Show(IconHighPing,     NS.bRemote && NS.bHighPing);
+        Show(IconDisconnected, NS.bRemote && NS.bLost);
     }
 }
 
