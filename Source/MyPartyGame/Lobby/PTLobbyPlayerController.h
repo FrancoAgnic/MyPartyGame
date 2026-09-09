@@ -62,6 +62,7 @@ public:
     UFUNCTION(Exec) void PTHideNames();         // oculta/muestra los nombres flotantes
     UFUNCTION(Exec) void PTSpecSpeed(float N);  // multiplica la velocidad de la cámara
     UFUNCTION(Exec) void PTSpecSmooth(float N); // suavizado/lag de la cámara (bajo = más suave)
+    UFUNCTION(Exec) void PTSolo();              // DEV: jugar solo → marca solo y arranca la partida ya
 
     // El cliente le avisa al server que entra/sale de espectador (para sacarlo de la partida).
     UFUNCTION(Server, Reliable) void Server_SetSpectator(bool bInSpectator);

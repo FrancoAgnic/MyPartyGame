@@ -330,6 +330,24 @@ void APTSculptPlayerController::PTSpecSmooth(float N)
     if (Spectator) Spectator->SetSmoothSpeed(N);
 }
 
+void APTSculptPlayerController::PTSolo()
+{
+    // DEV: habilita jugar solo (1 jugador) y arranca el turno ya. Solo tiene efecto en el host
+    // (listen server) porque el game mode vive en el server.
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
+        GI->bSoloTest = true;
+    if (HasAuthority())
+    {
+        if (APTSculptGameMode* GM = GetWorld()->GetAuthGameMode<APTSculptGameMode>())
+            GM->SoloStart();
+        UE_LOG(LogTemp, Log, TEXT("[PTSolo] Modo solo ON: arrancando turno con 1 jugador."));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[PTSolo] Solo funciona en el host (listen server)."));
+    }
+}
+
 void APTSculptPlayerController::SetupInputComponent()
 {
     Super::SetupInputComponent();

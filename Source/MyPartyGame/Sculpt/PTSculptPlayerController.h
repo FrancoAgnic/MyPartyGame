@@ -358,6 +358,7 @@ public:
     UFUNCTION(Exec) void PTHideHotbar();        // oculta/muestra la barra de herramientas
     UFUNCTION(Exec) void PTSpecSpeed(float N);  // multiplica la velocidad de la cámara
     UFUNCTION(Exec) void PTSpecSmooth(float N); // suavizado/lag de la cámara (bajo = más suave)
+    UFUNCTION(Exec) void PTSolo();              // DEV: jugar solo (1 jugador) → arranca el turno ya
 
     // El cliente le avisa al server que entra/sale de espectador (para sacarlo de la partida).
     UFUNCTION(Server, Reliable) void Server_SetSpectator(bool bInSpectator);

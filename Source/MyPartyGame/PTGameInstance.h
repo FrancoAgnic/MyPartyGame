@@ -59,6 +59,12 @@ public:
     UPROPERTY(BlueprintReadWrite, Category="Match")
     FPTMatchSettings PendingMatchSettings;
 
+    // DEV/test: jugar SOLO. Con esto en true, el sculpt game mode arranca y sigue el flujo (elegir
+    // palabra + esculpir) con 1 solo jugador. Se prende con el comando de consola "PTSolo".
+    // Vive en el GameInstance para sobrevivir el seamless travel lobby → Lvl-01.
+    UPROPERTY(BlueprintReadWrite, Category="Match")
+    bool bSoloTest = false;
+
     // Abre un diálogo nativo para elegir un .csv y carga sus palabras en
     // PendingMatchSettings.CustomWords (+ bUseCustomWords=true). Formato por línea:
     // "Palabra,Categoria,Dificultad" (Dificultad: Facil/Media/Dificil o 1/2/3; categoría y

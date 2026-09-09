@@ -255,6 +255,16 @@ void APTLobbyPlayerController::PTSpecSmooth(float N)
     if (Spectator) Spectator->SetSmoothSpeed(N);
 }
 
+void APTLobbyPlayerController::PTSolo()
+{
+    // DEV: marca "jugar solo" (sobrevive el travel al Lvl-01) y fuerza el arranque de la partida
+    // sin esperar a que haya 2 jugadores listos. En Lvl-01 el sculpt game mode arranca con 1.
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
+        GI->bSoloTest = true;
+    UE_LOG(LogTemp, Log, TEXT("[PTSolo] Modo solo ON: viajando a la partida con 1 jugador."));
+    Server_RequestStartGame(); // chequea bIsHost adentro y hace TravelToGame
+}
+
 void APTLobbyPlayerController::ApplyDioramaInputMode()
 {
     if (!IsLocalController()) return;

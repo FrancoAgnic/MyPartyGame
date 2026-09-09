@@ -23,6 +23,10 @@ public:
 
     // ── Tuneables (editar en BP_SculptGameMode) ─────────────────────────────
     UPROPERTY(EditDefaultsOnly, Category="Game") int32 MinPlayersToStart = 2;
+    // Mínimo EFECTIVO: 1 si el GameInstance tiene bSoloTest (comando "PTSolo"), si no MinPlayersToStart.
+    int32 MinToStart() const;
+    // DEV: marca bSoloTest y arranca la partida con 1 jugador (lo llama el comando "PTSolo").
+    void SoloStart();
     UPROPERTY(EditDefaultsOnly, Category="Game") float TurnDuration      = 90.f; // seg de dibujo
     UPROPERTY(EditDefaultsOnly, Category="Game") float ChooseDuration    = 15.f; // seg para elegir palabra
     UPROPERTY(EditDefaultsOnly, Category="Game") float TurnEndDuration   = 5.f;  // pausa de reveal

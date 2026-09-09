@@ -136,7 +136,7 @@ void APTSculptGameMode::Logout(AController* Exiting)
 
     if (!G) return;
 
-    if (GetActivePlayers().Num() < MinPlayersToStart)
+    if (GetActivePlayers().Num() < MinToStart())
     {
         GoToWaiting();
     }
@@ -149,12 +149,24 @@ void APTSculptGameMode::Logout(AController* Exiting)
     }
 }
 
+int32 APTSculptGameMode::MinToStart() const
+{
+    const UPTGameInstance* GI = GetGameInstance<UPTGameInstance>();
+    return (GI && GI->bSoloTest) ? 1 : MinPlayersToStart;
+}
+
+void APTSculptGameMode::SoloStart()
+{
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>()) GI->bSoloTest = true;
+    CheckStart(); // ahora MinToStart()==1 → si estaba esperando, agenda el arranque
+}
+
 void APTSculptGameMode::CheckStart()
 {
     APTSculptGameState* G = GS();
     if (!G) return;
     if (G->TurnPhase == EPTTurnPhase::WaitingForPlayers &&
-        GetActivePlayers().Num() >= MinPlayersToStart &&
+        GetActivePlayers().Num() >= MinToStart() &&
         !bStartScheduled)
     {
         // Arranque DIFERIDO: si venimos de seamless travel desde el lobby, los PlayerState y
@@ -195,7 +207,7 @@ void APTSculptGameMode::StartGame()
     ApplyMatchSettingsFromGameInstance();
 
     TArray<APTPlayerState*> Players = GetActivePlayers();
-    if (Players.Num() < MinPlayersToStart) { GoToWaiting(); return; }
+    if (Players.Num() < MinToStart()) { GoToWaiting(); return; }
 
     // Puntajes en cero y rondas desde el principio.
     for (APTPlayerState* PT : Players) PT->GameScore = 0;
@@ -232,7 +244,7 @@ void APTSculptGameMode::StartChoosingPhase()
     if (WordBank.Num() == 0) SeedDefaultWords();
 
     TArray<APTPlayerState*> Players = GetActivePlayers();
-    if (Players.Num() < MinPlayersToStart) { GoToWaiting(); return; }
+    if (Players.Num() < MinToStart()) { GoToWaiting(); return; }
 
     // Resetear "adivinó" de todos al empezar el turno.
     for (APTPlayerState* PT : Players) PT->bHasGuessedThisTurn = false;
