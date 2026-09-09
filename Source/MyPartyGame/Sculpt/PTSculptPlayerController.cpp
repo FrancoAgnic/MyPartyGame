@@ -887,6 +887,10 @@ void APTSculptPlayerController::UpdateSculptFog(const FVector& StampPos)
     SculptFogMID->SetVectorParameterValue(TEXT("CursorPos"),    StampPos);
     SculptFogMID->SetScalarParameterValue(TEXT("CursorRadius"), FMath::Max(1.f, StampSize * 0.5f));
     SculptFogMID->SetScalarParameterValue(TEXT("Glow"),         SculptFogGlow);
+    // Límites del cubo (para el ray-march del interior): centro + half-extent en mundo.
+    SculptFogMID->SetVectorParameterValue(TEXT("BoxCenter"), Box->GetComponentLocation());
+    const FVector Ext = Box->GetScaledBoxExtent();
+    SculptFogMID->SetVectorParameterValue(TEXT("BoxExtent"), FLinearColor(Ext.X, Ext.Y, Ext.Z));
 }
 
 bool APTSculptPlayerController::GetCameraRay(FVector& Start, FVector& Dir) const
