@@ -1,0 +1,21 @@
+TITLE:
+Sculpturillo v0.7.4 — Depth grid: see exactly where your brush is
+
+BBCODE (paste directly into the Steam patch notes / event description box):
+--------------------------------------------------------------------------
+[h1]✨ What's New[/h1]
+[list]
+[*] 🧊 New 3D depth grid: a crisp volumetric grid of fine lines appears around your brush so you can read how deep you're sculpting in mid-air.
+[*] 💡 Contact glow: when your brush touches the existing clay, the grid lights up brighter right at the contact point.
+[*] 🟥 Boundary shading: the edges of the sculpting box are highlighted with a soft radial shadow, so the limits of the play area read clearly.
+[/list]
+
+[h1]🎨 Improvements[/h1]
+[list]
+[*] 🎯 The grid scales with your brush size (with min/max limits) so it never disappears or floods the screen.
+[*] 🌫️ Smooth radial fade: the grid is solid at the center and fades out toward the edges — clean and unobtrusive.
+[*] 🧭 Kept the single bottom height stick for ground reference; removed the extra axis rods for a cleaner view.
+[/list]
+
+[hr][/hr]
+[i]Thanks for playing Sculpturillo! 🎨 Tell us what you'd like to see in the next patch.[/i]
