@@ -889,12 +889,11 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
         FMath::Max3(StampScale.X, StampScale.Y, StampScale.Z);
     const float Ratio     = BrushWorld / FMath::Max(1.f, SculptGridRefBrushSize);
     const float EffRadius = FMath::Max(10.f, SculptGridRadius * Ratio);
-    const float Cell      = FMath::Max(10.f, SculptGridCell * Ratio);
+    const float Cell      = FMath::Max(10.f, SculptGridCell); // celda FIJA (solo escala el radio)
 
-    // La malla es geometría estática construida a un radio/celda fijos. Si cambian (escalaste la brocha),
-    // la reconstruimos (es infrecuente: solo al escalar la brocha, no cada frame).
-    if (FMath::Abs(EffRadius - GridBuiltRadius) > Cell * 0.5f ||
-        FMath::Abs(Cell - GridBuiltCell) > 2.f)
+    // La malla es geometría estática construida a un radio fijo. Si el radio efectivo cambió (escalaste la
+    // brocha), la reconstruimos (es infrecuente: solo al escalar la brocha, no cada frame).
+    if (FMath::Abs(EffRadius - GridBuiltRadius) > Cell * 0.5f)
     {
         GridBuiltRadius = EffRadius;
         GridBuiltCell   = Cell;
@@ -920,10 +919,12 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
     FVector ClayPos   = StampPos + FVector(0.f, 0.f, 1.0e6f);
     float   Proximity = 0.f;
     {
+        // Paso 1 — escaneo grueso: hallar el punto muestreado más cercano que esté dentro de la arcilla.
         const int32 K = FMath::Clamp(FMath::CeilToInt(EffRadius / Cell), 1, 4); // ~4 → 9³=729 muestras máx
         const float Spacing = EffRadius / (float)K;
         const float R2 = EffRadius * EffRadius;
         float BestD2 = TNumericLimits<float>::Max();
+        FVector Coarse = ClayPos;
         for (int32 i = -K; i <= K; ++i)
         for (int32 j = -K; j <= K; ++j)
         for (int32 k = -K; k <= K; ++k)
@@ -931,12 +932,44 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
             const FVector P = StampPos + FVector(i, j, k) * Spacing;
             const float D2 = (P - StampPos).SizeSquared();
             if (D2 > R2 || D2 >= BestD2) continue;                 // fuera de la bola / no más cercano
-            if (Volume->SampleWorldDensity(P) >= 0.f) { BestD2 = D2; ClayPos = P; }
+            if (Volume->SampleWorldDensity(P) >= 0.f) { BestD2 = D2; Coarse = P; }
         }
+
         if (BestD2 < TNumericLimits<float>::Max())
         {
-            const float Gap = FMath::Sqrt(BestD2);
-            Proximity = 1.f - FMath::Clamp(Gap / (EffRadius * 0.75f), 0.f, 1.f);
+            // Paso 2 — refinar: marchar del cursor hacia el punto grueso y afinar el cruce de superficie con
+            // bisección. Así la distancia (Gap) es CONTINUA (no escalonada por el paso del escaneo) → la
+            // transición azul→verde es suave.
+            float Gap = FMath::Sqrt(BestD2);
+            const FVector Dir = (Coarse - StampPos).GetSafeNormal();
+            if (!Dir.IsNearlyZero())
+            {
+                const float Step = FMath::Max(4.f, Cell * 0.25f);
+                float tPrev = 0.f; bool bCrossed = false; float tHit = Gap;
+                for (float t = Step; t <= Gap + Step; t += Step)
+                {
+                    if (Volume->SampleWorldDensity(StampPos + Dir * t) >= 0.f) { tHit = t; bCrossed = true; break; }
+                    tPrev = t;
+                }
+                if (bCrossed)
+                {
+                    float lo = tPrev, hi = tHit;
+                    for (int32 b = 0; b < 6; ++b)
+                    {
+                        const float mid = (lo + hi) * 0.5f;
+                        if (Volume->SampleWorldDensity(StampPos + Dir * mid) >= 0.f) hi = mid; else lo = mid;
+                    }
+                    Gap = hi;
+                }
+            }
+            else { Gap = 0.f; } // cursor dentro de la arcilla
+            ClayPos = StampPos + Dir * Gap;
+
+            // Transición progresiva por distancia: azul cuando la arcilla llega al borde de la bola,
+            // verde cuando el preview la overlapea (Gap ≤ radio de brocha), lineal entre medio.
+            const float GreenAt = BrushRadius;
+            const float BlueAt  = FMath::Max(GreenAt + 1.f, EffRadius * 0.75f);
+            Proximity = FMath::Clamp((BlueAt - Gap) / (BlueAt - GreenAt), 0.f, 1.f);
         }
     }
 
@@ -958,12 +991,9 @@ void APTSculptPlayerController::BuildSculptGridMesh()
 {
     if (!SculptGrid) return;
 
-    const float Cell   = FMath::Max(10.f, GridBuiltCell   > 0.f ? GridBuiltCell   : SculptGridCell);
+    const float Cell   = FMath::Max(10.f, SculptGridCell); // celda FIJA
     const float Radius = FMath::Max(10.f, GridBuiltRadius > 0.f ? GridBuiltRadius : SculptGridRadius);
-    // El grosor acompaña a la escala de celda (Cell/SculptGridCell) → líneas finas y proporcionales aun con
-    // brocha chica.
-    const float TScale = Cell / FMath::Max(10.f, SculptGridCell);
-    const float T      = FMath::Max(0.1f, SculptGridThickness * TScale); // media-anchura de cada línea (UU)
+    const float T      = FMath::Max(0.1f, SculptGridThickness); // media-anchura de cada línea (UU), fija
     // Media-extensión: cubre la bola aun con el snapping (hasta media celda de corrimiento).
     const int32 N = FMath::CeilToInt((Radius + Cell) / Cell); // líneas a cada lado del centro
     const float H = N * Cell;
