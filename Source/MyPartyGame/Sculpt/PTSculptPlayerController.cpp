@@ -909,48 +909,35 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
                           FMath::GridSnap(StampPos.Z, Cell));
     SculptGrid->SetWorldLocation(Snapped);
 
-    // Densidad del SDF en el cursor (>0 dentro de la arcilla, <0 fuera, ≈0 en la superficie).
-    const float Dens = Volume->SampleWorldDensity(StampPos);
     const float BrushRadius = FMath::Max(1.f, BrushWorld * 0.5f);
 
-    // Ubicar el punto de arcilla MÁS CERCANO al cursor con TRACES reales contra la malla (robusto; el
-    // gradiente del SDF no sirve porque en el SVO está clampeado y da 0 salvo pegado a la superficie).
-    // Se lanzan rayos en 14 direcciones (6 ejes + 8 diagonales) hasta el borde de la bola y se filtra que
-    // el hit sea el propio volumen de arcilla (no el piso ni las paredes ni el preview).
-    //  - Proximity: 0 = arcilla en la bola pero lejos del pincel (azul) → 1 = overlapeando (verde).
+    // Ubicar el punto de arcilla MÁS CERCANO al cursor SAMPLEANDO el campo SDF en una grilla 3D (robusto en
+    // SVO: los chunks de arcilla NO tienen colisión, así que los traces no sirven, pero el campo siempre está).
+    // SampleWorldDensity: >0 dentro de la arcilla, <0 fuera. Buscamos el punto muestreado más cercano que esté
+    // dentro/tocando (>=0). El cursor mismo (0,0,0) entra en el escaneo → si está adentro, ClayPos = cursor.
+    //  - Proximity: 0 = arcilla lejos en la bola (azul) → 1 = pincel encima (verde). Transición por distancia.
     //  - Sin arcilla en rango → ClayPos lejísimos → el material deja todo blanco.
     FVector ClayPos   = StampPos + FVector(0.f, 0.f, 1.0e6f);
     float   Proximity = 0.f;
-    if (Dens >= 0.f)
     {
-        // El cursor ya está dentro/tocando la arcilla → overlap total.
-        ClayPos = StampPos;
-        Proximity = 1.f;
-    }
-    else
-    {
-        static const FVector Dirs[14] = {
-            { 1, 0, 0}, {-1, 0, 0}, { 0, 1, 0}, { 0,-1, 0}, { 0, 0, 1}, { 0, 0,-1},
-            { 1, 1, 1}, { 1, 1,-1}, { 1,-1, 1}, { 1,-1,-1},
-            {-1, 1, 1}, {-1, 1,-1}, {-1,-1, 1}, {-1,-1,-1} };
-        FCollisionQueryParams QP; QP.bTraceComplex = true;
-        if (PreviewActor)                QP.AddIgnoredActor(PreviewActor);
-        if (const APawn* Pw = GetPawn())  QP.AddIgnoredActor(Pw);
-        float Best = TNumericLimits<float>::Max();
-        for (const FVector& D : Dirs)
+        const int32 K = FMath::Clamp(FMath::CeilToInt(EffRadius / Cell), 1, 4); // ~4 → 9³=729 muestras máx
+        const float Spacing = EffRadius / (float)K;
+        const float R2 = EffRadius * EffRadius;
+        float BestD2 = TNumericLimits<float>::Max();
+        for (int32 i = -K; i <= K; ++i)
+        for (int32 j = -K; j <= K; ++j)
+        for (int32 k = -K; k <= K; ++k)
         {
-            FHitResult Hit;
-            const FVector End = StampPos + D.GetSafeNormal() * EffRadius;
-            if (GetWorld()->LineTraceSingleByChannel(Hit, StampPos, End, ECC_Visibility, QP)
-                && Hit.GetActor() == Volume && Hit.Distance < Best)
-            {
-                Best = Hit.Distance;
-                ClayPos = Hit.ImpactPoint;
-            }
+            const FVector P = StampPos + FVector(i, j, k) * Spacing;
+            const float D2 = (P - StampPos).SizeSquared();
+            if (D2 > R2 || D2 >= BestD2) continue;                 // fuera de la bola / no más cercano
+            if (Volume->SampleWorldDensity(P) >= 0.f) { BestD2 = D2; ClayPos = P; }
         }
-        if (Best < TNumericLimits<float>::Max())
-            // El preview (esfera de radio BrushRadius) toca la arcilla cuando la distancia ≤ BrushRadius.
-            Proximity = FMath::Clamp((BrushRadius - Best) / BrushRadius, 0.f, 1.f);
+        if (BestD2 < TNumericLimits<float>::Max())
+        {
+            const float Gap = FMath::Sqrt(BestD2);
+            Proximity = 1.f - FMath::Clamp(Gap / (EffRadius * 0.75f), 0.f, 1.f);
+        }
     }
 
     // Radio de la región teñida alrededor del contacto (fuera de esto los cubos quedan blancos).
