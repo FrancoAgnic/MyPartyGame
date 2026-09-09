@@ -96,20 +96,6 @@ public:
     UPROPERTY(EditAnywhere, Category="Sculpt|Boundary")
     UStaticMesh* BoundaryBoxMesh = nullptr;
 
-    // ── Niebla/grilla volumétrica de profundidad (SOLO la ve el escultor) ─────────
-    /** Material de la niebla/grilla volumétrica que LLENA el cubo de esculpido. Sutil; se ilumina/deforma
-     *  cerca del pincel. Debe tener params: Vector "CursorPos" (mundo), Scalar "CursorRadius",
-     *  Scalar "Glow". Translucent, Two-Sided (la cámara está adentro). Si es null, no se muestra. */
-    UPROPERTY(EditAnywhere, Category="Sculpt|Fog")
-    UMaterialInterface* SculptFogMaterial = nullptr;
-    /** Mesh del cubo de niebla (si null, usa el cubo básico del motor). Para que se deforme conviene uno
-     *  SUBDIVIDIDO (muchos vértices) si el material usa World Position Offset. */
-    UPROPERTY(EditAnywhere, Category="Sculpt|Fog")
-    UStaticMesh* SculptFogMesh = nullptr;
-    /** Intensidad global del efecto (0..1+). Subtle por defecto. */
-    UPROPERTY(EditAnywhere, Category="Sculpt|Fog", meta=(ClampMin="0.0"))
-    float SculptFogGlow = 1.f;
-
     /** Overlay que resalta al escultor del turno (amarillo). Se pone sobre su mesh en
      *  todos los clientes para que todos sepan quién esculpe. Asignar M_SculptorHighlight. */
     UPROPERTY(EditAnywhere, Category="Game")
@@ -474,9 +460,6 @@ private:
     UPROPERTY() class UStaticMeshComponent* HeightStick     = nullptr;
     UPROPERTY() class UStaticMeshComponent* BoundaryMesh    = nullptr;
     UPROPERTY() class UMaterialInstanceDynamic* BoundaryMID = nullptr;
-    UPROPERTY() class UStaticMeshComponent* SculptFog       = nullptr;
-    UPROPERTY() class UMaterialInstanceDynamic* SculptFogMID = nullptr;
-    void UpdateSculptFog(const FVector& StampPos); // niebla volumétrica: encaja al cubo + alimenta el cursor
 
     void RebuildPreviewMesh();
     void UpdatePreviewVisual();  // elige mesh (tool/stamp/procedural) y material
