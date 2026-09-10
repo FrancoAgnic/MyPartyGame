@@ -128,6 +128,7 @@ APTLobbyCharacter::APTLobbyCharacter()
     {
         OutCable = CreateDefaultSubobject<UCableComponent>(CableName);
         OutCable->SetupAttachment(GetMesh(), Socket); // nace en el hombro
+        OutCable->SetUsingAbsoluteScale(true); // IGNORAR la escala del hueso (si no, el ancho/largo se inflan)
         OutCable->bAttachEnd = false;          // extremo LIBRE → cuelga con física
         OutCable->NumSegments = 5;
         OutCable->SolverIterations = 4;
@@ -161,6 +162,7 @@ APTLobbyCharacter::APTLobbyCharacter()
     // Brazo hacia el preview (solo el escultor del turno; extremo pegado a la posición del sello).
     PreviewArm = CreateDefaultSubobject<UCableComponent>(TEXT("PreviewArm"));
     PreviewArm->SetupAttachment(GetMesh(), TEXT("Arm_RSocket"));
+    PreviewArm->SetUsingAbsoluteScale(true); // ignorar la escala del hueso (ancho correcto)
     PreviewArm->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     PreviewArm->bAttachEnd = true;   // extremo fijado a EndLocation (lo seteamos al preview)
     PreviewArm->NumSegments = 6;
