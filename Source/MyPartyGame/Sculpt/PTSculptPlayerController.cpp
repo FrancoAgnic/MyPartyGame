@@ -909,6 +909,8 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
                           FMath::GridSnap(StampPos.Y, Cell),
                           FMath::GridSnap(StampPos.Z, Cell));
     SculptGrid->SetWorldLocation(Snapped);
+    // La grilla NO debe rotar con el sello (el PreviewActor gira con StampRotation): rotación mundial fija.
+    SculptGrid->SetWorldRotation(FRotator::ZeroRotator);
 
     const float BrushRadius = FMath::Max(1.f, BrushWorld * 0.5f);
 
