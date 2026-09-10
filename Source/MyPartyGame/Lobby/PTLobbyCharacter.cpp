@@ -133,19 +133,11 @@ APTLobbyCharacter::APTLobbyCharacter()
         OutCable->NumSegments = 5;
         OutCable->SolverIterations = 4;
         OutCable->CastShadow = false;
-        // Colisión: el cable hace sphere-sweeps por partícula y NO ignora al dueño → choca con el cuerpo
-        // (capsule) y demás geometría, así no atraviesa. Bloquea WorldStatic/Dynamic/Pawn; ignora el resto
-        // (para no interferir con los raycasts de esculpido, que van por Visibility).
-        OutCable->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-        OutCable->SetCollisionObjectType(ECC_WorldDynamic);
-        OutCable->SetCollisionResponseToAllChannels(ECR_Ignore);
-        OutCable->SetCollisionResponseToChannel(ECC_WorldStatic,  ECR_Block);
-        OutCable->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
-        OutCable->SetCollisionResponseToChannel(ECC_Pawn,         ECR_Block);
-        OutCable->bEnableCollision  = true;
-        OutCable->CollisionFriction = 0.2f;
+        // El CABLE NO colisiona (solo cuelga con física). La colisión la lleva la MANO.
+        OutCable->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        OutCable->bEnableCollision = false;
         // La mano se reubica cada tick al último punto de la cuerda (GetCableParticleLocations). Le damos
-        // colisión (bloquea cuerpo/mundo, ignora Pawn/Visibility) para que tampoco atraviese.
+        // colisión (bloquea cuerpo/mundo, ignora Pawn/Visibility) para que no atraviese el cuerpo/cabeza.
         OutHand = CreateDefaultSubobject<UStaticMeshComponent>(HandName);
         OutHand->SetupAttachment(RootComponent);
         OutHand->SetCastShadow(false);
