@@ -262,36 +262,11 @@ public:
     const FPTBrushState& GetReplBrush() const { return ReplBrush; }
     /** [dueño] Le manda al server el estado del preview de su brocha para replicarlo a los demás. */
     UFUNCTION(Server, Unreliable) void Server_ReportBrush(const FPTBrushState& In);
-    /** [dueño] Setea su propio estado local (COND_SkipOwner no le replica el suyo) para que el brazo
-     *  hacia el preview también se dibuje en la pantalla del escultor. */
-    void SetBrushLocal(const FPTBrushState& In) { ReplBrush = In; }
 
 protected:
     UPROPERTY(Replicated) float ReplViewPitch = 0.f;
     UPROPERTY(Replicated) uint8 ReplEquippedTool = 0;
     UPROPERTY(Replicated) FPTBrushState ReplBrush;
-
-    // ── Brazos: cable con física + pelota (mano) al final. Cosméticos en todos los personajes. ──
-    UPROPERTY(EditAnywhere, Category="Arms") UMaterialInterface* ArmMaterial   = nullptr;
-    UPROPERTY(EditAnywhere, Category="Arms") UMaterialInterface* PreviewArmMaterial = nullptr; // brazo→preview
-    UPROPERTY(EditAnywhere, Category="Arms") UStaticMesh*        HandMesh      = nullptr; // esfera-mano
-    UPROPERTY(EditAnywhere, Category="Arms") float ArmWidth        = 6.f;   // grosor del cable (UU)
-    UPROPERTY(EditAnywhere, Category="Arms") float ArmLength       = 45.f;  // largo del brazo cosmético
-    UPROPERTY(EditAnywhere, Category="Arms") float ArmGravityScale = 1.f;   // cuánto cuelga
-    UPROPERTY(EditAnywhere, Category="Arms") float HandScale       = 0.3f;  // escala de la mano
-    UPROPERTY(EditAnywhere, Category="Arms") float PreviewArmWidth = 5.f;   // grosor del brazo→preview
-    // Puntos de hombro (espacio local del mesh) donde nacen los brazos. Ajustables en el BP.
-    UPROPERTY(EditAnywhere, Category="Arms") FVector ShoulderLeft  = FVector(0.f, -34.f, 55.f);
-    UPROPERTY(EditAnywhere, Category="Arms") FVector ShoulderRight = FVector(0.f,  34.f, 55.f);
-
-    UPROPERTY() class UCableComponent*      ArmCableL = nullptr;
-    UPROPERTY() class UCableComponent*      ArmCableR = nullptr;
-    UPROPERTY() class UStaticMeshComponent* HandL     = nullptr;
-    UPROPERTY() class UStaticMeshComponent* HandR     = nullptr;
-    UPROPERTY() class UCableComponent*      PreviewArm = nullptr; // del hombro al preview (solo escultor del turno)
-
-    void SetupArms();  // configura los cables/manos en BeginPlay
-    void UpdateArms();  // tick: mano al extremo del cable + brazo hacia el preview
     UFUNCTION(Server, Unreliable) void Server_ReportViewPitch(float InPitch);
     float ViewPitchSendAccum = 0.f;
 
