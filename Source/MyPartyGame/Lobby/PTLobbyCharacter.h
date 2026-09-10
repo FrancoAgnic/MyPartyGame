@@ -266,26 +266,21 @@ public:
      *  esculpido también se dibuje en la pantalla del escultor. */
     void SetBrushLocal(const FPTBrushState& In) { ReplBrush = In; }
 
-    // ── Rayo/chorro de arcilla: haz del personaje al sello (solo el escultor del turno, en todos los
-    //    clientes). Deja claro QUIÉN maneja el preview. Se tiñe con el color de arcilla actual. ──
-    // Fuente/fountain Niagara (lo autora el usuario). Si se asigna, se usa EN VEZ del cilindro. Las partículas
-    // spawnean en la posición del componente (lo ubico en el hombro/cabeza) y el sistema las dirige hacia el
-    // param de usuario "Target" (Vector = posición del sello). También expone "Color" (LinearColor). El
-    // cilindro queda de fallback si es null.
-    UPROPERTY(EditAnywhere, Category="SculptBeam") class UNiagaraSystem* SculptBeamFX = nullptr;
-    UPROPERTY(EditAnywhere, Category="SculptBeam") UStaticMesh*        SculptBeamMesh    = nullptr; // fallback: cilindro del engine
-    UPROPERTY(EditAnywhere, Category="SculptBeam") UMaterialInterface* SculptBeamMaterial = nullptr; // material emisivo (param "Color") del fallback
+    // ── Línea PUNTEADA del personaje al sello (solo la ven LOS QUE ADIVINAN, NO el escultor). Deja claro
+    //    QUIÉN maneja el preview. Los puntos avanzan del personaje al sello (animado por material). ──
+    UPROPERTY(EditAnywhere, Category="SculptBeam") UStaticMesh*        SculptBeamMesh    = nullptr; // si null: cilindro del engine
+    UPROPERTY(EditAnywhere, Category="SculptBeam") UMaterialInterface* SculptBeamMaterial = nullptr; // material punteado (params: Color, Tiling, Time)
     UPROPERTY(EditAnywhere, Category="SculptBeam") FName   BeamOriginSocket = TEXT("Bone_008"); // de dónde sale (cabeza)
     UPROPERTY(EditAnywhere, Category="SculptBeam") FVector BeamOriginOffset = FVector::ZeroVector;
-    UPROPERTY(EditAnywhere, Category="SculptBeam") float   SculptBeamWidth  = 5.f;   // grosor del haz (UU)
+    UPROPERTY(EditAnywhere, Category="SculptBeam") float   SculptBeamWidth  = 3.f;   // grosor de la línea (UU)
     UPROPERTY(EditAnywhere, Category="SculptBeam") float   SculptBeamGlow   = 2.f;   // intensidad emisiva
     UPROPERTY(EditAnywhere, Category="SculptBeam") FLinearColor SculptBeamTint = FLinearColor::White; // multiplica el color de arcilla
+    UPROPERTY(EditAnywhere, Category="SculptBeam", meta=(ClampMin="2")) float SculptBeamDashSpacing = 15.f; // UU entre puntos (para tiling parejo)
 
     UPROPERTY() class UStaticMeshComponent*      SculptBeam    = nullptr;
     UPROPERTY() class UMaterialInstanceDynamic*  SculptBeamMID = nullptr;
-    UPROPERTY() class UNiagaraComponent*         SculptBeamNiagara = nullptr;
     void SetupSculptBeam();  // BeginPlay: mesh + MID
-    void UpdateSculptBeam(); // tick: mostrar/ubicar/teñir el haz si este pawn es el escultor del turno
+    void UpdateSculptBeam(); // tick: línea punteada animada si este pawn es el escultor del turno (y NO soy yo)
 
 protected:
     UPROPERTY(Replicated) float ReplViewPitch = 0.f;

@@ -130,14 +130,6 @@ APTLobbyCharacter::APTLobbyCharacter()
     SculptBeam->SetAbsolute(true, true, true); // lo posicionamos en WORLD entre el personaje y el sello
     SculptBeam->SetVisibility(false);
     SculptBeam->SetTranslucentSortPriority(20);
-
-    // Chorro Niagara (opcional; si se asigna SculptBeamFX se usa en vez del cilindro). Empieza en el
-    // hombro/cabeza (lo ubico en WORLD cada tick); NO auto-activa (se prende solo en el turno del escultor).
-    SculptBeamNiagara = CreateDefaultSubobject<UNiagaraComponent>(TEXT("SculptBeamNiagara"));
-    SculptBeamNiagara->SetupAttachment(RootComponent);
-    SculptBeamNiagara->SetAbsolute(true, true, true);
-    SculptBeamNiagara->bAutoActivate = false;
-    SculptBeamNiagara->SetVisibility(false);
 }
 
 static const TCHAR* PTHeadSaveSlot = TEXT("PTHeadCustom");
@@ -853,30 +845,23 @@ void APTLobbyCharacter::SetupSculptBeam()
     if (BeamSM) SculptBeam->SetStaticMesh(BeamSM);
     if (SculptBeamMaterial)
         SculptBeamMID = SculptBeam->CreateDynamicMaterialInstance(0, SculptBeamMaterial);
-    if (SculptBeamNiagara && SculptBeamFX)
-        SculptBeamNiagara->SetAsset(SculptBeamFX);
 }
 
 void APTLobbyCharacter::UpdateSculptBeam()
 {
     if (!SculptBeam) return;
 
-    // Visible SOLO cuando este pawn es el escultor del turno y hay preview activo (en todos los clientes).
+    // Visible cuando este pawn es el escultor del turno y hay preview activo... PERO solo la ven LOS QUE
+    // ADIVINAN: NO se muestra en la pantalla del propio escultor (IsLocallyControlled() en ese cliente).
     bool bShow = false;
     if (const APTSculptGameState* G = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr)
     {
         const bool bMineDrawing = (G->TurnPhase == EPTTurnPhase::Drawing) &&
                                    G->CurrentSculptor && (G->CurrentSculptor->GetPawn() == this);
-        bShow = bMineDrawing && ReplBrush.bActive;
+        bShow = bMineDrawing && ReplBrush.bActive && !IsLocallyControlled();
     }
-    const bool bUseNiagara = (SculptBeamFX != nullptr && SculptBeamNiagara != nullptr);
 
-    if (!bShow)
-    {
-        SculptBeam->SetVisibility(false);
-        if (SculptBeamNiagara && SculptBeamNiagara->IsActive()) SculptBeamNiagara->Deactivate();
-        return;
-    }
+    if (!bShow) { SculptBeam->SetVisibility(false); return; }
 
     // Origen: hueso (cabeza) + offset. Destino: la posición del sello.
     FVector Start = GetMesh() ? GetMesh()->GetSocketLocation(BeamOriginSocket) : GetActorLocation();
@@ -885,36 +870,25 @@ void APTLobbyCharacter::UpdateSculptBeam()
 
     const FVector Delta = End - Start;
     const float   Len   = Delta.Size();
-    if (Len < 1.f) { SculptBeam->SetVisibility(false); if (SculptBeamNiagara && SculptBeamNiagara->IsActive()) SculptBeamNiagara->Deactivate(); return; }
+    if (Len < 1.f) { SculptBeam->SetVisibility(false); return; }
     const FVector Dir = Delta / Len;
 
-    const FLinearColor C = FLinearColor(ReplBrush.Color) * SculptBeamTint * SculptBeamGlow;
+    // Cilindro estirado (alto 100, radio 50 en Z) que cubre Start→End.
+    SculptBeam->SetVisibility(true);
+    SculptBeam->SetWorldLocation((Start + End) * 0.5f);
+    SculptBeam->SetWorldRotation(FRotationMatrix::MakeFromZ(Dir).Rotator());
+    const float XY = FMath::Max(0.5f, SculptBeamWidth) / 100.f; // diámetro = SculptBeamWidth
+    SculptBeam->SetWorldScale3D(FVector(XY, XY, Len / 100.f));
 
-    if (bUseNiagara)
+    // Material punteado ANIMADO: le paso Color, Tiling (puntos parejos según el largo) y Time (para que
+    // los puntos avancen del personaje al sello). El material hace frac(coordLargo*Tiling - Time*vel).
+    if (SculptBeamMID)
     {
-        // Fuente/fountain Niagara: el componente nace en el hombro/cabeza (ahí spawnean las partículas) y el
-        // sistema las dirige hacia "Target" (la posición del sello). Params de usuario: "Target" (Vector) y
-        // "Color" (LinearColor). Se setea también "BeamEnd" por compatibilidad.
-        SculptBeam->SetVisibility(false);
-        SculptBeamNiagara->SetWorldLocation(Start);
-        if (!SculptBeamNiagara->IsActive()) SculptBeamNiagara->Activate();
-        SculptBeamNiagara->SetVariableVec3(TEXT("Target"),  End);
-        SculptBeamNiagara->SetVariableVec3(TEXT("BeamEnd"), End); // compat con el nombre anterior
-        SculptBeamNiagara->SetVariableLinearColor(TEXT("Color"), C);
-    }
-    else
-    {
-        // Fallback: cilindro estirado (alto 100, radio 50 en Z). Escala para cubrir Start→End.
-        SculptBeam->SetVisibility(true);
-        SculptBeam->SetWorldLocation((Start + End) * 0.5f);
-        SculptBeam->SetWorldRotation(FRotationMatrix::MakeFromZ(Dir).Rotator());
-        const float XY = FMath::Max(0.5f, SculptBeamWidth) / 100.f; // diámetro = SculptBeamWidth
-        SculptBeam->SetWorldScale3D(FVector(XY, XY, Len / 100.f));
-        if (SculptBeamMID)
-        {
-            SculptBeamMID->SetVectorParameterValue(TEXT("Color"), C);
-            SculptBeamMID->SetVectorParameterValue(TEXT("EmissiveColor"), C);
-        }
+        const FLinearColor C = FLinearColor(ReplBrush.Color) * SculptBeamTint * SculptBeamGlow;
+        const float Tiling = Len / FMath::Max(2.f, SculptBeamDashSpacing);
+        SculptBeamMID->SetVectorParameterValue(TEXT("Color"), C);
+        SculptBeamMID->SetScalarParameterValue(TEXT("Tiling"), Tiling);
+        SculptBeamMID->SetScalarParameterValue(TEXT("Time"), GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f);
     }
 }
 
