@@ -268,9 +268,10 @@ public:
 
     // ── Rayo/chorro de arcilla: haz del personaje al sello (solo el escultor del turno, en todos los
     //    clientes). Deja claro QUIÉN maneja el preview. Se tiñe con el color de arcilla actual. ──
-    // Chorro Niagara (lo autora el usuario). Si se asigna, se usa EN VEZ del cilindro. El sistema debe
-    // exponer parámetros de usuario: "BeamEnd" (Vector, destino), "Color" (LinearColor). El inicio es la
-    // posición del componente (lo ubico en el hombro/cabeza). El cilindro queda de fallback si es null.
+    // Fuente/fountain Niagara (lo autora el usuario). Si se asigna, se usa EN VEZ del cilindro. Las partículas
+    // spawnean en la posición del componente (lo ubico en el hombro/cabeza) y el sistema las dirige hacia el
+    // param de usuario "Target" (Vector = posición del sello). También expone "Color" (LinearColor). El
+    // cilindro queda de fallback si es null.
     UPROPERTY(EditAnywhere, Category="SculptBeam") class UNiagaraSystem* SculptBeamFX = nullptr;
     UPROPERTY(EditAnywhere, Category="SculptBeam") UStaticMesh*        SculptBeamMesh    = nullptr; // fallback: cilindro del engine
     UPROPERTY(EditAnywhere, Category="SculptBeam") UMaterialInterface* SculptBeamMaterial = nullptr; // material emisivo (param "Color") del fallback

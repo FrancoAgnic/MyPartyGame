@@ -892,12 +892,14 @@ void APTLobbyCharacter::UpdateSculptBeam()
 
     if (bUseNiagara)
     {
-        // Chorro Niagara: el componente arranca en el hombro/cabeza; el sistema lee "BeamEnd" (destino)
-        // y "Color". El usuario expone esos params de usuario y bindea el Beam End del emitter a "BeamEnd".
+        // Fuente/fountain Niagara: el componente nace en el hombro/cabeza (ahí spawnean las partículas) y el
+        // sistema las dirige hacia "Target" (la posición del sello). Params de usuario: "Target" (Vector) y
+        // "Color" (LinearColor). Se setea también "BeamEnd" por compatibilidad.
         SculptBeam->SetVisibility(false);
         SculptBeamNiagara->SetWorldLocation(Start);
         if (!SculptBeamNiagara->IsActive()) SculptBeamNiagara->Activate();
-        SculptBeamNiagara->SetVariableVec3(TEXT("BeamEnd"), End);
+        SculptBeamNiagara->SetVariableVec3(TEXT("Target"),  End);
+        SculptBeamNiagara->SetVariableVec3(TEXT("BeamEnd"), End); // compat con el nombre anterior
         SculptBeamNiagara->SetVariableLinearColor(TEXT("Color"), C);
     }
     else
