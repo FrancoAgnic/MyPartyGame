@@ -898,11 +898,21 @@ void APTLobbyCharacter::SetupArms()
         else if (ArmMaterial)   PreviewArm->SetMaterial(0, ArmMaterial);
     }
 
-    // Manos: esfera al final de cada brazo.
-    auto CfgHand = [this](UStaticMeshComponent* H)
+    // Manos: esfera al final de cada brazo. Tamaño DETERMINISTA por radio real (UU), sin depender del
+    // tamaño nativo del mesh ni de la escala del hueso. Si no asignaste HandMesh, usa la esfera del engine.
+    UStaticMesh* HandSM = HandMesh;
+    if (!HandSM) HandSM = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+    float HandScale = 0.1f;
+    if (HandSM)
+    {
+        const FVector Ext = HandSM->GetBoundingBox().GetExtent(); // media-extensión
+        const float MaxExt = FMath::Max3(Ext.X, Ext.Y, Ext.Z);
+        if (MaxExt > 1.f) HandScale = FMath::Max(0.1f, HandRadius) / MaxExt; // radio deseado / radio nativo
+    }
+    auto CfgHand = [this, HandSM, HandScale](UStaticMeshComponent* H)
     {
         if (!H) return;
-        if (HandMesh) H->SetStaticMesh(HandMesh);
+        if (HandSM) H->SetStaticMesh(HandSM);
         H->SetWorldScale3D(FVector(HandScale));
         if (ArmMaterial) H->SetMaterial(0, ArmMaterial);
     };
@@ -918,7 +928,7 @@ void APTLobbyCharacter::UpdateArms()
         if (!C || !H) return;
         TArray<FVector> Pts;
         C->GetCableParticleLocations(Pts);
-        if (Pts.Num() > 0) H->SetWorldLocation(Pts.Last());
+        H->SetWorldLocation(Pts.Num() > 0 ? Pts.Last() : C->GetComponentLocation());
     };
     PlaceHand(ArmCableL, HandL);
     PlaceHand(ArmCableR, HandR);
