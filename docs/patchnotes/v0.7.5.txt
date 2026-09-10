@@ -1,0 +1,19 @@
+TITLE:
+Sculpturillo v0.7.5 — Official word banks & fuller translations
+
+BBCODE (paste directly into the Steam patch notes / event description box):
+--------------------------------------------------------------------------
+[h1]✨ What's New[/h1]
+[list]
+[*] 📚 Three official word banks built into the game: [b]Verbs[/b], [b]Varied[/b] and [b]Movies[/b] — 200 words each, in all 6 languages. They show at the top of the Library with their own artwork.
+[*] 🎯 Depth grid polish: the sculpting box limits are now highlighted, and the grid glows right where your brush touches the clay.
+[/list]
+
+[h1]🌍 Translations[/h1]
+[list]
+[*] 🈶 Many menus and pop-ups that stayed in one language now translate: Host/Find Game, the settings labels, the Find Session and Library tabs, and the Workshop publish screen.
+[*] 📖 The Workshop guide is now available in all 6 languages and opens in your language.
+[/list]
+
+[hr][/hr]
+[i]Thanks for playing Sculpturillo! 🎨 Tell us what you'd like to see in the next patch.[/i]
