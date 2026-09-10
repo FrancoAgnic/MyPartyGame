@@ -262,6 +262,24 @@ public:
     const FPTBrushState& GetReplBrush() const { return ReplBrush; }
     /** [dueño] Le manda al server el estado del preview de su brocha para replicarlo a los demás. */
     UFUNCTION(Server, Unreliable) void Server_ReportBrush(const FPTBrushState& In);
+    /** [dueño] Setea su propio estado local (COND_SkipOwner no le replica el suyo) para que el rayo de
+     *  esculpido también se dibuje en la pantalla del escultor. */
+    void SetBrushLocal(const FPTBrushState& In) { ReplBrush = In; }
+
+    // ── Rayo/chorro de arcilla: haz del personaje al sello (solo el escultor del turno, en todos los
+    //    clientes). Deja claro QUIÉN maneja el preview. Se tiñe con el color de arcilla actual. ──
+    UPROPERTY(EditAnywhere, Category="SculptBeam") UStaticMesh*        SculptBeamMesh    = nullptr; // si null: cilindro del engine
+    UPROPERTY(EditAnywhere, Category="SculptBeam") UMaterialInterface* SculptBeamMaterial = nullptr; // material emisivo (param "Color")
+    UPROPERTY(EditAnywhere, Category="SculptBeam") FName   BeamOriginSocket = TEXT("Bone_008"); // de dónde sale (cabeza)
+    UPROPERTY(EditAnywhere, Category="SculptBeam") FVector BeamOriginOffset = FVector::ZeroVector;
+    UPROPERTY(EditAnywhere, Category="SculptBeam") float   SculptBeamWidth  = 5.f;   // grosor del haz (UU)
+    UPROPERTY(EditAnywhere, Category="SculptBeam") float   SculptBeamGlow   = 2.f;   // intensidad emisiva
+    UPROPERTY(EditAnywhere, Category="SculptBeam") FLinearColor SculptBeamTint = FLinearColor::White; // multiplica el color de arcilla
+
+    UPROPERTY() class UStaticMeshComponent*      SculptBeam    = nullptr;
+    UPROPERTY() class UMaterialInstanceDynamic*  SculptBeamMID = nullptr;
+    void SetupSculptBeam();  // BeginPlay: mesh + MID
+    void UpdateSculptBeam(); // tick: mostrar/ubicar/teñir el haz si este pawn es el escultor del turno
 
 protected:
     UPROPERTY(Replicated) float ReplViewPitch = 0.f;

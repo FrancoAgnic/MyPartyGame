@@ -18,6 +18,9 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
 #include "Components/StaticMeshComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "../Sculpt/PTSculptGameState.h" // saber si este pawn es el escultor del turno (rayo de esculpido)
+#include "PTPlayerState.h"
 #include "Engine/DirectionalLight.h"
 #include "Components/DirectionalLightComponent.h"
 #include "StaticMeshResources.h"
@@ -117,6 +120,15 @@ APTLobbyCharacter::APTLobbyCharacter()
     FacingArrow->SetArrowColor(FLinearColor(0.3f, 0.8f, 1.f));
     FacingArrow->bIsScreenSizeScaled = false;
     FacingArrow->SetHiddenInGame(true); // visible sólo en modo G (SetFacingArrowVisible)
+
+    // ── Rayo de esculpido: un haz (cilindro estirado) del personaje al sello. Se ubica/tiñe cada tick. ──
+    SculptBeam = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("SculptBeam"));
+    SculptBeam->SetupAttachment(RootComponent);
+    SculptBeam->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    SculptBeam->SetCastShadow(false);
+    SculptBeam->SetAbsolute(true, true, true); // lo posicionamos en WORLD entre el personaje y el sello
+    SculptBeam->SetVisibility(false);
+    SculptBeam->SetTranslucentSortPriority(20);
 }
 
 static const TCHAR* PTHeadSaveSlot = TEXT("PTHeadCustom");
@@ -821,6 +833,57 @@ void APTLobbyCharacter::BeginPlay()
     Super::BeginPlay();
     TryApplyReplicatedHead();
     InitCharacterPaint(); // deja el RT enganchado desde el arranque (evita ver el material gris)
+    SetupSculptBeam();
+}
+
+void APTLobbyCharacter::SetupSculptBeam()
+{
+    if (!SculptBeam) return;
+    UStaticMesh* BeamSM = SculptBeamMesh;
+    if (!BeamSM) BeamSM = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+    if (BeamSM) SculptBeam->SetStaticMesh(BeamSM);
+    if (SculptBeamMaterial)
+        SculptBeamMID = SculptBeam->CreateDynamicMaterialInstance(0, SculptBeamMaterial);
+}
+
+void APTLobbyCharacter::UpdateSculptBeam()
+{
+    if (!SculptBeam) return;
+
+    // Visible SOLO cuando este pawn es el escultor del turno y hay preview activo (en todos los clientes).
+    bool bShow = false;
+    if (const APTSculptGameState* G = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr)
+    {
+        const bool bMineDrawing = (G->TurnPhase == EPTTurnPhase::Drawing) &&
+                                   G->CurrentSculptor && (G->CurrentSculptor->GetPawn() == this);
+        bShow = bMineDrawing && ReplBrush.bActive;
+    }
+    SculptBeam->SetVisibility(bShow);
+    if (!bShow) return;
+
+    // Origen: hueso (cabeza) + offset. Destino: la posición del sello.
+    FVector Start = GetMesh() ? GetMesh()->GetSocketLocation(BeamOriginSocket) : GetActorLocation();
+    Start += GetActorRotation().RotateVector(BeamOriginOffset);
+    const FVector End = ReplBrush.Pos;
+
+    const FVector Delta = End - Start;
+    const float   Len   = Delta.Size();
+    if (Len < 1.f) { SculptBeam->SetVisibility(false); return; }
+    const FVector Dir = Delta / Len;
+
+    // Cilindro del engine: alto 100, radio 50 (eje Z). Escala para cubrir Start→End con el grosor pedido.
+    SculptBeam->SetWorldLocation((Start + End) * 0.5f);
+    SculptBeam->SetWorldRotation(FRotationMatrix::MakeFromZ(Dir).Rotator());
+    const float XY = FMath::Max(0.5f, SculptBeamWidth) / 100.f; // diámetro = SculptBeamWidth
+    SculptBeam->SetWorldScale3D(FVector(XY, XY, Len / 100.f));
+
+    // Tinte: color de arcilla actual × glow × tint (el material debe tener un param vectorial "Color").
+    if (SculptBeamMID)
+    {
+        const FLinearColor C = FLinearColor(ReplBrush.Color) * SculptBeamTint * SculptBeamGlow;
+        SculptBeamMID->SetVectorParameterValue(TEXT("Color"), C);
+        SculptBeamMID->SetVectorParameterValue(TEXT("EmissiveColor"), C);
+    }
 }
 
 void APTLobbyCharacter::OnRep_PlayerState()
@@ -1131,6 +1194,8 @@ void APTLobbyCharacter::SetSpectateBodyHiddenLocal(bool bBodyHidden)
 void APTLobbyCharacter::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+
+    UpdateSculptBeam(); // rayo del personaje al sello (si es el escultor del turno)
 
     // Ocultar el "grito" de chat cuando venció su tiempo (su animación ya terminó/fundió).
     if (ChatShout && ChatShout->IsVisible() && GetWorld() && GetWorld()->GetTimeSeconds() >= ChatBubbleUntil)
