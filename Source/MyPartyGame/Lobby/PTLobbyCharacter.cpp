@@ -122,30 +122,45 @@ APTLobbyCharacter::APTLobbyCharacter()
     FacingArrow->SetHiddenInGame(true); // visible sólo en modo G (SetFacingArrowVisible)
 
     // ── Brazos: cable con física (cuelga desde el hombro) + esfera-mano al final ──
-    auto MakeArm = [this](const TCHAR* CableName, const TCHAR* HandName,
+    // Nacen en los sockets Arm_LSocket / Arm_RSocket del esqueleto (los hombros).
+    auto MakeArm = [this](const TCHAR* CableName, const TCHAR* HandName, const TCHAR* Socket,
                           UCableComponent*& OutCable, UStaticMeshComponent*& OutHand)
     {
         OutCable = CreateDefaultSubobject<UCableComponent>(CableName);
-        OutCable->SetupAttachment(GetMesh()); // nace en el hombro (SetRelativeLocation en BeginPlay)
-        OutCable->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        OutCable->SetupAttachment(GetMesh(), Socket); // nace en el hombro
         OutCable->bAttachEnd = false;          // extremo LIBRE → cuelga con física
         OutCable->NumSegments = 5;
         OutCable->SolverIterations = 4;
         OutCable->CastShadow = false;
-        // La mano NO se atacha al cable (el cable no expone el extremo como socket): se reubica cada tick
-        // al último punto de la cuerda con GetCableParticleLocations.
+        // Colisión: el cable hace sphere-sweeps por partícula y NO ignora al dueño → choca con el cuerpo
+        // (capsule) y demás geometría, así no atraviesa. Bloquea WorldStatic/Dynamic/Pawn; ignora el resto
+        // (para no interferir con los raycasts de esculpido, que van por Visibility).
+        OutCable->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+        OutCable->SetCollisionObjectType(ECC_WorldDynamic);
+        OutCable->SetCollisionResponseToAllChannels(ECR_Ignore);
+        OutCable->SetCollisionResponseToChannel(ECC_WorldStatic,  ECR_Block);
+        OutCable->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
+        OutCable->SetCollisionResponseToChannel(ECC_Pawn,         ECR_Block);
+        OutCable->bEnableCollision  = true;
+        OutCable->CollisionFriction = 0.2f;
+        // La mano se reubica cada tick al último punto de la cuerda (GetCableParticleLocations). Le damos
+        // colisión (bloquea cuerpo/mundo, ignora Pawn/Visibility) para que tampoco atraviese.
         OutHand = CreateDefaultSubobject<UStaticMeshComponent>(HandName);
         OutHand->SetupAttachment(RootComponent);
-        OutHand->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         OutHand->SetCastShadow(false);
         OutHand->SetAbsolute(true, true, true); // se posiciona en WORLD (no lo arrastra el root)
+        OutHand->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+        OutHand->SetCollisionObjectType(ECC_WorldDynamic);
+        OutHand->SetCollisionResponseToAllChannels(ECR_Ignore);
+        OutHand->SetCollisionResponseToChannel(ECC_WorldStatic,  ECR_Block);
+        OutHand->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
     };
-    MakeArm(TEXT("ArmCableL"), TEXT("HandL"), ArmCableL, HandL);
-    MakeArm(TEXT("ArmCableR"), TEXT("HandR"), ArmCableR, HandR);
+    MakeArm(TEXT("ArmCableL"), TEXT("HandL"), TEXT("Arm_LSocket"), ArmCableL, HandL);
+    MakeArm(TEXT("ArmCableR"), TEXT("HandR"), TEXT("Arm_RSocket"), ArmCableR, HandR);
 
     // Brazo hacia el preview (solo el escultor del turno; extremo pegado a la posición del sello).
     PreviewArm = CreateDefaultSubobject<UCableComponent>(TEXT("PreviewArm"));
-    PreviewArm->SetupAttachment(GetMesh());
+    PreviewArm->SetupAttachment(GetMesh(), TEXT("Arm_RSocket"));
     PreviewArm->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     PreviewArm->bAttachEnd = true;   // extremo fijado a EndLocation (lo seteamos al preview)
     PreviewArm->NumSegments = 6;
