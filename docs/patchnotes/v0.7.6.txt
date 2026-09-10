@@ -1,0 +1,19 @@
+TITLE:
+Sculpturillo v0.7.6 — See who's sculpting + clearer depth grid
+
+BBCODE (paste directly into the Steam patch notes / event description box):
+--------------------------------------------------------------------------
+[h1]✨ What's New[/h1]
+[list]
+[*] 🔗 A dotted line now links each player to their brush while they sculpt, so guessers can tell who is shaping the clay (the sculptor doesn't see their own line).
+[*] 🧊 The depth grid now shows through the clay: the part hidden behind the sculpture turns into dimmer dotted lines, so you always keep your spatial reference.
+[/list]
+
+[h1]🎨 Improvements[/h1]
+[list]
+[*] 🧭 The depth grid stays fixed in place — it no longer spins when you rotate the brush shape.
+[*] 🎌 Fixed the language flag being stretched in spectator POV (now shown square).
+[/list]
+
+[hr][/hr]
+[i]Thanks for playing Sculpturillo! 🎨 Tell us what you'd like to see in the next patch.[/i]
