@@ -268,8 +268,12 @@ public:
 
     // ── Rayo/chorro de arcilla: haz del personaje al sello (solo el escultor del turno, en todos los
     //    clientes). Deja claro QUIÉN maneja el preview. Se tiñe con el color de arcilla actual. ──
-    UPROPERTY(EditAnywhere, Category="SculptBeam") UStaticMesh*        SculptBeamMesh    = nullptr; // si null: cilindro del engine
-    UPROPERTY(EditAnywhere, Category="SculptBeam") UMaterialInterface* SculptBeamMaterial = nullptr; // material emisivo (param "Color")
+    // Chorro Niagara (lo autora el usuario). Si se asigna, se usa EN VEZ del cilindro. El sistema debe
+    // exponer parámetros de usuario: "BeamEnd" (Vector, destino), "Color" (LinearColor). El inicio es la
+    // posición del componente (lo ubico en el hombro/cabeza). El cilindro queda de fallback si es null.
+    UPROPERTY(EditAnywhere, Category="SculptBeam") class UNiagaraSystem* SculptBeamFX = nullptr;
+    UPROPERTY(EditAnywhere, Category="SculptBeam") UStaticMesh*        SculptBeamMesh    = nullptr; // fallback: cilindro del engine
+    UPROPERTY(EditAnywhere, Category="SculptBeam") UMaterialInterface* SculptBeamMaterial = nullptr; // material emisivo (param "Color") del fallback
     UPROPERTY(EditAnywhere, Category="SculptBeam") FName   BeamOriginSocket = TEXT("Bone_008"); // de dónde sale (cabeza)
     UPROPERTY(EditAnywhere, Category="SculptBeam") FVector BeamOriginOffset = FVector::ZeroVector;
     UPROPERTY(EditAnywhere, Category="SculptBeam") float   SculptBeamWidth  = 5.f;   // grosor del haz (UU)
@@ -278,6 +282,7 @@ public:
 
     UPROPERTY() class UStaticMeshComponent*      SculptBeam    = nullptr;
     UPROPERTY() class UMaterialInstanceDynamic*  SculptBeamMID = nullptr;
+    UPROPERTY() class UNiagaraComponent*         SculptBeamNiagara = nullptr;
     void SetupSculptBeam();  // BeginPlay: mesh + MID
     void UpdateSculptBeam(); // tick: mostrar/ubicar/teñir el haz si este pawn es el escultor del turno
 
