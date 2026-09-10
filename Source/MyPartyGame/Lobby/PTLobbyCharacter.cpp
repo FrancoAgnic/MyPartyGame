@@ -20,6 +20,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "../Sculpt/PTSculptGameState.h" // saber si este pawn es el escultor del turno (rayo de esculpido)
+#include "../Sculpt/PTSculptPlayerController.h" // POV espectado local (ocultar la linea si es el del escultor)
 #include "PTPlayerState.h"
 #include "Engine/DirectionalLight.h"
 #include "Components/DirectionalLightComponent.h"
@@ -858,7 +859,13 @@ void APTLobbyCharacter::UpdateSculptBeam()
     {
         const bool bMineDrawing = (G->TurnPhase == EPTTurnPhase::Drawing) &&
                                    G->CurrentSculptor && (G->CurrentSculptor->GetPawn() == this);
-        bShow = bMineDrawing && ReplBrush.bActive && !IsLocallyControlled();
+        // Ocultar si el POV LOCAL es este pawn (el escultor): soy yo el escultor, o soy espectador metido
+        // en SU POV. Si estoy en cámara libre o en el POV de otro, sí la veo.
+        bool bLocalViewIsSculptor = IsLocallyControlled();
+        if (!bLocalViewIsSculptor)
+            if (APTSculptPlayerController* LPC = Cast<APTSculptPlayerController>(GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr))
+                bLocalViewIsSculptor = (LPC->GetSpectatedPovPawn() == this);
+        bShow = bMineDrawing && ReplBrush.bActive && !bLocalViewIsSculptor;
     }
 
     if (!bShow) { SculptBeam->SetVisibility(false); return; }
