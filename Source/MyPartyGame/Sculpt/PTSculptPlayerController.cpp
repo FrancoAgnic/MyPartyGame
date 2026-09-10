@@ -603,11 +603,11 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
 
     if (!Volume) return;
 
-    // Solo el escultor del turno ve los previews de las herramientas. Para el resto —o con el
-    // menú de pausa abierto— ocultar el actor de preview y no calcular/aplicar nada de la brocha.
+    // Solo el escultor del turno maneja el preview con SU cursor. Para el resto —o con el menú de pausa—
+    // no se calcula la brocha local; pero SÍ se muestra el preview REPLICADO del escultor (para que el
+    // espectador y los demás clientes vean dónde va a esculpir).
     if (!CanLocalPlayerSculpt() || bMenuOpen)
     {
-        if (PreviewActor) PreviewActor->SetActorHiddenInGame(true);
         bStrokeActive = false;
         bClearHeld    = false; // no dejar el "borrar todo" cargándose fuera de tu turno
         ClearHoldTime = 0.f;
@@ -615,9 +615,14 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         // Se terminó tu turno con el modo eje activo → apagarlo (y destruir su plano con colisión,
         // para no dejarlo frenándote cuando ya no esculpís).
         if (bAxisLock && !CanLocalPlayerSculpt()) SetAxisMode(false, bAxisHorizontal);
+        // Menú local abierto → ocultar todo. Si no, mostrar el preview replicado del escultor del turno.
+        if (bMenuOpen) { if (PreviewActor) PreviewActor->SetActorHiddenInGame(true); }
+        else           UpdateRemotePreview();
         return;
     }
     if (PreviewActor) PreviewActor->SetActorHiddenInGame(false);
+    // Venías de mostrar el preview remoto (otro turno) → forzar rebuild para TU forma/selección.
+    if (bRemotePreviewShown) { bPreviewDirty = true; bRemotePreviewShown = false; bRCacheValid = false; }
 
     // Borrar TODO: mantener BACKSPACE 3s (con cuenta regresiva en pantalla para que se entienda
     // que hay que sostenerlo y para poder arrepentirse soltando).
@@ -758,84 +763,28 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
 
     // (El límite/boundary de la zona de esculpido ahora lo maneja UpdateSculptGrid con el mismo material.)
 
-    // Preview de superficie (Paint por shape + color; Smooth su propio mesh):
-    // alineado a la normal, escalado con la brocha.
-    if (PaintRing)
-    {
-        UStaticMesh* RingMesh = nullptr;
-        bool  bTint     = false;
-        bool  bEyeScale = false; // los ojos escalan por su propio radio/base
-        if (bEyesTool)
-        {
-            // Preview del ojo apoyado sobre la malla (igual que en modo G): mesh del ojo o esfera.
-            RingMesh = (Volume && Volume->EyeMesh) ? Volume->EyeMesh : PaintMeshSphere;
-            bEyeScale = true;
-        }
-        else if (EditMode == EPTEditMode::Paint)
-        {
-            switch (StampShape)
-            {
-            case EPTStampShape::Sphere:   RingMesh = PaintMeshSphere;   break;
-            case EPTStampShape::Cube:     RingMesh = PaintMeshCube;     break;
-            case EPTStampShape::Cylinder: RingMesh = PaintMeshCylinder; break;
-            case EPTStampShape::TriPrism: RingMesh = PaintMeshCone;     break;
-            }
-            bTint = true;
-        }
-        else if (EditMode == EPTEditMode::Smooth)
-        {
-            RingMesh = SmoothRingMesh;
-        }
+    // Preview de superficie (Paint por shape + color; Smooth su propio mesh): alineado a la normal.
+    UpdateSurfacePreview(StampPos, Normal);
 
-        // El preview se ve SIEMPRE (aunque estés fuera del lienzo): que no se pueda construir ahí
-        // lo avisa el ícono de "prohibido" del centro de la pantalla, no la desaparición del preview.
-        const bool bShow = (RingMesh != nullptr);
-        PaintRing->SetVisibility(bShow);
-        if (bShow)
+    // Replicar el estado del preview al server (throttle ~20Hz) → los demás/espectador ven tu brocha.
+    BrushSendAccum += DeltaTime;
+    if (BrushSendAccum >= 0.05f)
+    {
+        BrushSendAccum = 0.f;
+        if (APTLobbyCharacter* MyPawn = Cast<APTLobbyCharacter>(GetPawn()))
         {
-            // Rearmar si cambió el mesh O si cambió el estado de tinte (Paint ↔ Ojos/Smooth).
-            if (CachedRingMesh != RingMesh || CachedRingTint != bTint)
-            {
-                PaintRing->SetStaticMesh(RingMesh);
-                PaintRingMID = nullptr;
-                if (bTint)
-                {
-                    // Paint: MID para teñir con el color del picker. Usar un material TINTABLE conocido
-                    // (PreviewMatPaint, o el del Add como fallback) en vez del material propio del mesh
-                    // del anillo, que puede no tener el parámetro "Color" (se veía blanco/emisivo).
-                    UMaterialInterface* RingMat = PreviewMatPaint ? PreviewMatPaint
-                                                : (PreviewMatAdd ? PreviewMatAdd : PaintRing->GetMaterial(0));
-                    if (RingMat)
-                    {
-                        PaintRingMID = PaintRing->CreateDynamicMaterialInstance(0, RingMat);
-                        // Apagar el glow por-tiempo de la arcilla (el preview no tiene ese dato) para que
-                        // no se vea emisivo.
-                        if (PaintRingMID) PaintRingMID->SetScalarParameterValue(TEXT("GlowEnable"), 0.f);
-                    }
-                }
-                else
-                {
-                    // Ojos/Smooth: sacar cualquier override (el MID tintado de Paint) para que el
-                    // mesh use SU material original → el ojo siempre se ve igual, sin color.
-                    PaintRing->SetMaterial(0, nullptr);
-                }
-                CachedRingMesh = RingMesh;
-                CachedRingTint = bTint;
-            }
-            PaintRing->SetWorldLocation(StampPos);
-            PaintRing->SetWorldRotation(FRotationMatrix::MakeFromZ(Normal).Rotator());
-            float Scale;
-            if (bEyeScale)
-            {
-                const float EyeBase = (Volume && Volume->EyeBaseSize > 1.f) ? Volume->EyeBaseSize : 50.f;
-                Scale = (StampSize * 0.5f) / EyeBase; // mismo radio con que se coloca el ojo
-            }
-            else
-            {
-                Scale = StampSize / FMath::Max(PreviewMeshBaseSize, 1.f);
-            }
-            PaintRing->SetWorldScale3D(FVector(Scale));
-            if (bTint && PaintRingMID) PaintRingMID->SetVectorParameterValue(TEXT("Color"), CurrentPaintColor);
+            FPTBrushState B;
+            B.Pos     = StampPos;
+            B.Normal  = Normal;
+            B.Rot     = StampRotation;
+            B.Scale   = StampScale;
+            B.Color   = CurrentPaintColor.ToFColor(/*bSRGB=*/true);
+            B.Size    = StampSize;
+            B.Shape   = (uint8)StampShape;
+            B.Mode    = (uint8)EditMode;
+            B.bEyes   = bEyesTool;
+            B.bActive = true;
+            MyPawn->Server_ReportBrush(B);
         }
     }
 
@@ -1373,6 +1322,156 @@ void APTSculptPlayerController::UpdatePreviewBrightness(float Dt)
 }
 
 // Elige el mesh de preview: override por tool > override por stamp > procedural.
+void APTSculptPlayerController::UpdateSurfacePreview(const FVector& Pos, const FVector& Normal)
+{
+    if (!PaintRing) return;
+
+    UStaticMesh* RingMesh = nullptr;
+    bool  bTint     = false;
+    bool  bEyeScale = false; // los ojos escalan por su propio radio/base
+    if (bEyesTool)
+    {
+        // Preview del ojo apoyado sobre la malla (igual que en modo G): mesh del ojo o esfera.
+        RingMesh = (Volume && Volume->EyeMesh) ? Volume->EyeMesh : PaintMeshSphere;
+        bEyeScale = true;
+    }
+    else if (EditMode == EPTEditMode::Paint)
+    {
+        switch (StampShape)
+        {
+        case EPTStampShape::Sphere:   RingMesh = PaintMeshSphere;   break;
+        case EPTStampShape::Cube:     RingMesh = PaintMeshCube;     break;
+        case EPTStampShape::Cylinder: RingMesh = PaintMeshCylinder; break;
+        case EPTStampShape::TriPrism: RingMesh = PaintMeshCone;     break;
+        }
+        bTint = true;
+    }
+    else if (EditMode == EPTEditMode::Smooth)
+    {
+        RingMesh = SmoothRingMesh;
+    }
+
+    // El preview se ve SIEMPRE (aunque estés fuera del lienzo): que no se pueda construir ahí
+    // lo avisa el ícono de "prohibido" del centro de la pantalla, no la desaparición del preview.
+    const bool bShow = (RingMesh != nullptr);
+    PaintRing->SetVisibility(bShow);
+    if (bShow)
+    {
+        // Rearmar si cambió el mesh O si cambió el estado de tinte (Paint ↔ Ojos/Smooth).
+        if (CachedRingMesh != RingMesh || CachedRingTint != bTint)
+        {
+            PaintRing->SetStaticMesh(RingMesh);
+            PaintRingMID = nullptr;
+            if (bTint)
+            {
+                // Paint: MID para teñir con el color del picker. Usar un material TINTABLE conocido
+                // (PreviewMatPaint, o el del Add como fallback) en vez del material propio del mesh
+                // del anillo, que puede no tener el parámetro "Color" (se veía blanco/emisivo).
+                UMaterialInterface* RingMat = PreviewMatPaint ? PreviewMatPaint
+                                            : (PreviewMatAdd ? PreviewMatAdd : PaintRing->GetMaterial(0));
+                if (RingMat)
+                {
+                    PaintRingMID = PaintRing->CreateDynamicMaterialInstance(0, RingMat);
+                    // Apagar el glow por-tiempo de la arcilla (el preview no tiene ese dato) para que
+                    // no se vea emisivo.
+                    if (PaintRingMID) PaintRingMID->SetScalarParameterValue(TEXT("GlowEnable"), 0.f);
+                }
+            }
+            else
+            {
+                // Ojos/Smooth: sacar cualquier override (el MID tintado de Paint) para que el
+                // mesh use SU material original → el ojo siempre se ve igual, sin color.
+                PaintRing->SetMaterial(0, nullptr);
+            }
+            CachedRingMesh = RingMesh;
+            CachedRingTint = bTint;
+        }
+        PaintRing->SetWorldLocation(Pos);
+        PaintRing->SetWorldRotation(FRotationMatrix::MakeFromZ(Normal).Rotator());
+        float Scale;
+        if (bEyeScale)
+        {
+            const float EyeBase = (Volume && Volume->EyeBaseSize > 1.f) ? Volume->EyeBaseSize : 50.f;
+            Scale = (StampSize * 0.5f) / EyeBase; // mismo radio con que se coloca el ojo
+        }
+        else
+        {
+            Scale = StampSize / FMath::Max(PreviewMeshBaseSize, 1.f);
+        }
+        PaintRing->SetWorldScale3D(FVector(Scale));
+        if (bTint && PaintRingMID) PaintRingMID->SetVectorParameterValue(TEXT("Color"), CurrentPaintColor);
+    }
+}
+
+void APTSculptPlayerController::UpdateRemotePreview()
+{
+    if (!PreviewActor) return;
+
+    // Solo durante el turno de DIBUJO y para el escultor actual (que no sea uno mismo).
+    APTSculptGameState* G = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr;
+    APTPlayerState* SculptorPS = G ? G->CurrentSculptor : nullptr;
+    APTLobbyCharacter* SculptorPawn = SculptorPS ? Cast<APTLobbyCharacter>(SculptorPS->GetPawn()) : nullptr;
+    const bool bDrawing = G && G->TurnPhase == EPTTurnPhase::Drawing;
+    if (!bDrawing || !SculptorPawn || SculptorPawn == GetPawn())
+    {
+        PreviewActor->SetActorHiddenInGame(true);
+        bRemotePreviewShown = false;
+        return;
+    }
+
+    const FPTBrushState& B = SculptorPawn->GetReplBrush();
+    if (!B.bActive)
+    {
+        PreviewActor->SetActorHiddenInGame(true);
+        bRemotePreviewShown = false;
+        return;
+    }
+
+    // Guardar la selección LOCAL (por si es tu turno más tarde) y alimentar los Stamp* con lo replicado
+    // → así se reutiliza TODO el armado del preview sin duplicar.
+    const EPTEditMode   sMode  = EditMode;      const bool          sEyes  = bEyesTool;
+    const EPTStampShape sShape = StampShape;    const float         sSize  = StampSize;
+    const FVector       sScale = StampScale;    const FLinearColor  sColor = CurrentPaintColor;
+    const FRotator      sRot   = StampRotation;
+
+    EditMode          = (EPTEditMode)B.Mode;
+    bEyesTool         = B.bEyes;
+    StampShape        = (EPTStampShape)B.Shape;
+    StampSize         = B.Size;
+    StampScale        = B.Scale;
+    CurrentPaintColor = FLinearColor(B.Color);
+    StampRotation     = B.Rot;
+
+    PreviewActor->SetActorHiddenInGame(false);
+
+    // Reconstruir el mesh 3D (Add/Erase) si cambió algo respecto del último frame remoto.
+    if (!bRCacheValid || RCacheShape != StampShape || RCacheMode != EditMode || RCacheSize != StampSize
+        || RCacheScale != StampScale || RCacheEyes != bEyesTool || !RCacheColor.Equals(CurrentPaintColor))
+    {
+        UpdatePreviewVisual();
+        RCacheShape = StampShape; RCacheMode = EditMode; RCacheSize = StampSize;
+        RCacheScale = StampScale; RCacheEyes = bEyesTool; RCacheColor = CurrentPaintColor;
+        bRCacheValid = true;
+    }
+    PreviewActor->SetActorLocation(B.Pos);
+    PreviewActor->SetActorRotation(StampRotation);
+
+    // Preview de superficie (Paint/Ojos/Smooth) con la posición/normal replicadas.
+    UpdateSurfacePreview(B.Pos, B.Normal);
+
+    // Ocultar los ayudantes de profundidad (son personales del escultor; no aplican al que mira).
+    if (SculptGrid)   SculptGrid->SetVisibility(false);
+    if (BoundaryMesh) BoundaryMesh->SetVisibility(false);
+    if (HeightStick)  HeightStick->SetVisibility(false);
+    if (ShadowDecal)  ShadowDecal->SetVisibility(false);
+    if (AxisGizmo)    AxisGizmo->SetVisibility(false);
+
+    // Restaurar la selección local (el preview ya quedó armado con los valores remotos).
+    EditMode = sMode; bEyesTool = sEyes; StampShape = sShape; StampSize = sSize;
+    StampScale = sScale; CurrentPaintColor = sColor; StampRotation = sRot;
+    bRemotePreviewShown = true;
+}
+
 void APTSculptPlayerController::UpdatePreviewVisual()
 {
     if (!PreviewMesh) return;

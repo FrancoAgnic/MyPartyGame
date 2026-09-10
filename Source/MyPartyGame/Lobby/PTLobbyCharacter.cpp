@@ -1085,6 +1085,7 @@ void APTLobbyCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     // la herramienta equipada (para mostrar el hotbar del jugador que esculpe).
     DOREPLIFETIME_CONDITION(APTLobbyCharacter, ReplViewPitch,    COND_SkipOwner);
     DOREPLIFETIME_CONDITION(APTLobbyCharacter, ReplEquippedTool, COND_SkipOwner);
+    DOREPLIFETIME_CONDITION(APTLobbyCharacter, ReplBrush,        COND_SkipOwner);
 }
 
 void APTLobbyCharacter::Server_ReportViewPitch_Implementation(float InPitch)
@@ -1095,6 +1096,11 @@ void APTLobbyCharacter::Server_ReportViewPitch_Implementation(float InPitch)
 void APTLobbyCharacter::Server_ReportEquippedTool_Implementation(uint8 Tool)
 {
     ReplEquippedTool = Tool; // el server lo replica a los espectadores
+}
+
+void APTLobbyCharacter::Server_ReportBrush_Implementation(const FPTBrushState& In)
+{
+    ReplBrush = In; // el server lo replica a los demás clientes (COND_SkipOwner)
 }
 
 FVector APTLobbyCharacter::GetSpectateCamLocation() const

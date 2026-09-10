@@ -18,6 +18,26 @@ class UCameraComponent;
 class UInputAction;
 class UWidgetComponent;
 class UAnimMontage;
+
+// Estado del PREVIEW de la brocha del escultor, replicado para que el espectador y los demás clientes
+// vean la forma/posición del sello donde el escultor va a esculpir. Shape/Mode van como uint8 (los enums
+// viven en el módulo de esculpido; acá no hace falta incluirlos).
+USTRUCT()
+struct FPTBrushState
+{
+    GENERATED_BODY()
+
+    UPROPERTY() FVector  Pos    = FVector::ZeroVector;  // posición del sello (mundo)
+    UPROPERTY() FVector  Normal = FVector::UpVector;    // normal de superficie (para Paint/Ojos/Smooth)
+    UPROPERTY() FRotator Rot    = FRotator::ZeroRotator;// rotación del sello
+    UPROPERTY() FVector  Scale  = FVector::OneVector;   // escala no uniforme del sello
+    UPROPERTY() FColor   Color  = FColor::White;        // color (para Paint)
+    UPROPERTY() float    Size   = 100.f;                // tamaño de brocha
+    UPROPERTY() uint8    Shape  = 0;                    // EPTStampShape (uint8)
+    UPROPERTY() uint8    Mode   = 0;                    // EPTEditMode (uint8)
+    UPROPERTY() bool     bEyes  = false;                // herramienta de ojos activa
+    UPROPERTY() bool     bActive = false;               // hay preview visible ahora
+};
 class UNiagaraSystem;
 class UProceduralMeshComponent;
 class UTextureRenderTarget2D;
@@ -238,9 +258,15 @@ public:
     /** [dueño] Le dice al server su herramienta actual (para replicarla a los espectadores). */
     UFUNCTION(Server, Reliable) void Server_ReportEquippedTool(uint8 Tool);
 
+    /** Estado del preview de la brocha (replicado a NO-dueños): forma/posición/modo/color del sello. */
+    const FPTBrushState& GetReplBrush() const { return ReplBrush; }
+    /** [dueño] Le manda al server el estado del preview de su brocha para replicarlo a los demás. */
+    UFUNCTION(Server, Unreliable) void Server_ReportBrush(const FPTBrushState& In);
+
 protected:
     UPROPERTY(Replicated) float ReplViewPitch = 0.f;
     UPROPERTY(Replicated) uint8 ReplEquippedTool = 0;
+    UPROPERTY(Replicated) FPTBrushState ReplBrush;
     UFUNCTION(Server, Unreliable) void Server_ReportViewPitch(float InPitch);
     float ViewPitchSendAccum = 0.f;
 

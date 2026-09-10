@@ -509,6 +509,21 @@ private:
     void RebuildPreviewMesh();
     void UpdatePreviewVisual();  // elige mesh (tool/stamp/procedural) y material
     void ApplyPreviewMaterial(); // aplica el material según EditMode
+    // Preview de superficie (Paint/Ojos/Smooth): posiciona el anillo/mesh sobre la superficie. Lo usan
+    // tanto el escultor local (con su cursor) como el preview REMOTO (con el estado replicado).
+    void UpdateSurfacePreview(const FVector& Pos, const FVector& Normal);
+    // Muestra en los NO-escultores (incluye espectador) el preview replicado del escultor del turno.
+    void UpdateRemotePreview();
+    // Estado del preview remoto (para saber cuándo reconstruir y para restaurar la selección local).
+    bool bRemotePreviewShown = false;
+    bool bRCacheValid = false;
+    EPTStampShape RCacheShape = EPTStampShape::Sphere;
+    EPTEditMode   RCacheMode  = EPTEditMode::Add;
+    float         RCacheSize  = 0.f;
+    FVector       RCacheScale = FVector::OneVector;
+    FLinearColor  RCacheColor = FLinearColor::White;
+    bool          RCacheEyes  = false;
+    float         BrushSendAccum = 0.f; // throttle del envío del estado de brocha al server
     // Overlay X-ray (M_PreviewXray, el contorno al solaparse con la arcilla): se apaga mientras se
     // agrega arcilla (Add + click apretado) y se repone al soltar. Guardado en bXrayOverlayOn para no
     // re-setear el overlay cada frame.
