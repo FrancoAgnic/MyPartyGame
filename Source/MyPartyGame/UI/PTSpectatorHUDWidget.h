@@ -21,7 +21,7 @@ public:
     void SetFlag(UTexture2D* Flag);
 
     /** Tamaño de la bandera en px (ancho x alto). */
-    UPROPERTY(EditAnywhere, Category="Spectator") FVector2D FlagSize = FVector2D(160.f, 107.f);
+    UPROPERTY(EditAnywhere, Category="Spectator") FVector2D FlagSize = FVector2D(150.f, 150.f); // cuadrado (la textura es 512x512)
     /** Separación desde el borde derecho, en px. */
     UPROPERTY(EditAnywhere, Category="Spectator") float RightMargin = 48.f;
 

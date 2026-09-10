@@ -103,6 +103,10 @@ public:
      *  esfera (usa la geometría de la esfera) y desvanecer en el borde. Translucent, Two-Sided. */
     UPROPERTY(EditAnywhere, Category="Sculpt|Grid")
     UMaterialInterface* SculptGridMaterial = nullptr;
+    /** Overlay tipo X-ray para la grilla (se oscurece detrás de la arcilla / outline al overlapear). Si es
+     *  null usa el mismo del preview (PreviewOverlayMaterial). Podés duplicar M_PreviewXray y tunearlo. */
+    UPROPERTY(EditAnywhere, Category="Sculpt|Grid")
+    UMaterialInterface* SculptGridOverlayMaterial = nullptr;
     /** Radio de la bola visible al TAMAÑO de brocha de referencia. El radio real escala con la brocha. */
     UPROPERTY(EditAnywhere, Category="Sculpt|Grid", meta=(ClampMin="10"))
     float SculptGridRadius = 300.f;
