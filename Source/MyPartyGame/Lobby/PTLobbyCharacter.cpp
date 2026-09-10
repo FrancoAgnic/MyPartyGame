@@ -880,14 +880,15 @@ void APTLobbyCharacter::UpdateSculptBeam()
     const float XY = FMath::Max(0.5f, SculptBeamWidth) / 100.f; // diámetro = SculptBeamWidth
     SculptBeam->SetWorldScale3D(FVector(XY, XY, Len / 100.f));
 
-    // Material punteado ANIMADO: le paso Color, Tiling (puntos parejos según el largo) y Time (para que
-    // los puntos avancen del personaje al sello). El material hace frac(coordLargo*Tiling - Time*vel).
+    // Material punteado ANIMADO anclado al MUNDO: los puntos se calculan por la distancia desde el SELLO
+    // (punto fijo) usando la posición mundial del fragmento → el patrón NO se mueve aunque el personaje se
+    // desplace; solo lo anima Time. Le paso SculptPos (sello), DashSpacing (UU entre puntos), Time y Color.
     if (SculptBeamMID)
     {
         const FLinearColor C = FLinearColor(ReplBrush.Color) * SculptBeamTint * SculptBeamGlow;
-        const float Tiling = Len / FMath::Max(2.f, SculptBeamDashSpacing);
         SculptBeamMID->SetVectorParameterValue(TEXT("Color"), C);
-        SculptBeamMID->SetScalarParameterValue(TEXT("Tiling"), Tiling);
+        SculptBeamMID->SetVectorParameterValue(TEXT("SculptPos"), FLinearColor(End.X, End.Y, End.Z, 0.f));
+        SculptBeamMID->SetScalarParameterValue(TEXT("DashSpacing"), FMath::Max(2.f, SculptBeamDashSpacing));
         SculptBeamMID->SetScalarParameterValue(TEXT("Time"), GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f);
     }
 }
