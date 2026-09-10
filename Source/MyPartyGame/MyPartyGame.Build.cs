@@ -15,6 +15,7 @@ public class MyPartyGame : ModuleRules
 			"InputCore",
 			"EnhancedInput",
 			"ProceduralMeshComponent",
+			"CableComponent", // brazos de cable con física + brazo hacia el preview
 			"RHI",
 			"RenderCore",
 			"ImageWrapper", // PNG encode/decode de las texturas de pintura (cabeza + cuerpo)
