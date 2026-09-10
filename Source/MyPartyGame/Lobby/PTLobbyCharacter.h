@@ -280,9 +280,9 @@ protected:
     UPROPERTY(EditAnywhere, Category="Arms") float ArmGravityScale = 1.f;   // cuánto cuelga
     UPROPERTY(EditAnywhere, Category="Arms") float HandScale       = 0.3f;  // escala de la mano
     UPROPERTY(EditAnywhere, Category="Arms") float PreviewArmWidth = 5.f;   // grosor del brazo→preview
-    // Puntos de hombro (espacio local del mesh) donde nacen los brazos. Ajustables en el BP.
-    UPROPERTY(EditAnywhere, Category="Arms") FVector ShoulderLeft  = FVector(0.f, -34.f, 55.f);
-    UPROPERTY(EditAnywhere, Category="Arms") FVector ShoulderRight = FVector(0.f,  34.f, 55.f);
+    // Offset FINO desde el socket del hombro (Arm_LSocket/Arm_RSocket) donde nacen los brazos. 0 = en el socket.
+    UPROPERTY(EditAnywhere, Category="Arms") FVector ShoulderLeft  = FVector::ZeroVector;
+    UPROPERTY(EditAnywhere, Category="Arms") FVector ShoulderRight = FVector::ZeroVector;
 
     UPROPERTY() class UCableComponent*      ArmCableL = nullptr;
     UPROPERTY() class UCableComponent*      ArmCableR = nullptr;
