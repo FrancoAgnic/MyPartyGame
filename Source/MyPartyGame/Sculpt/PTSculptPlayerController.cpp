@@ -255,6 +255,9 @@ void APTSculptPlayerController::BeginPlay()
             SculptGridMID->SetScalarParameterValue(TEXT("IsBoundary"), 0.f); // este es la grilla, no el límite
             SculptGrid->SetMaterial(0, SculptGridMID);
         }
+        // Overlay X-ray (el MISMO del preview): se oscurece detrás de la arcilla y hace el outline/depth-fade
+        // al overlapearla. Sigue el mismo on/off que el preview (bXrayOverlayOn).
+        if (PreviewOverlayMaterial) SculptGrid->SetOverlayMaterial(PreviewOverlayMaterial);
         SculptGrid->SetVisibility(false);
     }
 
@@ -852,6 +855,7 @@ void APTSculptPlayerController::SetPreviewXrayEnabled(bool bOn)
     if (PreviewMesh)       PreviewMesh->SetOverlayMaterial(Ov);
     if (PreviewStaticMesh) PreviewStaticMesh->SetOverlayMaterial(Ov);
     if (PaintRing)         PaintRing->SetOverlayMaterial(Ov);
+    if (SculptGrid)        SculptGrid->SetOverlayMaterial(Ov);
 }
 
 // ── Lógica de cursor ─────────────────────────────────────────────────────────
