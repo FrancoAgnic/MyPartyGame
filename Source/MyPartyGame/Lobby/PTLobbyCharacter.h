@@ -278,7 +278,7 @@ protected:
     UPROPERTY(EditAnywhere, Category="Arms") float ArmWidth        = 6.f;   // grosor del cable (UU)
     UPROPERTY(EditAnywhere, Category="Arms") float ArmLength       = 45.f;  // largo del brazo cosmético
     UPROPERTY(EditAnywhere, Category="Arms") float ArmGravityScale = 1.f;   // cuánto cuelga
-    UPROPERTY(EditAnywhere, Category="Arms") float HandScale       = 0.3f;  // escala de la mano
+    UPROPERTY(EditAnywhere, Category="Arms") float HandRadius      = 8.f;   // radio de la mano en UU (tamaño real)
     UPROPERTY(EditAnywhere, Category="Arms") float PreviewArmWidth = 5.f;   // grosor del brazo→preview
     // Offset FINO desde el socket del hombro (Arm_LSocket/Arm_RSocket) donde nacen los brazos. 0 = en el socket.
     UPROPERTY(EditAnywhere, Category="Arms") FVector ShoulderLeft  = FVector::ZeroVector;
