@@ -18,6 +18,9 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
 #include "Components/StaticMeshComponent.h"
+#include "CableComponent.h"                 // brazos de cable con física + brazo hacia el preview
+#include "../Sculpt/PTSculptGameState.h"    // saber si este pawn es el escultor del turno (brazo→preview)
+#include "PTPlayerState.h"
 #include "Engine/DirectionalLight.h"
 #include "Components/DirectionalLightComponent.h"
 #include "StaticMeshResources.h"
@@ -117,6 +120,38 @@ APTLobbyCharacter::APTLobbyCharacter()
     FacingArrow->SetArrowColor(FLinearColor(0.3f, 0.8f, 1.f));
     FacingArrow->bIsScreenSizeScaled = false;
     FacingArrow->SetHiddenInGame(true); // visible sólo en modo G (SetFacingArrowVisible)
+
+    // ── Brazos: cable con física (cuelga desde el hombro) + esfera-mano al final ──
+    auto MakeArm = [this](const TCHAR* CableName, const TCHAR* HandName,
+                          UCableComponent*& OutCable, UStaticMeshComponent*& OutHand)
+    {
+        OutCable = CreateDefaultSubobject<UCableComponent>(CableName);
+        OutCable->SetupAttachment(GetMesh()); // nace en el hombro (SetRelativeLocation en BeginPlay)
+        OutCable->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        OutCable->bAttachEnd = false;          // extremo LIBRE → cuelga con física
+        OutCable->NumSegments = 5;
+        OutCable->SolverIterations = 4;
+        OutCable->CastShadow = false;
+        // La mano NO se atacha al cable (el cable no expone el extremo como socket): se reubica cada tick
+        // al último punto de la cuerda con GetCableParticleLocations.
+        OutHand = CreateDefaultSubobject<UStaticMeshComponent>(HandName);
+        OutHand->SetupAttachment(RootComponent);
+        OutHand->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        OutHand->SetCastShadow(false);
+        OutHand->SetAbsolute(true, true, true); // se posiciona en WORLD (no lo arrastra el root)
+    };
+    MakeArm(TEXT("ArmCableL"), TEXT("HandL"), ArmCableL, HandL);
+    MakeArm(TEXT("ArmCableR"), TEXT("HandR"), ArmCableR, HandR);
+
+    // Brazo hacia el preview (solo el escultor del turno; extremo pegado a la posición del sello).
+    PreviewArm = CreateDefaultSubobject<UCableComponent>(TEXT("PreviewArm"));
+    PreviewArm->SetupAttachment(GetMesh());
+    PreviewArm->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    PreviewArm->bAttachEnd = true;   // extremo fijado a EndLocation (lo seteamos al preview)
+    PreviewArm->NumSegments = 6;
+    PreviewArm->CableGravityScale = 0.15f; // apenas colgado (es un brazo estirado hacia el sello)
+    PreviewArm->CastShadow = false;
+    PreviewArm->SetVisibility(false);
 }
 
 static const TCHAR* PTHeadSaveSlot = TEXT("PTHeadCustom");
@@ -821,6 +856,75 @@ void APTLobbyCharacter::BeginPlay()
     Super::BeginPlay();
     TryApplyReplicatedHead();
     InitCharacterPaint(); // deja el RT enganchado desde el arranque (evita ver el material gris)
+    SetupArms();
+}
+
+void APTLobbyCharacter::SetupArms()
+{
+    auto Cfg = [this](UCableComponent* C, const FVector& Shoulder, float Grav, float Width, float Len, UMaterialInterface* Mat)
+    {
+        if (!C) return;
+        C->SetRelativeLocation(Shoulder);
+        C->CableWidth = Width;
+        C->CableLength = Len;
+        C->CableGravityScale = Grav;
+        if (Mat) C->SetMaterial(0, Mat);
+    };
+    Cfg(ArmCableL, ShoulderLeft,  ArmGravityScale, ArmWidth, ArmLength, ArmMaterial);
+    Cfg(ArmCableR, ShoulderRight, ArmGravityScale, ArmWidth, ArmLength, ArmMaterial);
+    // El brazo→preview nace en el hombro derecho (la "mano que modela").
+    if (PreviewArm)
+    {
+        PreviewArm->SetRelativeLocation(ShoulderRight);
+        PreviewArm->CableWidth = PreviewArmWidth;
+        if (PreviewArmMaterial) PreviewArm->SetMaterial(0, PreviewArmMaterial);
+        else if (ArmMaterial)   PreviewArm->SetMaterial(0, ArmMaterial);
+    }
+
+    // Manos: esfera al final de cada brazo.
+    auto CfgHand = [this](UStaticMeshComponent* H)
+    {
+        if (!H) return;
+        if (HandMesh) H->SetStaticMesh(HandMesh);
+        H->SetWorldScale3D(FVector(HandScale));
+        if (ArmMaterial) H->SetMaterial(0, ArmMaterial);
+    };
+    CfgHand(HandL);
+    CfgHand(HandR);
+}
+
+void APTLobbyCharacter::UpdateArms()
+{
+    // Mano al último punto de cada cuerda (el extremo libre que cuelga con física).
+    auto PlaceHand = [](UCableComponent* C, UStaticMeshComponent* H)
+    {
+        if (!C || !H) return;
+        TArray<FVector> Pts;
+        C->GetCableParticleLocations(Pts);
+        if (Pts.Num() > 0) H->SetWorldLocation(Pts.Last());
+    };
+    PlaceHand(ArmCableL, HandL);
+    PlaceHand(ArmCableR, HandR);
+
+    // Brazo hacia el preview: visible SOLO cuando este pawn es el escultor del turno y hay preview activo.
+    bool bShow = false;
+    FVector Target = FVector::ZeroVector;
+    if (const APTSculptGameState* G = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr)
+    {
+        const bool bMineDrawing = (G->TurnPhase == EPTTurnPhase::Drawing) &&
+                                   G->CurrentSculptor && (G->CurrentSculptor->GetPawn() == this);
+        if (bMineDrawing && ReplBrush.bActive) { bShow = true; Target = ReplBrush.Pos; }
+    }
+    if (PreviewArm)
+    {
+        PreviewArm->SetVisibility(bShow);
+        if (bShow)
+        {
+            // EndLocation es RELATIVO al componente → convertir la posición mundial del sello.
+            PreviewArm->EndLocation = PreviewArm->GetComponentTransform().InverseTransformPosition(Target);
+            PreviewArm->SetComponentTickEnabled(true);
+        }
+    }
 }
 
 void APTLobbyCharacter::OnRep_PlayerState()
@@ -1131,6 +1235,8 @@ void APTLobbyCharacter::SetSpectateBodyHiddenLocal(bool bBodyHidden)
 void APTLobbyCharacter::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+
+    UpdateArms(); // manos al extremo de los cables + brazo hacia el preview (si es el escultor del turno)
 
     // Ocultar el "grito" de chat cuando venció su tiempo (su animación ya terminó/fundió).
     if (ChatShout && ChatShout->IsVisible() && GetWorld() && GetWorld()->GetTimeSeconds() >= ChatBubbleUntil)

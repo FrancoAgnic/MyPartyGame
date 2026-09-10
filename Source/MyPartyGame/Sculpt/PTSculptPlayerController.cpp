@@ -785,6 +785,7 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
             B.bEyes   = bEyesTool;
             B.bActive = true;
             MyPawn->Server_ReportBrush(B);
+            MyPawn->SetBrushLocal(B); // COND_SkipOwner no le devuelve el suyo → setearlo para su propio brazo→preview
         }
     }
 
