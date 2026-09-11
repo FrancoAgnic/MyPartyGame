@@ -416,8 +416,29 @@ void UPTWordPackSubsystem::AddPackFromFolder(const FString& Folder, const FStrin
 
 void UPTWordPackSubsystem::ScanOfficialPacks()
 {
+    const FString Content = FPaths::ProjectContentDir();
+
+    // Banco DEFAULT del juego, PRIMERO de la lista. Es sintético (no una carpeta con words.csv): apunta al
+    // WordBank.csv bundled, así no se duplica ni se desincroniza. Su miniatura es Content/WordPacks/Default/preview.png.
+    {
+        const FString DefCsv = FPaths::Combine(Content, TEXT("Localization/WordBank.csv"));
+        if (FPaths::FileExists(DefCsv))
+        {
+            FPTWordPack Def;
+            Def.Id          = TEXT("official:Default");
+            Def.Title       = TEXT("Default");                 // se traduce por el sweep (fila GS_DEFAULT)
+            Def.Author      = TEXT("Sculpturillo");
+            Def.CsvPath     = DefCsv;
+            Def.bOfficial   = true;
+            Def.Description  = TEXT("El banco de palabras oficial del juego."); // traducible: WORDPACK_DESC_DEFAULT
+            const FString DefPrev = FPaths::Combine(Content, TEXT("WordPacks/Default/preview.png"));
+            if (FPaths::FileExists(DefPrev)) Def.PreviewPath = DefPrev;
+            Packs.Add(MoveTemp(Def));
+        }
+    }
+
     // Bancos OFICIALES del juego: Content/WordPacks/*  (se stagean en la build vía DirectoriesToAlwaysStageAsUFS).
-    const FString Root = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("WordPacks"));
+    const FString Root = FPaths::Combine(Content, TEXT("WordPacks"));
     if (!FPaths::DirectoryExists(Root)) return;
 
     TArray<FString> SubDirs;

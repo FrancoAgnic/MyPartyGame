@@ -85,6 +85,11 @@ void UPTGameplayHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDelta
             : FText::GetEmpty());
     }
 
+    // Glow de "pulsado" para Undo/Borrar (ClearAll) y Formas (TAB/CycleShape): resaltan mientras se
+    // mantiene la tecla, igual que el resto del hotbar (son momentáneos, no tienen estado "equipado").
+    if (ClearSlot)     ClearSlot->SetSelected(PC->IsInputKeyDown(PTInput::GetKey(TEXT("ClearAll"))));
+    if (ShapeHintSlot) ShapeHintSlot->SetSelected(PC->IsInputKeyDown(PTInput::GetKey(TEXT("CycleShape"))));
+
     // Ícono de "prohibido construir": apuntando fuera de la zona de modelado (cualquier tool).
     if (OutOfBoundsIcon)
     {
