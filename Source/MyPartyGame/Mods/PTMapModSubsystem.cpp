@@ -9,17 +9,49 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Dom/JsonObject.h"
+#include "Async/Async.h"
+#include "UObject/WeakObjectPtr.h"
+
+#if PT_WITH_STEAM
+#include "steam/steam_api.h"
+#include "steam/isteamugc.h"
+#endif
 
 DEFINE_LOG_CATEGORY_STATIC(LogPTMapMods, Log, All);
+
+#if PT_WITH_STEAM
+// Watcher de descargas: suscribirse NO baja el contenido; hay que DownloadItem y esperar este callback.
+// Al terminar la descarga de un item de ESTA app, re-escaneamos para que el mapa aparezca montable.
+struct FPTMapDownloadWatcher
+{
+    TWeakObjectPtr<UPTMapModSubsystem> Owner;
+    CCallback<FPTMapDownloadWatcher, DownloadItemResult_t> DownloadedCb;
+    explicit FPTMapDownloadWatcher(UPTMapModSubsystem* InOwner)
+        : Owner(InOwner), DownloadedCb(this, &FPTMapDownloadWatcher::OnDownloaded) {}
+    void OnDownloaded(DownloadItemResult_t* p)
+    {
+        if (!p) return;
+        if (SteamUtils() && p->m_unAppID != SteamUtils()->GetAppID()) return;
+        TWeakObjectPtr<UPTMapModSubsystem> W = Owner;
+        AsyncTask(ENamedThreads::GameThread, [W]() { if (UPTMapModSubsystem* O = W.Get()) O->RescanMods(); });
+    }
+};
+#endif
 
 void UPTMapModSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);
+#if PT_WITH_STEAM
+    DownloadWatcher = new FPTMapDownloadWatcher(this);
+#endif
     RescanMods();
 }
 
 void UPTMapModSubsystem::Deinitialize()
 {
+#if PT_WITH_STEAM
+    if (DownloadWatcher) { delete DownloadWatcher; DownloadWatcher = nullptr; }
+#endif
     Super::Deinitialize();
 }
 
@@ -32,8 +64,49 @@ void UPTMapModSubsystem::RescanMods()
 {
     Mods.Reset();
     ScanLocalMapMods();
+    ScanWorkshopMaps();
     UE_LOG(LogPTMapMods, Log, TEXT("RescanMods: %d mapa(s)-mod."), Mods.Num());
     OnMapModsUpdated.Broadcast();
+}
+
+void UPTMapModSubsystem::ScanWorkshopMaps()
+{
+#if PT_WITH_STEAM
+    if (!SteamUGC()) return;
+
+    const uint32 Num = SteamUGC()->GetNumSubscribedItems();
+    if (Num == 0) return;
+
+    TArray<PublishedFileId_t> Ids;
+    Ids.SetNumZeroed(Num);
+    const uint32 Got = SteamUGC()->GetSubscribedItems(Ids.GetData(), Num);
+
+    int32 Pending = 0;
+    for (uint32 i = 0; i < Got; ++i)
+    {
+        const PublishedFileId_t Id = Ids[i];
+        const uint32 State = SteamUGC()->GetItemState(Id);
+
+        // Suscrito pero sin instalar (o con update pendiente) → disparar descarga; al terminar, el watcher rescanea.
+        if (!(State & k_EItemStateInstalled) || (State & k_EItemStateNeedsUpdate))
+        {
+            SteamUGC()->DownloadItem(Id, /*bHighPriority=*/true);
+            ++Pending;
+            if (!(State & k_EItemStateInstalled)) continue; // aún sin carpeta en disco
+        }
+
+        uint64 SizeOnDisk = 0; uint32 Timestamp = 0;
+        char FolderBuf[2048] = { 0 };
+        if (SteamUGC()->GetItemInstallInfo(Id, &SizeOnDisk, FolderBuf, sizeof(FolderBuf), &Timestamp))
+        {
+            // AddModFromFolder exige map.pak+mod.json → los items que son BANCOS (words.csv) se ignoran solos.
+            const FString Folder = UTF8_TO_TCHAR(FolderBuf);
+            AddModFromFolder(Folder, FString::Printf(TEXT("%llu"), Id), /*bWorkshop=*/true);
+        }
+    }
+    if (Pending > 0)
+        UE_LOG(LogPTMapMods, Log, TEXT("[Workshop] %d item(s) suscritos descargándose; aparecerán al terminar."), Pending);
+#endif
 }
 
 void UPTMapModSubsystem::ScanLocalMapMods()

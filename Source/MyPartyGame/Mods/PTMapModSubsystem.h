@@ -62,8 +62,14 @@ public:
 
 private:
     void ScanLocalMapMods();
+    void ScanWorkshopMaps(); // items suscritos del Workshop cuyo contenido es un map.pak (mapas de mod)
     void AddModFromFolder(const FString& Folder, const FString& Id, bool bWorkshop);
 
     UPROPERTY() TArray<FPTMapMod> Mods;
     TSet<FString> MountedPakPaths; // paks ya montados en este proceso (para no re-montar)
+
+#if PT_WITH_STEAM
+    // Cuando Steam termina de bajar un item suscrito, re-escanea (suscribir NO baja el contenido solo).
+    struct FPTMapDownloadWatcher* DownloadWatcher = nullptr;
+#endif
 };
