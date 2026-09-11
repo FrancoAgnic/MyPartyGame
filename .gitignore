@@ -43,3 +43,8 @@ Config/Windows/
 
 # Builds empaquetados (binarios grandes, no se trackean en git)
 Packaged/
+
+# Modding kit: artefactos de cook (no versionar)
+/Releases/
+/MapMods_Output/
+/MapMods/
