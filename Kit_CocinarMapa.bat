@@ -27,24 +27,26 @@ call "%UAT%" BuildCookRun ^
 
 if errorlevel 1 ( echo [ERROR] Fallo el cook del DLC. & pause & exit /b 1 )
 
-REM Buscar el .pak generado (la ruta exacta puede variar segun version) y copiarlo a MapMods_Output.
+REM Buscar el .pak DE DLC generado. El correcto vive en StagedBuilds\...\Plugins\MapKit\Content\Paks\Windows\.
+REM (Un glob amplio puede pegarle a paks vacios de 188 bytes; por eso apuntamos a esa carpeta puntual.)
 if not exist "%OUT%" mkdir "%OUT%"
 set FOUND=
-for /f "delims=" %%F in ('dir /b /s "%PROJECT_DIR%Plugins\MapKit\Saved\*MapKit*.pak" 2^>nul') do set FOUND=%%F
-if "!FOUND!"=="" for /f "delims=" %%F in ('dir /b /s "%PROJECT_DIR%Saved\*MapKit*.pak" 2^>nul') do set FOUND=%%F
+set PAKDIR=%PROJECT_DIR%Plugins\MapKit\Saved\StagedBuilds\Windows\MyPartyGame\Plugins\MapKit\Content\Paks\Windows
+for /f "delims=" %%F in ('dir /b /s "%PAKDIR%\*.pak" 2^>nul') do set FOUND=%%F
+if "!FOUND!"=="" for /f "delims=" %%F in ('dir /b /s "%PROJECT_DIR%Plugins\MapKit\Saved\StagedBuilds\*MapKit*.pak" 2^>nul') do set FOUND=%%F
 
 if "!FOUND!"=="" (
-    echo [AVISO] No encontre el .pak automaticamente. Buscalo bajo Plugins\MapKit\Saved o Saved\ y copialo como map.pak.
+    echo [AVISO] No encontre el .pak de DLC. Buscalo bajo Plugins\MapKit\Saved\StagedBuilds\ y copialo como map.pak.
 ) else (
     copy /y "!FOUND!" "%OUT%\map.pak" >nul
     echo Copiado: "!FOUND!"  ->  "%OUT%\map.pak"
 )
 
-REM Plantilla de mod.json (editar MapName con el nombre real de tu .umap, y Title/Author).
+REM Plantilla de mod.json. MapName = /MapKit/ + nombre de tu .umap. Editar Title/Author.
 if not exist "%OUT%\mod.json" (
 > "%OUT%\mod.json" (
 echo {
-echo   "MapName": "/MapKit/TuMapa",
+echo   "MapName": "/MapKit/Mapa_Plantilla",
 echo   "Title": "Mi Mapa",
 echo   "Author": "TuNombre"
 echo }
