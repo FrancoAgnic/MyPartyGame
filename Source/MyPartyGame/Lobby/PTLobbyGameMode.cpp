@@ -7,6 +7,7 @@
 #include "PTGameState.h"
 #include "MultiplayerSessionsSubsystem.h"
 #include "../PTGameInstance.h"
+#include "../Mods/PTMapModSubsystem.h" // mapas de mod: montar + viajar al mapa elegido
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 
@@ -229,6 +230,20 @@ void APTLobbyGameMode::TravelToGame()
     // Acá sí queremos seamless (sin flash) — puede haberse desactivado para el self-travel
     // de "Crear sesión" en MainMenu (ver PTMainMenuWidget::OnCreateSession).
     bUseSeamlessTravel = true;
+
+    // ¿El host eligió un mapa de MOD? → montar el pak local y viajar a ese mapa (los clientes montan en 3b).
+    if (const UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
+    {
+        const FString ModId   = GI->PendingMatchSettings.MapModId;
+        const FString MapPath = GI->PendingMatchSettings.MapPath;
+        if (!ModId.IsEmpty() && !MapPath.IsEmpty())
+        {
+            if (UPTMapModSubsystem* MM = GetGameInstance()->GetSubsystem<UPTMapModSubsystem>())
+                MM->MountMod(ModId); // host monta antes de viajar
+            TravelToModMap(MapPath);
+            return;
+        }
+    }
 
     const FString URL = GameMapPath + TEXT("?listen");
     UE_LOG(LogTemp, Log, TEXT("[LobbyGameMode] ServerTravel → %s"), *URL);
