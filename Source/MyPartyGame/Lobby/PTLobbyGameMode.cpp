@@ -235,6 +235,17 @@ void APTLobbyGameMode::TravelToGame()
     GetWorld()->ServerTravel(URL, /*bAbsolute=*/true);
 }
 
+void APTLobbyGameMode::TravelToModMap(const FString& MapPackage)
+{
+    if (MapPackage.IsEmpty()) { TravelToGame(); return; } // fallback al mapa oficial
+    bUseSeamlessTravel = true;
+    // Forzamos el GameMode de esculpido por la URL (?game=): el mapa del mod NO necesita configurarlo.
+    FString URL = MapPackage + TEXT("?listen");
+    if (!SculptGameModePath.IsEmpty()) URL += TEXT("?game=") + SculptGameModePath;
+    UE_LOG(LogTemp, Log, TEXT("[LobbyGameMode] ServerTravel (mod map) → %s"), *URL);
+    GetWorld()->ServerTravel(URL, /*bAbsolute=*/true);
+}
+
 void APTLobbyGameMode::CheckReadyState()
 {
     APTGameState* PTGS = GetGameState<APTGameState>();

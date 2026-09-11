@@ -46,7 +46,15 @@ public:
     UPROPERTY(EditDefaultsOnly, Category="Travel")
     FString GameMapPath = TEXT("/Game/Template/levels/Lvl-01");
 
+    /** GameMode de esculpido (BP), que se FUERZA por la URL al viajar a un mapa de MOD. Así el mapa del
+     *  creador no necesita configurar su GameMode: solo PlayerStarts + un APTSculptVolume + escenografía. */
+    UPROPERTY(EditDefaultsOnly, Category="Travel")
+    FString SculptGameModePath = TEXT("/Game/Template/Character/BP_SculptGameMode.BP_SculptGameMode_C");
+
     void TravelToGame();
+    /** (Host) Viaja a un mapa de MOD (ya montado su pak) forzando el GameMode de esculpido por la URL.
+     *  MapPackage = ruta de paquete del mapa (el MapName del mod.json). */
+    void TravelToModMap(const FString& MapPackage);
 
     /** (Host) Vuelca la config de partida del host (GameInstance + sesión) al APTGameState replicado
      *  para que los clientes puedan verla read-only en el lobby. Lo llama el BeginPlay y el
