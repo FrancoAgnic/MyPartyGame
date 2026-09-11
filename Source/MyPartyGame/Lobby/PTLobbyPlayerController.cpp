@@ -266,6 +266,42 @@ void APTLobbyPlayerController::PTSolo()
     Server_RequestStartGame(); // chequea bIsHost adentro y hace TravelToGame
 }
 
+void APTLobbyPlayerController::Client_PrepareModMap_Implementation(const FString& ModId, const FString& MapPath)
+{
+    // (Cliente) montar el pak del mapa que eligió el host. Si no lo tiene, suscribir+bajar y pollear.
+    PrepModId = ModId;
+    MapPrepTries = 0;
+    TryPrepareMapStep();
+}
+
+void APTLobbyPlayerController::TryPrepareMapStep()
+{
+    UPTMapModSubsystem* MM = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTMapModSubsystem>() : nullptr;
+    if (!MM) { Server_MapReady(); return; }
+    MM->RescanMods();
+    if (MM->MountMod(PrepModId))
+    {
+        GetWorldTimerManager().ClearTimer(MapPrepPoll);
+        Server_MapReady();
+        return;
+    }
+    if (MapPrepTries == 0) MM->RequestWorkshopDownload(PrepModId); // primer intento: suscribir+descargar
+    if (++MapPrepTries >= 30) // ~30s: rendirse y avisar igual (el host no debe colgarse)
+    {
+        GetWorldTimerManager().ClearTimer(MapPrepPoll);
+        UE_LOG(LogTemp, Warning, TEXT("[MapMod] Cliente no pudo montar '%s' a tiempo; avisa listo igual."), *PrepModId);
+        Server_MapReady();
+        return;
+    }
+    GetWorldTimerManager().SetTimer(MapPrepPoll, this, &APTLobbyPlayerController::TryPrepareMapStep, 1.f, false);
+}
+
+void APTLobbyPlayerController::Server_MapReady_Implementation()
+{
+    if (APTLobbyGameMode* GM = GetWorld()->GetAuthGameMode<APTLobbyGameMode>())
+        GM->OnClientMapReady(this);
+}
+
 void APTLobbyPlayerController::PTMapMod(int32 Index)
 {
     // DEV (mapas M1): monta el mod de mapa LOCAL #Index (de <Proyecto>/MapMods/*) y viaja a su mapa,

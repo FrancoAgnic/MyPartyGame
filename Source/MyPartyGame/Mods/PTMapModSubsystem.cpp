@@ -205,3 +205,18 @@ FString UPTMapModSubsystem::GetTravelMap(const FString& Id) const
     const FPTMapMod* Mod = FindMod(Id);
     return Mod ? Mod->MapName : FString();
 }
+
+void UPTMapModSubsystem::RequestWorkshopDownload(const FString& WorkshopIdStr)
+{
+#if PT_WITH_STEAM
+    if (!SteamUGC()) return;
+    // Los ids de mods locales son "local:<carpeta>" → no se pueden descargar. Solo los numéricos (workshop).
+    if (WorkshopIdStr.StartsWith(TEXT("local:"))) return;
+    uint64 Id64 = 0;
+    if (!LexTryParseString(Id64, *WorkshopIdStr) || Id64 == 0) return;
+    const PublishedFileId_t Id = (PublishedFileId_t)Id64;
+    SteamUGC()->SubscribeItem(Id);
+    SteamUGC()->DownloadItem(Id, /*bHighPriority=*/true);
+    UE_LOG(LogPTMapMods, Log, TEXT("[MapMod] Suscribiendo+descargando item %llu (el cliente no lo tenía)."), Id64);
+#endif
+}

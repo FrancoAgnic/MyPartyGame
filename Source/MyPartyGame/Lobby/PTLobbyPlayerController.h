@@ -68,6 +68,12 @@ public:
     // El cliente le avisa al server que entra/sale de espectador (para sacarlo de la partida).
     UFUNCTION(Server, Reliable) void Server_SetSpectator(bool bInSpectator);
 
+    // ── Handshake de montaje de mapa de MOD (M4 3b) ──
+    // El server le pide al cliente que monte (o baje+monte) el pak del mapa elegido; el cliente responde
+    // "listo" cuando lo montó (o al rendirse por timeout) para que el host viaje.
+    UFUNCTION(Client, Reliable) void Client_PrepareModMap(const FString& ModId, const FString& MapPath);
+    UFUNCTION(Server, Reliable) void Server_MapReady();
+
     // ── Estado del modo cabeza (lo lee la hotbar del modo G para resaltar la herramienta) ──
     bool          IsHeadSculptMode()      const { return bHeadSculptMode; }
     EPTEditMode   GetHeadEditMode()       const { return HeadEditMode; }
@@ -219,6 +225,12 @@ protected:
 
 private:
     UPROPERTY() UPTLobbyEscapeMenuWidget* EscapeMenuWidget = nullptr;
+
+    // Handshake de mapa de mod (cliente): monta/baja el pak y avisa "listo". Polling acotado por timeout.
+    void TryPrepareMapStep();
+    FString      PrepModId;
+    int32        MapPrepTries = 0;
+    FTimerHandle MapPrepPoll;
 
     // Fija la vista a la cámara diorama y bloquea el look (el mouse es para la UI). Reintenta
     // hasta encontrar la cámara (puede no estar lista en BeginPlay / al poseer el pawn).

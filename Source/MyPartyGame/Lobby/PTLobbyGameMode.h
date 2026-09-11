@@ -56,6 +56,20 @@ public:
      *  MapPackage = ruta de paquete del mapa (el MapName del mod.json). */
     void TravelToModMap(const FString& MapPackage);
 
+    // ── Handshake de montaje de mapa de MOD antes del ServerTravel (M4 3b) ──
+    // El host, antes de viajar a un mapa de mod, le pide a cada cliente que MONTE (o baje+monte) el pak, y
+    // espera sus "listo" (con timeout). Así los clientes pueden cargar el mapa en el seamless travel.
+    void StartModMapTravel(const FString& ModId, const FString& MapPath);
+    void OnClientMapReady(class APlayerController* PC); // lo llama el cliente por Server RPC
+private:
+    void DoModMapTravelNow(); // ejecuta el travel al mapa de mod (una sola vez)
+    FString  PendingModId, PendingMapPath;
+    int32    MapReadyExpected = 0;
+    int32    MapReadyGot = 0;
+    bool     bModTravelStarted = false;
+    FTimerHandle MapTravelTimeout;
+public:
+
     /** (Host) Vuelca la config de partida del host (GameInstance + sesión) al APTGameState replicado
      *  para que los clientes puedan verla read-only en el lobby. Lo llama el BeginPlay y el
      *  GameSettings del host tras cada cambio. No-op fuera del servidor. */

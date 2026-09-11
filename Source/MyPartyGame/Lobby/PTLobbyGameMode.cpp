@@ -238,9 +238,7 @@ void APTLobbyGameMode::TravelToGame()
         const FString MapPath = GI->PendingMatchSettings.MapPath;
         if (!ModId.IsEmpty() && !MapPath.IsEmpty())
         {
-            if (UPTMapModSubsystem* MM = GetGameInstance()->GetSubsystem<UPTMapModSubsystem>())
-                MM->MountMod(ModId); // host monta antes de viajar
-            TravelToModMap(MapPath);
+            StartModMapTravel(ModId, MapPath); // monta host + pide a los clientes que monten, y luego viaja
             return;
         }
     }
@@ -248,6 +246,46 @@ void APTLobbyGameMode::TravelToGame()
     const FString URL = GameMapPath + TEXT("?listen");
     UE_LOG(LogTemp, Log, TEXT("[LobbyGameMode] ServerTravel → %s"), *URL);
     GetWorld()->ServerTravel(URL, /*bAbsolute=*/true);
+}
+
+void APTLobbyGameMode::StartModMapTravel(const FString& ModId, const FString& MapPath)
+{
+    PendingModId = ModId; PendingMapPath = MapPath;
+    bModTravelStarted = false; MapReadyGot = 0; MapReadyExpected = 0;
+
+    // Host: montar el pak local ya.
+    if (UPTMapModSubsystem* MM = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTMapModSubsystem>() : nullptr)
+        MM->MountMod(ModId);
+
+    // Pedir a cada CLIENTE remoto que monte (o baje+monte) el pak antes de viajar.
+    for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+    {
+        APTLobbyPlayerController* PC = Cast<APTLobbyPlayerController>(It->Get());
+        if (!PC || PC->IsLocalController()) continue; // el host ya montó
+        ++MapReadyExpected;
+        PC->Client_PrepareModMap(ModId, MapPath);
+    }
+
+    if (MapReadyExpected == 0) { DoModMapTravelNow(); return; }
+
+    // Timeout de seguridad: si un cliente no confirma, viajar igual (ese cliente podría fallar la carga).
+    GetWorld()->GetTimerManager().SetTimer(MapTravelTimeout, this, &APTLobbyGameMode::DoModMapTravelNow, 30.f, false);
+    UE_LOG(LogTemp, Log, TEXT("[LobbyGameMode] Preparando mapa de mod en %d cliente(s) antes de viajar."), MapReadyExpected);
+}
+
+void APTLobbyGameMode::OnClientMapReady(APlayerController* /*PC*/)
+{
+    ++MapReadyGot;
+    UE_LOG(LogTemp, Log, TEXT("[LobbyGameMode] Cliente listo con el mapa (%d/%d)."), MapReadyGot, MapReadyExpected);
+    if (MapReadyGot >= MapReadyExpected) DoModMapTravelNow();
+}
+
+void APTLobbyGameMode::DoModMapTravelNow()
+{
+    if (bModTravelStarted) return;
+    bModTravelStarted = true;
+    GetWorld()->GetTimerManager().ClearTimer(MapTravelTimeout);
+    TravelToModMap(PendingMapPath);
 }
 
 void APTLobbyGameMode::TravelToModMap(const FString& MapPackage)

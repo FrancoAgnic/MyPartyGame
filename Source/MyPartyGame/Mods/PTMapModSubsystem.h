@@ -57,6 +57,10 @@ public:
     UFUNCTION(BlueprintCallable, Category="MapMod") bool IsMounted(const FString& Id) const;
     /** Ruta de paquete del mapa (MapName) para viajar; vacío si no existe el mod. */
     UFUNCTION(BlueprintCallable, Category="MapMod") FString GetTravelMap(const FString& Id) const;
+    /** (Cliente) Se asegura de tener el item del Workshop: si el Id es numérico (workshop) y no está,
+     *  lo SUSCRIBE + DownloadItem (el watcher rescanea al terminar). Para que un cliente pueda montar un
+     *  mapa que el host eligió pero que él no tenía. No-op para mods locales o sin Steam. */
+    UFUNCTION(BlueprintCallable, Category="MapMod") void RequestWorkshopDownload(const FString& WorkshopIdStr);
 
     FPTOnMapModsUpdated OnMapModsUpdated;
 
