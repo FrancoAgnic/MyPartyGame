@@ -1,0 +1,11 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "MapKit",
+	"Description": "Kit para crear mapas custom de Sculpturillo (Steam Workshop). Plugin de contenido: el creador pone su .umap acá y lo cocina a .pak (DLC). En el juego base va habilitado y VACÍO, solo para registrar el mount point /MapKit/ donde se montan los paks de mods de mapa.",
+	"Category": "Modding",
+	"CanContainContent": true,
+	"IsBetaVersion": true,
+	"Installed": false
+}

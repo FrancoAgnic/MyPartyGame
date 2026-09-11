@@ -25,11 +25,31 @@ GameMode: solo arma el mapa con lo siguiente.
 Un `.umap` base ya listo con: 1× `APTSculptVolume` (config de Lvl-01) + ~12 PlayerStarts + una luz + SkyLight.
 El creador lo **duplica**, le agrega su escenografía, y lo cocina a `.pak` (ver M3).
 
-## Empaquetado (adelanto M3)
-El mapa se cociná a un **`.pak`** con **Unreal Engine 5.8** (misma versión) y se entrega junto a un
-`mod.json`:
+## Empaquetado — M3 (DLC cook con el plugin MapKit)
+Método elegido: **cook de DLC** vía UAT usando el plugin de contenido **`MapKit`**. El `.pak` sale limpio
+(solo tu mapa, con deps y mount point `/MapKit/` resueltos).
+
+**Requisitos del creador:** el **proyecto/kit** + **Unreal Engine 5.8** + la carpeta `Releases/Sculpturillo1`
+(viene en el kit; la genera el dev con `Kit_PrepararBase.bat`, se corre una sola vez por versión).
+
+**Flujo del creador:**
+1. Abrí el proyecto en UE 5.8. En el Content Browser, entrá al plugin **MapKit** (`/MapKit/`).
+2. **Duplicá el mapa plantilla** ahí (trae 1× `APTSculptVolume` + PlayerStarts + luz). Ponele tu nombre y
+   agregá tu escenografía. Guardalo en `/MapKit/TuMapa`.
+3. Corré **`Kit_CocinarMapa.bat`** → cocina el mapa a `.pak` (DLC) y lo deja en `MapMods_Output\map.pak`
+   + un `mod.json` de plantilla.
+4. Editá `mod.json`: `MapName` = `/MapKit/TuMapa` (el nombre real de tu `.umap`), `Title`, `Author`.
+5. **Probar local:** copiá `map.pak` + `mod.json` a `<Proyecto>\MapMods\TuMod\` y abrí el **juego empaquetado**
+   (en el editor el montaje de paks no está disponible). El loader (M1) lo detecta y lo monta.
+6. **Publicar:** subirlo por el Workshop (M4, próximamente).
+
+**`mod.json`:**
 ```json
-{ "MapName": "/Game/MapMods/MiMapa/MiMapa", "Title": "Mi Mapa", "Author": "TuNombre" }
+{ "MapName": "/MapKit/TuMapa", "Title": "Mi Mapa", "Author": "TuNombre" }
 ```
-`MapName` = ruta de paquete del `.umap` dentro del pak (a la que el juego hace ServerTravel).
-El loader (M1, `UPTMapModSubsystem`) monta el `.pak` y viaja a `MapName` con el GameMode forzado.
+El loader (M1, `UPTMapModSubsystem`) monta el `.pak` y el host viaja a `MapName` con el GameMode forzado
+(`APTLobbyGameMode::TravelToModMap`).
+
+> **Estado M3:** plugin `MapKit` + scripts `Kit_PrepararBase.bat` / `Kit_CocinarMapa.bat` creados como
+> primera versión. Falta: (a) crear el **`.umap` plantilla** dentro de `/MapKit/`, y (b) una **corrida de
+> validación** del cook (ajustar flags/ruta de salida del `.pak` si hace falta) para probar M1 de punta a punta.
