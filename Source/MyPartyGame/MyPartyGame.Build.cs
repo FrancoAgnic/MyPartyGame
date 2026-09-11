@@ -27,6 +27,9 @@ public class MyPartyGame : ModuleRules
 			"SlateCore",
 			"Niagara",
 			"AudioMixer", // análisis espectral de la música (banda aguda → baile del personaje)
+			"PakFile",          // M1 mapas: montar .pak de mods de mapa en runtime (FCoreDelegates::MountPak)
+			"Json",             // M1 mapas: parsear mod.json (MapName/Title/Author)
+			"JsonUtilities",
 			// Online Subsystem — Steam (cargado dinámicamente vía plugin/config).
 			"OnlineSubsystem",
 			"OnlineSubsystemUtils",
