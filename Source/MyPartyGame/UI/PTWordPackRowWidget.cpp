@@ -96,7 +96,38 @@ void UPTWordPackRowWidget::DownloadThumbnail(const FString& Url)
     Req->ProcessRequest();
 }
 
+void UPTWordPackRowWidget::InitMap(const FPTMapMod& InMap, bool bSelected, UPTWordPackWidget* InOwner)
+{
+    PackId = InMap.Id;
+    bIsMap = true;
+    Owner  = InOwner;
+
+    if (TitleText) TitleText->SetText(FText::FromString(InMap.Title));
+    if (AuthorText)
+    {
+        if (InMap.Author.IsEmpty()) AuthorText->SetText(FText::GetEmpty());
+        else { FFormatOrderedArguments A; A.Add(FText::FromString(InMap.Author));
+               AuthorText->SetText(PTText::Format(TEXT("WORDPACK_BY"), A)); }
+    }
+    if (UseButton)     UseButton->SetIsEnabled(!bSelected);
+    if (UseButtonText) UseButtonText->SetText(PTText::Get(bSelected ? TEXT("WORDPACK_INUSE") : TEXT("WORDPACK_USE")));
+    if (DescText)      DescText->SetText(FText::GetEmpty());
+    if (TypeTagText)   TypeTagText->SetText(PTText::Get(TEXT("WORKSHOP_TAG_MAP")));
+
+    if (ThumbnailImage) ThumbnailImage->SetVisibility(ESlateVisibility::Collapsed);
+    if (!InMap.PreviewPath.IsEmpty() && ThumbnailImage)
+    {
+        if (UTexture2D* Tex = FImageUtils::ImportFileAsTexture2D(InMap.PreviewPath))
+        {
+            ThumbnailImage->SetBrushFromTexture(Tex, /*bMatchSize=*/false);
+            ThumbnailImage->SetVisibility(ESlateVisibility::Visible);
+        }
+    }
+}
+
 void UPTWordPackRowWidget::OnUseClicked()
 {
-    if (Owner) Owner->UsePack(PackId);
+    if (!Owner) return;
+    if (bIsMap) Owner->UseMap(PackId);
+    else        Owner->UsePack(PackId);
 }

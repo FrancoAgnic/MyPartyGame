@@ -12,6 +12,7 @@
 #include "CoreMinimal.h"
 #include "PTUserWidget.h"
 #include "Mods/PTWordPackSubsystem.h" // FPTWordPack
+#include "Mods/PTMapModSubsystem.h"   // FPTMapMod (la misma fila sirve para mapas)
 #include "PTWordPackRowWidget.generated.h"
 
 class UTextBlock;
@@ -27,6 +28,8 @@ class MYPARTYGAME_API UPTWordPackRowWidget : public UPTUserWidget
 public:
     /** Carga la fila. bSelected = es el banco elegido ahora (deshabilita el botón y muestra "En uso"). */
     void Init(const FPTWordPack& InPack, bool bSelected, UPTWordPackWidget* InOwner);
+    /** Igual pero para un MAPA de mod (misma fila). "Usar" enruta a SelectMapMod. */
+    void InitMap(const FPTMapMod& InMap, bool bSelected, UPTWordPackWidget* InOwner);
 
 protected:
     virtual bool Initialize() override;
@@ -44,6 +47,7 @@ protected:
 
 private:
     FString PackId;
+    bool    bIsMap = false; // esta fila representa un MAPA (no un banco) → "Usar" llama SelectMapMod
     UPROPERTY() UPTWordPackWidget* Owner = nullptr;
 
     void DownloadThumbnail(const FString& Url); // baja el preview por HTTP → ThumbnailImage

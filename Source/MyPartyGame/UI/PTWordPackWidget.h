@@ -36,6 +36,8 @@ public:
     UFUNCTION(BlueprintCallable, Category="WordPack") void ShowPanel();
     /** Elegir un banco (lo llama la fila). */
     void UsePack(const FString& PackId);
+    /** Elegir un mapa de mod (lo llama la fila de la pestaña Mapas). */
+    void UseMap(const FString& MapId);
 
 protected:
     virtual void NativeConstruct() override;

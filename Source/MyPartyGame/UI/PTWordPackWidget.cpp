@@ -6,6 +6,7 @@
 #include "../PTGameInstance.h"
 #include "../PTTextTable.h"
 #include "Mods/PTWordPackSubsystem.h"
+#include "Mods/PTMapModSubsystem.h"
 #include "Components/PanelWidget.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
@@ -56,15 +57,15 @@ void UPTWordPackWidget::SwitchTab(int32 Tab)
     ActiveTab = Tab;
     const bool bMaps = (ActiveTab == 1);
 
-    // Palabras (funcional) vs Mapas (bloqueado): se muestra una lista u otra, como el Locker.
+    // Palabras vs Mapas: se muestra una lista u otra. Ambas funcionales ahora.
     if (PacksBox)        PacksBox->SetVisibility(bMaps ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
     if (MapsBox)         MapsBox->SetVisibility(bMaps ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-    if (MapsLockedPanel) MapsLockedPanel->SetVisibility(bMaps ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-    // Controles de bancos (actualizar/default) solo en la pestaña Palabras.
-    if (RefreshButton)   RefreshButton->SetVisibility(bMaps ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
-    if (DefaultButton)   DefaultButton->SetVisibility(bMaps ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
-    if (SelectedText)    SelectedText->SetVisibility(bMaps ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
-    if (EmptyText && bMaps) EmptyText->SetVisibility(ESlateVisibility::Collapsed);
+    if (MapsLockedPanel) MapsLockedPanel->SetVisibility(ESlateVisibility::Collapsed); // ya no está bloqueado
+    // Los controles (actualizar/default/elegido) valen para ambas pestañas.
+    if (RefreshButton)   RefreshButton->SetVisibility(ESlateVisibility::Visible);
+    if (DefaultButton)   DefaultButton->SetVisibility(ESlateVisibility::Visible);
+    if (SelectedText)    SelectedText->SetVisibility(ESlateVisibility::Visible);
+    Rebuild(); // refresca listas + "En uso" según la pestaña
 
     ApplyTabVisual();
 }
@@ -111,14 +112,27 @@ void UPTWordPackWidget::UsePack(const FString& PackId)
     Rebuild();
 }
 
+void UPTWordPackWidget::UseMap(const FString& MapId)
+{
+    if (GI()) GI()->SelectMapMod(MapId);
+    Rebuild();
+}
+
 void UPTWordPackWidget::OnRefreshClicked()
 {
     if (UPTWordPackSubsystem* P = Packs()) P->RescanPacks();
+    if (UPTMapModSubsystem* MM = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTMapModSubsystem>() : nullptr)
+        MM->RescanMods();
+    Rebuild();
 }
 
 void UPTWordPackWidget::OnDefaultClicked()
 {
-    if (GI()) GI()->SelectDefaultWordBank();
+    if (GI())
+    {
+        if (ActiveTab == 1) GI()->SelectDefaultMap();       // pestaña Mapas → mapa oficial (Lvl-01)
+        else                GI()->SelectDefaultWordBank();  // pestaña Palabras → banco default
+    }
     Rebuild();
 }
 
@@ -173,23 +187,47 @@ void UPTWordPackWidget::Rebuild()
         }
     }
 
+    // ── Pestaña MAPAS: llenar con los mapas de mod (locales + Workshop). Reusa la MISMA fila. ──
+    int32 MapCount = 0;
+    if (MapsBox)
+    {
+        MapsBox->ClearChildren();
+        UPTMapModSubsystem* MM = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTMapModSubsystem>() : nullptr;
+        if (MM && RowWidgetClass)
+        {
+            const FString CurMapId = GI() ? GI()->PendingMatchSettings.MapModId : FString();
+            for (const FPTMapMod& Mod : MM->GetMods())
+            {
+                UPTWordPackRowWidget* Row = CreateWidget<UPTWordPackRowWidget>(this, RowWidgetClass);
+                if (!Row) continue;
+                Row->InitMap(Mod, Mod.Id == CurMapId, this);
+                MapsBox->AddChild(Row);
+                ++MapCount;
+            }
+        }
+    }
+
     if (EmptyText)
     {
         EmptyText->SetText(PTText::Get(TEXT("WORDPACK_EMPTY")));
-        // Solo en la pestaña Palabras (en Mapas manda el overlay "Próximamente").
-        EmptyText->SetVisibility((ActiveTab == 0 && Count == 0) ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+        const bool bShowEmpty = (ActiveTab == 0 && Count == 0) || (ActiveTab == 1 && MapCount == 0);
+        EmptyText->SetVisibility(bShowEmpty ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
     }
 
     if (SelectedText)
     {
-        if (CurTitle.IsEmpty())
+        // En Mapas muestra el mapa elegido; en Palabras, el banco elegido. Vacío = default/oficial.
+        const FString Sel = (ActiveTab == 1)
+            ? (GI() ? GI()->SelectedMapTitle : FString())
+            : CurTitle;
+        if (Sel.IsEmpty())
         {
             SelectedText->SetText(PTText::Get(TEXT("WORDPACK_DEFAULT")));
         }
         else
         {
             FFormatOrderedArguments Args;
-            Args.Add(FText::FromString(CurTitle));
+            Args.Add(FText::FromString(Sel));
             SelectedText->SetText(PTText::Format(TEXT("WORDPACK_SELECTED"), Args));
         }
     }
