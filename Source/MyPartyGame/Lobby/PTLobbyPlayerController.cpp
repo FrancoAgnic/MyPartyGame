@@ -7,6 +7,7 @@
 #include "PTGameState.h"
 #include "PTPlayerState.h"
 #include "PTLobbyGameMode.h"
+#include "../Mods/PTMapModSubsystem.h" // DEV PTMapMod: montar/viajar a un mapa de mod (M1)
 #include "PTMainMenuWidget.h"
 #include "PTLobbyHUDWidget.h"
 #include "EnhancedInputSubsystems.h"
@@ -263,6 +264,28 @@ void APTLobbyPlayerController::PTSolo()
         GI->bSoloTest = true;
     UE_LOG(LogTemp, Log, TEXT("[PTSolo] Modo solo ON: viajando a la partida con 1 jugador."));
     Server_RequestStartGame(); // chequea bIsHost adentro y hace TravelToGame
+}
+
+void APTLobbyPlayerController::PTMapMod(int32 Index)
+{
+    // DEV (mapas M1): monta el mod de mapa LOCAL #Index (de <Proyecto>/MapMods/*) y viaja a su mapa,
+    // forzando el GameMode de esculpido. Solo host, solo en build empaquetada (en editor MountPak no está).
+    if (!HasAuthority()) { UE_LOG(LogTemp, Warning, TEXT("[PTMapMod] Solo el host puede.")); return; }
+    UPTMapModSubsystem* Subsys = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTMapModSubsystem>() : nullptr;
+    if (!Subsys) { UE_LOG(LogTemp, Warning, TEXT("[PTMapMod] Sin subsistema de mapas.")); return; }
+    Subsys->RescanMods();
+    const TArray<FPTMapMod>& Mods = Subsys->GetMods();
+    if (!Mods.IsValidIndex(Index))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[PTMapMod] Index %d inválido (hay %d mod(s) de mapa)."), Index, Mods.Num());
+        return;
+    }
+    const FString Id = Mods[Index].Id;
+    if (!Subsys->MountMod(Id)) { UE_LOG(LogTemp, Error, TEXT("[PTMapMod] No se pudo montar '%s'."), *Id); return; }
+    const FString Map = Subsys->GetTravelMap(Id);
+    UE_LOG(LogTemp, Log, TEXT("[PTMapMod] Montado '%s' → viajando a '%s'."), *Id, *Map);
+    if (APTLobbyGameMode* GM = GetWorld()->GetAuthGameMode<APTLobbyGameMode>())
+        GM->TravelToModMap(Map);
 }
 
 void APTLobbyPlayerController::ApplyDioramaInputMode()

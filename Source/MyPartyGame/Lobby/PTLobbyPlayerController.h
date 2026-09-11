@@ -63,6 +63,7 @@ public:
     UFUNCTION(Exec) void PTSpecSpeed(float N);  // multiplica la velocidad de la cámara
     UFUNCTION(Exec) void PTSpecSmooth(float N); // suavizado/lag de la cámara (bajo = más suave)
     UFUNCTION(Exec) void PTSolo();              // DEV: jugar solo → marca solo y arranca la partida ya
+    UFUNCTION(Exec) void PTMapMod(int32 Index); // DEV (mapas M1): monta el mod local #Index y viaja a su mapa
 
     // El cliente le avisa al server que entra/sale de espectador (para sacarlo de la partida).
     UFUNCTION(Server, Reliable) void Server_SetSpectator(bool bInSpectator);
