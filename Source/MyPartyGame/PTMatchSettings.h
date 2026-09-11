@@ -54,4 +54,10 @@ struct FPTMatchSettings
     // Palabras subidas por el host (CSV). Si bUseCustomWords, reemplazan el banco default.
     UPROPERTY(BlueprintReadWrite, Category="Match") TArray<FPTWordEntry> CustomWords;
     UPROPERTY(BlueprintReadWrite, Category="Match") bool bUseCustomWords = false;
+
+    // Mapa de MOD elegido por el host (Workshop/local). Vacío = mapa OFICIAL (Lvl-01).
+    // MapModId = id del mod (para que cada cliente monte su .pak antes del travel); MapPath = ruta de
+    // paquete a la que se viaja (el MapName del mod.json, ej "/MapKit/MiMapa").
+    UPROPERTY(BlueprintReadWrite, Category="Match") FString MapModId;
+    UPROPERTY(BlueprintReadWrite, Category="Match") FString MapPath;
 };

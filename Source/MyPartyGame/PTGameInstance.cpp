@@ -24,6 +24,7 @@
 #include "Multiplayer/MultiplayerSessionsSubsystem.h"
 #include "UI/PTInvitePopupWidget.h"
 #include "Mods/PTWordPackSubsystem.h"
+#include "Mods/PTMapModSubsystem.h"
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/PlayerState.h"
 #include "Lobby/PTPlayerState.h"
@@ -153,6 +154,30 @@ void UPTGameInstance::SelectDefaultWordBank()
     ClearCustomWords();
     SelectedWordPackTitle.Reset();
     OnSelectedWordPackChanged.Broadcast();
+}
+
+void UPTGameInstance::SelectMapMod(const FString& ModId)
+{
+    UPTMapModSubsystem* MM = GetSubsystem<UPTMapModSubsystem>();
+    const FPTMapMod* Mod = MM ? MM->FindMod(ModId) : nullptr;
+    if (!Mod)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[GameInstance] SelectMapMod: no se encontró el mapa '%s'."), *ModId);
+        return;
+    }
+    PendingMatchSettings.MapModId = Mod->Id;
+    PendingMatchSettings.MapPath  = Mod->MapName;
+    SelectedMapTitle              = Mod->Title;
+    UE_LOG(LogTemp, Log, TEXT("[GameInstance] Mapa de mod '%s' seleccionado (%s)."), *Mod->Title, *Mod->MapName);
+    OnSelectedMapChanged.Broadcast();
+}
+
+void UPTGameInstance::SelectDefaultMap()
+{
+    PendingMatchSettings.MapModId.Reset();
+    PendingMatchSettings.MapPath.Reset();
+    SelectedMapTitle.Reset();
+    OnSelectedMapChanged.Broadcast();
 }
 
 // "titulos_peliculas" / "titulos-peliculas" → "Titulos Peliculas" (fallback de título si no lo escriben).

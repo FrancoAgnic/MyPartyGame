@@ -100,6 +100,16 @@ public:
     // Notifica a la UI que cambió el banco elegido (ver SelectWordPack/SelectDefaultWordBank).
     FPTOnSelectedWordPackChanged OnSelectedWordPackChanged;
 
+    // ── Mapas de la comunidad (Workshop / locales) ──
+    // Elige un mapa de mod por su Id (de UPTMapModSubsystem::GetMods) → guarda MapModId+MapPath en
+    // PendingMatchSettings. Lo llama el host desde la Biblioteca. Vacío/ClearMapMod = mapa oficial (Lvl-01).
+    UFUNCTION(BlueprintCallable, Category="MapMod") void SelectMapMod(const FString& ModId);
+    UFUNCTION(BlueprintCallable, Category="MapMod") void SelectDefaultMap();
+    // Título del mapa elegido (vacío = oficial), para mostrarlo en el lobby.
+    UPROPERTY(BlueprintReadOnly, Category="MapMod") FString SelectedMapTitle;
+    // Notifica a la UI que cambió el mapa elegido (reusa el mismo tipo de delegate).
+    FPTOnSelectedWordPackChanged OnSelectedMapChanged;
+
     // ── Modo captura / espectador dev (trailer/screenshots) ─────────────────────────────────
     // Cuando está activo, la UI del juego reemplaza LOCALMENTE los nombres de Steam por "Player N"
     // (no se replica; es solo para grabar sin exponer nicks). Lo prende/apaga el comando PTSpectate.
