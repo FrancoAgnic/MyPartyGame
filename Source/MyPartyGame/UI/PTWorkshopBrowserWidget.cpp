@@ -21,6 +21,7 @@
 
 // Tag del catálogo para cada sección.
 static const TCHAR* PT_TAG_WORDBANK = TEXT("WordBank");
+static const TCHAR* PT_TAG_MAP      = TEXT("Map");
 
 UPTWordPackSubsystem* UPTWorkshopBrowserWidget::Packs() const
 {
@@ -99,24 +100,15 @@ void UPTWorkshopBrowserWidget::OnMapsTabClicked()      { SwitchTab(1); }
 void UPTWorkshopBrowserWidget::SwitchTab(int32 Tab)
 {
     ActiveTab = Tab;
-    const bool bMaps = (ActiveTab == 1);
 
-    // Mapas: BLOQUEADO por ahora → overlay "Próximamente", sin buscador ni resultados.
-    if (MapsLockedPanel) MapsLockedPanel->SetVisibility(bMaps ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-    if (ResultsBox)      ResultsBox->SetVisibility(bMaps ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
-    if (SearchBox)       SearchBox->SetIsEnabled(!bMaps);
-    if (SearchButton)    SearchButton->SetIsEnabled(!bMaps);
+    // Ambas pestañas funcionales: buscador + resultados en las dos; se busca con el tag de la pestaña.
+    if (MapsLockedPanel) MapsLockedPanel->SetVisibility(ESlateVisibility::Collapsed); // ya no bloqueado
+    if (ResultsBox)      ResultsBox->SetVisibility(ESlateVisibility::Visible);
+    if (SearchBox)       SearchBox->SetIsEnabled(true);
+    if (SearchButton)    SearchButton->SetIsEnabled(true);
 
     ApplyTabVisual();
-
-    if (!bMaps)
-    {
-        RunSearch(); // al entrar a Bancos, mostrar populares (búsqueda vacía)
-    }
-    else if (EmptyText)
-    {
-        EmptyText->SetVisibility(ESlateVisibility::Collapsed);
-    }
+    RunSearch(); // muestra populares del tag de la pestaña
 }
 
 void UPTWorkshopBrowserWidget::ApplyTabVisual()
@@ -143,7 +135,6 @@ void UPTWorkshopBrowserWidget::OnSearchCommitted(const FText& Text, ETextCommit:
 
 void UPTWorkshopBrowserWidget::RunSearch()
 {
-    if (ActiveTab != 0) return; // mapas bloqueado
     UPTWordPackSubsystem* P = Packs();
     if (!P) return;
 
@@ -155,7 +146,9 @@ void UPTWorkshopBrowserWidget::RunSearch()
     }
     if (EmptyText) EmptyText->SetVisibility(ESlateVisibility::Collapsed);
 
-    P->SearchWorkshop(Text, PT_TAG_WORDBANK);
+    // Busca con el tag de la pestaña activa: Bancos (WordBank) o Mapas (Map).
+    const TCHAR* Tag = (ActiveTab == 1) ? PT_TAG_MAP : PT_TAG_WORDBANK;
+    P->SearchWorkshop(Text, Tag);
 }
 
 void UPTWorkshopBrowserWidget::OnSearchComplete(const TArray<FPTWorkshopItem>& Items, bool bOk)
