@@ -180,6 +180,16 @@ void UPTGameInstance::SelectDefaultMap()
     OnSelectedMapChanged.Broadcast();
 }
 
+void UPTGameInstance::EnterMapAuthoring()
+{
+    // Abre el nivel plantilla del MapKit forzando el GameMode de autoría por la URL (?game=...).
+    // Es un travel local (standalone): salís de la sesión actual y entrás solo a esculpir el mapa.
+    if (MapAuthorLevel.IsEmpty()) return;
+    const FString Options = FString::Printf(TEXT("game=%s"), *MapAuthorGameMode);
+    UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Entrando a autoría: %s (%s)"), *MapAuthorLevel, *Options);
+    UGameplayStatics::OpenLevel(this, FName(*MapAuthorLevel), /*bAbsolute=*/true, Options);
+}
+
 // "titulos_peliculas" / "titulos-peliculas" → "Titulos Peliculas" (fallback de título si no lo escriben).
 static FString PT_PrettifyTitle(const FString& In)
 {

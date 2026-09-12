@@ -34,6 +34,7 @@ void UPTWorkshopBrowserWidget::NativeConstruct()
 
     if (SearchButton)       SearchButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnSearchClicked);
     if (PublishButton)      PublishButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnPublishClicked);
+    if (CreateMapButton)    CreateMapButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnCreateMapClicked);
     if (UploadCsvButton)    UploadCsvButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnUploadCsvClicked);
     if (ThumbnailButton)    ThumbnailButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnThumbnailClicked);
     if (ApplyPublishButton) ApplyPublishButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnApplyPublishClicked);
@@ -106,6 +107,8 @@ void UPTWorkshopBrowserWidget::SwitchTab(int32 Tab)
     if (ResultsBox)      ResultsBox->SetVisibility(ESlateVisibility::Visible);
     if (SearchBox)       SearchBox->SetIsEnabled(true);
     if (SearchButton)    SearchButton->SetIsEnabled(true);
+    // "Crear mapa" solo tiene sentido en la pestaña Mapas.
+    if (CreateMapButton) CreateMapButton->SetVisibility(Tab == 1 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 
     ApplyTabVisual();
     RunSearch(); // muestra populares del tag de la pestaña
@@ -194,6 +197,14 @@ void UPTWorkshopBrowserWidget::OnPublishClicked()
         return;
     }
     OnUploadCsvClicked(); // WBP sin popup: al menos deja elegir el CSV
+}
+
+void UPTWorkshopBrowserWidget::OnCreateMapClicked()
+{
+    // Entra al nivel plantilla del MapKit en modo autoría (esculpido libre). Es un travel local:
+    // se sale de la sesión actual. La UI del Workshop se va con el mundo viejo.
+    if (UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance()))
+        GI->EnterMapAuthoring();
 }
 
 void UPTWorkshopBrowserWidget::ResetPublishForm()

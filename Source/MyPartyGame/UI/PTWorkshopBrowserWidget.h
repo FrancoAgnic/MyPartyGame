@@ -53,6 +53,8 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UButton*          SearchButton;
     // "Publish" abre un popup chico con dos botones: subir CSV y descargar plantilla.
     UPROPERTY(meta = (BindWidgetOptional)) UButton*          PublishButton;
+    // "Crear mapa" (solo pestaña Mapas): entra al nivel plantilla en modo autoría (esculpido libre).
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*          CreateMapButton;
     // Popup (Border/Overlay) que agrupa Upload/Template. Arranca oculto; lo abre PublishButton.
     UPROPERTY(meta = (BindWidgetOptional)) UWidget*          PublishPopup;
     // Dentro del popup: campos para el TÍTULO (obligatorio-ish) y la DESCRIPCIÓN (opcional) del banco.
@@ -99,6 +101,7 @@ protected:
     UFUNCTION() void OnMapsTabClicked();
     UFUNCTION() void OnBackClicked();
     UFUNCTION() void OnPublishClicked();     // abre el popup (y resetea la selección)
+    UFUNCTION() void OnCreateMapClicked();   // entra al modo autoría de mapa (esculpido libre)
     UFUNCTION() void OnUploadCsvClicked();   // elige el CSV (no publica); pone el nombre en el botón
     UFUNCTION() void OnThumbnailClicked();   // elige la imagen; la muestra en ThumbnailImage
     UFUNCTION() void OnApplyPublishClicked();// APLICAR → publica el item al Workshop

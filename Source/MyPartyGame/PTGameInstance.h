@@ -112,6 +112,14 @@ public:
     // Notifica a la UI que cambió el mapa elegido (reusa el mismo tipo de delegate).
     FPTOnSelectedWordPackChanged OnSelectedMapChanged;
 
+    // ── Crear mapa desde el juego (autoría) ──────────────────────────────────────────────────
+    // Abre el nivel plantilla del MapKit en modo AUTORÍA (esculpido libre, sin partida): fuerza
+    // BP_MapAuthorGameMode por la URL. Standalone/solo. Lo llama el botón "Crear mapa" del Workshop.
+    UFUNCTION(BlueprintCallable, Category="MapMod") void EnterMapAuthoring();
+    // Ruta del nivel plantilla y del GameMode de autoría (editables por si cambian de lugar).
+    UPROPERTY(EditAnywhere, Category="MapMod") FString MapAuthorLevel = TEXT("/MapKit/Mapa_Plantilla");
+    UPROPERTY(EditAnywhere, Category="MapMod") FString MapAuthorGameMode = TEXT("/Game/Template/Character/BP_MapAuthorGameMode.BP_MapAuthorGameMode_C");
+
     // ── Modo captura / espectador dev (trailer/screenshots) ─────────────────────────────────
     // Cuando está activo, la UI del juego reemplaza LOCALMENTE los nombres de Steam por "Player N"
     // (no se replica; es solo para grabar sin exponer nicks). Lo prende/apaga el comando PTSpectate.
