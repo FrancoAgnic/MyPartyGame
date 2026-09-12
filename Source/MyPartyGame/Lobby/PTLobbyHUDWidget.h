@@ -108,6 +108,7 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* SV_RoundsText;   // "Rondas: 3"
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* SV_RevealText;   // "Revelado: 30%"
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* SV_WordPackText; // "Biblioteca: X / Default"
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* SV_MapText;      // "Mapa: X / Oficial"
 
     void RefreshSettingsView(); // rellena los SV_* desde APTGameState
 

@@ -26,9 +26,12 @@ bool UPTGameSettingsWidget::Initialize()
     if (Btn_Back)            Btn_Back->OnClicked.AddDynamic(this, &UPTGameSettingsWidget::OnCloseClicked);
     if (CloseSettingsButton) CloseSettingsButton->OnClicked.AddDynamic(this, &UPTGameSettingsWidget::OnCloseClicked);
 
-    // Refrescar los textos "Word:/Map:" cuando el host cambia de banco desde la Biblioteca.
+    // Refrescar los textos "Word:/Map:" cuando el host cambia de banco o de mapa desde la Biblioteca.
     if (UPTGameInstance* GI = GetGI())
+    {
         GI->OnSelectedWordPackChanged.AddUObject(this, &UPTGameSettingsWidget::RefreshPackTexts);
+        GI->OnSelectedMapChanged.AddUObject(this, &UPTGameSettingsWidget::RefreshPackTexts);
+    }
     return true;
 }
 
@@ -83,8 +86,10 @@ void UPTGameSettingsWidget::RefreshPackTexts()
     }
     if (MapText)
     {
-        // Mapas custom bloqueados por ahora → siempre "Default".
-        FFormatOrderedArguments Args; Args.Add(Default);
+        // Mapa custom elegido (vacío = mapa oficial).
+        const FString MapTitle = GetGI() ? GetGI()->SelectedMapTitle : FString();
+        const FText Map = MapTitle.IsEmpty() ? Default : FText::FromString(MapTitle);
+        FFormatOrderedArguments Args; Args.Add(Map);
         MapText->SetText(PTText::Format(TEXT("GS_MAP"), Args));
     }
 

@@ -60,6 +60,7 @@ void APTLobbyGameMode::SyncMatchSettingsToState()
         PTGS->MatchNumRounds      = S.NumRounds;
         PTGS->MatchRevealFraction = S.RevealFraction;
         PTGS->MatchWordPackTitle  = GI->SelectedWordPackTitle;
+        PTGS->MatchMapTitle       = GI->SelectedMapTitle;
     }
     if (UMultiplayerSessionsSubsystem* Sessions =
             GetGameInstance() ? GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>() : nullptr)

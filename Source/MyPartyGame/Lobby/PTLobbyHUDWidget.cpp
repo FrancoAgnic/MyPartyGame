@@ -292,6 +292,13 @@ void UPTLobbyHUDWidget::RefreshSettingsView()
         FFormatOrderedArguments Args; Args.Add(Pack);
         SV_WordPackText->SetText(PTText::Format(TEXT("SV_LIBRARY"), Args));
     }
+    if (SV_MapText)
+    {
+        const FText Map = PTGS->MatchMapTitle.IsEmpty()
+            ? PTText::Get(TEXT("SV_MAP_OFFICIAL")) : FText::FromString(PTGS->MatchMapTitle);
+        FFormatOrderedArguments Args; Args.Add(Map);
+        SV_MapText->SetText(PTText::Format(TEXT("SV_MAP"), Args));
+    }
 }
 
 void UPTLobbyHUDWidget::OnCopyCodeClicked()

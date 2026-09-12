@@ -50,6 +50,8 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") bool    bMatchFriendsOnly   = false;
     // Título del banco de palabras activo. Vacío = banco por defecto.
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") FString MatchWordPackTitle;
+    // Título del mapa custom activo. Vacío = mapa oficial (Lvl-01).
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") FString MatchMapTitle;
 
     // true mientras el host tiene ABIERTO su panel de Game Settings: los clientes muestran su
     // panelcito read-only solo en ese lapso (lo ven cambiar en vivo mientras el host edita).
