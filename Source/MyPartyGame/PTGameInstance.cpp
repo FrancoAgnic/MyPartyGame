@@ -227,6 +227,25 @@ bool UPTGameInstance::PickImageFile(FString& OutPath)
     return true;
 }
 
+bool UPTGameInstance::PickMapPakFile(FString& OutPath)
+{
+    IDesktopPlatform* DP = FDesktopPlatformModule::Get();
+    if (!DP) return false;
+    const void* ParentHandle = FSlateApplication::IsInitialized()
+        ? FSlateApplication::Get().FindBestParentWindowHandleForDialogs(nullptr) : nullptr;
+    // Se elige el map.pak del mapa cocinado (Kit_CocinarMapa.bat → MapMods_Output\map.pak). El mod.json
+    // debe estar en la MISMA carpeta; el publish sube ambos.
+    const FString StartDir = FPaths::Combine(FPaths::ProjectDir(), TEXT("MapMods_Output"));
+    TArray<FString> Files;
+    const bool bPicked = DP->OpenFileDialog(
+        ParentHandle, TEXT("Elegir el map.pak del mapa"),
+        FPaths::DirectoryExists(StartDir) ? StartDir : FPaths::ProjectDir(), TEXT(""),
+        TEXT("Mapa (*.pak)|*.pak|Todos (*.*)|*.*"), EFileDialogFlags::None, Files);
+    if (!bPicked || Files.Num() == 0) return false;
+    OutPath = Files[0];
+    return true;
+}
+
 void UPTGameInstance::PublishWordPackFromDialog(const FString& InTitle, const FString& InDescription)
 {
     IDesktopPlatform* DP = FDesktopPlatformModule::Get();

@@ -31,7 +31,9 @@ struct FPTWorkshopPublish
 {
     TFunction<void(bool, FString)> Cb;
     FString ContentFolder, PreviewPath, Title, Desc, Diag;
-    TArray<FString> LangTags; // idiomas del banco ("ES","EN"...) → tags de Steam además de "WordBank"
+    FString BaseTag = TEXT("WordBank"); // tag principal del item: "WordBank" o "Map"
+    FString ChangeNote = TEXT("Banco de palabras"); // nota de cambio del SubmitItemUpdate
+    TArray<FString> LangTags; // idiomas del banco ("ES","EN"...) → tags de Steam además del BaseTag
     PublishedFileId_t ItemId = 0;
     CCallResult<FPTWorkshopPublish, CreateItemResult_t>       CreateCR;
     CCallResult<FPTWorkshopPublish, SubmitItemUpdateResult_t> SubmitCR;
@@ -80,10 +82,9 @@ struct FPTWorkshopPublish
         const bool bPrev    = PreviewPath.IsEmpty() || SteamUGC()->SetItemPreview(U, TCHAR_TO_UTF8(*PreviewPath));
         // Item público por defecto (algunos flujos lo requieren explícito).
         const bool bVis     = SteamUGC()->SetItemVisibility(U, k_ERemoteStoragePublishedFileVisibilityPublic);
-        // Tags: "WordBank" (para filtrar solo bancos en el buscador) + un tag por IDIOMA del banco
-        // ("ES","EN"...), así se puede ver/filtrar en qué idiomas está. Los códigos se auto-detectan
-        // del CSV al publicar (columnas con palabras).
-        TArray<FString> AllTags; AllTags.Add(TEXT("WordBank")); AllTags.Append(LangTags);
+        // Tags: BaseTag ("WordBank" o "Map", para filtrar por sección en el buscador) + un tag por
+        // IDIOMA ("ES","EN"...) en los bancos. Los códigos se auto-detectan del CSV al publicar.
+        TArray<FString> AllTags; AllTags.Add(BaseTag); AllTags.Append(LangTags);
         TArray<FTCHARToUTF8> Utf8; Utf8.Reserve(AllTags.Num());
         for (const FString& T : AllTags) Utf8.Emplace(*T);
         TArray<const char*> Ptrs; Ptrs.Reserve(Utf8.Num());
@@ -97,7 +98,7 @@ struct FPTWorkshopPublish
             TEXT("[Publish] ItemId=%llu %s content='%s' preview='%s'"),
             (uint64)ItemId, *Diag, *ContentFolder, *PreviewPath);
 
-        const SteamAPICall_t h = SteamUGC()->SubmitItemUpdate(U, "Banco de palabras");
+        const SteamAPICall_t h = SteamUGC()->SubmitItemUpdate(U, TCHAR_TO_UTF8(*ChangeNote));
         SubmitCR.Set(h, this, &FPTWorkshopPublish::OnSubmit);
     }
 
@@ -696,6 +697,104 @@ void UPTWordPackSubsystem::PublishWordPack(const FString& CsvPath, const FString
                 bOk ? TEXT("OK") : TEXT("FALLÓ"), *Info);
             OnWordPackPublished.Broadcast(bOk, Info);
             if (bOk) RescanPacks();
+        });
+#else
+    OnWordPackPublished.Broadcast(false, TEXT("Steamworks no disponible en esta plataforma"));
+#endif
+}
+
+void UPTWordPackSubsystem::PublishMap(const FString& MapPakPath, const FString& Title,
+                                      const FString& Description, const FString& PreviewPath)
+{
+#if PT_WITH_STEAM
+    if (!SteamUGC() || !SteamUtils())
+    {
+        OnWordPackPublished.Broadcast(false, TEXT("Steam no disponible"));
+        return;
+    }
+    if (!FPaths::FileExists(MapPakPath))
+    {
+        OnWordPackPublished.Broadcast(false, TEXT("No existe el map.pak"));
+        return;
+    }
+    // El mod.json (MapName/Title/Author) tiene que estar al lado del map.pak (lo genera Kit_CocinarMapa.bat).
+    const FString SrcDir  = FPaths::GetPath(MapPakPath);
+    const FString SrcJson = FPaths::Combine(SrcDir, TEXT("mod.json"));
+    if (!FPaths::FileExists(SrcJson))
+    {
+        OnWordPackPublished.Broadcast(false, TEXT("Falta mod.json junto al map.pak"));
+        return;
+    }
+
+    // ISteamUGC sube una CARPETA. Staging en %TEMP% (siempre escribible):
+    //   <base>/content/ → map.pak + mod.json  → SetItemContent (ruta ABSOLUTA + nativa)
+    //   <base>/preview.png → miniatura FUERA de content.
+    FString Base = FPaths::Combine(FString(FPlatformProcess::UserTempDir()),
+                                   TEXT("SculpturilloWorkshop"),
+                                   FGuid::NewGuid().ToString(EGuidFormats::Short));
+    Base = FPaths::ConvertRelativePathToFull(Base);
+    FPaths::MakePlatformFilename(Base);
+    FString Content = FPaths::Combine(Base, TEXT("content"));
+    FPaths::MakePlatformFilename(Content);
+
+    IFileManager& FM = IFileManager::Get();
+    const bool bDir   = FM.MakeDirectory(*Content, /*Tree=*/true);
+    const bool bPak   = (FM.Copy(*FPaths::Combine(Content, TEXT("map.pak")), *MapPakPath) == COPY_OK);
+    const bool bJson  = (FM.Copy(*FPaths::Combine(Content, TEXT("mod.json")), *SrcJson) == COPY_OK);
+
+    // Preview: misma lógica que los bancos (achicar a ≤512 y re-encodar; fallback branded; fallback sólido).
+    FString UsePreview;
+    if (!PreviewPath.IsEmpty())
+    {
+        FString Processed;
+        if (PT_ProcessPreviewImage(PreviewPath, Base, Processed)) UsePreview = Processed;
+    }
+    if (UsePreview.IsEmpty())
+    {
+        const FString Branded = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("UI/Workshop/DefaultWordBankThumbnail.png"));
+        if (FPaths::FileExists(Branded))
+        {
+            FString Processed;
+            if (PT_ProcessPreviewImage(Branded, Base, Processed)) UsePreview = Processed;
+        }
+    }
+    if (UsePreview.IsEmpty())
+    {
+        const int32 Sz = 256;
+        TArray<FColor> Pixels; Pixels.Init(FColor(90, 150, 200, 255), Sz * Sz);
+        IImageWrapperModule& IW = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
+        TSharedPtr<IImageWrapper> Wrapper = IW.CreateImageWrapper(EImageFormat::PNG);
+        if (Wrapper.IsValid() &&
+            Wrapper->SetRaw(Pixels.GetData(), Pixels.Num() * sizeof(FColor), Sz, Sz, ERGBFormat::BGRA, 8))
+        {
+            const TArray64<uint8>& Png = Wrapper->GetCompressed(100);
+            const FString PrevFile = FPaths::Combine(Base, TEXT("preview.png"));
+            if (FFileHelper::SaveArrayToFile(TArray<uint8>(Png), *PrevFile)) UsePreview = PrevFile;
+        }
+    }
+    if (!UsePreview.IsEmpty()) FPaths::MakePlatformFilename(UsePreview);
+
+    UE_LOG(LogPTWordPacks, Warning, TEXT("[PublishMap] Content='%s' dir=%d pak=%d json=%d preview='%s'"),
+        *Content, bDir ? 1 : 0, bPak ? 1 : 0, bJson ? 1 : 0, *UsePreview);
+    if (!bPak || !bJson)
+    {
+        OnWordPackPublished.Broadcast(false, FString::Printf(TEXT("No se pudo armar el staging: %s"), *Content));
+        return;
+    }
+
+    FString EffectiveTitle = Title;
+    EffectiveTitle.TrimStartAndEndInline();
+    if (EffectiveTitle.IsEmpty()) EffectiveTitle = PT_PrettifyName(FPaths::GetBaseFilename(SrcDir));
+
+    delete Publisher;
+    Publisher = new FPTWorkshopPublish();
+    Publisher->BaseTag    = TEXT("Map");   // filtra en la pestaña Mapas del buscador
+    Publisher->ChangeNote = TEXT("Mapa");
+    Publisher->Start(Content, UsePreview, EffectiveTitle, Description, /*LangTags=*/{},
+        [this](bool bOk, FString Info)
+        {
+            UE_LOG(LogPTWordPacks, Log, TEXT("PublishMap: %s (%s)"), bOk ? TEXT("OK") : TEXT("FALLÓ"), *Info);
+            OnWordPackPublished.Broadcast(bOk, Info);
         });
 #else
     OnWordPackPublished.Broadcast(false, TEXT("Steamworks no disponible en esta plataforma"));

@@ -95,6 +95,8 @@ public:
     UFUNCTION(BlueprintCallable, Category="WordPack") bool PickCsvFile(FString& OutPath);
     // Abre SOLO el diálogo para elegir una imagen (PNG/JPG). Devuelve true y la ruta si eligió algo.
     UFUNCTION(BlueprintCallable, Category="WordPack") bool PickImageFile(FString& OutPath);
+    // Abre el diálogo para elegir el map.pak del mapa cocinado (MapMods_Output). Devuelve la ruta al .pak.
+    UFUNCTION(BlueprintCallable, Category="WordPack") bool PickMapPakFile(FString& OutPath);
     // Título del banco elegido (vacío = default), para mostrarlo en el lobby.
     UPROPERTY(BlueprintReadOnly, Category="WordPack") FString SelectedWordPackTitle;
     // Notifica a la UI que cambió el banco elegido (ver SelectWordPack/SelectDefaultWordBank).

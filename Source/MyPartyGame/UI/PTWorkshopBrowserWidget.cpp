@@ -200,7 +200,7 @@ void UPTWorkshopBrowserWidget::ResetPublishForm()
 {
     PendingCsvPath.Reset();
     PendingImagePath.Reset();
-    if (CsvButtonLabel)  CsvButtonLabel->SetText(PTText::Get(TEXT("WORDPACK_CHOOSE_CSV")));
+    if (CsvButtonLabel)  CsvButtonLabel->SetText(PTText::Get(ActiveTab == 1 ? TEXT("WORDPACK_CHOOSE_MAP") : TEXT("WORDPACK_CHOOSE_CSV")));
     if (ThumbnailImage)  ThumbnailImage->SetVisibility(ESlateVisibility::Collapsed);
     if (ApplyPublishButton) ApplyPublishButton->SetIsEnabled(true);
     if (StatusText)        StatusText->SetVisibility(ESlateVisibility::Collapsed);
@@ -232,13 +232,14 @@ void UPTWorkshopBrowserWidget::OnGuideClicked()
 
 void UPTWorkshopBrowserWidget::OnUploadCsvClicked()
 {
-    // Paso 1: elegir el CSV del banco. NO publica: solo guarda la selección y pone el nombre del
-    // archivo en el botón. Publicar es después, con "Aplicar".
+    // Paso 1: elegir el contenido. NO publica: solo guarda la selección y pone el nombre del archivo en
+    // el botón. En Bancos = CSV; en Mapas = map.pak (cocinado con Kit_CocinarMapa.bat). Publicar es después.
     if (bUploading) return;
     UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance());
     if (!GI) return;
     FString Path;
-    if (!GI->PickCsvFile(Path)) return;
+    const bool bMaps = (ActiveTab == 1);
+    if (bMaps ? !GI->PickMapPakFile(Path) : !GI->PickCsvFile(Path)) return;
     PendingCsvPath = Path;
     if (CsvButtonLabel) CsvButtonLabel->SetText(FText::FromString(FPaths::GetBaseFilename(Path)));
     if (PublishStatusText) PublishStatusText->SetVisibility(ESlateVisibility::Collapsed);
@@ -278,7 +279,7 @@ void UPTWorkshopBrowserWidget::OnApplyPublishClicked()
     if (Title.IsEmpty())            Missing.Add(PTText::GetStr(TEXT("WORDPACK_F_TITLE")));
     if (PendingImagePath.IsEmpty()) Missing.Add(PTText::GetStr(TEXT("WORDPACK_F_THUMB")));
     if (Desc.IsEmpty())             Missing.Add(PTText::GetStr(TEXT("WORDPACK_F_DESC")));
-    if (PendingCsvPath.IsEmpty())   Missing.Add(PTText::GetStr(TEXT("WORDPACK_F_CSV")));
+    if (PendingCsvPath.IsEmpty())   Missing.Add(PTText::GetStr(ActiveTab == 1 ? TEXT("WORDPACK_F_MAP") : TEXT("WORDPACK_F_CSV")));
     if (Missing.Num() > 0)
     {
         FFormatOrderedArguments Args;
@@ -301,7 +302,10 @@ void UPTWorkshopBrowserWidget::OnApplyPublishClicked()
         W->GetTimerManager().SetTimer(UploadAnimTimer, this, &UPTWorkshopBrowserWidget::TickUploadingText, 0.35f, /*loop=*/true);
 
     if (UPTWordPackSubsystem* WP = Packs())
-        WP->PublishWordPack(PendingCsvPath, Title, Desc, PendingImagePath);
+    {
+        if (ActiveTab == 1) WP->PublishMap(PendingCsvPath, Title, Desc, PendingImagePath);
+        else                WP->PublishWordPack(PendingCsvPath, Title, Desc, PendingImagePath);
+    }
 }
 
 void UPTWorkshopBrowserWidget::ShowPublishMsg(const FText& Msg)
