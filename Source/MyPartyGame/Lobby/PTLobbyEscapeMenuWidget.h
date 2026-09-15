@@ -36,6 +36,11 @@ protected:
     // Solo en modo AUTORÍA de mapa: guarda el escenario esculpido. Se muestra únicamente en ese modo.
     UPROPERTY(meta = (BindWidgetOptional)) UButton* SaveMapButton;
 
+    // Popup "¿salir sin guardar?" (solo autoría, al tocar Salir). Arranca oculto.
+    UPROPERTY(meta = (BindWidgetOptional)) UWidget* DiscardPopup;
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* DiscardDontSaveButton; // salir sin guardar
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* DiscardSaveButton;     // abre el form de Guardar
+
     UPROPERTY(meta = (BindWidgetOptional)) UPTSettingsWidget* SettingsPanel;
     // Formulario de Guardar mapa (título/desc/miniatura). Asignar WBP_SaveMap (deriva de PTSaveMapWidget).
     UPROPERTY(EditAnywhere, Category = "MapMod") TSubclassOf<class UPTSaveMapWidget> SaveMapClass;
@@ -45,7 +50,10 @@ protected:
     UFUNCTION() void OnSettingsClicked();
     UFUNCTION() void OnResumeClicked();
     UFUNCTION() void OnSaveMapClicked();
+    UFUNCTION() void OnDiscardDontSave(); // salir sin guardar
+    UFUNCTION() void OnDiscardSave();     // abre el form de Guardar
 
 private:
     bool IsMapAuthorMode() const; // el GameMode actual es APTMapAuthorGameMode
+    void DoLeaveGame();           // la salida real (host-leave o OpenLevel MainMenu)
 };

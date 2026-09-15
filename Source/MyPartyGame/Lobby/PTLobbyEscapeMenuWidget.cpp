@@ -19,6 +19,9 @@ bool UPTLobbyEscapeMenuWidget::Initialize()
     if (SettingsButton)  SettingsButton->OnClicked.AddDynamic(this, &UPTLobbyEscapeMenuWidget::OnSettingsClicked);
     if (ResumeButton)    ResumeButton->OnClicked.AddDynamic(this, &UPTLobbyEscapeMenuWidget::OnResumeClicked);
     if (SaveMapButton)   SaveMapButton->OnClicked.AddDynamic(this, &UPTLobbyEscapeMenuWidget::OnSaveMapClicked);
+    if (DiscardDontSaveButton) DiscardDontSaveButton->OnClicked.AddDynamic(this, &UPTLobbyEscapeMenuWidget::OnDiscardDontSave);
+    if (DiscardSaveButton)     DiscardSaveButton->OnClicked.AddDynamic(this, &UPTLobbyEscapeMenuWidget::OnDiscardSave);
+    if (DiscardPopup)          DiscardPopup->SetVisibility(ESlateVisibility::Collapsed);
 
     SetVisibility(ESlateVisibility::Collapsed);
     return true;
@@ -72,6 +75,17 @@ void UPTLobbyEscapeMenuWidget::HandleEscape()
 
 void UPTLobbyEscapeMenuWidget::OnLeaveGameClicked()
 {
+    // En modo AUTORÍA de mapa: preguntar antes de salir (podés perder cambios sin guardar).
+    if (IsMapAuthorMode() && DiscardPopup)
+    {
+        DiscardPopup->SetVisibility(ESlateVisibility::Visible);
+        return;
+    }
+    DoLeaveGame();
+}
+
+void UPTLobbyEscapeMenuWidget::DoLeaveGame()
+{
     UWorld* World = GetWorld();
 
     // Si el que se va es el ANFITRIÓN, no se puede cerrar el mundo de una: eso deja a los clientes
@@ -85,9 +99,23 @@ void UPTLobbyEscapeMenuWidget::OnLeaveGameClicked()
         }
     }
 
-    // Cliente (o partida local): OpenLevel desconecta del server; en el servidor eso dispara
+    // Cliente / autoría / partida local: OpenLevel desconecta del server; en el servidor eso dispara
     // APTLobbyGameMode::Logout, que ya limpia la sesión si era el último jugador.
     UGameplayStatics::OpenLevel(this, FName("MainMenu"));
+}
+
+void UPTLobbyEscapeMenuWidget::OnDiscardDontSave()
+{
+    // "No guardar": salir directo (se pierden los cambios sin guardar).
+    if (DiscardPopup) DiscardPopup->SetVisibility(ESlateVisibility::Collapsed);
+    DoLeaveGame();
+}
+
+void UPTLobbyEscapeMenuWidget::OnDiscardSave()
+{
+    // "Guardar": cerrar el aviso y abrir el formulario de Guardar (título/desc/miniatura).
+    if (DiscardPopup) DiscardPopup->SetVisibility(ESlateVisibility::Collapsed);
+    OnSaveMapClicked();
 }
 
 void UPTLobbyEscapeMenuWidget::OnSettingsClicked()
