@@ -123,18 +123,6 @@ void APTSculptPlayerController::BeginPlay()
     if (!Volume)
         UE_LOG(LogTemp, Warning, TEXT("[PTSculptPC] No APTSculptVolume in level!"));
 
-    // Preview del asset a colocar (modo autoría). Componente suelto sin colisión que sigue el cursor.
-    AssetPreview = NewObject<UStaticMeshComponent>(this, TEXT("AssetPreviewComp"));
-    if (AssetPreview)
-    {
-        AssetPreview->RegisterComponent();
-        AssetPreview->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-        AssetPreview->SetCastShadow(false);
-        AssetPreview->SetVisibility(false);
-    }
-
-
-
     // Actor para la preview de la forma del stamp
     FActorSpawnParameters SP;
     SP.bNoFail = true;
@@ -154,6 +142,18 @@ void APTSculptPlayerController::BeginPlay()
         // el boundary (M_SculptBoundary) a veces tapaba el preview aunque el preview esté DENTRO. Le damos
         // al preview una prioridad alta para que siempre se dibuje por encima del boundary (que va a -100).
         PreviewMesh->SetTranslucentSortPriority(10);
+
+        // Preview del ASSET a colocar (modo autoría): sigue el cursor con transform absoluto (independiente
+        // del preview de la forma). Attacheado al PreviewActor (que sí vive en el mundo) para que renderice.
+        AssetPreview = NewObject<UStaticMeshComponent>(PreviewActor, TEXT("AssetPreviewComp"));
+        AssetPreview->SetupAttachment(PreviewMesh);
+        AssetPreview->SetUsingAbsoluteLocation(true);
+        AssetPreview->SetUsingAbsoluteRotation(true);
+        AssetPreview->SetUsingAbsoluteScale(true);
+        AssetPreview->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        AssetPreview->SetCastShadow(false);
+        AssetPreview->RegisterComponent();
+        AssetPreview->SetVisibility(false);
 
         // Mesh estático opcional (cuando el usuario asigna sus propios meshes).
         PreviewStaticMesh = NewObject<UStaticMeshComponent>(PreviewActor, TEXT("PreviewStaticMesh"));
