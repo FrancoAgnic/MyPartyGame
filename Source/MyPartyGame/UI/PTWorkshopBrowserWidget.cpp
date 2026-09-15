@@ -2,6 +2,7 @@
 
 #include "PTWorkshopBrowserWidget.h"
 #include "PTWorkshopItemRowWidget.h"
+#include "PTPublishWidget.h"
 #include "../PTTextTable.h"
 #include "../PTGameInstance.h"
 #include "../PTGameUserSettings.h" // idioma actual → abrir la guía web en ese idioma
@@ -191,7 +192,18 @@ void UPTWorkshopBrowserWidget::AddItem(const FString& ItemId)
 
 void UPTWorkshopBrowserWidget::OnPublishClicked()
 {
-    // Abre el popup (elegir contenido → miniatura → Aplicar). Arranca con el formulario limpio.
+    // Ventana de publicar en su PROPIO widget (WBP_Publish): dos secciones (banco CSV / mapas por combo).
+    if (PublishWidgetClass)
+    {
+        if (!PublishWidget)
+        {
+            PublishWidget = CreateWidget<UPTPublishWidget>(this, PublishWidgetClass);
+            if (PublishWidget) PublishWidget->AddToViewport(70); // por encima del browser
+        }
+        if (PublishWidget) { PublishWidget->ShowPanel(); return; }
+    }
+
+    // Fallback (compat): popup viejo embebido en este WBP.
     if (PublishPopup)
     {
         ResetPublishForm();

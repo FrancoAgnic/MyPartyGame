@@ -97,6 +97,11 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Workshop")
     TSubclassOf<UPTWorkshopItemRowWidget> RowWidgetClass;
 
+    // Ventana de publicar (widget aparte). Asignar WBP_Publish (deriva de PTPublishWidget) en Details.
+    UPROPERTY(EditAnywhere, Category="Workshop")
+    TSubclassOf<class UPTPublishWidget> PublishWidgetClass;
+    UPROPERTY(Transient) class UPTPublishWidget* PublishWidget = nullptr; // creado una vez y reusado
+
     UPROPERTY(EditAnywhere, Category="Workshop") FLinearColor TabActiveColor   = FLinearColor(0.95f, 0.25f, 0.55f, 1.f);
     UPROPERTY(EditAnywhere, Category="Workshop") FLinearColor TabInactiveColor = FLinearColor(0.20f, 0.45f, 0.75f, 1.f);
 
