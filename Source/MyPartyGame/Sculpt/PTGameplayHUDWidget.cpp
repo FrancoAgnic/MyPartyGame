@@ -127,14 +127,17 @@ static FText PT_ShortKeyLabel(const FKey& Key)
 
 UPTToolSlotWidget* UPTGameplayHUDWidget::CreateSlotIn(UPanelWidget* Box, UTexture2D* Icon,
                                                      const FText& KeyName, const FText& Label,
-                                                     UTexture2D* KeyIconTex)
+                                                     UTexture2D* KeyIconTex,
+                                                     TSubclassOf<UPTToolSlotWidget> SlotClassOverride)
 {
-    if (!Box || !ToolSlotClass) return nullptr;
+    // Clase de la celda: override (tools grandes) o la default.
+    TSubclassOf<UPTToolSlotWidget> Cls = SlotClassOverride ? SlotClassOverride : ToolSlotClass;
+    if (!Box || !Cls) return nullptr;
     // Outer: en juego el PlayerController; en el diseñador (sin PC) usamos este widget, así el preview
     // se puede crear en el editor de widgets. (CreateWidget elige overload por el tipo del outer.)
     UPTToolSlotWidget* S = GetOwningPlayer()
-        ? CreateWidget<UPTToolSlotWidget>(GetOwningPlayer(), ToolSlotClass)
-        : CreateWidget<UPTToolSlotWidget>(this, ToolSlotClass);
+        ? CreateWidget<UPTToolSlotWidget>(GetOwningPlayer(), Cls)
+        : CreateWidget<UPTToolSlotWidget>(this, Cls);
     if (!S) return nullptr;
     S->SetSlot(Icon, KeyName, Label, KeyIconTex);
     UPanelSlot* PS = Box->AddChild(S);
@@ -158,14 +161,16 @@ void UPTGameplayHUDWidget::BuildToolbar()
 
     // Tools: la tecla sale de PTInput (misma tabla que bindea el controller) → si se rebindea,
     // el cuadrito muestra la tecla nueva sin tocar nada acá.
+    // Tools 1/2/3/4: usan la clase GRANDE (con marco de fondo) si está asignada; si no, la default.
     if (ToolsBox)
     {
+        TSubclassOf<UPTToolSlotWidget> ToolsCls = ToolSlotToolsClass ? ToolSlotToolsClass : ToolSlotClass;
         ToolsBox->ClearChildren();
         ToolSlots.Reset();
-        ToolSlots.Add(MakeSlot(ToolsBox, IconAdd,   PTInput::GetKey(TEXT("ModeAdd")),   PTText::Get(TEXT("TOOL_ADD"))));
-        ToolSlots.Add(MakeSlot(ToolsBox, IconErase, PTInput::GetKey(TEXT("ModeErase")), PTText::Get(TEXT("TOOL_ERASE"))));
-        ToolSlots.Add(MakeSlot(ToolsBox, IconPaint, PTInput::GetKey(TEXT("ModePaint")), PTText::Get(TEXT("TOOL_PAINT"))));
-        ToolSlots.Add(MakeSlot(ToolsBox, IconEyes,  PTInput::GetKey(TEXT("ModeEyes")),  PTText::Get(TEXT("TOOL_EYES"))));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconAdd,   PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModeAdd"))),   PTText::Get(TEXT("TOOL_ADD")),   nullptr, ToolsCls));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconErase, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModeErase"))), PTText::Get(TEXT("TOOL_ERASE")), nullptr, ToolsCls));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconPaint, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModePaint"))), PTText::Get(TEXT("TOOL_PAINT")), nullptr, ToolsCls));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconEyes,  PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModeEyes"))),  PTText::Get(TEXT("TOOL_EYES")),  nullptr, ToolsCls));
     }
 
     // Formas + Color: ShapesBox lleva la celda-hint de formas ("mantener TAB → formas") y, al lado,
@@ -210,12 +215,13 @@ void UPTGameplayHUDWidget::BuildToolbarPreview()
     // Tools 1/2/3/4 (con marca de "equipado" en la primera, como se ve en juego).
     if (ToolsBox)
     {
+        TSubclassOf<UPTToolSlotWidget> ToolsCls = ToolSlotToolsClass ? ToolSlotToolsClass : ToolSlotClass;
         ToolsBox->ClearChildren();
         ToolSlots.Reset();
-        ToolSlots.Add(CreateSlotIn(ToolsBox, IconAdd,   PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModeAdd"))),   PTText::Get(TEXT("TOOL_ADD"))));
-        ToolSlots.Add(CreateSlotIn(ToolsBox, IconErase, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModeErase"))), PTText::Get(TEXT("TOOL_ERASE"))));
-        ToolSlots.Add(CreateSlotIn(ToolsBox, IconPaint, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModePaint"))), PTText::Get(TEXT("TOOL_PAINT"))));
-        ToolSlots.Add(CreateSlotIn(ToolsBox, IconEyes,  PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModeEyes"))),  PTText::Get(TEXT("TOOL_EYES"))));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconAdd,   PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModeAdd"))),   PTText::Get(TEXT("TOOL_ADD")),   nullptr, ToolsCls));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconErase, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModeErase"))), PTText::Get(TEXT("TOOL_ERASE")), nullptr, ToolsCls));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconPaint, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModePaint"))), PTText::Get(TEXT("TOOL_PAINT")), nullptr, ToolsCls));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconEyes,  PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModeEyes"))),  PTText::Get(TEXT("TOOL_EYES")),  nullptr, ToolsCls));
         if (ToolSlots.Num() > 0 && ToolSlots[0]) ToolSlots[0]->SetSelected(true);
     }
 

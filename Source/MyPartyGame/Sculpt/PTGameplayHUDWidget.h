@@ -47,7 +47,8 @@ public:
      *  diseño. Reusado por BuildToolbar, los hints y el preview del diseñador. */
     class UPTToolSlotWidget* CreateSlotIn(class UPanelWidget* Box, UTexture2D* Icon,
                                           const FText& KeyName, const FText& Label,
-                                          UTexture2D* KeyIconTex = nullptr);
+                                          UTexture2D* KeyIconTex = nullptr,
+                                          TSubclassOf<class UPTToolSlotWidget> SlotClassOverride = nullptr);
     /** Puebla el hotbar con celdas de ejemplo SOLO en el diseñador (WYSIWYG). */
     void BuildToolbarPreview();
     /** Actualiza qué está equipado y qué barras se ven según el modo. Se llama desde RefreshTick. */
@@ -108,9 +109,14 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) class UImage* IconHighPing;     // latencia alta (>500 ms)
     UPROPERTY(meta=(BindWidgetOptional)) class UImage* IconDisconnected; // se cayó el server / se fue internet
 
-    /** WBP del cuadrito (derivado de UPTToolSlotWidget). */
+    /** WBP del cuadrito (derivado de UPTToolSlotWidget). Lo usan formas/hints/borrar/color. */
     UPROPERTY(EditAnywhere, Category="UI")
     TSubclassOf<class UPTToolSlotWidget> ToolSlotClass;
+
+    /** WBP del cuadrito de las HERRAMIENTAS (1/2/3/4): más grande + marco de fondo (se tiñe naranja al
+     *  estar equipado vía OnSelectedChanged/SelectedMarker en el WBP). Si queda vacío, usa ToolSlotClass. */
+    UPROPERTY(EditAnywhere, Category="UI")
+    TSubclassOf<class UPTToolSlotWidget> ToolSlotToolsClass;
 
     /** Separación horizontal entre celdas del hotbar (UU), aplicada igual en el diseñador y en juego.
      *  0 = sin padding extra (usa el layout tal cual del contenedor). Subilo para separar las celdas. */
