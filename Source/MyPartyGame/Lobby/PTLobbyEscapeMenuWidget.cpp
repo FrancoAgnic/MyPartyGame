@@ -5,7 +5,7 @@
 #include "PTLobbyGameMode.h"
 #include "../PTGameInstance.h"
 #include "../Mods/PTMapAuthorGameMode.h"
-#include "../Sculpt/PTSculptVolume.h"
+#include "../Mods/PTMapEnvironment.h"
 #include "../UI/PTSaveMapWidget.h"
 #include "Engine/World.h"
 #include "Components/Button.h"
@@ -160,13 +160,13 @@ void UPTLobbyEscapeMenuWidget::OnSaveMapClicked()
         if (SaveMapForm) { SaveMapForm->ShowPanel(); return; }
     }
 
-    // Fallback (sin WBP de formulario): guardar directo el escenario (sin metadatos).
+    // Fallback (sin WBP de formulario): guardar directo el mapa (props) sin metadatos.
     UWorld* W = GetWorld();
     UPTGameInstance* GI = W ? Cast<UPTGameInstance>(W->GetGameInstance()) : nullptr;
-    APTSculptVolume* Vol = W ? Cast<APTSculptVolume>(
-        UGameplayStatics::GetActorOfClass(W, APTSculptVolume::StaticClass())) : nullptr;
-    if (!GI || !Vol) return;
+    APTMapEnvironment* Env = W ? Cast<APTMapEnvironment>(
+        UGameplayStatics::GetActorOfClass(W, APTMapEnvironment::StaticClass())) : nullptr;
+    if (!GI || !Env) return;
     TArray<uint8> Blob;
-    Vol->SaveSnapshot(Blob);
+    Env->SerializeEnvironment(Blob);
     GI->SaveAuthoredMap(Blob);
 }

@@ -53,6 +53,14 @@ public:
     /** Borra la instancia más cercana a WorldPos dentro de Radius (cualquier asset). true si borró. */
     bool RemoveInstanceNear(const FVector& WorldPos, float Radius);
 
+    /** Serializa el mapa (geometría de cada asset único + transforms de todas las instancias) a un blob.
+     *  Es el contenido del mapa que se guarda/publica/replica. */
+    void SerializeEnvironment(TArray<uint8>& Out);
+    /** Reconstruye el entorno desde el blob (reconstruye StaticMesh + HISM y recoloca las instancias). */
+    void DeserializeEnvironment(const TArray<uint8>& In);
+    /** Vacía todo (assets + instancias). */
+    void ClearAll();
+
 private:
     struct FPTPropAsset
     {

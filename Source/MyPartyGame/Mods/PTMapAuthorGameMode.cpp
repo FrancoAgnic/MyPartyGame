@@ -35,14 +35,15 @@ void APTMapAuthorGameMode::BeginPlay()
 
 void APTMapAuthorGameMode::LoadSavedMapIntoVolume()
 {
-    APTSculptVolume* V = FindVolume();
     UPTGameInstance* GI = GetGameInstance<UPTGameInstance>();
-    if (!V || !GI) return;
+    APTMapEnvironment* Env = Cast<APTMapEnvironment>(
+        UGameplayStatics::GetActorOfClass(GetWorld(), APTMapEnvironment::StaticClass()));
+    if (!GI || !Env) return;
     TArray<uint8> Blob;
     if (GI->LoadAuthoredMap(Blob))
     {
-        V->LoadSnapshot(Blob);
-        UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Escenario guardado cargado (%d bytes)."), Blob.Num());
+        Env->DeserializeEnvironment(Blob); // reconstruye los props colocados
+        UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Mapa guardado cargado (%d bytes)."), Blob.Num());
     }
 }
 

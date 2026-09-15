@@ -8,6 +8,8 @@
 #include "StaticMeshAttributes.h"
 #include "MeshDescription.h"
 #include "MeshDescriptionBuilder.h"
+#include "Serialization/MemoryWriter.h"
+#include "Serialization/MemoryReader.h"
 
 APTMapEnvironment::APTMapEnvironment()
 {
@@ -171,4 +173,59 @@ bool APTMapEnvironment::RemoveInstanceNear(const FVector& WorldPos, float Radius
         return true;
     }
     return false;
+}
+
+void APTMapEnvironment::ClearAll()
+{
+    for (FPTPropAsset& A : Assets)
+        if (A.HISM) A.HISM->DestroyComponent();
+    Assets.Reset();
+}
+
+void APTMapEnvironment::SerializeEnvironment(TArray<uint8>& Out)
+{
+    Out.Reset();
+    FMemoryWriter Ar(Out, /*bIsPersistent=*/true);
+    int32 Version = 1; Ar << Version;
+    int32 NumAssets = Assets.Num(); Ar << NumAssets;
+    for (FPTPropAsset& A : Assets)
+    {
+        Ar << A.Geo.Verts;
+        Ar << A.Geo.Normals;
+        Ar << A.Geo.Colors;
+        Ar << A.Geo.Tris;
+        // Instancias de este asset (transforms en mundo).
+        int32 NInst = A.HISM ? A.HISM->GetInstanceCount() : 0;
+        Ar << NInst;
+        for (int32 i = 0; i < NInst; ++i)
+        {
+            FTransform Xf;
+            if (A.HISM) A.HISM->GetInstanceTransform(i, Xf, /*bWorldSpace=*/true);
+            Ar << Xf;
+        }
+    }
+}
+
+void APTMapEnvironment::DeserializeEnvironment(const TArray<uint8>& In)
+{
+    ClearAll();
+    if (In.Num() == 0) return;
+    FMemoryReader Ar(In, /*bIsPersistent=*/true);
+    int32 Version = 0; Ar << Version;
+    int32 NumAssets = 0; Ar << NumAssets;
+    for (int32 a = 0; a < NumAssets; ++a)
+    {
+        FPTPropGeometry Geo;
+        Ar << Geo.Verts;
+        Ar << Geo.Normals;
+        Ar << Geo.Colors;
+        Ar << Geo.Tris;
+        const int32 Idx = AddAsset(Geo); // reconstruye StaticMesh + HISM
+        int32 NInst = 0; Ar << NInst;
+        for (int32 i = 0; i < NInst; ++i)
+        {
+            FTransform Xf; Ar << Xf;
+            if (Idx != INDEX_NONE) PlaceInstance(Idx, Xf);
+        }
+    }
 }

@@ -3,7 +3,7 @@
 #include "PTSaveMapWidget.h"
 #include "../PTGameInstance.h"
 #include "../PTTextTable.h"
-#include "../Sculpt/PTSculptVolume.h"
+#include "../Mods/PTMapEnvironment.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/Image.h"
@@ -76,15 +76,15 @@ bool UPTSaveMapWidget::DoSave()
 {
     UWorld* W = GetWorld();
     UPTGameInstance* G = GI();
-    APTSculptVolume* Vol = W ? Cast<APTSculptVolume>(
-        UGameplayStatics::GetActorOfClass(W, APTSculptVolume::StaticClass())) : nullptr;
-    if (!G || !Vol) return false;
+    APTMapEnvironment* Env = W ? Cast<APTMapEnvironment>(
+        UGameplayStatics::GetActorOfClass(W, APTMapEnvironment::StaticClass())) : nullptr;
+    if (!G || !Env) return false;
 
     const FString Title = TitleBox ? TitleBox->GetText().ToString().TrimStartAndEnd() : FString();
     const FString Desc  = DescBox  ? DescBox->GetText().ToString().TrimStartAndEnd()  : FString();
 
     TArray<uint8> Blob;
-    Vol->SaveSnapshot(Blob);                          // escenario (geometría + pintura)
+    Env->SerializeEnvironment(Blob);                  // mapa = assets + placements (props colocados)
     G->SaveAuthoredMap(Blob);                         // → sculpt.bin del mapa actual
     G->SaveAuthoredMapMeta(Title, Desc, PendingThumb);// → mod.json (título/desc) + preview.png (si elegiste)
     return true;
