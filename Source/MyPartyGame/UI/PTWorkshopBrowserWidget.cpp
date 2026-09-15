@@ -3,6 +3,7 @@
 #include "PTWorkshopBrowserWidget.h"
 #include "PTWorkshopItemRowWidget.h"
 #include "PTPublishWidget.h"
+#include "PTLevelCreatorWidget.h"
 #include "../PTTextTable.h"
 #include "../PTGameInstance.h"
 #include "../PTGameUserSettings.h" // idioma actual → abrir la guía web en ese idioma
@@ -265,10 +266,14 @@ void UPTWorkshopBrowserWidget::OnEditMapClicked()
 
 void UPTWorkshopBrowserWidget::OnCreateMapClicked()
 {
-    // Entra al nivel plantilla del MapKit en modo autoría (esculpido libre). Es un travel local:
-    // se sale de la sesión actual. La UI del Workshop se va con el mundo viejo.
-    if (UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance()))
-        GI->CreateNewLevel();
+    // Abre el Level Creator (crear nuevo mapa con título/desc, o editar uno guardado).
+    if (!LevelCreatorClass) return;
+    if (!LevelCreator)
+    {
+        LevelCreator = CreateWidget<UPTLevelCreatorWidget>(this, LevelCreatorClass);
+        if (LevelCreator) LevelCreator->AddToViewport(70);
+    }
+    if (LevelCreator) LevelCreator->ShowPanel();
 }
 
 void UPTWorkshopBrowserWidget::ResetPublishForm()

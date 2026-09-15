@@ -736,11 +736,16 @@ void UPTWordPackSubsystem::PublishMap(const FString& MapFolder, const FString& T
     const bool bDir   = FM.MakeDirectory(*Content, /*Tree=*/true);
     const bool bBlob  = (FM.Copy(*FPaths::Combine(Content, TEXT("sculpt.bin")), *SrcBlob) == COPY_OK);
 
-    // mod.json con el TÍTULO del popup (autoritativo) + el nivel base que se carga al jugar.
+    // mod.json con el TÍTULO + DESCRIPCIÓN del popup (autoritativos) + el nivel base que se carga al jugar.
     FString EffTitle = Title; EffTitle.TrimStartAndEndInline();
     if (EffTitle.IsEmpty()) EffTitle = PT_PrettifyName(FPaths::GetCleanFilename(MapFolder));
+    FString EscTitle = EffTitle, EscDesc = Description.TrimStartAndEnd();
+    EscTitle.ReplaceInline(TEXT("\\"), TEXT("\\\\")); EscTitle.ReplaceInline(TEXT("\""), TEXT("\\\""));
+    EscDesc.ReplaceInline(TEXT("\\"), TEXT("\\\\"));  EscDesc.ReplaceInline(TEXT("\""), TEXT("\\\""));
+    EscDesc.ReplaceInline(TEXT("\r"), TEXT(" "));     EscDesc.ReplaceInline(TEXT("\n"), TEXT(" "));
     const FString ModJson = FString::Printf(
-        TEXT("{ \"Title\": \"%s\", \"MapName\": \"/MapKit/Mapa_Plantilla\", \"Author\": \"\" }"), *EffTitle);
+        TEXT("{ \"Title\": \"%s\", \"Description\": \"%s\", \"MapName\": \"/MapKit/Mapa_Plantilla\", \"Author\": \"\" }"),
+        *EscTitle, *EscDesc);
     const bool bJson = FFileHelper::SaveStringToFile(ModJson, *FPaths::Combine(Content, TEXT("mod.json")));
 
     // Preview: misma lógica que los bancos (achicar a ≤512 y re-encodar; fallback branded; fallback sólido).

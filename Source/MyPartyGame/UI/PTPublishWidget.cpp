@@ -39,7 +39,6 @@ void UPTPublishWidget::NativeConstruct()
     if (CloseButton)     CloseButton->OnClicked.AddDynamic(this, &UPTPublishWidget::OnCloseClicked);
     if (GuideButton)     GuideButton->OnClicked.AddDynamic(this, &UPTPublishWidget::OnGuideClicked);
     if (MapSelectCombo)  MapSelectCombo->OnSelectionChanged.AddDynamic(this, &UPTPublishWidget::OnMapSelected);
-    if (EditMapButton)   EditMapButton->OnClicked.AddDynamic(this, &UPTPublishWidget::OnEditMapClicked);
 
     if (UPTWordPackSubsystem* P = Packs())
     {
@@ -82,7 +81,9 @@ void UPTPublishWidget::SwitchTab(int32 Tab)
     // Controles sueltos (por si el WBP no usa contenedores BankPanel/MapPanel).
     if (UploadCsvButton) UploadCsvButton->SetVisibility(bMaps ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
     if (MapSelectCombo)  MapSelectCombo->SetVisibility(bMaps ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-    if (EditMapButton)   EditMapButton->SetVisibility(bMaps ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+    // La miniatura del mapa NO se edita acá (se saca dentro del nivel): ocultar el botón de elegir imagen
+    // en Mapas. En Bancos sí se elige. El preview igual se muestra (imagen del mapa).
+    if (ThumbnailButton) ThumbnailButton->SetVisibility(bMaps ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
     ResetForm();
     if (bMaps) RefreshMapList();
     ApplyTabVisual();
@@ -123,7 +124,7 @@ void UPTPublishWidget::RefreshMapList()
     if (AuthoredMapSlugs.Num() > 0)
     {
         MapSelectCombo->SetSelectedIndex(0);
-        PendingCsvPath = G->AuthoredMapDir(AuthoredMapSlugs[0]); // carpeta del mapa a publicar
+        OnMapSelected(FString(), ESelectInfo::Direct); // autocompletar título/desc/miniatura del 1ro
     }
 }
 
@@ -131,16 +132,29 @@ void UPTPublishWidget::OnMapSelected(FString SelectedItem, ESelectInfo::Type Typ
 {
     UPTGameInstance* G = GI();
     const int32 Idx = MapSelectCombo ? MapSelectCombo->GetSelectedIndex() : INDEX_NONE;
-    if (G && AuthoredMapSlugs.IsValidIndex(Idx))
-        PendingCsvPath = G->AuthoredMapDir(AuthoredMapSlugs[Idx]);
-}
+    if (!G || !AuthoredMapSlugs.IsValidIndex(Idx)) return;
+    const FString Slug = AuthoredMapSlugs[Idx];
+    PendingCsvPath = G->AuthoredMapDir(Slug); // carpeta del mapa a publicar
 
-void UPTPublishWidget::OnEditMapClicked()
-{
-    UPTGameInstance* G = GI();
-    const int32 Idx = MapSelectCombo ? MapSelectCombo->GetSelectedIndex() : INDEX_NONE;
-    if (G && AuthoredMapSlugs.IsValidIndex(Idx))
-        G->EditLevel(AuthoredMapSlugs[Idx]); // travel a autoría con ese mapa
+    // Autocompletar (editable): título + descripción desde el mod.json del mapa guardado.
+    FString T, D;
+    if (G->GetAuthoredMapMeta(Slug, T, D))
+    {
+        if (TitleBox) TitleBox->SetText(FText::FromString(T));
+        if (DescBox)  DescBox->SetText(FText::FromString(D));
+    }
+    // Miniatura del mapa (preview.png): se muestra pero NO se edita acá (se saca dentro del nivel).
+    const FString Prev = G->AuthoredMapPreviewPath(Slug);
+    PendingImagePath = FPaths::FileExists(Prev) ? Prev : FString();
+    if (ThumbnailImage)
+    {
+        if (!PendingImagePath.IsEmpty())
+        {
+            if (UTexture2D* Tex = FImageUtils::ImportFileAsTexture2D(PendingImagePath))
+            { ThumbnailImage->SetBrushFromTexture(Tex, false); ThumbnailImage->SetVisibility(ESlateVisibility::Visible); }
+        }
+        else ThumbnailImage->SetVisibility(ESlateVisibility::Collapsed);
+    }
 }
 
 void UPTPublishWidget::OnUploadCsvClicked()
@@ -181,11 +195,12 @@ void UPTPublishWidget::OnApplyClicked()
     const FString Desc  = DescBox  ? DescBox->GetText().ToString().TrimStartAndEnd()  : FString();
 
     // Obligatorios: título, miniatura, descripción y el contenido (CSV o mapa).
+    const bool bMaps = (ActiveTab == 1);
     TArray<FString> Missing;
-    if (Title.IsEmpty())            Missing.Add(PTText::GetStr(TEXT("WORDPACK_F_TITLE")));
-    if (PendingImagePath.IsEmpty()) Missing.Add(PTText::GetStr(TEXT("WORDPACK_F_THUMB")));
-    if (Desc.IsEmpty())             Missing.Add(PTText::GetStr(TEXT("WORDPACK_F_DESC")));
-    if (PendingCsvPath.IsEmpty())   Missing.Add(PTText::GetStr(ActiveTab == 1 ? TEXT("WORDPACK_F_MAP") : TEXT("WORDPACK_F_CSV")));
+    if (Title.IsEmpty())                        Missing.Add(PTText::GetStr(TEXT("WORDPACK_F_TITLE")));
+    if (!bMaps && PendingImagePath.IsEmpty())   Missing.Add(PTText::GetStr(TEXT("WORDPACK_F_THUMB"))); // en mapas la saca del nivel
+    if (Desc.IsEmpty())                         Missing.Add(PTText::GetStr(TEXT("WORDPACK_F_DESC")));
+    if (PendingCsvPath.IsEmpty())               Missing.Add(PTText::GetStr(bMaps ? TEXT("WORDPACK_F_MAP") : TEXT("WORDPACK_F_CSV")));
     if (Missing.Num() > 0)
     {
         FFormatOrderedArguments Args; Args.Add(FText::FromString(FString::Join(Missing, TEXT(", "))));

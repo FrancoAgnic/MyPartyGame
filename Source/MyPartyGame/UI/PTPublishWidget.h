@@ -67,9 +67,8 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) UButton*    UploadCsvButton;
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* CsvButtonLabel;
 
-    // ── Mapas ──
+    // ── Mapas ── (solo PUBLICAR: elegís uno de tus mapas guardados; título/desc/miniatura se autocompletan)
     UPROPERTY(meta=(BindWidgetOptional)) UComboBoxString* MapSelectCombo;
-    UPROPERTY(meta=(BindWidgetOptional)) UButton*         EditMapButton;
 
     UPROPERTY(EditAnywhere, Category="Workshop") FString GuideUrl = TEXT("https://francoagnic.github.io/MyPartyGame/");
 
@@ -81,7 +80,6 @@ protected:
     UFUNCTION() void OnCloseClicked();
     UFUNCTION() void OnGuideClicked();
     UFUNCTION() void OnMapSelected(FString SelectedItem, ESelectInfo::Type Type);
-    UFUNCTION() void OnEditMapClicked();
     UFUNCTION() void TickUploadingText();
 
 private:

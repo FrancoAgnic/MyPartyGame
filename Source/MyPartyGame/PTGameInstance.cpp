@@ -185,12 +185,29 @@ void UPTGameInstance::SelectDefaultMap()
     OnSelectedMapChanged.Broadcast();
 }
 
-void UPTGameInstance::CreateNewLevel()
+// Escapa comillas/backslashes para meter un texto en un string JSON.
+static FString PT_JsonEscape(const FString& In)
 {
-    // Slug fresco por timestamp (único y ordenable). El título se define al guardar/publicar.
+    FString S = In;
+    S.ReplaceInline(TEXT("\\"), TEXT("\\\\"));
+    S.ReplaceInline(TEXT("\""), TEXT("\\\""));
+    S.ReplaceInline(TEXT("\r"), TEXT(" "));
+    S.ReplaceInline(TEXT("\n"), TEXT(" "));
+    return S;
+}
+
+void UPTGameInstance::CreateNewLevel(const FString& Title, const FString& Desc)
+{
+    // Slug fresco por timestamp (único y ordenable). El título/descripción van al mod.json ya al crear.
     CurrentAuthoringSlug = FString::Printf(TEXT("Map_%s"), *FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S")));
-    IFileManager::Get().MakeDirectory(*AuthoredMapDir(CurrentAuthoringSlug), /*Tree=*/true);
-    UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Nuevo mapa: %s"), *CurrentAuthoringSlug);
+    const FString Dir = AuthoredMapDir(CurrentAuthoringSlug);
+    IFileManager::Get().MakeDirectory(*Dir, /*Tree=*/true);
+    const FString EffTitle = Title.TrimStartAndEnd().IsEmpty() ? CurrentAuthoringSlug : Title.TrimStartAndEnd();
+    const FString Json = FString::Printf(
+        TEXT("{ \"Title\": \"%s\", \"Description\": \"%s\", \"MapName\": \"/MapKit/Mapa_Plantilla\", \"Author\": \"\" }"),
+        *PT_JsonEscape(EffTitle), *PT_JsonEscape(Desc.TrimStartAndEnd()));
+    FFileHelper::SaveStringToFile(Json, *FPaths::Combine(Dir, TEXT("mod.json")));
+    UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Nuevo mapa: %s ('%s')"), *CurrentAuthoringSlug, *EffTitle);
     EnterMapAuthoring();
 }
 
@@ -235,16 +252,49 @@ void UPTGameInstance::SaveAuthoredMap(const TArray<uint8>& Blob)
     if (!FFileHelper::SaveArrayToFile(Blob, *Path))
     { UE_LOG(LogTemp, Warning, TEXT("[MapAuthor] No se pudo guardar el escenario en %s"), *Path); return; }
 
-    // Asegurar un mod.json con el título (por defecto = slug) para que el mapa aparezca en la lista/publish.
+    // Asegurar un mod.json (por si se guarda sin haber pasado por CreateNewLevel). No pisa el existente.
     const FString JsonPath = FPaths::Combine(Dir, TEXT("mod.json"));
     if (!FPaths::FileExists(JsonPath))
     {
         const FString Json = FString::Printf(
-            TEXT("{ \"Title\": \"%s\", \"MapName\": \"/MapKit/Mapa_Plantilla\", \"Author\": \"\" }"),
+            TEXT("{ \"Title\": \"%s\", \"Description\": \"\", \"MapName\": \"/MapKit/Mapa_Plantilla\", \"Author\": \"\" }"),
             *CurrentAuthoringSlug);
         FFileHelper::SaveStringToFile(Json, *JsonPath);
     }
     UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Escenario guardado: %d bytes en %s"), Blob.Num(), *Path);
+}
+
+FString UPTGameInstance::AuthoredMapPreviewPath(const FString& Slug) const
+{
+    return FPaths::Combine(AuthoredMapDir(Slug), TEXT("preview.png"));
+}
+
+void UPTGameInstance::SaveAuthoredMapMeta(const FString& Title, const FString& Desc, const FString& ThumbnailSrcPath)
+{
+    if (CurrentAuthoringSlug.IsEmpty()) return;
+    const FString Dir = AuthoredMapDir(CurrentAuthoringSlug);
+    IFileManager::Get().MakeDirectory(*Dir, /*Tree=*/true);
+    const FString EffTitle = Title.TrimStartAndEnd().IsEmpty() ? CurrentAuthoringSlug : Title.TrimStartAndEnd();
+    const FString Json = FString::Printf(
+        TEXT("{ \"Title\": \"%s\", \"Description\": \"%s\", \"MapName\": \"/MapKit/Mapa_Plantilla\", \"Author\": \"\" }"),
+        *PT_JsonEscape(EffTitle), *PT_JsonEscape(Desc.TrimStartAndEnd()));
+    FFileHelper::SaveStringToFile(Json, *FPaths::Combine(Dir, TEXT("mod.json")));
+    // Miniatura: copiar la imagen elegida a preview.png del mapa (si se pasó una).
+    if (!ThumbnailSrcPath.IsEmpty() && FPaths::FileExists(ThumbnailSrcPath))
+        IFileManager::Get().Copy(*AuthoredMapPreviewPath(CurrentAuthoringSlug), *ThumbnailSrcPath);
+}
+
+bool UPTGameInstance::GetAuthoredMapMeta(const FString& Slug, FString& OutTitle, FString& OutDesc) const
+{
+    OutTitle.Reset(); OutDesc.Reset();
+    FString Json;
+    if (!FFileHelper::LoadFileToString(Json, *FPaths::Combine(AuthoredMapDir(Slug), TEXT("mod.json")))) return false;
+    TSharedPtr<FJsonObject> Obj;
+    const TSharedRef<TJsonReader<>> R = TJsonReaderFactory<>::Create(Json);
+    if (!FJsonSerializer::Deserialize(R, Obj) || !Obj.IsValid()) return false;
+    if (Obj->HasField(TEXT("Title")))       OutTitle = Obj->GetStringField(TEXT("Title"));
+    if (Obj->HasField(TEXT("Description"))) OutDesc  = Obj->GetStringField(TEXT("Description"));
+    return true;
 }
 
 bool UPTGameInstance::LoadAuthoredMap(TArray<uint8>& OutBlob) const

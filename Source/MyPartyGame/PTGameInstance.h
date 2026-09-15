@@ -119,9 +119,10 @@ public:
     //   preview.png → miniatura (opcional, se elige al publicar)
     // El GameInstance recuerda qué mapa se está editando (CurrentAuthoringSlug) a través del travel.
 
-    /** Arranca un mapa NUEVO (slug fresco) y entra a esculpirlo. Lo llama "Crear niveles" / "Crear mapa". */
-    UFUNCTION(BlueprintCallable, Category="MapMod") void CreateNewLevel();
-    /** Entra a editar un mapa ya guardado (por slug) → carga su escenario. Lo llama "Editar" de la lista. */
+    /** Arranca un mapa NUEVO (slug fresco) con su título/descripción y entra a esculpirlo. Lo llama el
+     *  Level Creator (Nuevo). El título va al mod.json; la descripción es opcional. */
+    UFUNCTION(BlueprintCallable, Category="MapMod") void CreateNewLevel(const FString& Title, const FString& Desc);
+    /** Entra a editar un mapa ya guardado (por slug) → carga su escenario. Lo llama "Editar" del Level Creator. */
     UFUNCTION(BlueprintCallable, Category="MapMod") void EditLevel(const FString& Slug);
     /** Abre el nivel plantilla en modo autoría con el mapa actual (CurrentAuthoringSlug). */
     UFUNCTION(BlueprintCallable, Category="MapMod") void EnterMapAuthoring();
@@ -130,6 +131,16 @@ public:
     // de autoría (cargar al entrar).
     void    SaveAuthoredMap(const TArray<uint8>& Blob);
     bool    LoadAuthoredMap(TArray<uint8>& OutBlob) const;
+
+    // ── Metadatos del mapa (título / descripción / miniatura) ────────────────
+    /** Guarda título+descripción en el mod.json del mapa ACTUAL; si ThumbnailSrcPath no está vacío,
+     *  copia esa imagen a preview.png del mapa. Lo usa el formulario de Guardar (ESC). */
+    UFUNCTION(BlueprintCallable, Category="MapMod")
+    void SaveAuthoredMapMeta(const FString& Title, const FString& Desc, const FString& ThumbnailSrcPath);
+    /** Lee título+descripción del mod.json de un mapa. Devuelve false si no hay mod.json. */
+    UFUNCTION(BlueprintCallable, Category="MapMod")
+    bool GetAuthoredMapMeta(const FString& Slug, FString& OutTitle, FString& OutDesc) const;
+    FString AuthoredMapPreviewPath(const FString& Slug) const; // .../<slug>/preview.png (miniatura)
 
     // Slug del mapa que se está editando (vacío = ninguno). Persiste por el travel (el GI vive toda la app).
     UPROPERTY(BlueprintReadOnly, Category="MapMod") FString CurrentAuthoringSlug;

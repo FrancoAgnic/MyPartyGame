@@ -37,6 +37,9 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UButton* SaveMapButton;
 
     UPROPERTY(meta = (BindWidgetOptional)) UPTSettingsWidget* SettingsPanel;
+    // Formulario de Guardar mapa (título/desc/miniatura). Asignar WBP_SaveMap (deriva de PTSaveMapWidget).
+    UPROPERTY(EditAnywhere, Category = "MapMod") TSubclassOf<class UPTSaveMapWidget> SaveMapClass;
+    UPROPERTY(Transient)   class UPTSaveMapWidget* SaveMapForm = nullptr;
 
     UFUNCTION() void OnLeaveGameClicked();
     UFUNCTION() void OnSettingsClicked();

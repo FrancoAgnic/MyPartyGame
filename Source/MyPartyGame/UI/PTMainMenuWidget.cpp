@@ -10,6 +10,7 @@
 #include "PTSettingsWidget.h"
 #include "PTLanguageSelectWidget.h"
 #include "PTWorkshopBrowserWidget.h"
+#include "PTLevelCreatorWidget.h"
 #include "PTGameUserSettings.h"
 #include "PTGameInstance.h"
 #include "PTLobbyGameMode.h"
@@ -245,9 +246,18 @@ void UPTMainMenuWidget::OnWorkshopClicked()
 
 void UPTMainMenuWidget::OnCreateLevelClicked()
 {
-    // Arranca un mapa NUEVO y entra a esculpirlo (para después publicarlo).
-    if (UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance()))
-        GI->CreateNewLevel();
+    // Level Creator: popup para crear un mapa nuevo (título+desc) o editar uno guardado.
+    if (!LevelCreatorClass)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[Menu] CreateLevelButton sin LevelCreatorClass asignado."));
+        return;
+    }
+    if (!LevelCreator)
+    {
+        LevelCreator = CreateWidget<UPTLevelCreatorWidget>(this, LevelCreatorClass);
+        if (LevelCreator) LevelCreator->AddToViewport(55);
+    }
+    if (LevelCreator) LevelCreator->ShowPanel();
 }
 
 // ==========================================================================

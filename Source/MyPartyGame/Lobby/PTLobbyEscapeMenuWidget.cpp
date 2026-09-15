@@ -6,6 +6,7 @@
 #include "../PTGameInstance.h"
 #include "../Mods/PTMapAuthorGameMode.h"
 #include "../Sculpt/PTSculptVolume.h"
+#include "../UI/PTSaveMapWidget.h"
 #include "Engine/World.h"
 #include "Components/Button.h"
 #include "Kismet/GameplayStatics.h"
@@ -106,8 +107,19 @@ bool UPTLobbyEscapeMenuWidget::IsMapAuthorMode() const
 
 void UPTLobbyEscapeMenuWidget::OnSaveMapClicked()
 {
-    // Guarda el escenario esculpido (geometría + pintura) al archivo de trabajo local. Igual que el
-    // botón Guardar del HUD; acá vive en el menú de pausa (ESC) para el modo autoría.
+    // Abre el formulario de Guardar (título/desc/miniatura autocompletados, editables). Al confirmar ahí
+    // se guarda el escenario + los metadatos.
+    if (SaveMapClass)
+    {
+        if (!SaveMapForm)
+        {
+            SaveMapForm = CreateWidget<UPTSaveMapWidget>(this, SaveMapClass);
+            if (SaveMapForm) SaveMapForm->AddToViewport(80);
+        }
+        if (SaveMapForm) { SaveMapForm->ShowPanel(); return; }
+    }
+
+    // Fallback (sin WBP de formulario): guardar directo el escenario (sin metadatos).
     UWorld* W = GetWorld();
     UPTGameInstance* GI = W ? Cast<UPTGameInstance>(W->GetGameInstance()) : nullptr;
     APTSculptVolume* Vol = W ? Cast<APTSculptVolume>(

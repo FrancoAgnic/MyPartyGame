@@ -102,6 +102,10 @@ protected:
     TSubclassOf<class UPTPublishWidget> PublishWidgetClass;
     UPROPERTY(Transient) class UPTPublishWidget* PublishWidget = nullptr; // creado una vez y reusado
 
+    // WBP del Level Creator (crear/editar mapas). Asignar en Details. El botón "Crear mapa" lo abre.
+    UPROPERTY(EditAnywhere, Category="Workshop") TSubclassOf<class UPTLevelCreatorWidget> LevelCreatorClass;
+    UPROPERTY(Transient) class UPTLevelCreatorWidget* LevelCreator = nullptr;
+
     UPROPERTY(EditAnywhere, Category="Workshop") FLinearColor TabActiveColor   = FLinearColor(0.95f, 0.25f, 0.55f, 1.f);
     UPROPERTY(EditAnywhere, Category="Workshop") FLinearColor TabInactiveColor = FLinearColor(0.20f, 0.45f, 0.75f, 1.f);
 
