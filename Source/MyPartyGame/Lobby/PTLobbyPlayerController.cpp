@@ -760,6 +760,22 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
                 HeadChar->ClearHeadPaintCone(HeadVolume->GetMeshComponent(), Pt, HeadBrushSize * 0.65f);
                 HeadChar->FlushHeadPaint();
             }
+
+            // BORRAR también saca los OJOS que caen bajo la brocha. En modo cabeza los ojos viven en un
+            // array LOCAL (HeadEyes), NO en el Eyes del volumen → EraseEyesNear del multicast no los toca;
+            // hay que borrarlos acá. (Add no borra ojos.)
+            if (HeadEditMode == EPTEditMode::Erase && HeadEyes.Num() > 0)
+            {
+                const FVector L = HeadVolume->GetActorTransform().InverseTransformPosition(Pt);
+                const float BrushR = HeadBrushSize * 0.5f;
+                bool bRemoved = false;
+                for (int32 i = HeadEyes.Num() - 1; i >= 0; --i)
+                {
+                    const FVector Ec(HeadEyes[i].X, HeadEyes[i].Y, HeadEyes[i].Z);
+                    if (FVector::Dist(Ec, L) <= BrushR + HeadEyes[i].W) { HeadEyes.RemoveAt(i); bRemoved = true; }
+                }
+                if (bRemoved) { RebuildEyesLiveMesh(); bHeadSessionHeadDirty = true; }
+            }
         }
     }
 
