@@ -169,6 +169,8 @@ public:
     bool GetCanvasBox(FTransform& OutXform, FVector& OutUnscaledExtent) const;
 
     float        SampleWorldDensity(FVector WorldPos) const;
+    // Densidad SOLO de la base (sin capas de detalle) — para el snap a superficie del modo ALT.
+    float        SampleWorldDensityBaseOnly(FVector WorldPos) const;
     FLinearColor SampleWorldColor  (FVector WorldPos) const;
     // Color PINTADO (atlas) en esa posición del mundo. bOutPainted=false si ese punto no fue
     // pintado (busca en un vecindario chico para no fallar por redondeo del voxel).

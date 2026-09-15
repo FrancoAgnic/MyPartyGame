@@ -896,6 +896,17 @@ float APTSculptVolume::SampleWorldDensity(FVector WorldPos) const
     return d;
 }
 
+float APTSculptVolume::SampleWorldDensityBaseOnly(FVector WorldPos) const
+{
+    // Igual que SampleWorldDensity pero SIN las capas de detalle: el snap a superficie del modo ALT usa
+    // esto para pegarse a la BASE (la malla que ya estaba) y seguir su contorno, sin que el detalle que
+    // vas agregando en la capa nueva mueva la superficie hacia la cámara (evita que el trazo "trepe").
+    if (bUseSVO)
+        return SVOField.Sample(GetActorTransform().InverseTransformPosition(WorldPos));
+    const FVector C = WorldToCell(WorldPos);
+    return Field.SampleSDF(C.X, C.Y, C.Z);
+}
+
 FLinearColor APTSculptVolume::SampleWorldColor(FVector WorldPos) const
 {
     if (bUseSVO) return ClayBaseColor; // el color en SVO va por vértice; para FX alcanza el color base
