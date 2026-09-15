@@ -1179,11 +1179,15 @@ FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
     // el contorno de la malla existente sin trepar hacia la cámara. Paint/Smooth/Ojos usan la unión
     // (base + detalle) para pegarse a la superficie más externa.
     const bool bAltDetail = (EditMode == EPTEditMode::Add && bSurfaceSnap);
+    // Solo DURANTE el trazo ALT excluimos la capa activa (para no trepar sobre lo que agregás ahora).
+    // Al posicionar (hover) o en el 1er sello, se usa la unión COMPLETA → snapea a la base y a las capas
+    // ALT previas (podés apoyar detalle sobre detalle). Paint/Smooth/Ojos siempre unión completa.
+    const bool bExcludeActive = bAltDetail && bStrokeActive;
     if (((EditMode == EPTEditMode::Paint || EditMode == EPTEditMode::Smooth || bEyesTool)
          || bAltDetail) && Volume)
     {
-        auto SampleD = [this, bAltDetail](const FVector& P) -> float
-        { return bAltDetail ? Volume->SampleWorldDensityBaseOnly(P) : Volume->SampleWorldDensity(P); };
+        auto SampleD = [this, bExcludeActive](const FVector& P) -> float
+        { return bExcludeActive ? Volume->SampleWorldDensityExceptActiveDetail(P) : Volume->SampleWorldDensity(P); };
 
         static constexpr float StepSize = 8.f;  // ~1 voxel: preciso
         static constexpr int32 MaxSteps = 700;

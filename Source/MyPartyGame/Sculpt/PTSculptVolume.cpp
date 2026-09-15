@@ -880,15 +880,18 @@ void APTSculptVolume::CellBounds(FIntVector& OutMin, FIntVector& OutMax) const
 
 float APTSculptVolume::SampleWorldDensity(FVector WorldPos) const
 {
-    // Modo SVO: densidad = SDF del octree en ACTOR-LOCAL (>0 dentro). Lo usan los ojos (raymarch a
-    // la superficie) y el cursor.
+    // Unión (máximo) de la base + TODAS las capas de detalle → el raymarch (ALT/Paint/Smooth/Ojos) se
+    // pega a la superficie MÁS EXTERNA exista donde exista arcilla (base o cualquier capa ALT), no solo
+    // a la base. Convención: SDF positivo = dentro del material → el máximo es la unión de todo.
     if (bUseSVO)
-        return SVOField.Sample(GetActorTransform().InverseTransformPosition(WorldPos));
-
+    {
+        const FVector L = GetActorTransform().InverseTransformPosition(WorldPos);
+        float d = SVOField.Sample(L);
+        for (const TSharedPtr<FPTVoxelOctree>& Lyr : SVODetailFields)
+            if (Lyr.IsValid()) d = FMath::Max(d, Lyr->Sample(L));
+        return d;
+    }
     const FVector C = WorldToCell(WorldPos);
-    // Unión (máximo) de la base + TODAS las capas de detalle: así el raymarch del cursor (ALT) se pega
-    // a la superficie más externa exista donde exista arcilla, no solo a la base. Convención: SDF
-    // positivo = dentro del material → el máximo es la unión de todas las mallas.
     float d = Field.SampleSDF(C.X, C.Y, C.Z);
     for (const TSharedPtr<FPTSculptField>& L : DetailFields)
         if (L.IsValid())
@@ -896,15 +899,25 @@ float APTSculptVolume::SampleWorldDensity(FVector WorldPos) const
     return d;
 }
 
-float APTSculptVolume::SampleWorldDensityBaseOnly(FVector WorldPos) const
+float APTSculptVolume::SampleWorldDensityExceptActiveDetail(FVector WorldPos) const
 {
-    // Igual que SampleWorldDensity pero SIN las capas de detalle: el snap a superficie del modo ALT usa
-    // esto para pegarse a la BASE (la malla que ya estaba) y seguir su contorno, sin que el detalle que
-    // vas agregando en la capa nueva mueva la superficie hacia la cámara (evita que el trazo "trepe").
+    // Unión de base + capas de detalle EXCEPTO la ACTIVA (la del trazo en curso). El snap del modo ALT
+    // lo usa DURANTE el trazo: así sigue la base y las capas ALT previas, pero NO la arcilla que estás
+    // agregando ahora (si no, la superficie treparía hacia la cámara). La base SIEMPRE se incluye.
     if (bUseSVO)
-        return SVOField.Sample(GetActorTransform().InverseTransformPosition(WorldPos));
+    {
+        const FVector L = GetActorTransform().InverseTransformPosition(WorldPos);
+        float d = SVOField.Sample(L);
+        for (const TSharedPtr<FPTVoxelOctree>& Lyr : SVODetailFields)
+            if (Lyr.IsValid() && Lyr.Get() != ActiveSVO) d = FMath::Max(d, Lyr->Sample(L));
+        return d;
+    }
     const FVector C = WorldToCell(WorldPos);
-    return Field.SampleSDF(C.X, C.Y, C.Z);
+    float d = Field.SampleSDF(C.X, C.Y, C.Z);
+    for (const TSharedPtr<FPTSculptField>& L : DetailFields)
+        if (L.IsValid() && L.Get() != ActiveField)
+            d = FMath::Max(d, L->SampleSDF(C.X, C.Y, C.Z));
+    return d;
 }
 
 FLinearColor APTSculptVolume::SampleWorldColor(FVector WorldPos) const
