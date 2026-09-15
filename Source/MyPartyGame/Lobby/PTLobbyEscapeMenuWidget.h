@@ -33,10 +33,16 @@ protected:
     UPROPERTY(meta = (BindWidget))         UButton* LeaveGameButton;
     UPROPERTY(meta = (BindWidgetOptional)) UButton* SettingsButton;
     UPROPERTY(meta = (BindWidgetOptional)) UButton* ResumeButton;
+    // Solo en modo AUTORÍA de mapa: guarda el escenario esculpido. Se muestra únicamente en ese modo.
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* SaveMapButton;
 
     UPROPERTY(meta = (BindWidgetOptional)) UPTSettingsWidget* SettingsPanel;
 
     UFUNCTION() void OnLeaveGameClicked();
     UFUNCTION() void OnSettingsClicked();
     UFUNCTION() void OnResumeClicked();
+    UFUNCTION() void OnSaveMapClicked();
+
+private:
+    bool IsMapAuthorMode() const; // el GameMode actual es APTMapAuthorGameMode
 };

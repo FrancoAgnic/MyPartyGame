@@ -3,6 +3,9 @@
 #include "PTLobbyEscapeMenuWidget.h"
 #include "PTSettingsWidget.h"
 #include "PTLobbyGameMode.h"
+#include "../PTGameInstance.h"
+#include "../Mods/PTMapAuthorGameMode.h"
+#include "../Sculpt/PTSculptVolume.h"
 #include "Engine/World.h"
 #include "Components/Button.h"
 #include "Kismet/GameplayStatics.h"
@@ -14,6 +17,7 @@ bool UPTLobbyEscapeMenuWidget::Initialize()
     if (LeaveGameButton) LeaveGameButton->OnClicked.AddDynamic(this, &UPTLobbyEscapeMenuWidget::OnLeaveGameClicked);
     if (SettingsButton)  SettingsButton->OnClicked.AddDynamic(this, &UPTLobbyEscapeMenuWidget::OnSettingsClicked);
     if (ResumeButton)    ResumeButton->OnClicked.AddDynamic(this, &UPTLobbyEscapeMenuWidget::OnResumeClicked);
+    if (SaveMapButton)   SaveMapButton->OnClicked.AddDynamic(this, &UPTLobbyEscapeMenuWidget::OnSaveMapClicked);
 
     SetVisibility(ESlateVisibility::Collapsed);
     return true;
@@ -28,6 +32,10 @@ void UPTLobbyEscapeMenuWidget::ToggleMenu()
 {
     const bool bOpen = !IsMenuOpen();
     SetVisibility(bOpen ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+
+    // "Guardar mapa" solo tiene sentido en el modo autoría de mapa.
+    if (SaveMapButton)
+        SaveMapButton->SetVisibility(IsMapAuthorMode() ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 
     if (APlayerController* PC = GetOwningPlayer())
     {
@@ -89,4 +97,23 @@ void UPTLobbyEscapeMenuWidget::OnSettingsClicked()
 void UPTLobbyEscapeMenuWidget::OnResumeClicked()
 {
     ToggleMenu();
+}
+
+bool UPTLobbyEscapeMenuWidget::IsMapAuthorMode() const
+{
+    return GetWorld() && Cast<APTMapAuthorGameMode>(GetWorld()->GetAuthGameMode()) != nullptr;
+}
+
+void UPTLobbyEscapeMenuWidget::OnSaveMapClicked()
+{
+    // Guarda el escenario esculpido (geometría + pintura) al archivo de trabajo local. Igual que el
+    // botón Guardar del HUD; acá vive en el menú de pausa (ESC) para el modo autoría.
+    UWorld* W = GetWorld();
+    UPTGameInstance* GI = W ? Cast<UPTGameInstance>(W->GetGameInstance()) : nullptr;
+    APTSculptVolume* Vol = W ? Cast<APTSculptVolume>(
+        UGameplayStatics::GetActorOfClass(W, APTSculptVolume::StaticClass())) : nullptr;
+    if (!GI || !Vol) return;
+    TArray<uint8> Blob;
+    Vol->SaveSnapshot(Blob);
+    GI->SaveAuthoredMap(Blob);
 }
