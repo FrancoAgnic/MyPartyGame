@@ -904,18 +904,22 @@ float APTSculptVolume::SampleWorldDensityExceptActiveDetail(FVector WorldPos) co
     // Unión de base + capas de detalle EXCEPTO la ACTIVA (la del trazo en curso). El snap del modo ALT
     // lo usa DURANTE el trazo: así sigue la base y las capas ALT previas, pero NO la arcilla que estás
     // agregando ahora (si no, la superficie treparía hacia la cámara). La base SIEMPRE se incluye.
+    // La capa "activa" = la ÚLTIMA creada (la del trazo ALT en curso). Se excluye por puntero persistente
+    // (NO ActiveSVO/ActiveField, que son transitorios y para cuando corre el raymarch ya volvieron a la base).
     if (bUseSVO)
     {
         const FVector L = GetActorTransform().InverseTransformPosition(WorldPos);
+        const FPTVoxelOctree* Exclude = SVODetailFields.Num() > 0 ? SVODetailFields.Last().Get() : nullptr;
         float d = SVOField.Sample(L);
         for (const TSharedPtr<FPTVoxelOctree>& Lyr : SVODetailFields)
-            if (Lyr.IsValid() && Lyr.Get() != ActiveSVO) d = FMath::Max(d, Lyr->Sample(L));
+            if (Lyr.IsValid() && Lyr.Get() != Exclude) d = FMath::Max(d, Lyr->Sample(L));
         return d;
     }
     const FVector C = WorldToCell(WorldPos);
+    const FPTSculptField* Exclude = DetailFields.Num() > 0 ? DetailFields.Last().Get() : nullptr;
     float d = Field.SampleSDF(C.X, C.Y, C.Z);
     for (const TSharedPtr<FPTSculptField>& L : DetailFields)
-        if (L.IsValid() && L.Get() != ActiveField)
+        if (L.IsValid() && L.Get() != Exclude)
             d = FMath::Max(d, L->SampleSDF(C.X, C.Y, C.Z));
     return d;
 }
@@ -1868,6 +1872,13 @@ UProceduralMeshComponent* APTSculptVolume::CreateDetailLayerMesh()
 
 void APTSculptVolume::Multicast_BeginDetailLayer_Implementation()
 {
+    // Grabar el respaldo de PINTURA de este trazo de detalle (para que el undo de la capa restaure el
+    // color y no quede color fantasma). Igual que BeginStroke pero la geometría la respalda la capa misma.
+    CurrentVolumeUndo = FPTVolumeUndo();
+    CurrentVolumeUndo.EyesCount = Eyes.Num();
+    bRecordingStroke = true;
+    bRecordingDetail = true;
+
     // Modo SVO: nueva capa = su propio octree + su propio mesh.
     if (bUseSVO)
     {
@@ -2017,6 +2028,7 @@ void APTSculptVolume::ClearAll()
     // bricks de un campo que se descartó).
     Field.ClearUndo();
     VolumeUndoStack.Reset();
+    DetailUndoStack.Reset(); bRecordingDetail = false;
     CurrentVolumeUndo = FPTVolumeUndo();
     bRecordingStroke  = false;
 
@@ -2135,6 +2147,7 @@ bool APTSculptVolume::LoadFieldState(const TArray<uint8>& In)
 
     // Undo del volumen (pintura/ojos) también en blanco: los respaldos apuntarían a un campo viejo.
     VolumeUndoStack.Reset();
+    DetailUndoStack.Reset(); bRecordingDetail = false;
     CurrentVolumeUndo = FPTVolumeUndo();
     bRecordingStroke  = false;
 
@@ -2215,6 +2228,7 @@ void APTSculptVolume::LoadPaintState(const TArray<uint8>& In)
 
     // Los respaldos de undo apuntarían a slots viejos → resetear.
     VolumeUndoStack.Reset();
+    DetailUndoStack.Reset(); bRecordingDetail = false;
     CurrentVolumeUndo = FPTVolumeUndo();
     UploadColorField();
 }
@@ -2327,6 +2341,17 @@ void APTSculptVolume::Multicast_BeginStroke_Implementation()
 
 void APTSculptVolume::Multicast_EndStroke_Implementation()
 {
+    // Trazo de DETALLE (ALT): su respaldo de pintura va a la pila de capas (paralela a las capas de
+    // geometría). El '1' de UndoOrder ya se agregó en BeginDetailLayer → acá NO se agrega otro.
+    if (bRecordingDetail)
+    {
+        DetailUndoStack.Add(MoveTemp(CurrentVolumeUndo));
+        CurrentVolumeUndo = FPTVolumeUndo();
+        bRecordingStroke = false;
+        bRecordingDetail = false;
+        return;
+    }
+
     if (bUseSVO)
     {
         // Guardar el respaldo de pintura/ojos del trazo (el snapshot de geometría ya se guardó en BeginStroke).
@@ -2357,6 +2382,24 @@ void APTSculptVolume::Multicast_EndStroke_Implementation()
     }
 }
 
+void APTSculptVolume::RestoreLastDetailPaint()
+{
+    // Restaura el color pintado durante el último trazo de detalle (ALT) al deshacer su capa → los voxeles
+    // del atlas vuelven a su estado previo (vacío) y la geometría nueva en ese lugar no hereda el color viejo.
+    if (DetailUndoStack.Num() == 0) return;
+    const FPTVolumeUndo U = MoveTemp(DetailUndoStack.Last());
+    DetailUndoStack.Pop();
+    for (const auto& It : U.AtlasOld)
+        if (AtlasBuf.IsValidIndex(It.Key)) AtlasBuf[It.Key] = It.Value;
+    if (U.AtlasOld.Num() > 0)
+    {
+        for (const int32 Slot : U.Slots) DirtyTiles.Add(Slot);
+        bPaintDirty = true;
+        UploadColorField();
+    }
+    if (HasAuthority() && Eyes.Num() > U.EyesCount) { Eyes.SetNum(U.EyesCount); RebuildEyesMesh(); }
+}
+
 void APTSculptVolume::Multicast_Undo_Implementation()
 {
     // Modo SVO: LIFO igual que el clásico — última capa entera, o último trazo de la base (snapshot).
@@ -2371,6 +2414,7 @@ void APTSculptVolume::Multicast_Undo_Implementation()
                 if (UProceduralMeshComponent* M = DetailMeshes.Last()) M->DestroyComponent();
                 DetailMeshes.Pop();
             }
+            RestoreLastDetailPaint(); // + restaurar el COLOR de esa capa (si no, queda color fantasma)
             bSVODirty = true; TimeSinceRebuild = RebuildInterval;
             return;
         }
@@ -2409,6 +2453,7 @@ void APTSculptVolume::Multicast_Undo_Implementation()
             if (UProceduralMeshComponent* M = DetailMeshes.Last()) M->DestroyComponent();
             DetailMeshes.Pop();
         }
+        RestoreLastDetailPaint(); // + restaurar el COLOR de esa capa (si no, queda color fantasma)
         return;
     }
     if (UndoOrder.Num() > 0 && UndoOrder.Last() == 0) UndoOrder.Pop();

@@ -307,11 +307,18 @@ private:
         int32               EyesCount = 0; // cuántos ojos había antes del trazo
     };
     TArray<FPTVolumeUndo>  VolumeUndoStack;
+    // Respaldo de PINTURA por CAPA de detalle (ALT), en paralelo a las capas (LIFO). Los trazos ALT crean
+    // una capa (geometría) y pintan color; al deshacer la capa hay que restaurar TAMBIÉN ese color (si no,
+    // queda color fantasma que la geometría nueva hereda). Va aparte de VolumeUndoStack (que es de la base).
+    TArray<FPTVolumeUndo>  DetailUndoStack;
     FPTVolumeUndo          CurrentVolumeUndo;
     bool                   bRecordingStroke = false;
+    bool                   bRecordingDetail = false; // el trazo en curso es una capa de detalle (ALT)
     static constexpr int32 MaxUndoSteps = 8;
     /** Guarda el color previo de un texel del atlas (solo la 1ra vez en el trazo). */
     void BackupAtlas(int32 AIdx, int32 Slot);
+    /** Restaura el color del último trazo de detalle (ALT) al deshacer su capa (evita color fantasma). */
+    void RestoreLastDetailPaint();
 
     FPTSculptField Field; // campo BASE (la arcilla principal)
 

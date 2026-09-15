@@ -1563,9 +1563,9 @@ void APTSculptPlayerController::OnStampPressed()
 
 void APTSculptPlayerController::OnStampReleased()
 {
-    // Los trazos de la BASE se cierran con EndStroke (para el undo por trazo); las capas de detalle
-    // ya quedaron committeadas al crearse, así que no necesitan cierre.
-    if (bIsStamping && !bStrokeIsDetail && CanLocalPlayerSculpt()) Server_EndStroke();
+    // Cerrar el trazo (base o detalle) con EndStroke: el volumen guarda el respaldo de pintura del trazo
+    // (para el undo del color). Para detalle, el respaldo va a la pila de capas (DetailUndoStack).
+    if (bIsStamping && CanLocalPlayerSculpt()) Server_EndStroke();
     bIsStamping     = false;
     bStrokeIsDetail = false;
     AxisChosen      = -1;
