@@ -89,17 +89,13 @@ protected:
     // ── Barra de herramientas (esquina inferior derecha, estilo hotbar) ──────
     // Contenedores en el WBP (HorizontalBox): C++ los llena con cuadritos.
     UPROPERTY(meta=(BindWidgetOptional)) class UPanelWidget* ToolsBox;   // 1/2/3/4: Add/Erase/Paint/Ojos
-    // Con el radial, ShapesBox ya no lleva 4 formas ciclables: C++ le spawnea UNA celda-hint
-    // ("mantener TAB → formas"), igual que se llenan las otras barras. Dejá el HorizontalBox
-    // ShapesBox en el WBP tal cual; el C++ se encarga del contenido.
+    // ShapesBox (HorizontalBox) lleva DOS celdas-hint: "mantener TAB → formas" y "mantener RMB → color
+    // picker", una al lado de la otra. Dejá el HorizontalBox en el WBP tal cual; el C++ lo llena.
     UPROPERTY(meta=(BindWidgetOptional)) class UPanelWidget* ShapesBox;
     UPROPERTY(meta=(BindWidgetOptional)) class UPanelWidget* HintsBox;   // atajos contextuales (Z/X, E...)
     // Cuadrito de "borrar todo" (BACKSPACE mantenido): contenedor propio porque, a diferencia de
     // los hints, NO se rearma por contexto — se construye una vez y se le actualiza el progreso.
     UPROPERTY(meta=(BindWidgetOptional)) class UPanelWidget* ClearBox;
-    // Slot persistente para "mantener RMB → abrir el color picker". Igual que ClearBox: contenedor propio
-    // en el WBP (HorizontalBox), se arma una vez y se muestra mientras esculpís.
-    UPROPERTY(meta=(BindWidgetOptional)) class UPanelWidget* ColorBox;
 
     // Ícono de "prohibido construir" (🚫) en el centro de la pantalla: aparece cuando apuntás
     // fuera de la zona de modelado, con CUALQUIER herramienta. La textura se asigna directo en el

@@ -168,8 +168,8 @@ void UPTGameplayHUDWidget::BuildToolbar()
         ToolSlots.Add(MakeSlot(ToolsBox, IconEyes,  PTInput::GetKey(TEXT("ModeEyes")),  PTText::Get(TEXT("TOOL_EYES"))));
     }
 
-    // Formas: con el radial, ShapesBox lleva UNA sola celda-hint ("mantener TAB → formas"), spawneada
-    // igual que las demás barras. La forma ya no se cicla acá: se elige en el menú radial.
+    // Formas + Color: ShapesBox lleva la celda-hint de formas ("mantener TAB → formas") y, al lado,
+    // el slot de "mantener RMB → color picker" (keycap por ICONO IconKeyRMB). Así shapes y color van juntos.
     if (ShapesBox)
     {
         ShapesBox->ClearChildren();
@@ -177,6 +177,9 @@ void UPTGameplayHUDWidget::BuildToolbar()
         const FKey TabKey = PTInput::GetKey(TEXT("CycleShape"));
         ShapeHintSlot = MakeSlot(ShapesBox, IconShapesHint ? IconShapesHint : IconSphere,
                                  TabKey, PTText::Get(TEXT("SHAPE_HINT")));
+        ColorSlot = CreateSlotIn(ShapesBox, IconColorPicker ? IconColorPicker : IconSaveColor,
+                                 PT_ShortKeyLabel(PTInput::GetKey(TEXT("ColorPick"))),
+                                 PTText::Get(TEXT("HINT_COLOR")), IconKeyRMB);
     }
 
     // Borrar todo (BACKSPACE mantenido): cuadrito fijo con círculo de progreso + contador.
@@ -187,15 +190,6 @@ void UPTGameplayHUDWidget::BuildToolbar()
         ClearSlot = CreateSlotIn(ClearBox, IconClearAll, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ClearAll"))),
                                  PTText::Get(TEXT("TOOL_CLEAR_ALL")), IconKeyBackspace);
         if (ClearSlot) ClearSlot->SetProgress(0.f, FText::GetEmpty()); // arranca sin círculo
-    }
-
-    // Abrir color picker (mantener RMB): slot persistente. Keycap por ICONO (IconKeyRMB).
-    if (ColorBox)
-    {
-        ColorBox->ClearChildren();
-        ColorSlot = CreateSlotIn(ColorBox, IconColorPicker ? IconColorPicker : IconSaveColor,
-                                 PT_ShortKeyLabel(PTInput::GetKey(TEXT("ColorPick"))),
-                                 PTText::Get(TEXT("HINT_COLOR")), IconKeyRMB);
     }
 }
 
@@ -225,12 +219,15 @@ void UPTGameplayHUDWidget::BuildToolbarPreview()
         if (ToolSlots.Num() > 0 && ToolSlots[0]) ToolSlots[0]->SetSelected(true);
     }
 
-    // Formas: la celda-hint de TAB.
+    // Formas (TAB) + Color (RMB) juntos en ShapesBox.
     if (ShapesBox)
     {
         ShapesBox->ClearChildren();
         ShapeHintSlot = CreateSlotIn(ShapesBox, IconShapesHint ? IconShapesHint : IconSphere,
                                      PT_ShortKeyLabel(PTInput::GetKey(TEXT("CycleShape"))), PTText::Get(TEXT("SHAPE_HINT")));
+        ColorSlot = CreateSlotIn(ShapesBox, IconColorPicker ? IconColorPicker : IconSaveColor,
+                                 PT_ShortKeyLabel(PTInput::GetKey(TEXT("ColorPick"))),
+                                 PTText::Get(TEXT("HINT_COLOR")), IconKeyRMB);
     }
 
     // Atajos contextuales de ejemplo (los que se ven con Agregar): Z / X / ALT.
@@ -249,15 +246,6 @@ void UPTGameplayHUDWidget::BuildToolbarPreview()
         ClearBox->ClearChildren();
         ClearSlot = CreateSlotIn(ClearBox, IconClearAll, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ClearAll"))),
                                  PTText::Get(TEXT("TOOL_CLEAR_ALL")), IconKeyBackspace);
-    }
-
-    // Abrir color (RMB) — keycap por icono.
-    if (ColorBox)
-    {
-        ColorBox->ClearChildren();
-        ColorSlot = CreateSlotIn(ColorBox, IconColorPicker ? IconColorPicker : IconSaveColor,
-                                 PT_ShortKeyLabel(PTInput::GetKey(TEXT("ColorPick"))),
-                                 PTText::Get(TEXT("HINT_COLOR")), IconKeyRMB);
     }
 }
 
@@ -286,7 +274,6 @@ void UPTGameplayHUDWidget::RefreshToolbar()
     const ESlateVisibility Vis = bSculpting ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
     if (ToolsBox)  ToolsBox->SetVisibility(Vis);
     if (ClearBox)  ClearBox->SetVisibility(Vis);
-    if (ColorBox)  ColorBox->SetVisibility(Vis);
     // Los atajos contextuales solo tienen sentido para VOS (no para lo que espectás): se ocultan al espectar.
     if (HintsBox)  HintsBox->SetVisibility((bSculpting && !bSpectatingSculptor) ? Vis : ESlateVisibility::Collapsed);
 
