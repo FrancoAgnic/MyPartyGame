@@ -52,6 +52,8 @@ protected:
     // Workshop: abre el Browser de mods (bancos de palabras + mapas). Solo hace falta crear el botón
     // con este nombre y asignar WorkshopBrowserClass en Details; el resto lo maneja C++.
     UPROPERTY(meta = (BindWidgetOptional)) UButton* WorkshopButton;
+    // "Crear niveles": entra al modo autoría de mapa (esculpir un escenario para publicar).
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* CreateLevelButton;
 
     // Agrupa título+subtítulo de la pantalla principal (se oculta junto con Play/Settings/Exit).
     UPROPERTY(meta = (BindWidgetOptional)) UWidget* MainMenuHeaderPanel;
@@ -102,6 +104,7 @@ protected:
     UFUNCTION() void OnHostClicked();
     UFUNCTION() void OnFindClicked();
     UFUNCTION() void OnWorkshopClicked();
+    UFUNCTION() void OnCreateLevelClicked();
     UFUNCTION() void OnEnterCodeClicked();
     UFUNCTION() void OnQuitClicked();
     UFUNCTION() void OnSettingsClicked();

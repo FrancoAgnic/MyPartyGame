@@ -36,6 +36,7 @@ bool UPTMainMenuWidget::Initialize()
     if (SettingsButton)  SettingsButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnSettingsClicked);
     if (LockerButton)    LockerButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnLockerClicked);
     if (WorkshopButton)  WorkshopButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnWorkshopClicked);
+    if (CreateLevelButton) CreateLevelButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnCreateLevelClicked);
 
     // Si hay un PlayButton, arrancar en la pantalla principal (submenú Host/Find/EnterCode oculto).
     // Si el WBP todavía no tiene PlayButton, no se toca nada (comportamiento previo, todo visible).
@@ -240,6 +241,13 @@ void UPTMainMenuWidget::OnWorkshopClicked()
         WorkshopBrowser->AddToViewport(50); // por encima del menú
     }
     WorkshopBrowser->ShowPanel();
+}
+
+void UPTMainMenuWidget::OnCreateLevelClicked()
+{
+    // Entra al modo autoría de mapa (esculpir un escenario libre para después publicarlo).
+    if (UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance()))
+        GI->EnterMapAuthoring();
 }
 
 // ==========================================================================
