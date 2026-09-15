@@ -580,7 +580,10 @@ void APTSculptGameMode::ResetSculpture()
     if (APTSculptVolume* Vol = Cast<APTSculptVolume>(
             UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass())))
     {
-        Vol->Multicast_ClearAll();
+        // Transición animada: el cubo colapsa (borra la escultura del turno anterior) y reaparece con
+        // rebote. La colisión crece con él → empuja hacia afuera a quien haya quedado adentro (fin del
+        // problema de quedar trabado por colisión que aparecía de golpe).
+        Vol->Multicast_PlayTurnReset();
     }
 }
 

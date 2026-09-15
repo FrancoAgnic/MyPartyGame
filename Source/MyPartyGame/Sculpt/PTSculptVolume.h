@@ -226,6 +226,19 @@ public:
     UFUNCTION(NetMulticast, Reliable)
     void Multicast_ClearAll();
 
+    // Transición de turno: colapsa el cubo (escala 1→0, borra la escultura en el fondo) y lo hace
+    // reaparecer (0→1) con rebote. La colisión escala con el actor → al crecer EMPUJA a quien haya
+    // quedado adentro (no aparece de golpe encima → ya no te quedás trabado). Lo llama el GameMode al
+    // empezar cada turno en vez de Multicast_ClearAll.
+    UFUNCTION(NetMulticast, Reliable)
+    void Multicast_PlayTurnReset();
+
+    // Tuneables de la animación de transición (editar en BP_SculptVolume).
+    UPROPERTY(EditAnywhere, Category="Sculpt|Transition", meta=(ClampMin="0.05")) float TurnCollapseTime = 0.28f;
+    UPROPERTY(EditAnywhere, Category="Sculpt|Transition", meta=(ClampMin="0.05")) float TurnGrowTime     = 0.5f;
+    // Overshoot del rebote al reaparecer (0 = sin rebote; ~1.7 = rebote clásico; más alto = más rebote).
+    UPROPERTY(EditAnywhere, Category="Sculpt|Transition", meta=(ClampMin="0.0")) float TurnBounceAmount   = 1.7f;
+
     // ── Undo (deshacer la última acción) ────────────────────────────────────
     // Un "trazo" = desde que apretás el click hasta que lo soltás (o un ojo colocado). Cada
     // cliente graba su propio respaldo, así que el undo se difunde y todos deshacen igual.
@@ -372,6 +385,11 @@ private:
     void  UpdateSculptBoundaryCollision();
     float BoundaryAccum = 0.f;
     bool  bBoundaryOn   = false;
+
+    // ── Animación de transición de turno (colapso + rebote) ──────────────────
+    uint8 VolAnimPhase = 0;   // 0 = idle, 1 = colapsando (1→0), 2 = creciendo (0→1 con rebote)
+    float VolAnimT     = 0.f; // segundos transcurridos en la fase actual
+    void  TickTurnAnim(float Dt);
 
     // ── Pintura por campo de color 3D DISPERSO (bricks + page table + atlas) ──
     // El color vive en un campo 3D real (sin bleed), pero solo se allocan bricks

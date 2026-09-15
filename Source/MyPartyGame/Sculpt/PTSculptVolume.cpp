@@ -376,6 +376,9 @@ void APTSculptVolume::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
+    // Animación de transición de turno (colapso + rebote). Escala el actor entero (mesh + colisión).
+    TickTurnAnim(DeltaTime);
+
     // Apagar la fuente de partículas cuando pasa un ratito sin sellar (soltaste el click). No se
     // desactiva de golpe al soltar para que la "fuente" no corte seca; se deja terminar el chorro.
     if (SculptFX && SculptFX->IsActive() && GetWorld()
@@ -2188,6 +2191,48 @@ void APTSculptVolume::LoadSnapshot(const TArray<uint8>& In)
 void APTSculptVolume::Multicast_ClearAll_Implementation()
 {
     ClearAll();
+}
+
+void APTSculptVolume::Multicast_PlayTurnReset_Implementation()
+{
+    // Arranca la transición de turno: colapsa (1→0) borrando la escultura al llegar al fondo, y vuelve a
+    // crecer (0→1) con rebote. Corre en server y en todos los clientes (multicast) → todos ven lo mismo.
+    VolAnimPhase = 1;   // 1 = colapsando
+    VolAnimT     = 0.f;
+}
+
+void APTSculptVolume::TickTurnAnim(float Dt)
+{
+    if (VolAnimPhase == 0) return;
+    VolAnimT += Dt;
+    float Scale = 1.f;
+
+    if (VolAnimPhase == 1)
+    {
+        // Colapso 1→0 (ease-in cúbico): el cubo se "compacta" arrastrando la escultura.
+        const float a = (TurnCollapseTime > 0.f) ? FMath::Clamp(VolAnimT / TurnCollapseTime, 0.f, 1.f) : 1.f;
+        Scale = 1.f - (a * a * a);
+        if (a >= 1.f)
+        {
+            ClearAll();                 // lienzo en blanco JUSTO cuando el cubo está compactado (scale ~0)
+            VolAnimPhase = 2;           // pasa a crecer
+            VolAnimT = 0.f;
+            Scale = 0.f;
+        }
+    }
+    else // VolAnimPhase == 2
+    {
+        // Crecimiento 0→1 con overshoot (ease-out-back): rebote al final. La colisión crece con el actor
+        // → si alguien quedó adentro, la caja lo EMPUJA hacia afuera en vez de aparecer encima.
+        const float a  = (TurnGrowTime > 0.f) ? FMath::Clamp(VolAnimT / TurnGrowTime, 0.f, 1.f) : 1.f;
+        const float c1 = TurnBounceAmount;
+        const float c3 = c1 + 1.f;
+        const float t  = a - 1.f;
+        Scale = 1.f + c3 * t * t * t + c1 * t * t;
+        if (a >= 1.f) { Scale = 1.f; VolAnimPhase = 0; }
+    }
+
+    SetActorScale3D(FVector(FMath::Max(Scale, 0.001f))); // evita escala 0 exacta (colisión degenerada)
 }
 
 // ─── Undo ─────────────────────────────────────────────────────────────────────
