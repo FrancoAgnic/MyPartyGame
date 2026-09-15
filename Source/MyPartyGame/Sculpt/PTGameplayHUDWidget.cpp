@@ -16,6 +16,7 @@
 #include "../UI/PTControlRowWidget.h"
 #include "../UI/PTToolSlotWidget.h"
 #include "Components/PanelWidget.h"
+#include "Components/HorizontalBoxSlot.h" // SlotSpacing (padding entre celdas)
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
@@ -100,6 +101,26 @@ void UPTGameplayHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDelta
     }
 }
 
+UPTToolSlotWidget* UPTGameplayHUDWidget::CreateSlotIn(UPanelWidget* Box, UTexture2D* Icon,
+                                                     const FText& KeyName, const FText& Label)
+{
+    if (!Box || !ToolSlotClass) return nullptr;
+    // Outer: en juego el PlayerController; en el diseñador (sin PC) usamos este widget, así el preview
+    // se puede crear en el editor de widgets. (CreateWidget elige overload por el tipo del outer.)
+    UPTToolSlotWidget* S = GetOwningPlayer()
+        ? CreateWidget<UPTToolSlotWidget>(GetOwningPlayer(), ToolSlotClass)
+        : CreateWidget<UPTToolSlotWidget>(this, ToolSlotClass);
+    if (!S) return nullptr;
+    S->SetSlot(Icon, KeyName, Label);
+    UPanelSlot* PS = Box->AddChild(S);
+    // Espaciado uniforme y tuneable (mismo valor en diseño y en juego). Solo si el contenedor es
+    // HorizontalBox y SlotSpacing > 0; si no, se respeta el layout del contenedor tal cual.
+    if (SlotSpacing > 0.f)
+        if (UHorizontalBoxSlot* HS = Cast<UHorizontalBoxSlot>(PS))
+            HS->SetPadding(FMargin(SlotSpacing * 0.5f, 0.f, SlotSpacing * 0.5f, 0.f));
+    return S;
+}
+
 void UPTGameplayHUDWidget::BuildToolbar()
 {
     if (!ToolSlotClass) return;
@@ -107,12 +128,7 @@ void UPTGameplayHUDWidget::BuildToolbar()
     auto MakeSlot = [this](UPanelWidget* Box, UTexture2D* Icon, const FKey& Key, const FText& Label)
         -> UPTToolSlotWidget*
     {
-        if (!Box) return nullptr;
-        UPTToolSlotWidget* S = CreateWidget<UPTToolSlotWidget>(GetOwningPlayer(), ToolSlotClass);
-        if (!S) return nullptr;
-        S->SetSlot(Icon, Key.GetDisplayName(), Label);
-        Box->AddChild(S);
-        return S;
+        return CreateSlotIn(Box, Icon, Key.GetDisplayName(), Label);
     };
 
     // Tools: la tecla sale de PTInput (misma tabla que bindea el controller) → si se rebindea,
@@ -145,6 +161,58 @@ void UPTGameplayHUDWidget::BuildToolbar()
         ClearSlot = MakeSlot(ClearBox, IconClearAll, PTInput::GetKey(TEXT("ClearAll")),
                              PTText::Get(TEXT("TOOL_CLEAR_ALL")));
         if (ClearSlot) ClearSlot->SetProgress(0.f, FText::GetEmpty()); // arranca sin círculo
+    }
+}
+
+void UPTGameplayHUDWidget::NativePreConstruct()
+{
+    Super::NativePreConstruct();
+    // Solo en el editor de widgets: mostrar el hotbar real para poder acomodarlo viéndolo (WYSIWYG).
+    // En juego no corre (ahí lo arma BuildToolbar en Initialize con el estado real).
+    if (IsDesignTime())
+        BuildToolbarPreview();
+}
+
+void UPTGameplayHUDWidget::BuildToolbarPreview()
+{
+    if (!ToolSlotClass) return;
+
+    // Tools 1/2/3/4 (con marca de "equipado" en la primera, como se ve en juego).
+    if (ToolsBox)
+    {
+        ToolsBox->ClearChildren();
+        ToolSlots.Reset();
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconAdd,   FText::FromString(TEXT("1")), PTText::Get(TEXT("TOOL_ADD"))));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconErase, FText::FromString(TEXT("2")), PTText::Get(TEXT("TOOL_ERASE"))));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconPaint, FText::FromString(TEXT("3")), PTText::Get(TEXT("TOOL_PAINT"))));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconEyes,  FText::FromString(TEXT("4")), PTText::Get(TEXT("TOOL_EYES"))));
+        if (ToolSlots.Num() > 0 && ToolSlots[0]) ToolSlots[0]->SetSelected(true);
+    }
+
+    // Formas: la celda-hint de TAB.
+    if (ShapesBox)
+    {
+        ShapesBox->ClearChildren();
+        ShapeHintSlot = CreateSlotIn(ShapesBox, IconShapesHint ? IconShapesHint : IconSphere,
+                                     FText::FromString(TEXT("TAB")), PTText::Get(TEXT("SHAPE_HINT")));
+    }
+
+    // Atajos contextuales de ejemplo (los que se ven con Agregar): Z / X / ALT.
+    if (HintsBox)
+    {
+        HintsBox->ClearChildren();
+        HintSlots.Reset();
+        HintSlots.Add(CreateSlotIn(HintsBox, IconAxisVert,  FText::FromString(TEXT("Z")),   PTText::Get(TEXT("HINT_PLANE_VERTICAL"))));
+        HintSlots.Add(CreateSlotIn(HintsBox, IconAxisHoriz, FText::FromString(TEXT("X")),   PTText::Get(TEXT("HINT_PLANE_HORIZONTAL"))));
+        HintSlots.Add(CreateSlotIn(HintsBox, IconDetail,    FText::FromString(TEXT("ALT")), PTText::Get(TEXT("TOOL_DETAIL"))));
+    }
+
+    // Borrar todo (BACKSPACE).
+    if (ClearBox)
+    {
+        ClearBox->ClearChildren();
+        ClearSlot = CreateSlotIn(ClearBox, IconClearAll, FText::FromString(TEXT("BSPACE")),
+                                 PTText::Get(TEXT("TOOL_CLEAR_ALL")));
     }
 }
 
@@ -216,11 +284,8 @@ void UPTGameplayHUDWidget::RefreshToolbar()
 
         auto AddHint = [this](UTexture2D* Icon, const FKey& Key, const FText& Label) -> UPTToolSlotWidget*
         {
-            UPTToolSlotWidget* S = CreateWidget<UPTToolSlotWidget>(GetOwningPlayer(), ToolSlotClass);
-            if (!S) return nullptr;
-            S->SetSlot(Icon, Key.GetDisplayName(), Label);
-            HintsBox->AddChild(S);
-            HintSlots.Add(S);
+            UPTToolSlotWidget* S = CreateSlotIn(HintsBox, Icon, Key.GetDisplayName(), Label);
+            if (S) HintSlots.Add(S);
             return S;
         };
 

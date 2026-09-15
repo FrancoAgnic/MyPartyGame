@@ -43,11 +43,20 @@ public:
 
     /** Arma la barra de herramientas (una sola vez): tools 1/2/3/4 + formas (TAB). */
     void BuildToolbar();
+    /** Crea una celda del hotbar y la agrega a Box (con el SlotSpacing). Outer válido en juego y en
+     *  diseño. Reusado por BuildToolbar, los hints y el preview del diseñador. */
+    class UPTToolSlotWidget* CreateSlotIn(class UPanelWidget* Box, UTexture2D* Icon,
+                                          const FText& KeyName, const FText& Label);
+    /** Puebla el hotbar con celdas de ejemplo SOLO en el diseñador (WYSIWYG). */
+    void BuildToolbarPreview();
     /** Actualiza qué está equipado y qué barras se ven según el modo. Se llama desde RefreshTick. */
     void RefreshToolbar();
 
 protected:
     virtual bool Initialize() override;
+    // Preview en el DISEÑADOR: puebla el hotbar con celdas representativas para poder acomodarlo
+    // viéndolo (WYSIWYG), en vez de a ciegas. Solo corre en design time; en juego no hace nada.
+    virtual void NativePreConstruct() override;
     virtual void NativeDestruct() override;
     // Solo para el círculo de "borrar todo": RefreshTick va a 10Hz y se vería a saltos.
     virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
@@ -102,6 +111,11 @@ protected:
     /** WBP del cuadrito (derivado de UPTToolSlotWidget). */
     UPROPERTY(EditAnywhere, Category="UI")
     TSubclassOf<class UPTToolSlotWidget> ToolSlotClass;
+
+    /** Separación horizontal entre celdas del hotbar (UU), aplicada igual en el diseñador y en juego.
+     *  0 = sin padding extra (usa el layout tal cual del contenedor). Subilo para separar las celdas. */
+    UPROPERTY(EditAnywhere, Category="UI")
+    float SlotSpacing = 0.f;
 
     // Iconos de cada tool/forma/atajo. Asignar en el WBP; si falta alguno el cuadrito muestra
     // igual la tecla y el nombre.
