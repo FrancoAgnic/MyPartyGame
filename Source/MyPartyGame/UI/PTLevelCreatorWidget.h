@@ -35,12 +35,15 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) UButton*                   CreateButton;
     UPROPERTY(meta=(BindWidgetOptional)) UComboBoxString*           MapSelectCombo;
     UPROPERTY(meta=(BindWidgetOptional)) UButton*                   EditButton;
+    // Miniatura del mapa elegido en el combo (la que guardaste en el form de Save). Se autocompleta.
+    UPROPERTY(meta=(BindWidgetOptional)) class UImage*              ThumbnailImage;
     UPROPERTY(meta=(BindWidgetOptional)) UButton*                   CloseButton;
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*                StatusText;
 
     UFUNCTION() void OnCreateClicked();
     UFUNCTION() void OnEditClicked();
     UFUNCTION() void OnCloseClicked();
+    UFUNCTION() void OnMapSelected(FString SelectedItem, ESelectInfo::Type Type); // autocompleta la miniatura
 
 private:
     UPTGameInstance* GI() const;

@@ -8,6 +8,10 @@
 #include "Components/EditableTextBox.h"
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/ComboBoxString.h"
+#include "Components/Image.h"
+#include "ImageUtils.h"
+#include "Engine/Texture2D.h"
+#include "Misc/Paths.h"
 
 UPTGameInstance* UPTLevelCreatorWidget::GI() const
 {
@@ -20,6 +24,7 @@ void UPTLevelCreatorWidget::NativeConstruct()
     if (CreateButton) CreateButton->OnClicked.AddDynamic(this, &UPTLevelCreatorWidget::OnCreateClicked);
     if (EditButton)   EditButton->OnClicked.AddDynamic(this, &UPTLevelCreatorWidget::OnEditClicked);
     if (CloseButton)  CloseButton->OnClicked.AddDynamic(this, &UPTLevelCreatorWidget::OnCloseClicked);
+    if (MapSelectCombo) MapSelectCombo->OnSelectionChanged.AddDynamic(this, &UPTLevelCreatorWidget::OnMapSelected);
     SetVisibility(ESlateVisibility::Collapsed);
 }
 
@@ -47,7 +52,28 @@ void UPTLevelCreatorWidget::RefreshList()
         Slugs.Add(S[i]);
         MapSelectCombo->AddOption(T.IsValidIndex(i) ? T[i] : S[i]);
     }
-    if (Slugs.Num() > 0) MapSelectCombo->SetSelectedIndex(0);
+    if (Slugs.Num() > 0)
+    {
+        MapSelectCombo->SetSelectedIndex(0);
+        OnMapSelected(FString(), ESelectInfo::Direct); // autocompletar la miniatura del 1ro
+    }
+    else if (ThumbnailImage) ThumbnailImage->SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UPTLevelCreatorWidget::OnMapSelected(FString SelectedItem, ESelectInfo::Type Type)
+{
+    if (!ThumbnailImage) return;
+    UPTGameInstance* G = GI();
+    const int32 Idx = MapSelectCombo ? MapSelectCombo->GetSelectedIndex() : INDEX_NONE;
+    if (!G || !Slugs.IsValidIndex(Idx)) { ThumbnailImage->SetVisibility(ESlateVisibility::Collapsed); return; }
+    // Miniatura guardada del mapa (preview.png, la que aplicaste en el form de Save).
+    const FString Prev = G->AuthoredMapPreviewPath(Slugs[Idx]);
+    if (FPaths::FileExists(Prev))
+    {
+        if (UTexture2D* Tex = FImageUtils::ImportFileAsTexture2D(Prev))
+        { ThumbnailImage->SetBrushFromTexture(Tex, false); ThumbnailImage->SetVisibility(ESlateVisibility::Visible); return; }
+    }
+    ThumbnailImage->SetVisibility(ESlateVisibility::Collapsed); // sin miniatura guardada
 }
 
 void UPTLevelCreatorWidget::OnCreateClicked()
