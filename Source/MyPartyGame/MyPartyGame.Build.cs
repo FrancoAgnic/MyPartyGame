@@ -15,6 +15,9 @@ public class MyPartyGame : ModuleRules
 			"InputCore",
 			"EnhancedInput",
 			"ProceduralMeshComponent",
+			"MeshDescription",        // construir UStaticMesh en runtime (props de mapa horneados)
+			"StaticMeshDescription",  // FStaticMeshAttributes
+			"MeshConversion",         // FMeshDescriptionBuilder
 			"RHI",
 			"RenderCore",
 			"ImageWrapper", // PNG encode/decode de las texturas de pintura (cabeza + cuerpo)
