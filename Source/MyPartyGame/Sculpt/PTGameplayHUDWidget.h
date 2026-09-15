@@ -46,7 +46,8 @@ public:
     /** Crea una celda del hotbar y la agrega a Box (con el SlotSpacing). Outer válido en juego y en
      *  diseño. Reusado por BuildToolbar, los hints y el preview del diseñador. */
     class UPTToolSlotWidget* CreateSlotIn(class UPanelWidget* Box, UTexture2D* Icon,
-                                          const FText& KeyName, const FText& Label);
+                                          const FText& KeyName, const FText& Label,
+                                          UTexture2D* KeyIconTex = nullptr);
     /** Puebla el hotbar con celdas de ejemplo SOLO en el diseñador (WYSIWYG). */
     void BuildToolbarPreview();
     /** Actualiza qué está equipado y qué barras se ven según el modo. Se llama desde RefreshTick. */
@@ -96,6 +97,9 @@ protected:
     // Cuadrito de "borrar todo" (BACKSPACE mantenido): contenedor propio porque, a diferencia de
     // los hints, NO se rearma por contexto — se construye una vez y se le actualiza el progreso.
     UPROPERTY(meta=(BindWidgetOptional)) class UPanelWidget* ClearBox;
+    // Slot persistente para "mantener RMB → abrir el color picker". Igual que ClearBox: contenedor propio
+    // en el WBP (HorizontalBox), se arma una vez y se muestra mientras esculpís.
+    UPROPERTY(meta=(BindWidgetOptional)) class UPanelWidget* ColorBox;
 
     // Ícono de "prohibido construir" (🚫) en el centro de la pantalla: aparece cuando apuntás
     // fuera de la zona de modelado, con CUALQUIER herramienta. La textura se asigna directo en el
@@ -133,6 +137,12 @@ protected:
     UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconSaveColor = nullptr;
     UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconClearAll  = nullptr;
     UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconDetail    = nullptr; // ALT (detalle)
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconColorPicker = nullptr; // icono del slot "abrir color" (RMB)
+
+    // ── Iconos de KEYCAP (para teclas de nombre largo: se muestran EN VEZ del texto de la tecla) ──
+    // Asignar en el WBP. Si quedan vacíos, el keycap cae al texto corto ("RMB"/"Bksp").
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconKeyRMB       = nullptr; // click derecho
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconKeyBackspace = nullptr; // borrar todo
 
     // Cuadritos creados (para actualizar el equipado sin reconstruir).
     UPROPERTY() TArray<class UPTToolSlotWidget*> ToolSlots;   // orden: Add, Erase, Paint, Ojos
@@ -140,6 +150,7 @@ protected:
     UPROPERTY() class UPTToolSlotWidget* ShapeHintSlot = nullptr; // celda-hint "mantener TAB → formas"
     UPROPERTY() TArray<class UPTToolSlotWidget*> HintSlots;
     UPROPERTY() class UPTToolSlotWidget* ClearSlot = nullptr; // BACKSPACE (con círculo de progreso)
+    UPROPERTY() class UPTToolSlotWidget* ColorSlot = nullptr; // RMB → abrir color picker
     FString CachedHintSig; // los atajos contextuales solo se rearman si cambia el contexto
     // RichTextBlock: el nombre usa el estilo "name" (color); el mensaje queda en el default.
     UPROPERTY(meta=(BindWidgetOptional)) class URichTextBlock* TxtChat;    // log de chat (Auto Wrap)

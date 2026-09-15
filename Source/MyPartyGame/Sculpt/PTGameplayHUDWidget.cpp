@@ -117,13 +117,17 @@ static FText PT_ShortKeyLabel(const FKey& Key)
         { EKeys::SpaceBar.GetFName(),     TEXT("Space") },
         { EKeys::Enter.GetFName(),        TEXT("Enter") },
         { EKeys::Escape.GetFName(),       TEXT("Esc")   },
+        { EKeys::RightMouseButton.GetFName(),  TEXT("RMB") },
+        { EKeys::LeftMouseButton.GetFName(),   TEXT("LMB") },
+        { EKeys::MiddleMouseButton.GetFName(), TEXT("MMB") },
     };
     if (const FString* S = Short.Find(Key.GetFName())) return FText::FromString(*S);
     return Key.GetDisplayName();
 }
 
 UPTToolSlotWidget* UPTGameplayHUDWidget::CreateSlotIn(UPanelWidget* Box, UTexture2D* Icon,
-                                                     const FText& KeyName, const FText& Label)
+                                                     const FText& KeyName, const FText& Label,
+                                                     UTexture2D* KeyIconTex)
 {
     if (!Box || !ToolSlotClass) return nullptr;
     // Outer: en juego el PlayerController; en el diseñador (sin PC) usamos este widget, así el preview
@@ -132,7 +136,7 @@ UPTToolSlotWidget* UPTGameplayHUDWidget::CreateSlotIn(UPanelWidget* Box, UTextur
         ? CreateWidget<UPTToolSlotWidget>(GetOwningPlayer(), ToolSlotClass)
         : CreateWidget<UPTToolSlotWidget>(this, ToolSlotClass);
     if (!S) return nullptr;
-    S->SetSlot(Icon, KeyName, Label);
+    S->SetSlot(Icon, KeyName, Label, KeyIconTex);
     UPanelSlot* PS = Box->AddChild(S);
     // Espaciado uniforme y tuneable (mismo valor en diseño y en juego). Solo si el contenedor es
     // HorizontalBox y SlotSpacing > 0; si no, se respeta el layout del contenedor tal cual.
@@ -176,12 +180,22 @@ void UPTGameplayHUDWidget::BuildToolbar()
     }
 
     // Borrar todo (BACKSPACE mantenido): cuadrito fijo con círculo de progreso + contador.
+    // Keycap por ICONO (IconKeyBackspace) para que el nombre largo no desalinee.
     if (ClearBox)
     {
         ClearBox->ClearChildren();
-        ClearSlot = MakeSlot(ClearBox, IconClearAll, PTInput::GetKey(TEXT("ClearAll")),
-                             PTText::Get(TEXT("TOOL_CLEAR_ALL")));
+        ClearSlot = CreateSlotIn(ClearBox, IconClearAll, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ClearAll"))),
+                                 PTText::Get(TEXT("TOOL_CLEAR_ALL")), IconKeyBackspace);
         if (ClearSlot) ClearSlot->SetProgress(0.f, FText::GetEmpty()); // arranca sin círculo
+    }
+
+    // Abrir color picker (mantener RMB): slot persistente. Keycap por ICONO (IconKeyRMB).
+    if (ColorBox)
+    {
+        ColorBox->ClearChildren();
+        ColorSlot = CreateSlotIn(ColorBox, IconColorPicker ? IconColorPicker : IconSaveColor,
+                                 PT_ShortKeyLabel(PTInput::GetKey(TEXT("ColorPick"))),
+                                 PTText::Get(TEXT("HINT_COLOR")), IconKeyRMB);
     }
 }
 
@@ -229,12 +243,21 @@ void UPTGameplayHUDWidget::BuildToolbarPreview()
         HintSlots.Add(CreateSlotIn(HintsBox, IconDetail,    PT_ShortKeyLabel(FKey(EKeys::LeftAlt)),                    PTText::Get(TEXT("TOOL_DETAIL"))));
     }
 
-    // Borrar todo (BACKSPACE).
+    // Borrar todo (BACKSPACE) — keycap por icono.
     if (ClearBox)
     {
         ClearBox->ClearChildren();
         ClearSlot = CreateSlotIn(ClearBox, IconClearAll, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ClearAll"))),
-                                 PTText::Get(TEXT("TOOL_CLEAR_ALL")));
+                                 PTText::Get(TEXT("TOOL_CLEAR_ALL")), IconKeyBackspace);
+    }
+
+    // Abrir color (RMB) — keycap por icono.
+    if (ColorBox)
+    {
+        ColorBox->ClearChildren();
+        ColorSlot = CreateSlotIn(ColorBox, IconColorPicker ? IconColorPicker : IconSaveColor,
+                                 PT_ShortKeyLabel(PTInput::GetKey(TEXT("ColorPick"))),
+                                 PTText::Get(TEXT("HINT_COLOR")), IconKeyRMB);
     }
 }
 
@@ -263,6 +286,7 @@ void UPTGameplayHUDWidget::RefreshToolbar()
     const ESlateVisibility Vis = bSculpting ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
     if (ToolsBox)  ToolsBox->SetVisibility(Vis);
     if (ClearBox)  ClearBox->SetVisibility(Vis);
+    if (ColorBox)  ColorBox->SetVisibility(Vis);
     // Los atajos contextuales solo tienen sentido para VOS (no para lo que espectás): se ocultan al espectar.
     if (HintsBox)  HintsBox->SetVisibility((bSculpting && !bSpectatingSculptor) ? Vis : ESlateVisibility::Collapsed);
 

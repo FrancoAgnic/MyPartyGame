@@ -24,9 +24,11 @@ class MYPARTYGAME_API UPTToolSlotWidget : public UUserWidget
     GENERATED_BODY()
 
 public:
-    /** Llena el cuadrito. KeyName ya viene con el nombre lindo de la tecla (ej: "1", "Tab"). */
+    /** Llena el cuadrito. KeyName ya viene con el nombre lindo de la tecla (ej: "1", "Tab").
+     *  KeyIconTex opcional: si se pasa (y el WBP tiene KeyIcon), el keycap muestra ESA imagen en vez
+     *  del texto (para teclas de nombre largo como RMB o Backspace). */
     UFUNCTION(BlueprintCallable, Category="UI")
-    void SetSlot(UTexture2D* Icon, const FText& KeyName, const FText& Label);
+    void SetSlot(UTexture2D* Icon, const FText& KeyName, const FText& Label, UTexture2D* KeyIconTex = nullptr);
 
     /** Marca/desmarca como equipado (mueve SelectedMarker y avisa a BP). */
     UFUNCTION(BlueprintCallable, Category="UI")
@@ -43,6 +45,9 @@ public:
 protected:
     UPROPERTY(meta=(BindWidgetOptional)) UImage*     IconImage;
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* KeyText;
+    // Imagen del keycap (opcional): para teclas de nombre largo (RMB, Backspace) se muestra un icono
+    // en vez del texto. Si SetSlot recibe una textura de keycap, se muestra esto y se oculta KeyText.
+    UPROPERTY(meta=(BindWidgetOptional)) UImage*     KeyIcon;
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* LabelText;
     UPROPERTY(meta=(BindWidgetOptional)) UWidget*    SelectedMarker;
 
