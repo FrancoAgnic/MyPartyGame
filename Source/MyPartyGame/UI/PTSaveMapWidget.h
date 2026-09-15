@@ -35,15 +35,18 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) UMultiLineEditableTextBox* DescBox;
     UPROPERTY(meta=(BindWidgetOptional)) UButton*    ThumbnailButton;
     UPROPERTY(meta=(BindWidgetOptional)) UImage*     ThumbnailImage;
-    UPROPERTY(meta=(BindWidgetOptional)) UButton*    ConfirmButton;
-    UPROPERTY(meta=(BindWidgetOptional)) UButton*    CancelButton;
+    UPROPERTY(meta=(BindWidgetOptional)) UButton*    ConfirmButton;      // Apply: guarda y cierra (seguís en el nivel)
+    UPROPERTY(meta=(BindWidgetOptional)) UButton*    SaveAndExitButton;  // guarda y vuelve al menú principal
+    UPROPERTY(meta=(BindWidgetOptional)) UButton*    CancelButton;       // (opcional) cerrar sin guardar
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* StatusText;
 
     UFUNCTION() void OnThumbnailClicked();
     UFUNCTION() void OnConfirmClicked();
+    UFUNCTION() void OnSaveAndExitClicked();
     UFUNCTION() void OnCancelClicked();
 
 private:
     UPTGameInstance* GI() const;
+    bool DoSave(); // guarda escenario + metadatos; false si no se pudo (sin volumen/GI)
     FString PendingThumb; // imagen elegida esta vez (vacío = mantener la que ya tenga el mapa)
 };

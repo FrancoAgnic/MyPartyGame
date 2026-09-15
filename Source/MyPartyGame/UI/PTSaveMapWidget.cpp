@@ -21,8 +21,9 @@ void UPTSaveMapWidget::NativeConstruct()
 {
     Super::NativeConstruct();
     if (ThumbnailButton) ThumbnailButton->OnClicked.AddDynamic(this, &UPTSaveMapWidget::OnThumbnailClicked);
-    if (ConfirmButton)   ConfirmButton->OnClicked.AddDynamic(this, &UPTSaveMapWidget::OnConfirmClicked);
-    if (CancelButton)    CancelButton->OnClicked.AddDynamic(this, &UPTSaveMapWidget::OnCancelClicked);
+    if (ConfirmButton)     ConfirmButton->OnClicked.AddDynamic(this, &UPTSaveMapWidget::OnConfirmClicked);
+    if (SaveAndExitButton) SaveAndExitButton->OnClicked.AddDynamic(this, &UPTSaveMapWidget::OnSaveAndExitClicked);
+    if (CancelButton)      CancelButton->OnClicked.AddDynamic(this, &UPTSaveMapWidget::OnCancelClicked);
     SetVisibility(ESlateVisibility::Collapsed);
 }
 
@@ -71,13 +72,13 @@ void UPTSaveMapWidget::OnThumbnailClicked()
     }
 }
 
-void UPTSaveMapWidget::OnConfirmClicked()
+bool UPTSaveMapWidget::DoSave()
 {
     UWorld* W = GetWorld();
     UPTGameInstance* G = GI();
     APTSculptVolume* Vol = W ? Cast<APTSculptVolume>(
         UGameplayStatics::GetActorOfClass(W, APTSculptVolume::StaticClass())) : nullptr;
-    if (!G || !Vol) return;
+    if (!G || !Vol) return false;
 
     const FString Title = TitleBox ? TitleBox->GetText().ToString().TrimStartAndEnd() : FString();
     const FString Desc  = DescBox  ? DescBox->GetText().ToString().TrimStartAndEnd()  : FString();
@@ -86,13 +87,26 @@ void UPTSaveMapWidget::OnConfirmClicked()
     Vol->SaveSnapshot(Blob);                          // escenario (geometría + pintura)
     G->SaveAuthoredMap(Blob);                         // → sculpt.bin del mapa actual
     G->SaveAuthoredMapMeta(Title, Desc, PendingThumb);// → mod.json (título/desc) + preview.png (si elegiste)
+    return true;
+}
 
+void UPTSaveMapWidget::OnConfirmClicked()
+{
+    // Apply: guardar y cerrar el popup (seguís en el nivel).
+    if (!DoSave()) return;
     if (StatusText)
     {
         StatusText->SetText(PTText::Get(TEXT("MAP_SAVED")));
         StatusText->SetVisibility(ESlateVisibility::Visible);
     }
     SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UPTSaveMapWidget::OnSaveAndExitClicked()
+{
+    // Guardar y salir al menú principal.
+    DoSave();
+    UGameplayStatics::OpenLevel(this, FName(TEXT("MainMenu")));
 }
 
 void UPTSaveMapWidget::OnCancelClicked()
