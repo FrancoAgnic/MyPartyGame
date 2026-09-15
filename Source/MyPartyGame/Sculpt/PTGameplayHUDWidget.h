@@ -108,6 +108,11 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) class UImage* IconPacketLoss;   // paquetes perdidos
     UPROPERTY(meta=(BindWidgetOptional)) class UImage* IconHighPing;     // latencia alta (>500 ms)
     UPROPERTY(meta=(BindWidgetOptional)) class UImage* IconDisconnected; // se cayó el server / se fue internet
+    // Texturas de esos iconos (asignar en Details). Se aplican por CÓDIGO al brush → no dependen de que el
+    // brush del WBP tenga la textura puesta (así no salen en blanco). Si quedan vacías, cae al brush del WBP.
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconNetPacketLoss   = nullptr;
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconNetHighPing     = nullptr;
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconNetDisconnected = nullptr;
 
     /** WBP del cuadrito (derivado de UPTToolSlotWidget). Lo usan formas/hints/borrar/color. */
     UPROPERTY(EditAnywhere, Category="UI")

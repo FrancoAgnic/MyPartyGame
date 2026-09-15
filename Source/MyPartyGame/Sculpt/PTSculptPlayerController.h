@@ -359,6 +359,7 @@ public:
     UFUNCTION(Exec) void PTSpectate();          // vuelo libre WASD+mouse on/off (+ nombres → Player N)
     UFUNCTION(Exec) void PTHideUI();            // oculta/muestra todo el HUD
     UFUNCTION(Exec) void PTHideNames();         // oculta/muestra los nombres flotantes
+    UFUNCTION(Exec) void PTCaptureNames();      // nombres → "Player N" (lista + chat) para grabar, SIN espectar
     UFUNCTION(Exec) void PTHideHotbar();        // oculta/muestra la barra de herramientas
     UFUNCTION(Exec) void PTSpecSpeed(float N);  // multiplica la velocidad de la cámara
     UFUNCTION(Exec) void PTSpecSmooth(float N); // suavizado/lag de la cámara (bajo = más suave)

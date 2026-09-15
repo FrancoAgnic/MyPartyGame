@@ -66,6 +66,11 @@ bool UPTGameplayHUDWidget::Initialize()
     RebuildControls();
     BuildToolbar();
 
+    // Iconos de red: aplicar la textura por código (si se asignó en Details) → no dependen del brush del WBP.
+    if (IconPacketLoss   && IconNetPacketLoss)   IconPacketLoss->SetBrushFromTexture(IconNetPacketLoss,     true);
+    if (IconHighPing     && IconNetHighPing)     IconHighPing->SetBrushFromTexture(IconNetHighPing,         true);
+    if (IconDisconnected && IconNetDisconnected) IconDisconnected->SetBrushFromTexture(IconNetDisconnected, true);
+
     return true;
 }
 

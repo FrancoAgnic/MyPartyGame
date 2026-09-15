@@ -316,6 +316,14 @@ void APTSculptPlayerController::PTHideNames()
         GI->SetHideNames(!GI->AreNamesHidden());
 }
 
+void APTSculptPlayerController::PTCaptureNames()
+{
+    // Reemplaza los nicks por "Player N" en la lista de jugadores y en el chat (para grabar gameplay sin
+    // exponer nombres), SIN entrar a modo espectador. El HUD ya respeta el capture mode (NameFor/OnChatLine).
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
+        GI->SetCaptureMode(!GI->IsCaptureMode());
+}
+
 void APTSculptPlayerController::PTHideHotbar()
 {
     if (GameplayHUD) GameplayHUD->ToggleHotbar();
@@ -867,7 +875,8 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
 {
     if (!SculptGrid) return;
     // Se muestra con las herramientas que ponen el sello en el aire (Add/Erase): ahí importa la profundidad.
-    const bool bWant = Volume && SculptGridMID && !bEyesTool &&
+    // En modo EJES (Z/X) se OCULTA: ahí ya está la grilla plana del plano de eje y las dos se mezclaban.
+    const bool bWant = Volume && SculptGridMID && !bEyesTool && !bAxisLock &&
                        (EditMode == EPTEditMode::Add || EditMode == EPTEditMode::Erase);
     if (!bWant)
     {
@@ -883,8 +892,10 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
     // Radio y celda efectivos: escalan con el TAMAÑO de la brocha (StampSize · mayor eje de StampScale)
     // respecto del tamaño de referencia. Brocha grande → bola y cubitos grandes; brocha chica → chicos
     // (así con brocha chica la grilla se sigue viendo).
-    const float BrushWorld = FMath::Max(1.f, StampSize) *
-        FMath::Max3(StampScale.X, StampScale.Y, StampScale.Z);
+    // OJO: usa SOLO StampSize (el tamaño simétrico), NO la escala no-uniforme del sello. Antes se
+    // multiplicaba por max3(StampScale) y, con la shape escalada al máximo en dos ejes + la escala normal
+    // al máximo, el radio se disparaba e inundaba la pantalla. Ahora el tope es el de StampSize (MaxR).
+    const float BrushWorld = FMath::Max(1.f, StampSize);
     const float Ratio     = BrushWorld / FMath::Max(1.f, SculptGridRefBrushSize);
     // Radio proporcional a la brocha, pero con PISO y TOPE: con brochas chicas no desaparece y con brochas
     // grandes no inunda la pantalla.
