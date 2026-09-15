@@ -5,7 +5,7 @@
 #include "Components/Image.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
-void UPTToolSlotWidget::SetSlot(UTexture2D* Icon, const FText& KeyName, const FText& Label)
+void UPTToolSlotWidget::SetSlot(UTexture2D* Icon, const FText& KeyName, const FText& Label, UTexture2D* KeyIconTex)
 {
     if (IconImage)
     {
@@ -13,7 +13,23 @@ void UPTToolSlotWidget::SetSlot(UTexture2D* Icon, const FText& KeyName, const FT
         // Sin icono asignado el cuadrito igual sirve (queda solo la tecla + el nombre).
         IconImage->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
     }
-    if (KeyText)   KeyText->SetText(KeyName);
+    // Keycap: si hay imagen de keycap (RMB/Backspace) se muestra el icono y se oculta el texto;
+    // si no, se muestra el texto de la tecla como siempre.
+    const bool bUseKeyIcon = (KeyIconTex != nullptr) && (KeyIcon != nullptr);
+    if (KeyIcon)
+    {
+        // bMatchSize=true: el brush toma el tamaño NATIVO de cada textura → cada keycap respeta su propia
+        // escala/aspecto (RMB y Backspace tienen proporciones distintas y no se estiran a una caja fija).
+        // Requisito en el WBP: el Image KeyIcon SIN "Size Override" (Size To Content); envolvelo en un
+        // SizeBox con Max Desired si querés un tope para texturas grandes.
+        if (KeyIconTex) KeyIcon->SetBrushFromTexture(KeyIconTex, /*bMatchSize=*/true);
+        KeyIcon->SetVisibility(bUseKeyIcon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+    }
+    if (KeyText)
+    {
+        KeyText->SetText(KeyName);
+        KeyText->SetVisibility(bUseKeyIcon ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+    }
     if (LabelText) LabelText->SetText(Label);
 
     // Los cuadritos normales no usan el círculo de progreso: arrancan sin él (solo el de

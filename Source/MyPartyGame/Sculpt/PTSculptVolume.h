@@ -169,6 +169,9 @@ public:
     bool GetCanvasBox(FTransform& OutXform, FVector& OutUnscaledExtent) const;
 
     float        SampleWorldDensity(FVector WorldPos) const;
+    // Unión base + detalle EXCEPTO la capa activa — para el snap del modo ALT durante el trazo (que
+    // siga la superficie existente sin trepar sobre la arcilla que se está agregando en ese trazo).
+    float        SampleWorldDensityExceptActiveDetail(FVector WorldPos) const;
     FLinearColor SampleWorldColor  (FVector WorldPos) const;
     // Color PINTADO (atlas) en esa posición del mundo. bOutPainted=false si ese punto no fue
     // pintado (busca en un vecindario chico para no fallar por redondeo del voxel).
@@ -225,6 +228,21 @@ public:
     // Reset sincronizado en todos: el GameMode (servidor) lo llama al empezar cada turno.
     UFUNCTION(NetMulticast, Reliable)
     void Multicast_ClearAll();
+
+    // Transición de turno en DOS partes (ida y vuelta):
+    //  - Collapse: al TERMINAR el turno, escala 1→0 (ease-in) y borra la escultura al llegar al fondo;
+    //    queda colapsado (escala 0).
+    //  - Grow: al EMPEZAR el nuevo turno, escala 0→1 con rebote (ease-out-back).
+    // La colisión escala con el actor y, además, el server saca a los NO-escultores que hayan quedado
+    // adentro (ver UpdateSculptBoundaryCollision) → ya no te quedás trabado.
+    UFUNCTION(NetMulticast, Reliable) void Multicast_CollapseVolume();
+    UFUNCTION(NetMulticast, Reliable) void Multicast_GrowVolume();
+
+    // Tuneables de la animación de transición (editar en BP_SculptVolume).
+    UPROPERTY(EditAnywhere, Category="Sculpt|Transition", meta=(ClampMin="0.05")) float TurnCollapseTime = 0.28f;
+    UPROPERTY(EditAnywhere, Category="Sculpt|Transition", meta=(ClampMin="0.05")) float TurnGrowTime     = 0.5f;
+    // Overshoot del rebote al reaparecer (0 = sin rebote; ~1.7 = rebote clásico; más alto = más rebote).
+    UPROPERTY(EditAnywhere, Category="Sculpt|Transition", meta=(ClampMin="0.0")) float TurnBounceAmount   = 1.7f;
 
     // ── Undo (deshacer la última acción) ────────────────────────────────────
     // Un "trazo" = desde que apretás el click hasta que lo soltás (o un ojo colocado). Cada
@@ -289,11 +307,18 @@ private:
         int32               EyesCount = 0; // cuántos ojos había antes del trazo
     };
     TArray<FPTVolumeUndo>  VolumeUndoStack;
+    // Respaldo de PINTURA por CAPA de detalle (ALT), en paralelo a las capas (LIFO). Los trazos ALT crean
+    // una capa (geometría) y pintan color; al deshacer la capa hay que restaurar TAMBIÉN ese color (si no,
+    // queda color fantasma que la geometría nueva hereda). Va aparte de VolumeUndoStack (que es de la base).
+    TArray<FPTVolumeUndo>  DetailUndoStack;
     FPTVolumeUndo          CurrentVolumeUndo;
     bool                   bRecordingStroke = false;
+    bool                   bRecordingDetail = false; // el trazo en curso es una capa de detalle (ALT)
     static constexpr int32 MaxUndoSteps = 8;
     /** Guarda el color previo de un texel del atlas (solo la 1ra vez en el trazo). */
     void BackupAtlas(int32 AIdx, int32 Slot);
+    /** Restaura el color del último trazo de detalle (ALT) al deshacer su capa (evita color fantasma). */
+    void RestoreLastDetailPaint();
 
     FPTSculptField Field; // campo BASE (la arcilla principal)
 
@@ -372,6 +397,12 @@ private:
     void  UpdateSculptBoundaryCollision();
     float BoundaryAccum = 0.f;
     bool  bBoundaryOn   = false;
+
+    // ── Animación de transición de turno (colapso + rebote) ──────────────────
+    uint8 VolAnimPhase     = 0;   // 0 = idle, 1 = colapsando (→0), 2 = creciendo (→1 con rebote)
+    float VolAnimT         = 0.f; // segundos transcurridos en la fase actual
+    float VolAnimStartScale = 1.f; // escala al arrancar la fase (para animar desde donde esté)
+    void  TickTurnAnim(float Dt);
 
     // ── Pintura por campo de color 3D DISPERSO (bricks + page table + atlas) ──
     // El color vive en un campo 3D real (sin bleed), pero solo se allocan bricks

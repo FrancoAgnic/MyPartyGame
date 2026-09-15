@@ -216,6 +216,13 @@ void APTSculptGameMode::StartGame()
     G->TotalRounds      = NumRounds;
     TurnsLeftThisRound  = Players.Num();  // una ronda = todos esculpen una vez
 
+    // Primer turno (o "Jugar de nuevo"): sin colapso previo → limpiar el lienzo de una (instantáneo).
+    if (APTSculptVolume* Vol = Cast<APTSculptVolume>(
+            UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass())))
+    {
+        Vol->Multicast_ClearAll();
+    }
+
     StartChoosingPhase();
 }
 
@@ -414,7 +421,13 @@ void APTSculptGameMode::AdvanceTurn()
         TurnsLeftThisRound = FMath::Max(1, GetActivePlayers().Num());
         G->OnTurnPhaseChanged.Broadcast(); // refrescar "Ronda X/Y" en el HUD
     }
-    StartChoosingPhase();
+
+    // Fin del turno: colapsar el cubo (borra la escultura) y, cuando terminó el colapso, arrancar el
+    // nuevo turno (que lo hace crecer con rebote). Así queda el "ida y vuelta" separado.
+    CollapseSculpture();
+    GetWorldTimerManager().ClearTimer(PhaseTimer);
+    GetWorldTimerManager().SetTimer(PhaseTimer, this, &APTSculptGameMode::StartChoosingPhase,
+                                    FMath::Max(0.05f, TurnCollapseDelay), false);
 }
 
 void APTSculptGameMode::EndGame()
@@ -577,10 +590,23 @@ bool APTSculptGameMode::DoesGuessMatch(const FString& Guess) const
 
 void APTSculptGameMode::ResetSculpture()
 {
+    // Al EMPEZAR el turno: el cubo (que quedó colapsado al terminar el turno anterior) reaparece con
+    // rebote (0→1). La escultura ya se borró en el colapso. Ver CollapseSculpture (fin de turno).
     if (APTSculptVolume* Vol = Cast<APTSculptVolume>(
             UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass())))
     {
-        Vol->Multicast_ClearAll();
+        Vol->Multicast_GrowVolume();
+    }
+}
+
+void APTSculptGameMode::CollapseSculpture()
+{
+    // Al TERMINAR el turno: el cubo colapsa (1→0) y borra la escultura al llegar al fondo. Queda en 0
+    // hasta que el próximo turno lo haga crecer (ResetSculpture).
+    if (APTSculptVolume* Vol = Cast<APTSculptVolume>(
+            UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass())))
+    {
+        Vol->Multicast_CollapseVolume();
     }
 }
 

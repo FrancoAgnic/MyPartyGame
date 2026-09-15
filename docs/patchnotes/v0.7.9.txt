@@ -1,0 +1,6 @@
+[h1]Sculpturillo v0.7.9[/h1]
+
+[h2]Fixes[/h2]
+[list]
+[*] Disabled the engine debug overlay that could be toggled by accident with the apostrophe key in-game.
+[/list]

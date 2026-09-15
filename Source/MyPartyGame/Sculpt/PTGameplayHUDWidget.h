@@ -43,11 +43,22 @@ public:
 
     /** Arma la barra de herramientas (una sola vez): tools 1/2/3/4 + formas (TAB). */
     void BuildToolbar();
+    /** Crea una celda del hotbar y la agrega a Box (con el SlotSpacing). Outer válido en juego y en
+     *  diseño. Reusado por BuildToolbar, los hints y el preview del diseñador. */
+    class UPTToolSlotWidget* CreateSlotIn(class UPanelWidget* Box, UTexture2D* Icon,
+                                          const FText& KeyName, const FText& Label,
+                                          UTexture2D* KeyIconTex = nullptr,
+                                          TSubclassOf<class UPTToolSlotWidget> SlotClassOverride = nullptr);
+    /** Puebla el hotbar con celdas de ejemplo SOLO en el diseñador (WYSIWYG). */
+    void BuildToolbarPreview();
     /** Actualiza qué está equipado y qué barras se ven según el modo. Se llama desde RefreshTick. */
     void RefreshToolbar();
 
 protected:
     virtual bool Initialize() override;
+    // Preview en el DISEÑADOR: puebla el hotbar con celdas representativas para poder acomodarlo
+    // viéndolo (WYSIWYG), en vez de a ciegas. Solo corre en design time; en juego no hace nada.
+    virtual void NativePreConstruct() override;
     virtual void NativeDestruct() override;
     // Solo para el círculo de "borrar todo": RefreshTick va a 10Hz y se vería a saltos.
     virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
@@ -79,9 +90,8 @@ protected:
     // ── Barra de herramientas (esquina inferior derecha, estilo hotbar) ──────
     // Contenedores en el WBP (HorizontalBox): C++ los llena con cuadritos.
     UPROPERTY(meta=(BindWidgetOptional)) class UPanelWidget* ToolsBox;   // 1/2/3/4: Add/Erase/Paint/Ojos
-    // Con el radial, ShapesBox ya no lleva 4 formas ciclables: C++ le spawnea UNA celda-hint
-    // ("mantener TAB → formas"), igual que se llenan las otras barras. Dejá el HorizontalBox
-    // ShapesBox en el WBP tal cual; el C++ se encarga del contenido.
+    // ShapesBox (HorizontalBox) lleva DOS celdas-hint: "mantener TAB → formas" y "mantener RMB → color
+    // picker", una al lado de la otra. Dejá el HorizontalBox en el WBP tal cual; el C++ lo llena.
     UPROPERTY(meta=(BindWidgetOptional)) class UPanelWidget* ShapesBox;
     UPROPERTY(meta=(BindWidgetOptional)) class UPanelWidget* HintsBox;   // atajos contextuales (Z/X, E...)
     // Cuadrito de "borrar todo" (BACKSPACE mantenido): contenedor propio porque, a diferencia de
@@ -98,10 +108,25 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) class UImage* IconPacketLoss;   // paquetes perdidos
     UPROPERTY(meta=(BindWidgetOptional)) class UImage* IconHighPing;     // latencia alta (>500 ms)
     UPROPERTY(meta=(BindWidgetOptional)) class UImage* IconDisconnected; // se cayó el server / se fue internet
+    // Texturas de esos iconos (asignar en Details). Se aplican por CÓDIGO al brush → no dependen de que el
+    // brush del WBP tenga la textura puesta (así no salen en blanco). Si quedan vacías, cae al brush del WBP.
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconNetPacketLoss   = nullptr;
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconNetHighPing     = nullptr;
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconNetDisconnected = nullptr;
 
-    /** WBP del cuadrito (derivado de UPTToolSlotWidget). */
+    /** WBP del cuadrito (derivado de UPTToolSlotWidget). Lo usan formas/hints/borrar/color. */
     UPROPERTY(EditAnywhere, Category="UI")
     TSubclassOf<class UPTToolSlotWidget> ToolSlotClass;
+
+    /** WBP del cuadrito de las HERRAMIENTAS (1/2/3/4): más grande + marco de fondo (se tiñe naranja al
+     *  estar equipado vía OnSelectedChanged/SelectedMarker en el WBP). Si queda vacío, usa ToolSlotClass. */
+    UPROPERTY(EditAnywhere, Category="UI")
+    TSubclassOf<class UPTToolSlotWidget> ToolSlotToolsClass;
+
+    /** Separación horizontal entre celdas del hotbar (UU), aplicada igual en el diseñador y en juego.
+     *  0 = sin padding extra (usa el layout tal cual del contenedor). Subilo para separar las celdas. */
+    UPROPERTY(EditAnywhere, Category="UI")
+    float SlotSpacing = 0.f;
 
     // Iconos de cada tool/forma/atajo. Asignar en el WBP; si falta alguno el cuadrito muestra
     // igual la tecla y el nombre.
@@ -119,6 +144,12 @@ protected:
     UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconSaveColor = nullptr;
     UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconClearAll  = nullptr;
     UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconDetail    = nullptr; // ALT (detalle)
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconColorPicker = nullptr; // icono del slot "abrir color" (RMB)
+
+    // ── Iconos de KEYCAP (para teclas de nombre largo: se muestran EN VEZ del texto de la tecla) ──
+    // Asignar en el WBP. Si quedan vacíos, el keycap cae al texto corto ("RMB"/"Bksp").
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconKeyRMB       = nullptr; // click derecho
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconKeyBackspace = nullptr; // borrar todo
 
     // Cuadritos creados (para actualizar el equipado sin reconstruir).
     UPROPERTY() TArray<class UPTToolSlotWidget*> ToolSlots;   // orden: Add, Erase, Paint, Ojos
@@ -126,6 +157,7 @@ protected:
     UPROPERTY() class UPTToolSlotWidget* ShapeHintSlot = nullptr; // celda-hint "mantener TAB → formas"
     UPROPERTY() TArray<class UPTToolSlotWidget*> HintSlots;
     UPROPERTY() class UPTToolSlotWidget* ClearSlot = nullptr; // BACKSPACE (con círculo de progreso)
+    UPROPERTY() class UPTToolSlotWidget* ColorSlot = nullptr; // RMB → abrir color picker
     FString CachedHintSig; // los atajos contextuales solo se rearman si cambia el contexto
     // RichTextBlock: el nombre usa el estilo "name" (color); el mensaje queda en el default.
     UPROPERTY(meta=(BindWidgetOptional)) class URichTextBlock* TxtChat;    // log de chat (Auto Wrap)

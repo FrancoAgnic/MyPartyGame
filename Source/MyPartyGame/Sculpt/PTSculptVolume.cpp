@@ -376,6 +376,9 @@ void APTSculptVolume::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
+    // Animación de transición de turno (colapso + rebote). Escala el actor entero (mesh + colisión).
+    TickTurnAnim(DeltaTime);
+
     // Apagar la fuente de partículas cuando pasa un ratito sin sellar (soltaste el click). No se
     // desactiva de golpe al soltar para que la "fuente" no corte seca; se deja terminar el chorro.
     if (SculptFX && SculptFX->IsActive() && GetWorld()
@@ -458,6 +461,38 @@ void APTSculptVolume::UpdateSculptBoundaryCollision()
         if (!Root) continue;
         const bool bCanEnter = (!bTurnActive) || (PS == Sculptor);
         Root->IgnoreActorWhenMoving(this, bCanEnter);
+    }
+
+    // ── Fix DURO anti-trabado (server) ──────────────────────────────────────
+    // El empuje por colisión no siempre saca a quien quedó DENTRO del cubo (la caja crece encima y la
+    // de-penetración del Character no lo expulsa). Acá el server detecta a cualquier NO-escultor que
+    // esté adentro durante el turno y lo TELEPORTA a la cara horizontal más cercana, afuera del área.
+    // Es autoritativo → se corrige en todos. Corre a 5 Hz (BoundaryAccum), suficiente para no trabar.
+    if (HasAuthority() && bTurnActive && Sculptor)
+    {
+        const FTransform BT  = BoundsBox->GetComponentTransform();
+        const FVector    Ext = BoundsBox->GetScaledBoxExtent(); // incluye la escala animada del actor
+        if (Ext.X > 1.f && Ext.Y > 1.f) // ignorar mientras está casi colapsado
+        {
+            for (APlayerState* PS : GS->PlayerArray)
+            {
+                if (!PS || PS == Sculptor) continue;
+                APawn* P = PS->GetPawn();
+                if (!P) continue;
+                const FVector L = BT.InverseTransformPosition(P->GetActorLocation());
+                if (FMath::Abs(L.X) < Ext.X && FMath::Abs(L.Y) < Ext.Y && FMath::Abs(L.Z) < Ext.Z)
+                {
+                    // Adentro → empujar por la cara X o Y más cercana (horizontal), con margen para la cápsula.
+                    const float PenX = Ext.X - FMath::Abs(L.X);
+                    const float PenY = Ext.Y - FMath::Abs(L.Y);
+                    const float Margin = 120.f;
+                    FVector Out = L;
+                    if (PenX <= PenY) Out.X = (L.X >= 0.f ? 1.f : -1.f) * (Ext.X + Margin);
+                    else              Out.Y = (L.Y >= 0.f ? 1.f : -1.f) * (Ext.Y + Margin);
+                    P->SetActorLocation(BT.TransformPosition(Out), /*bSweep=*/false, nullptr, ETeleportType::TeleportPhysics);
+                }
+            }
+        }
     }
 }
 
@@ -845,18 +880,46 @@ void APTSculptVolume::CellBounds(FIntVector& OutMin, FIntVector& OutMax) const
 
 float APTSculptVolume::SampleWorldDensity(FVector WorldPos) const
 {
-    // Modo SVO: densidad = SDF del octree en ACTOR-LOCAL (>0 dentro). Lo usan los ojos (raymarch a
-    // la superficie) y el cursor.
+    // Unión (máximo) de la base + TODAS las capas de detalle → el raymarch (ALT/Paint/Smooth/Ojos) se
+    // pega a la superficie MÁS EXTERNA exista donde exista arcilla (base o cualquier capa ALT), no solo
+    // a la base. Convención: SDF positivo = dentro del material → el máximo es la unión de todo.
     if (bUseSVO)
-        return SVOField.Sample(GetActorTransform().InverseTransformPosition(WorldPos));
-
+    {
+        const FVector L = GetActorTransform().InverseTransformPosition(WorldPos);
+        float d = SVOField.Sample(L);
+        for (const TSharedPtr<FPTVoxelOctree>& Lyr : SVODetailFields)
+            if (Lyr.IsValid()) d = FMath::Max(d, Lyr->Sample(L));
+        return d;
+    }
     const FVector C = WorldToCell(WorldPos);
-    // Unión (máximo) de la base + TODAS las capas de detalle: así el raymarch del cursor (ALT) se pega
-    // a la superficie más externa exista donde exista arcilla, no solo a la base. Convención: SDF
-    // positivo = dentro del material → el máximo es la unión de todas las mallas.
     float d = Field.SampleSDF(C.X, C.Y, C.Z);
     for (const TSharedPtr<FPTSculptField>& L : DetailFields)
         if (L.IsValid())
+            d = FMath::Max(d, L->SampleSDF(C.X, C.Y, C.Z));
+    return d;
+}
+
+float APTSculptVolume::SampleWorldDensityExceptActiveDetail(FVector WorldPos) const
+{
+    // Unión de base + capas de detalle EXCEPTO la ACTIVA (la del trazo en curso). El snap del modo ALT
+    // lo usa DURANTE el trazo: así sigue la base y las capas ALT previas, pero NO la arcilla que estás
+    // agregando ahora (si no, la superficie treparía hacia la cámara). La base SIEMPRE se incluye.
+    // La capa "activa" = la ÚLTIMA creada (la del trazo ALT en curso). Se excluye por puntero persistente
+    // (NO ActiveSVO/ActiveField, que son transitorios y para cuando corre el raymarch ya volvieron a la base).
+    if (bUseSVO)
+    {
+        const FVector L = GetActorTransform().InverseTransformPosition(WorldPos);
+        const FPTVoxelOctree* Exclude = SVODetailFields.Num() > 0 ? SVODetailFields.Last().Get() : nullptr;
+        float d = SVOField.Sample(L);
+        for (const TSharedPtr<FPTVoxelOctree>& Lyr : SVODetailFields)
+            if (Lyr.IsValid() && Lyr.Get() != Exclude) d = FMath::Max(d, Lyr->Sample(L));
+        return d;
+    }
+    const FVector C = WorldToCell(WorldPos);
+    const FPTSculptField* Exclude = DetailFields.Num() > 0 ? DetailFields.Last().Get() : nullptr;
+    float d = Field.SampleSDF(C.X, C.Y, C.Z);
+    for (const TSharedPtr<FPTSculptField>& L : DetailFields)
+        if (L.IsValid() && L.Get() != Exclude)
             d = FMath::Max(d, L->SampleSDF(C.X, C.Y, C.Z));
     return d;
 }
@@ -1809,6 +1872,13 @@ UProceduralMeshComponent* APTSculptVolume::CreateDetailLayerMesh()
 
 void APTSculptVolume::Multicast_BeginDetailLayer_Implementation()
 {
+    // Grabar el respaldo de PINTURA de este trazo de detalle (para que el undo de la capa restaure el
+    // color y no quede color fantasma). Igual que BeginStroke pero la geometría la respalda la capa misma.
+    CurrentVolumeUndo = FPTVolumeUndo();
+    CurrentVolumeUndo.EyesCount = Eyes.Num();
+    bRecordingStroke = true;
+    bRecordingDetail = true;
+
     // Modo SVO: nueva capa = su propio octree + su propio mesh.
     if (bUseSVO)
     {
@@ -1958,6 +2028,7 @@ void APTSculptVolume::ClearAll()
     // bricks de un campo que se descartó).
     Field.ClearUndo();
     VolumeUndoStack.Reset();
+    DetailUndoStack.Reset(); bRecordingDetail = false;
     CurrentVolumeUndo = FPTVolumeUndo();
     bRecordingStroke  = false;
 
@@ -2076,6 +2147,7 @@ bool APTSculptVolume::LoadFieldState(const TArray<uint8>& In)
 
     // Undo del volumen (pintura/ojos) también en blanco: los respaldos apuntarían a un campo viejo.
     VolumeUndoStack.Reset();
+    DetailUndoStack.Reset(); bRecordingDetail = false;
     CurrentVolumeUndo = FPTVolumeUndo();
     bRecordingStroke  = false;
 
@@ -2156,6 +2228,7 @@ void APTSculptVolume::LoadPaintState(const TArray<uint8>& In)
 
     // Los respaldos de undo apuntarían a slots viejos → resetear.
     VolumeUndoStack.Reset();
+    DetailUndoStack.Reset(); bRecordingDetail = false;
     CurrentVolumeUndo = FPTVolumeUndo();
     UploadColorField();
 }
@@ -2190,6 +2263,54 @@ void APTSculptVolume::Multicast_ClearAll_Implementation()
     ClearAll();
 }
 
+void APTSculptVolume::Multicast_CollapseVolume_Implementation()
+{
+    // Colapso al TERMINAR el turno: escala actual → 0, borra la escultura al llegar al fondo y queda en 0.
+    VolAnimStartScale = GetActorScale3D().X;
+    VolAnimPhase = 1;
+    VolAnimT     = 0.f;
+}
+
+void APTSculptVolume::Multicast_GrowVolume_Implementation()
+{
+    // Crecimiento al EMPEZAR el nuevo turno: escala actual (≈0) → 1 con rebote.
+    VolAnimStartScale = GetActorScale3D().X;
+    VolAnimPhase = 2;
+    VolAnimT     = 0.f;
+}
+
+void APTSculptVolume::TickTurnAnim(float Dt)
+{
+    if (VolAnimPhase == 0) return;
+    VolAnimT += Dt;
+    float Scale = 1.f;
+
+    if (VolAnimPhase == 1)
+    {
+        // Colapso StartScale→0 (ease-in cúbico): el cubo se "compacta" arrastrando la escultura.
+        const float a = (TurnCollapseTime > 0.f) ? FMath::Clamp(VolAnimT / TurnCollapseTime, 0.f, 1.f) : 1.f;
+        Scale = VolAnimStartScale * (1.f - a * a * a);
+        if (a >= 1.f)
+        {
+            ClearAll();          // lienzo en blanco JUSTO cuando el cubo está compactado (scale ~0)
+            VolAnimPhase = 0;    // queda colapsado hasta que el nuevo turno lo haga crecer
+            Scale = 0.f;
+        }
+    }
+    else // VolAnimPhase == 2 — crecimiento con overshoot (ease-out-back): rebote al final.
+    {
+        const float a  = (TurnGrowTime > 0.f) ? FMath::Clamp(VolAnimT / TurnGrowTime, 0.f, 1.f) : 1.f;
+        const float c1 = TurnBounceAmount;
+        const float c3 = c1 + 1.f;
+        const float t  = a - 1.f;
+        const float eb = 1.f + c3 * t * t * t + c1 * t * t; // easeOutBack: 0→1 con overshoot
+        Scale = VolAnimStartScale + (1.f - VolAnimStartScale) * eb;
+        if (a >= 1.f) { Scale = 1.f; VolAnimPhase = 0; }
+    }
+
+    SetActorScale3D(FVector(FMath::Max(Scale, 0.001f))); // evita escala 0 exacta (colisión degenerada)
+}
+
 // ─── Undo ─────────────────────────────────────────────────────────────────────
 void APTSculptVolume::BackupAtlas(int32 AIdx, int32 Slot)
 {
@@ -2220,6 +2341,17 @@ void APTSculptVolume::Multicast_BeginStroke_Implementation()
 
 void APTSculptVolume::Multicast_EndStroke_Implementation()
 {
+    // Trazo de DETALLE (ALT): su respaldo de pintura va a la pila de capas (paralela a las capas de
+    // geometría). El '1' de UndoOrder ya se agregó en BeginDetailLayer → acá NO se agrega otro.
+    if (bRecordingDetail)
+    {
+        DetailUndoStack.Add(MoveTemp(CurrentVolumeUndo));
+        CurrentVolumeUndo = FPTVolumeUndo();
+        bRecordingStroke = false;
+        bRecordingDetail = false;
+        return;
+    }
+
     if (bUseSVO)
     {
         // Guardar el respaldo de pintura/ojos del trazo (el snapshot de geometría ya se guardó en BeginStroke).
@@ -2250,6 +2382,24 @@ void APTSculptVolume::Multicast_EndStroke_Implementation()
     }
 }
 
+void APTSculptVolume::RestoreLastDetailPaint()
+{
+    // Restaura el color pintado durante el último trazo de detalle (ALT) al deshacer su capa → los voxeles
+    // del atlas vuelven a su estado previo (vacío) y la geometría nueva en ese lugar no hereda el color viejo.
+    if (DetailUndoStack.Num() == 0) return;
+    const FPTVolumeUndo U = MoveTemp(DetailUndoStack.Last());
+    DetailUndoStack.Pop();
+    for (const auto& It : U.AtlasOld)
+        if (AtlasBuf.IsValidIndex(It.Key)) AtlasBuf[It.Key] = It.Value;
+    if (U.AtlasOld.Num() > 0)
+    {
+        for (const int32 Slot : U.Slots) DirtyTiles.Add(Slot);
+        bPaintDirty = true;
+        UploadColorField();
+    }
+    if (HasAuthority() && Eyes.Num() > U.EyesCount) { Eyes.SetNum(U.EyesCount); RebuildEyesMesh(); }
+}
+
 void APTSculptVolume::Multicast_Undo_Implementation()
 {
     // Modo SVO: LIFO igual que el clásico — última capa entera, o último trazo de la base (snapshot).
@@ -2264,6 +2414,7 @@ void APTSculptVolume::Multicast_Undo_Implementation()
                 if (UProceduralMeshComponent* M = DetailMeshes.Last()) M->DestroyComponent();
                 DetailMeshes.Pop();
             }
+            RestoreLastDetailPaint(); // + restaurar el COLOR de esa capa (si no, queda color fantasma)
             bSVODirty = true; TimeSinceRebuild = RebuildInterval;
             return;
         }
@@ -2302,6 +2453,7 @@ void APTSculptVolume::Multicast_Undo_Implementation()
             if (UProceduralMeshComponent* M = DetailMeshes.Last()) M->DestroyComponent();
             DetailMeshes.Pop();
         }
+        RestoreLastDetailPaint(); // + restaurar el COLOR de esa capa (si no, queda color fantasma)
         return;
     }
     if (UndoOrder.Num() > 0 && UndoOrder.Last() == 0) UndoOrder.Pop();

@@ -7,6 +7,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/GameStateBase.h"
 #include "Engine/World.h"
+#include "Engine/NetConnection.h" // Barrera A: pacing por saturación del canal confiable del receptor
 #include "Net/UnrealNetwork.h"
 
 int32 APTPlayerState::GetLanguageIndex() const
@@ -51,7 +52,15 @@ void APTPlayerState::CopyProperties(APlayerState* NewPlayerState)
 // propiedad, y en ese caso Unreal lo tira sin avisar. Los RPC confiables se parten en varios
 // paquetes solos y llegan en orden, así que sirven para cualquier tamaño.
 
-namespace { constexpr int32 HeadChunkBytes = 8 * 1024; }
+namespace
+{
+    constexpr int32 HeadChunkBytes = 8 * 1024;
+    // Barrera B: tope duro de tamaño de una skin (geometría + PNG cabeza + PNG cuerpo, comprimido).
+    // Una skin normal está MUY por debajo; esto solo frena datos anómalos (bug de horneado, cliente
+    // manipulado) para que una skin gigante NO se transmita a todos y tumbe la sala.
+    constexpr int32 MaxHeadBlobBytes = 2 * 1024 * 1024; // 2 MB
+    constexpr int32 MaxHeadChunks    = MaxHeadBlobBytes / HeadChunkBytes + 8; // techo de partes válidas
+}
 
 // ── Cola de envío trottleado (vive en el PlayerState RECEPTOR para downloads) ────────────────────
 void APTPlayerState::EnqueueHeadJob(APTPlayerState* Source, const TSharedPtr<TArray<uint8>>& Data,
@@ -85,6 +94,18 @@ void APTPlayerState::PumpHeadSend()
     // 2 chunks/pump (0.05s) = ~40 chunks/s por CLIENTE. Como ahora los downloads salen SERIAL por cliente
     // (una cabeza por vez, este PlayerState = el receptor), el canal confiable de ese cliente nunca se
     // llena aunque haya 8 cabezas para mandarle: se van una atrás de otra.
+    // ── Barrera A: pacing adaptativo por saturación de la conexión del receptor ──
+    // Un download (Client RPC) viaja por la conexión del cliente dueño de ESTE PlayerState. Si esa
+    // conexión está saturada este tick (enlace lento/lageado, común con muchos jugadores), NO encolamos
+    // más bunches confiables: se saltea el envío y se reintenta al próximo tick del timer. Así el buffer
+    // confiable del canal (OutRec) drena antes de seguir y nunca llega al límite de 256 que corta la
+    // conexión → evita el colapso aunque la skin sea grande o el cliente ande mal.
+    // (Los uploads MI→server y el host local — sin UNetConnection — no pasan por esta compuerta.)
+    if (OutHeadJobs.Num() > 0 && !OutHeadJobs[0].bToServer)
+        if (UNetConnection* Conn = GetNetConnection())
+            if (!Conn->IsNetReady(/*bLowLatency=*/false))
+                return; // canal saturado: esperar al siguiente tick
+
     const int32 ChunksPerPump = 2;
     int32 Sent = 0;
     while (Sent < ChunksPerPump && OutHeadJobs.Num() > 0)
@@ -115,6 +136,15 @@ void APTPlayerState::UploadHead(const TArray<uint8>& Blob)
 {
     if (Blob.Num() == 0) return;
 
+    // Barrera B: no subir una skin anómala. Si se pasa del tope, se descarta acá (no se transmite a
+    // nadie); el dueño se queda con el look default en vez de tumbar la sala.
+    if (Blob.Num() > MaxHeadBlobBytes)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[Head] Skin DEMASIADO grande (%d bytes > %d): no se sube."),
+               Blob.Num(), MaxHeadBlobBytes);
+        return;
+    }
+
     HeadBlob = Blob; // copia local: el dueño ve su cabeza sin esperar la vuelta del server
     const int32 Version = HeadVersion + 1;
     // Encolar la subida troceada al server en MI cola (Source=nullptr, bToServer=true).
@@ -126,8 +156,27 @@ void APTPlayerState::UploadHead(const TArray<uint8>& Blob)
 void APTPlayerState::Server_UploadHeadChunk_Implementation(int32 Version, int32 ChunkIndex,
                                                            int32 TotalChunks, const TArray<uint8>& Data)
 {
+    // Barrera B: validar el encabezado. Un TotalChunks fuera de rango = subida corrupta/manipulada →
+    // descartar sin reservar memoria ni reensamblar.
+    if (TotalChunks <= 0 || TotalChunks > MaxHeadChunks)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[Head] Subida rechazada de %s: TotalChunks=%d fuera de rango."),
+               *GetDisplayNameSafe(), TotalChunks);
+        PendingVersion = -1; PendingBlob.Reset();
+        return;
+    }
+
     if (ChunkIndex == 0) { PendingBlob.Reset(); PendingVersion = Version; PendingChunks = TotalChunks; }
     if (PendingVersion != Version) return; // llegó una parte de una subida vieja: descartar
+
+    // Barrera B: cortar si el acumulado se pasa del tope (no dejar crecer sin límite ni reenviar a todos).
+    if (PendingBlob.Num() + Data.Num() > MaxHeadBlobBytes)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[Head] Subida de %s excede el tope (%d bytes): descartada."),
+               *GetDisplayNameSafe(), MaxHeadBlobBytes);
+        PendingVersion = -1; PendingBlob.Reset();
+        return;
+    }
 
     PendingBlob.Append(Data);
 
@@ -219,6 +268,9 @@ void APTPlayerState::Client_ReceiveHeadChunk_Implementation(APTPlayerState* Sour
 {
     if (!Source) return; // el PlayerState de origen todavía no replicó a este cliente
 
+    // Barrera B (defensivo): encabezado fuera de rango → descartar sin reservar memoria.
+    if (TotalChunks <= 0 || TotalChunks > MaxHeadChunks) { Source->PendingVersion = -1; Source->PendingBlob.Reset(); return; }
+
     if (ChunkIndex == 0)
     {
         Source->PendingBlob.Reset();
@@ -226,6 +278,8 @@ void APTPlayerState::Client_ReceiveHeadChunk_Implementation(APTPlayerState* Sour
         Source->PendingChunks  = TotalChunks;
     }
     if (Source->PendingVersion != Version) return;
+
+    if (Source->PendingBlob.Num() + Data.Num() > MaxHeadBlobBytes) { Source->PendingVersion = -1; Source->PendingBlob.Reset(); return; }
 
     Source->PendingBlob.Append(Data);
     if (ChunkIndex < TotalChunks - 1) return;

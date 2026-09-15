@@ -58,6 +58,10 @@
 		{
 			"Name": "MapKit",
 			"Enabled": true
+		},
+		{
+			"Name": "GameplayDebugger",
+			"Enabled": false
 		}
 	]
 }

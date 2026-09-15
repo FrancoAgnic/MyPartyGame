@@ -99,6 +99,9 @@ protected:
 
     /** WBP del cuadrito (el mismo WBP_ToolSlot del gameplay). */
     UPROPERTY(EditAnywhere, Category = "HeadHUD") TSubclassOf<UPTToolSlotWidget> ToolSlotClass;
+    /** WBP del cuadrito de las HERRAMIENTAS (1/2/3/4): el mismo grande con marco de fondo del gameplay
+     *  (WBP_ToolSlotBig). Si queda vacío, usa ToolSlotClass (como antes). */
+    UPROPERTY(EditAnywhere, Category = "HeadHUD") TSubclassOf<UPTToolSlotWidget> ToolSlotToolsClass;
 
     // Iconos de herramientas (asignar las MISMAS texturas del gameplay).
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconAdd      = nullptr;

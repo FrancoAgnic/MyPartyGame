@@ -316,6 +316,14 @@ void APTSculptPlayerController::PTHideNames()
         GI->SetHideNames(!GI->AreNamesHidden());
 }
 
+void APTSculptPlayerController::PTCaptureNames()
+{
+    // Reemplaza los nicks por "Player N" en la lista de jugadores y en el chat (para grabar gameplay sin
+    // exponer nombres), SIN entrar a modo espectador. El HUD ya respeta el capture mode (NameFor/OnChatLine).
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
+        GI->SetCaptureMode(!GI->IsCaptureMode());
+}
+
 void APTSculptPlayerController::PTHideHotbar()
 {
     if (GameplayHUD) GameplayHUD->ToggleHotbar();
@@ -816,18 +824,8 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         {
             Server_ApplyStamp(StampPos, Sh, StampSize, EditMode, CurrentPaintColor, StampRotation, bStrokeIsDetail, StampScale);
             bStrokeActive = true;
-            // ALT+Add: congelar el plano en el 1er sello (perpendicular a la vista) para que el resto
-            // del trazo vaya a profundidad constante y no trepe hacia la cámara.
-            if (bStrokeIsDetail)
-            {
-                FVector S, D;
-                if (GetCameraRay(S, D))
-                {
-                    SculptPlaneOrigin  = StampPos;
-                    SculptPlaneNormal  = D;      // plano perpendicular a la vista al iniciar el trazo
-                    bStrokePlaneLocked = true;
-                }
-            }
+            // ALT+Add ya NO congela un plano: cada sello se pega a la superficie de la BASE (ver
+            // GetStampPoint) → el trazo sigue el contorno de la malla sin trepar hacia la cámara.
         }
         LastStampPos = StampPos;
     }
@@ -867,7 +865,8 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
 {
     if (!SculptGrid) return;
     // Se muestra con las herramientas que ponen el sello en el aire (Add/Erase): ahí importa la profundidad.
-    const bool bWant = Volume && SculptGridMID && !bEyesTool &&
+    // En modo EJES (Z/X) se OCULTA: ahí ya está la grilla plana del plano de eje y las dos se mezclaban.
+    const bool bWant = Volume && SculptGridMID && !bEyesTool && !bAxisLock &&
                        (EditMode == EPTEditMode::Add || EditMode == EPTEditMode::Erase);
     if (!bWant)
     {
@@ -883,8 +882,10 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
     // Radio y celda efectivos: escalan con el TAMAÑO de la brocha (StampSize · mayor eje de StampScale)
     // respecto del tamaño de referencia. Brocha grande → bola y cubitos grandes; brocha chica → chicos
     // (así con brocha chica la grilla se sigue viendo).
-    const float BrushWorld = FMath::Max(1.f, StampSize) *
-        FMath::Max3(StampScale.X, StampScale.Y, StampScale.Z);
+    // OJO: usa SOLO StampSize (el tamaño simétrico), NO la escala no-uniforme del sello. Antes se
+    // multiplicaba por max3(StampScale) y, con la shape escalada al máximo en dos ejes + la escala normal
+    // al máximo, el radio se disparaba e inundaba la pantalla. Ahora el tope es el de StampSize (MaxR).
+    const float BrushWorld = FMath::Max(1.f, StampSize);
     const float Ratio     = BrushWorld / FMath::Max(1.f, SculptGridRefBrushSize);
     // Radio proporcional a la brocha, pero con PISO y TOPE: con brochas chicas no desaparece y con brochas
     // grandes no inunda la pantalla.
@@ -1171,51 +1172,44 @@ FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
         return Volume ? Volume->ClampInsideCanvas(Pf, 0.f) : Pf;
     }
 
-    // ── Paint, Smooth y OJOS: pegar el cursor a la superficie (raymarch) para trabajar
-    // preciso sobre la malla donde apuntás. ────────────────────────────────────
-    // ALT+Add DURANTE un trazo: NO re-raymarchear (la arcilla nueva quedaría más cerca y el trazo
-    // treparía hacia la cámara). Se dibuja sobre el plano congelado en el 1er sello (perpendicular a
-    // la vista) → trazos laterales/verticales a profundidad constante.
-    if (EditMode == EPTEditMode::Add && bStrokeIsDetail && bStrokeActive && bStrokePlaneLocked)
-    {
-        const float denom = FVector::DotProduct(Dir, SculptPlaneNormal);
-        FVector Pf = SculptPlaneOrigin;
-        if (FMath::Abs(denom) > 1e-4f)
-        {
-            const float t = FVector::DotProduct(SculptPlaneOrigin - Start, SculptPlaneNormal) / denom;
-            if (t > 0.f) Pf = Start + Dir * t;
-        }
-        OutNormal = -Dir;
-        return Volume ? Volume->ClampInsideCanvas(Pf, 0.f) : Pf;
-    }
-
     // Paint/Smooth/Ojos SIEMPRE se pegan a la superficie; Add lo hace solo con ALT (bSurfaceSnap):
     // así podés apoyar el sello sobre la arcilla ya dibujada y detallar de cerca en vez de agregar
     // a distancia fija del brazo.
+    // ALT+Add usa la superficie de la BASE (no la capa de detalle que vas agregando) → el trazo SIGUE
+    // el contorno de la malla existente sin trepar hacia la cámara. Paint/Smooth/Ojos usan la unión
+    // (base + detalle) para pegarse a la superficie más externa.
+    const bool bAltDetail = (EditMode == EPTEditMode::Add && bSurfaceSnap);
+    // Solo DURANTE el trazo ALT excluimos la capa activa (para no trepar sobre lo que agregás ahora).
+    // Al posicionar (hover) o en el 1er sello, se usa la unión COMPLETA → snapea a la base y a las capas
+    // ALT previas (podés apoyar detalle sobre detalle). Paint/Smooth/Ojos siempre unión completa.
+    const bool bExcludeActive = bAltDetail && bStrokeActive;
     if (((EditMode == EPTEditMode::Paint || EditMode == EPTEditMode::Smooth || bEyesTool)
-         || (EditMode == EPTEditMode::Add && bSurfaceSnap)) && Volume)
+         || bAltDetail) && Volume)
     {
+        auto SampleD = [this, bExcludeActive](const FVector& P) -> float
+        { return bExcludeActive ? Volume->SampleWorldDensityExceptActiveDetail(P) : Volume->SampleWorldDensity(P); };
+
         static constexpr float StepSize = 8.f;  // ~1 voxel: preciso
         static constexpr int32 MaxSteps = 700;
-        float prevD = Volume->SampleWorldDensity(Start);
+        float prevD = SampleD(Start);
         for (int32 i = 1; i <= MaxSteps; ++i)
         {
             const FVector P = Start + Dir * (StepSize * i);
-            const float   d = Volume->SampleWorldDensity(P);
+            const float   d = SampleD(P);
             if (prevD <= 0.f && d > 0.f)
             {
                 FVector lo = P - Dir * StepSize, hi = P;
                 for (int32 j = 0; j < 5; ++j)
                 {
                     const FVector mid = (lo + hi) * 0.5f;
-                    (Volume->SampleWorldDensity(mid) > 0.f ? hi : lo) = mid;
+                    (SampleD(mid) > 0.f ? hi : lo) = mid;
                 }
                 const FVector Surf = (lo + hi) * 0.5f;
                 const float E = Volume->VoxelSize * 0.5f;
                 FVector N(
-                    Volume->SampleWorldDensity(Surf + FVector(E,0,0)) - Volume->SampleWorldDensity(Surf - FVector(E,0,0)),
-                    Volume->SampleWorldDensity(Surf + FVector(0,E,0)) - Volume->SampleWorldDensity(Surf - FVector(0,E,0)),
-                    Volume->SampleWorldDensity(Surf + FVector(0,0,E)) - Volume->SampleWorldDensity(Surf - FVector(0,0,E)));
+                    SampleD(Surf + FVector(E,0,0)) - SampleD(Surf - FVector(E,0,0)),
+                    SampleD(Surf + FVector(0,E,0)) - SampleD(Surf - FVector(0,E,0)),
+                    SampleD(Surf + FVector(0,0,E)) - SampleD(Surf - FVector(0,0,E)));
                 N = (-N).GetSafeNormal();
                 OutNormal = N.IsNearlyZero() ? -Dir : N;
                 return Surf;
@@ -1569,9 +1563,9 @@ void APTSculptPlayerController::OnStampPressed()
 
 void APTSculptPlayerController::OnStampReleased()
 {
-    // Los trazos de la BASE se cierran con EndStroke (para el undo por trazo); las capas de detalle
-    // ya quedaron committeadas al crearse, así que no necesitan cierre.
-    if (bIsStamping && !bStrokeIsDetail && CanLocalPlayerSculpt()) Server_EndStroke();
+    // Cerrar el trazo (base o detalle) con EndStroke: el volumen guarda el respaldo de pintura del trazo
+    // (para el undo del color). Para detalle, el respaldo va a la pila de capas (DetailUndoStack).
+    if (bIsStamping && CanLocalPlayerSculpt()) Server_EndStroke();
     bIsStamping     = false;
     bStrokeIsDetail = false;
     AxisChosen      = -1;

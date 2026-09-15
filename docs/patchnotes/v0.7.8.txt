@@ -1,0 +1,17 @@
+[h1]Sculpturillo v0.7.8[/h1]
+
+[h2]Stability[/h2]
+[list]
+[*] Hardened custom-skin replication so busy rooms stay stable. Skins now stream to each player one at a time and back off automatically when a connection is congested, so a slow link can no longer overflow the network channel and drop the session.
+[*] Added a safety cap that rejects abnormally large or malformed skins before they are sent, so a single bad skin can never take a room down.
+[/list]
+
+[h2]Word Banks[/h2]
+[list]
+[*] The default word bank is now shown as the first item in the Library and can be selected like any other bank. The separate "Default" button is gone.
+[/list]
+
+[h2]Polish[/h2]
+[list]
+[*] Sculpting hotbar: the Undo (Clear) and Cycle Shape (Tab) keys now show the same pressed glow as the other hotbar keys while held.
+[/list]

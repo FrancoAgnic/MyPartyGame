@@ -25,15 +25,17 @@ void UPTHeadSculptHUDWidget::BuildOnce()
         return S;
     };
 
-    // ── Herramientas (1/2/3/4) ──
+    // ── Herramientas (1/2/3/4) ── usan la clase GRANDE con marco (la misma del gameplay) si está
+    // asignada; si no, la común. Así el hotbar de la cabeza se ve igual que el del gameplay.
     if (ToolsBox)
     {
+        const TSubclassOf<UPTToolSlotWidget> ToolsCls = ToolSlotToolsClass ? ToolSlotToolsClass : ToolSlotClass;
         ToolsBox->ClearChildren();
         ToolSlots.Reset();
         auto AddTool = [&](UTexture2D* Icon, const TCHAR* Key, const TCHAR* LabelKey)
         {
-            if (UPTToolSlotWidget* S = Make(Icon, FText::FromString(Key), PTText::Get(LabelKey)))
-            { ToolsBox->AddChild(S); ToolSlots.Add(S); }
+            UPTToolSlotWidget* S = CreateWidget<UPTToolSlotWidget>(this, ToolsCls);
+            if (S) { S->SetSlot(Icon, FText::FromString(Key), PTText::Get(LabelKey)); ToolsBox->AddChild(S); ToolSlots.Add(S); }
         };
         AddTool(IconAdd,   TEXT("1"), TEXT("TOOL_ADD"));
         AddTool(IconErase, TEXT("2"), TEXT("TOOL_ERASE"));
@@ -175,11 +177,13 @@ void UPTHeadSculptHUDWidget::Refresh(APTLobbyPlayerController* PC)
         }
     }
 
-    // ALT (detalle en capa aparte): es de la CABEZA. No aplica con el foco en el cuerpo. Se resalta al mantener Alt.
+    // ALT (detalle sobre la superficie): SOLO tiene sentido con Agregar arcilla equipado (modo 1). En
+    // Erase/Paint/Ojos o con el foco en el cuerpo se OCULTA. Se resalta al mantener Alt.
     if (DetailSlot)
     {
-        DetailSlot->SetVisibility(bBodyFocus ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
-        if (!bBodyFocus) DetailSlot->SetSelected(PC->IsHeadSurfaceSnapActive());
+        const bool bShowDetail = !bBodyFocus && (Equipped == 0); // 0 = Add
+        DetailSlot->SetVisibility(bShowDetail ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+        if (bShowDetail) DetailSlot->SetSelected(PC->IsHeadSurfaceSnapActive());
     }
 
     const bool  bPaintTool = PC->IsHeadPaintingTool();

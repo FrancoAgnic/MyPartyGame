@@ -16,6 +16,7 @@
 #include "../UI/PTControlRowWidget.h"
 #include "../UI/PTToolSlotWidget.h"
 #include "Components/PanelWidget.h"
+#include "Components/HorizontalBoxSlot.h" // SlotSpacing (padding entre celdas)
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
@@ -65,6 +66,11 @@ bool UPTGameplayHUDWidget::Initialize()
     RebuildControls();
     BuildToolbar();
 
+    // Iconos de red: aplicar la textura por código (si se asignó en Details) → no dependen del brush del WBP.
+    if (IconPacketLoss   && IconNetPacketLoss)   IconPacketLoss->SetBrushFromTexture(IconNetPacketLoss,     true);
+    if (IconHighPing     && IconNetHighPing)     IconHighPing->SetBrushFromTexture(IconNetHighPing,         true);
+    if (IconDisconnected && IconNetDisconnected) IconDisconnected->SetBrushFromTexture(IconNetDisconnected, true);
+
     return true;
 }
 
@@ -100,6 +106,54 @@ void UPTGameplayHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDelta
     }
 }
 
+// Keycap COMPACTO: el engine devuelve nombres largos ("Left Alt", "Backspace", "Spacebar") que ensanchan
+// el slot y desalinean el hotbar. Los mapeamos a etiquetas cortas y parejas. Se usa igual en el preview
+// del diseñador y en juego → mismo texto, mismo ancho, WYSIWYG.
+static FText PT_ShortKeyLabel(const FKey& Key)
+{
+    static const TMap<FName, FString> Short = {
+        { EKeys::LeftAlt.GetFName(),      TEXT("Alt")   },
+        { EKeys::RightAlt.GetFName(),     TEXT("Alt")   },
+        { EKeys::LeftShift.GetFName(),    TEXT("Shift") },
+        { EKeys::RightShift.GetFName(),   TEXT("Shift") },
+        { EKeys::LeftControl.GetFName(),  TEXT("Ctrl")  },
+        { EKeys::RightControl.GetFName(), TEXT("Ctrl")  },
+        { EKeys::BackSpace.GetFName(),    TEXT("Bksp")  },
+        { EKeys::SpaceBar.GetFName(),     TEXT("Space") },
+        { EKeys::Enter.GetFName(),        TEXT("Enter") },
+        { EKeys::Escape.GetFName(),       TEXT("Esc")   },
+        { EKeys::RightMouseButton.GetFName(),  TEXT("RMB") },
+        { EKeys::LeftMouseButton.GetFName(),   TEXT("LMB") },
+        { EKeys::MiddleMouseButton.GetFName(), TEXT("MMB") },
+    };
+    if (const FString* S = Short.Find(Key.GetFName())) return FText::FromString(*S);
+    return Key.GetDisplayName();
+}
+
+UPTToolSlotWidget* UPTGameplayHUDWidget::CreateSlotIn(UPanelWidget* Box, UTexture2D* Icon,
+                                                     const FText& KeyName, const FText& Label,
+                                                     UTexture2D* KeyIconTex,
+                                                     TSubclassOf<UPTToolSlotWidget> SlotClassOverride)
+{
+    // Clase de la celda: override (tools grandes) o la default.
+    TSubclassOf<UPTToolSlotWidget> Cls = SlotClassOverride ? SlotClassOverride : ToolSlotClass;
+    if (!Box || !Cls) return nullptr;
+    // Outer: en juego el PlayerController; en el diseñador (sin PC) usamos este widget, así el preview
+    // se puede crear en el editor de widgets. (CreateWidget elige overload por el tipo del outer.)
+    UPTToolSlotWidget* S = GetOwningPlayer()
+        ? CreateWidget<UPTToolSlotWidget>(GetOwningPlayer(), Cls)
+        : CreateWidget<UPTToolSlotWidget>(this, Cls);
+    if (!S) return nullptr;
+    S->SetSlot(Icon, KeyName, Label, KeyIconTex);
+    UPanelSlot* PS = Box->AddChild(S);
+    // Espaciado uniforme y tuneable (mismo valor en diseño y en juego). Solo si el contenedor es
+    // HorizontalBox y SlotSpacing > 0; si no, se respeta el layout del contenedor tal cual.
+    if (SlotSpacing > 0.f)
+        if (UHorizontalBoxSlot* HS = Cast<UHorizontalBoxSlot>(PS))
+            HS->SetPadding(FMargin(SlotSpacing * 0.5f, 0.f, SlotSpacing * 0.5f, 0.f));
+    return S;
+}
+
 void UPTGameplayHUDWidget::BuildToolbar()
 {
     if (!ToolSlotClass) return;
@@ -107,28 +161,25 @@ void UPTGameplayHUDWidget::BuildToolbar()
     auto MakeSlot = [this](UPanelWidget* Box, UTexture2D* Icon, const FKey& Key, const FText& Label)
         -> UPTToolSlotWidget*
     {
-        if (!Box) return nullptr;
-        UPTToolSlotWidget* S = CreateWidget<UPTToolSlotWidget>(GetOwningPlayer(), ToolSlotClass);
-        if (!S) return nullptr;
-        S->SetSlot(Icon, Key.GetDisplayName(), Label);
-        Box->AddChild(S);
-        return S;
+        return CreateSlotIn(Box, Icon, PT_ShortKeyLabel(Key), Label);
     };
 
     // Tools: la tecla sale de PTInput (misma tabla que bindea el controller) → si se rebindea,
     // el cuadrito muestra la tecla nueva sin tocar nada acá.
+    // Tools 1/2/3/4: usan la clase GRANDE (con marco de fondo) si está asignada; si no, la default.
     if (ToolsBox)
     {
+        TSubclassOf<UPTToolSlotWidget> ToolsCls = ToolSlotToolsClass ? ToolSlotToolsClass : ToolSlotClass;
         ToolsBox->ClearChildren();
         ToolSlots.Reset();
-        ToolSlots.Add(MakeSlot(ToolsBox, IconAdd,   PTInput::GetKey(TEXT("ModeAdd")),   PTText::Get(TEXT("TOOL_ADD"))));
-        ToolSlots.Add(MakeSlot(ToolsBox, IconErase, PTInput::GetKey(TEXT("ModeErase")), PTText::Get(TEXT("TOOL_ERASE"))));
-        ToolSlots.Add(MakeSlot(ToolsBox, IconPaint, PTInput::GetKey(TEXT("ModePaint")), PTText::Get(TEXT("TOOL_PAINT"))));
-        ToolSlots.Add(MakeSlot(ToolsBox, IconEyes,  PTInput::GetKey(TEXT("ModeEyes")),  PTText::Get(TEXT("TOOL_EYES"))));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconAdd,   PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModeAdd"))),   PTText::Get(TEXT("TOOL_ADD")),   nullptr, ToolsCls));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconErase, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModeErase"))), PTText::Get(TEXT("TOOL_ERASE")), nullptr, ToolsCls));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconPaint, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModePaint"))), PTText::Get(TEXT("TOOL_PAINT")), nullptr, ToolsCls));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconEyes,  PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModeEyes"))),  PTText::Get(TEXT("TOOL_EYES")),  nullptr, ToolsCls));
     }
 
-    // Formas: con el radial, ShapesBox lleva UNA sola celda-hint ("mantener TAB → formas"), spawneada
-    // igual que las demás barras. La forma ya no se cicla acá: se elige en el menú radial.
+    // Formas + Color: ShapesBox lleva la celda-hint de formas ("mantener TAB → formas") y, al lado,
+    // el slot de "mantener RMB → color picker" (keycap por ICONO IconKeyRMB). Así shapes y color van juntos.
     if (ShapesBox)
     {
         ShapesBox->ClearChildren();
@@ -136,15 +187,76 @@ void UPTGameplayHUDWidget::BuildToolbar()
         const FKey TabKey = PTInput::GetKey(TEXT("CycleShape"));
         ShapeHintSlot = MakeSlot(ShapesBox, IconShapesHint ? IconShapesHint : IconSphere,
                                  TabKey, PTText::Get(TEXT("SHAPE_HINT")));
+        ColorSlot = CreateSlotIn(ShapesBox, IconColorPicker ? IconColorPicker : IconSaveColor,
+                                 PT_ShortKeyLabel(PTInput::GetKey(TEXT("ColorPick"))),
+                                 PTText::Get(TEXT("HINT_COLOR")), IconKeyRMB);
     }
 
     // Borrar todo (BACKSPACE mantenido): cuadrito fijo con círculo de progreso + contador.
+    // Keycap por ICONO (IconKeyBackspace) para que el nombre largo no desalinee.
     if (ClearBox)
     {
         ClearBox->ClearChildren();
-        ClearSlot = MakeSlot(ClearBox, IconClearAll, PTInput::GetKey(TEXT("ClearAll")),
-                             PTText::Get(TEXT("TOOL_CLEAR_ALL")));
+        ClearSlot = CreateSlotIn(ClearBox, IconClearAll, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ClearAll"))),
+                                 PTText::Get(TEXT("TOOL_CLEAR_ALL")), IconKeyBackspace);
         if (ClearSlot) ClearSlot->SetProgress(0.f, FText::GetEmpty()); // arranca sin círculo
+    }
+}
+
+void UPTGameplayHUDWidget::NativePreConstruct()
+{
+    Super::NativePreConstruct();
+    // Solo en el editor de widgets: mostrar el hotbar real para poder acomodarlo viéndolo (WYSIWYG).
+    // En juego no corre (ahí lo arma BuildToolbar en Initialize con el estado real).
+    if (IsDesignTime())
+        BuildToolbarPreview();
+}
+
+void UPTGameplayHUDWidget::BuildToolbarPreview()
+{
+    if (!ToolSlotClass) return;
+
+    // Usa las MISMAS teclas y etiquetas cortas que en juego → el preview es fiel al gameplay.
+    // Tools 1/2/3/4 (con marca de "equipado" en la primera, como se ve en juego).
+    if (ToolsBox)
+    {
+        TSubclassOf<UPTToolSlotWidget> ToolsCls = ToolSlotToolsClass ? ToolSlotToolsClass : ToolSlotClass;
+        ToolsBox->ClearChildren();
+        ToolSlots.Reset();
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconAdd,   PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModeAdd"))),   PTText::Get(TEXT("TOOL_ADD")),   nullptr, ToolsCls));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconErase, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModeErase"))), PTText::Get(TEXT("TOOL_ERASE")), nullptr, ToolsCls));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconPaint, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModePaint"))), PTText::Get(TEXT("TOOL_PAINT")), nullptr, ToolsCls));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconEyes,  PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModeEyes"))),  PTText::Get(TEXT("TOOL_EYES")),  nullptr, ToolsCls));
+        if (ToolSlots.Num() > 0 && ToolSlots[0]) ToolSlots[0]->SetSelected(true);
+    }
+
+    // Formas (TAB) + Color (RMB) juntos en ShapesBox.
+    if (ShapesBox)
+    {
+        ShapesBox->ClearChildren();
+        ShapeHintSlot = CreateSlotIn(ShapesBox, IconShapesHint ? IconShapesHint : IconSphere,
+                                     PT_ShortKeyLabel(PTInput::GetKey(TEXT("CycleShape"))), PTText::Get(TEXT("SHAPE_HINT")));
+        ColorSlot = CreateSlotIn(ShapesBox, IconColorPicker ? IconColorPicker : IconSaveColor,
+                                 PT_ShortKeyLabel(PTInput::GetKey(TEXT("ColorPick"))),
+                                 PTText::Get(TEXT("HINT_COLOR")), IconKeyRMB);
+    }
+
+    // Atajos contextuales de ejemplo (los que se ven con Agregar): Z / X / ALT.
+    if (HintsBox)
+    {
+        HintsBox->ClearChildren();
+        HintSlots.Reset();
+        HintSlots.Add(CreateSlotIn(HintsBox, IconAxisVert,  PT_ShortKeyLabel(PTInput::GetKey(TEXT("AxisVertical"))),   PTText::Get(TEXT("HINT_PLANE_VERTICAL"))));
+        HintSlots.Add(CreateSlotIn(HintsBox, IconAxisHoriz, PT_ShortKeyLabel(PTInput::GetKey(TEXT("AxisHorizontal"))), PTText::Get(TEXT("HINT_PLANE_HORIZONTAL"))));
+        HintSlots.Add(CreateSlotIn(HintsBox, IconDetail,    PT_ShortKeyLabel(FKey(EKeys::LeftAlt)),                    PTText::Get(TEXT("TOOL_DETAIL"))));
+    }
+
+    // Borrar todo (BACKSPACE) — keycap por icono.
+    if (ClearBox)
+    {
+        ClearBox->ClearChildren();
+        ClearSlot = CreateSlotIn(ClearBox, IconClearAll, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ClearAll"))),
+                                 PTText::Get(TEXT("TOOL_CLEAR_ALL")), IconKeyBackspace);
     }
 }
 
@@ -216,11 +328,8 @@ void UPTGameplayHUDWidget::RefreshToolbar()
 
         auto AddHint = [this](UTexture2D* Icon, const FKey& Key, const FText& Label) -> UPTToolSlotWidget*
         {
-            UPTToolSlotWidget* S = CreateWidget<UPTToolSlotWidget>(GetOwningPlayer(), ToolSlotClass);
-            if (!S) return nullptr;
-            S->SetSlot(Icon, Key.GetDisplayName(), Label);
-            HintsBox->AddChild(S);
-            HintSlots.Add(S);
+            UPTToolSlotWidget* S = CreateSlotIn(HintsBox, Icon, PT_ShortKeyLabel(Key), Label);
+            if (S) HintSlots.Add(S);
             return S;
         };
 
