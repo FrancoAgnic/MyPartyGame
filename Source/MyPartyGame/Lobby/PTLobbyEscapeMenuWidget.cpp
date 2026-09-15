@@ -61,6 +61,19 @@ void UPTLobbyEscapeMenuWidget::ToggleMenu()
 
 void UPTLobbyEscapeMenuWidget::HandleEscape()
 {
+    // Sub-popups de autoría abiertos: ESC los cierra a ELLOS primero (no togglea el menú, así no se
+    // reactiva el input de juego con el popup abierto).
+    if (SaveMapForm && SaveMapForm->GetVisibility() != ESlateVisibility::Collapsed)
+    {
+        SaveMapForm->SetVisibility(ESlateVisibility::Collapsed);
+        return;
+    }
+    if (DiscardPopup && DiscardPopup->GetVisibility() != ESlateVisibility::Collapsed)
+    {
+        DiscardPopup->SetVisibility(ESlateVisibility::Collapsed);
+        return;
+    }
+
     // Si el settings está abierto → volver atrás (cerrar settings, seguir en el menú).
     if (SettingsPanel && SettingsPanel->GetVisibility() != ESlateVisibility::Collapsed)
     {
