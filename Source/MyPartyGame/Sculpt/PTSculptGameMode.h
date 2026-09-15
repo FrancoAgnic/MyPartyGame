@@ -126,7 +126,11 @@ private:
 
     APTSculptGameState* GS() const;
     TArray<APTPlayerState*> GetActivePlayers() const;
-    void ResetSculpture(); // limpia el Volume en todos (Multicast) al empezar el turno
+    void ResetSculpture();    // al EMPEZAR el turno: el cubo reaparece con rebote (0→1)
+    void CollapseSculpture();  // al TERMINAR el turno: el cubo colapsa (1→0) y borra la escultura
+    // Espera entre el colapso (fin de turno) y el arranque del nuevo turno (para que el colapso se vea
+    // completo antes de crecer). Mantener >= TurnCollapseTime del BP_SculptVolume.
+    UPROPERTY(EditDefaultsOnly, Category="Game") float TurnCollapseDelay = 0.4f;
 
     // Devuelve las palabras (solo texto) elegibles según MatchSettings: filtra el banco (o las
     // CustomWords si bUseCustomWords) por categorías y dificultades activas. Si el filtro deja

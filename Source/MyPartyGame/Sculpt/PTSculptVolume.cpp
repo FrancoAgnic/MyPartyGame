@@ -462,6 +462,38 @@ void APTSculptVolume::UpdateSculptBoundaryCollision()
         const bool bCanEnter = (!bTurnActive) || (PS == Sculptor);
         Root->IgnoreActorWhenMoving(this, bCanEnter);
     }
+
+    // ── Fix DURO anti-trabado (server) ──────────────────────────────────────
+    // El empuje por colisión no siempre saca a quien quedó DENTRO del cubo (la caja crece encima y la
+    // de-penetración del Character no lo expulsa). Acá el server detecta a cualquier NO-escultor que
+    // esté adentro durante el turno y lo TELEPORTA a la cara horizontal más cercana, afuera del área.
+    // Es autoritativo → se corrige en todos. Corre a 5 Hz (BoundaryAccum), suficiente para no trabar.
+    if (HasAuthority() && bTurnActive && Sculptor)
+    {
+        const FTransform BT  = BoundsBox->GetComponentTransform();
+        const FVector    Ext = BoundsBox->GetScaledBoxExtent(); // incluye la escala animada del actor
+        if (Ext.X > 1.f && Ext.Y > 1.f) // ignorar mientras está casi colapsado
+        {
+            for (APlayerState* PS : GS->PlayerArray)
+            {
+                if (!PS || PS == Sculptor) continue;
+                APawn* P = PS->GetPawn();
+                if (!P) continue;
+                const FVector L = BT.InverseTransformPosition(P->GetActorLocation());
+                if (FMath::Abs(L.X) < Ext.X && FMath::Abs(L.Y) < Ext.Y && FMath::Abs(L.Z) < Ext.Z)
+                {
+                    // Adentro → empujar por la cara X o Y más cercana (horizontal), con margen para la cápsula.
+                    const float PenX = Ext.X - FMath::Abs(L.X);
+                    const float PenY = Ext.Y - FMath::Abs(L.Y);
+                    const float Margin = 120.f;
+                    FVector Out = L;
+                    if (PenX <= PenY) Out.X = (L.X >= 0.f ? 1.f : -1.f) * (Ext.X + Margin);
+                    else              Out.Y = (L.Y >= 0.f ? 1.f : -1.f) * (Ext.Y + Margin);
+                    P->SetActorLocation(BT.TransformPosition(Out), /*bSweep=*/false, nullptr, ETeleportType::TeleportPhysics);
+                }
+            }
+        }
+    }
 }
 
 // ─── Pintura por campo de color 3D DISPERSO (bricks + page table + atlas) ─────
@@ -2193,11 +2225,19 @@ void APTSculptVolume::Multicast_ClearAll_Implementation()
     ClearAll();
 }
 
-void APTSculptVolume::Multicast_PlayTurnReset_Implementation()
+void APTSculptVolume::Multicast_CollapseVolume_Implementation()
 {
-    // Arranca la transición de turno: colapsa (1→0) borrando la escultura al llegar al fondo, y vuelve a
-    // crecer (0→1) con rebote. Corre en server y en todos los clientes (multicast) → todos ven lo mismo.
-    VolAnimPhase = 1;   // 1 = colapsando
+    // Colapso al TERMINAR el turno: escala actual → 0, borra la escultura al llegar al fondo y queda en 0.
+    VolAnimStartScale = GetActorScale3D().X;
+    VolAnimPhase = 1;
+    VolAnimT     = 0.f;
+}
+
+void APTSculptVolume::Multicast_GrowVolume_Implementation()
+{
+    // Crecimiento al EMPEZAR el nuevo turno: escala actual (≈0) → 1 con rebote.
+    VolAnimStartScale = GetActorScale3D().X;
+    VolAnimPhase = 2;
     VolAnimT     = 0.f;
 }
 
@@ -2209,26 +2249,24 @@ void APTSculptVolume::TickTurnAnim(float Dt)
 
     if (VolAnimPhase == 1)
     {
-        // Colapso 1→0 (ease-in cúbico): el cubo se "compacta" arrastrando la escultura.
+        // Colapso StartScale→0 (ease-in cúbico): el cubo se "compacta" arrastrando la escultura.
         const float a = (TurnCollapseTime > 0.f) ? FMath::Clamp(VolAnimT / TurnCollapseTime, 0.f, 1.f) : 1.f;
-        Scale = 1.f - (a * a * a);
+        Scale = VolAnimStartScale * (1.f - a * a * a);
         if (a >= 1.f)
         {
-            ClearAll();                 // lienzo en blanco JUSTO cuando el cubo está compactado (scale ~0)
-            VolAnimPhase = 2;           // pasa a crecer
-            VolAnimT = 0.f;
+            ClearAll();          // lienzo en blanco JUSTO cuando el cubo está compactado (scale ~0)
+            VolAnimPhase = 0;    // queda colapsado hasta que el nuevo turno lo haga crecer
             Scale = 0.f;
         }
     }
-    else // VolAnimPhase == 2
+    else // VolAnimPhase == 2 — crecimiento con overshoot (ease-out-back): rebote al final.
     {
-        // Crecimiento 0→1 con overshoot (ease-out-back): rebote al final. La colisión crece con el actor
-        // → si alguien quedó adentro, la caja lo EMPUJA hacia afuera en vez de aparecer encima.
         const float a  = (TurnGrowTime > 0.f) ? FMath::Clamp(VolAnimT / TurnGrowTime, 0.f, 1.f) : 1.f;
         const float c1 = TurnBounceAmount;
         const float c3 = c1 + 1.f;
         const float t  = a - 1.f;
-        Scale = 1.f + c3 * t * t * t + c1 * t * t;
+        const float eb = 1.f + c3 * t * t * t + c1 * t * t; // easeOutBack: 0→1 con overshoot
+        Scale = VolAnimStartScale + (1.f - VolAnimStartScale) * eb;
         if (a >= 1.f) { Scale = 1.f; VolAnimPhase = 0; }
     }
 

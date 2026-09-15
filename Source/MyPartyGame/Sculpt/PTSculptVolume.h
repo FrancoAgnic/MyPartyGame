@@ -226,12 +226,14 @@ public:
     UFUNCTION(NetMulticast, Reliable)
     void Multicast_ClearAll();
 
-    // Transición de turno: colapsa el cubo (escala 1→0, borra la escultura en el fondo) y lo hace
-    // reaparecer (0→1) con rebote. La colisión escala con el actor → al crecer EMPUJA a quien haya
-    // quedado adentro (no aparece de golpe encima → ya no te quedás trabado). Lo llama el GameMode al
-    // empezar cada turno en vez de Multicast_ClearAll.
-    UFUNCTION(NetMulticast, Reliable)
-    void Multicast_PlayTurnReset();
+    // Transición de turno en DOS partes (ida y vuelta):
+    //  - Collapse: al TERMINAR el turno, escala 1→0 (ease-in) y borra la escultura al llegar al fondo;
+    //    queda colapsado (escala 0).
+    //  - Grow: al EMPEZAR el nuevo turno, escala 0→1 con rebote (ease-out-back).
+    // La colisión escala con el actor y, además, el server saca a los NO-escultores que hayan quedado
+    // adentro (ver UpdateSculptBoundaryCollision) → ya no te quedás trabado.
+    UFUNCTION(NetMulticast, Reliable) void Multicast_CollapseVolume();
+    UFUNCTION(NetMulticast, Reliable) void Multicast_GrowVolume();
 
     // Tuneables de la animación de transición (editar en BP_SculptVolume).
     UPROPERTY(EditAnywhere, Category="Sculpt|Transition", meta=(ClampMin="0.05")) float TurnCollapseTime = 0.28f;
@@ -387,8 +389,9 @@ private:
     bool  bBoundaryOn   = false;
 
     // ── Animación de transición de turno (colapso + rebote) ──────────────────
-    uint8 VolAnimPhase = 0;   // 0 = idle, 1 = colapsando (1→0), 2 = creciendo (0→1 con rebote)
-    float VolAnimT     = 0.f; // segundos transcurridos en la fase actual
+    uint8 VolAnimPhase     = 0;   // 0 = idle, 1 = colapsando (→0), 2 = creciendo (→1 con rebote)
+    float VolAnimT         = 0.f; // segundos transcurridos en la fase actual
+    float VolAnimStartScale = 1.f; // escala al arrancar la fase (para animar desde donde esté)
     void  TickTurnAnim(float Dt);
 
     // ── Pintura por campo de color 3D DISPERSO (bricks + page table + atlas) ──
