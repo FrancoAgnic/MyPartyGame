@@ -37,6 +37,7 @@ void UPTWorkshopBrowserWidget::NativeConstruct()
     if (PublishButton)      PublishButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnPublishClicked);
     if (CreateMapButton)    CreateMapButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnCreateMapClicked);
     if (MapSelectCombo)     MapSelectCombo->OnSelectionChanged.AddDynamic(this, &UPTWorkshopBrowserWidget::OnMapSelected);
+    if (EditMapButton)      EditMapButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnEditMapClicked);
     if (UploadCsvButton)    UploadCsvButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnUploadCsvClicked);
     if (ThumbnailButton)    ThumbnailButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnThumbnailClicked);
     if (ApplyPublishButton) ApplyPublishButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnApplyPublishClicked);
@@ -198,6 +199,7 @@ void UPTWorkshopBrowserWidget::OnPublishClicked()
         // Sección según la pestaña: Bancos = botón elegir CSV; Mapas = selector de tus mapas creados.
         if (UploadCsvButton) UploadCsvButton->SetVisibility(bMaps ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
         if (MapSelectCombo)  MapSelectCombo->SetVisibility(bMaps ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+        if (EditMapButton)   EditMapButton->SetVisibility(bMaps ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
         if (bMaps) RefreshAuthoredMapList();
         PublishPopup->SetVisibility(ESlateVisibility::Visible);
         PlayPopInOn(PublishPopup);
@@ -238,6 +240,15 @@ void UPTWorkshopBrowserWidget::OnMapSelected(FString SelectedItem, ESelectInfo::
     const int32 Idx = MapSelectCombo->GetSelectedIndex();
     if (GI && AuthoredMapSlugs.IsValidIndex(Idx))
         PendingCsvPath = GI->AuthoredMapDir(AuthoredMapSlugs[Idx]); // carpeta del mapa elegido
+}
+
+void UPTWorkshopBrowserWidget::OnEditMapClicked()
+{
+    // Retomar el mapa elegido en el selector: entra a autoría cargando su escenario (travel local).
+    UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance());
+    const int32 Idx = MapSelectCombo ? MapSelectCombo->GetSelectedIndex() : INDEX_NONE;
+    if (GI && AuthoredMapSlugs.IsValidIndex(Idx))
+        GI->EditLevel(AuthoredMapSlugs[Idx]);
 }
 
 void UPTWorkshopBrowserWidget::OnCreateMapClicked()

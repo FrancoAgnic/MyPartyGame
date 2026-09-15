@@ -68,6 +68,8 @@ protected:
     // Sección MAPAS del popup: selector de tus mapas creados in-game (se llena con los mapas guardados).
     // Elegís uno de la lista y se publica su escenario (blob). Solo se usa en la pestaña Mapas.
     UPROPERTY(meta = (BindWidgetOptional)) class UComboBoxString* MapSelectCombo;
+    // Botón "Editar" (solo pestaña Mapas): entra a esculpir el mapa elegido en el selector para retocarlo.
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*          EditMapButton;
     // TextBlock DENTRO del botón del CSV: su texto pasa a ser el nombre del archivo elegido. Opcional.
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*       CsvButtonLabel;
     // Botón para elegir la MINIATURA (imagen). Al elegir, se muestra en ThumbnailImage.
@@ -106,6 +108,7 @@ protected:
     UFUNCTION() void OnPublishClicked();     // abre el popup (y resetea la selección)
     UFUNCTION() void OnCreateMapClicked();   // entra al modo autoría de mapa (esculpido libre)
     UFUNCTION() void OnMapSelected(FString SelectedItem, ESelectInfo::Type Type); // eligió un mapa de la lista
+    UFUNCTION() void OnEditMapClicked();     // editar el mapa elegido (vuelve a autoría)
     UFUNCTION() void OnUploadCsvClicked();   // elige el CSV (no publica); pone el nombre en el botón
     UFUNCTION() void OnThumbnailClicked();   // elige la imagen; la muestra en ThumbnailImage
     UFUNCTION() void OnApplyPublishClicked();// APLICAR → publica el item al Workshop
