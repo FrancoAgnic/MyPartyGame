@@ -580,6 +580,28 @@ private:
     // Sin partida en curso (testeo solo del mapa) devuelve true → esculpir libre.
     bool CanLocalPlayerSculpt() const;
 
+    // ── Editor de props (modo autoría de mapa) ───────────────────────────────
+    bool IsMapAuthorMode() const;          // el GameMode es APTMapAuthorGameMode
+    class APTMapEnvironment* GetMapEnv() const; // busca/cachea el actor de entorno del nivel
+    // Modo COLOCAR: en autoría, con el pincel FUERA del box y herramienta Add/Erase. Add coloca assets,
+    // Erase los borra; Paint/Ojos quedan desactivados afuera.
+    bool IsPlaceMode() const;
+    void TickAuthorProps(float Dt);        // preview del asset + bake por Enter-3s (llamado en PlayerTick)
+    void PlaceCurrentAsset();              // coloca una instancia del asset actual
+    void EraseAssetUnderCursor();          // borra la instancia bajo el cursor
+    void CycleAsset(int32 Dir);            // cambia el asset actual (TAB afuera)
+    void DoBakeAsset();                    // hornea el box → asset + limpia el box
+    // Punto "de brazo" SIN clampear al box (para colocar props afuera). OutOutside=true si cae fuera del box.
+    FVector GetPlacePoint(bool& bOutOutside) const;
+
+    UPROPERTY(Transient) class APTMapEnvironment* MapEnvCache = nullptr;
+    UPROPERTY(Transient) class UStaticMeshComponent* AssetPreview = nullptr; // preview del asset a colocar
+    int32 CurrentAsset = 0;                 // índice del asset elegido en la paleta
+    float AssetScale   = 1.f;               // escala del asset a colocar (rueda)
+    float BakeHoldTime = 0.f;               // acumulador del "mantener Enter" para hornear
+    bool  bBakedThisHold = false;           // ya horneó en este mantenido (evita repetir)
+    static constexpr float BakeHoldDuration = 3.0f;
+
     // Pone/saca el overlay amarillo en el mesh de cada jugador según quién esculpe.
     void UpdateSculptorHighlights();
     TWeakObjectPtr<class APlayerState> LastSculptorHighlight;

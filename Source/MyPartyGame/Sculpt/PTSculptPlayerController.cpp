@@ -20,6 +20,8 @@
 #include "../Lobby/PTLobbyEscapeMenuWidget.h"
 #include "../Lobby/PTLobbyCharacter.h"
 #include "PTSculptPlane.h"
+#include "../Mods/PTMapEnvironment.h"
+#include "../Mods/PTMapAuthorGameMode.h"
 #include "../PTInputBindings.h"
 #include "../Lobby/PTPlayerState.h"
 #include "../PTGameUserSettings.h"
@@ -120,6 +122,16 @@ void APTSculptPlayerController::BeginPlay()
         UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
     if (!Volume)
         UE_LOG(LogTemp, Warning, TEXT("[PTSculptPC] No APTSculptVolume in level!"));
+
+    // Preview del asset a colocar (modo autoría). Componente suelto sin colisión que sigue el cursor.
+    AssetPreview = NewObject<UStaticMeshComponent>(this, TEXT("AssetPreviewComp"));
+    if (AssetPreview)
+    {
+        AssetPreview->RegisterComponent();
+        AssetPreview->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        AssetPreview->SetCastShadow(false);
+        AssetPreview->SetVisibility(false);
+    }
 
 
 
@@ -846,6 +858,10 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
     // Loop 3D de la herramienta (Add/Erase/Paint) mientras se está sellando; se corta solo al soltar.
     if (SculptSounds)
         SculptSounds->SetActiveTool(EditMode, bEyesTool, bIsStamping && CanLocalPlayerSculpt(), StampPos);
+
+    // Editor de props (modo autoría): preview del asset a colocar + bake por Enter-3s. Corre al final
+    // para poder ocultar el preview normal cuando estás en modo colocar (fuera del box).
+    TickAuthorProps(DeltaTime);
 }
 
 void APTSculptPlayerController::SetPreviewXrayEnabled(bool bOn)
@@ -1544,6 +1560,14 @@ void APTSculptPlayerController::UpdatePreviewVisual()
 
 void APTSculptPlayerController::OnStampPressed()
 {
+    // Modo COLOCAR (autoría, fuera del box): Add coloca un asset, Erase borra; Paint/Ojos no hacen nada.
+    if (IsPlaceMode())
+    {
+        if (EditMode == EPTEditMode::Add && !bEyesTool)       PlaceCurrentAsset();
+        else if (EditMode == EPTEditMode::Erase && !bEyesTool) EraseAssetUnderCursor();
+        return;
+    }
+
     // Herramienta de ojos: un ojo por click (no esculpe ni deja bIsStamping).
     if (bEyesTool) { PlaceEyeAtCursor(); return; }
 
@@ -1756,6 +1780,10 @@ void APTSculptPlayerController::Server_SetSculptPlane_Implementation(bool bEnabl
 
 void APTSculptPlayerController::OnScrollUp()
 {
+    // Modo colocar (autoría): la rueda ESCALA el asset a colocar.
+    if (IsPlaceMode() && EditMode == EPTEditMode::Add && !bEyesTool)
+    { AssetScale = FMath::Clamp(AssetScale * 1.1f, 0.1f, 20.f); return; }
+
     // Con la rueda de color abierta (RMB) la rueda del mouse sube el brillo del color.
     if (bQuickColorActive)
     {
@@ -1780,6 +1808,10 @@ void APTSculptPlayerController::OnScrollUp()
 
 void APTSculptPlayerController::OnScrollDown()
 {
+    // Modo colocar (autoría): la rueda ESCALA el asset a colocar.
+    if (IsPlaceMode() && EditMode == EPTEditMode::Add && !bEyesTool)
+    { AssetScale = FMath::Clamp(AssetScale / 1.1f, 0.1f, 20.f); return; }
+
     // Con la rueda de color abierta (RMB) la rueda del mouse baja el brillo (hacia negro).
     if (bQuickColorActive)
     {
@@ -1824,6 +1856,10 @@ void APTSculptPlayerController::CycleShapes()
 
 void APTSculptPlayerController::OnShapeRadialPressed()
 {
+    // Modo colocar (autoría): TAB cambia el asset actual (por ahora cicla; radial de assets = P2).
+    if (IsPlaceMode() && EditMode == EPTEditMode::Add && !bEyesTool)
+    { CycleAsset(+1); return; }
+
     if (bShapeRadialActive) return;
 
     // El radial de formas SOLO tiene sentido con herramientas que usan formas (Agregar/Borrar/Pintar).
@@ -2194,3 +2230,117 @@ void APTSculptPlayerController::Client_SculptSnapshotChunk_Implementation(const 
     SnapIn.Reset();
 }
 
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  EDITOR DE PROPS (modo autoría de mapa) — P1
+// ══════════════════════════════════════════════════════════════════════════════
+
+bool APTSculptPlayerController::IsMapAuthorMode() const
+{
+    return GetWorld() && Cast<APTMapAuthorGameMode>(GetWorld()->GetAuthGameMode()) != nullptr;
+}
+
+APTMapEnvironment* APTSculptPlayerController::GetMapEnv() const
+{
+    if (MapEnvCache) return MapEnvCache;
+    APTSculptPlayerController* Self = const_cast<APTSculptPlayerController*>(this);
+    Self->MapEnvCache = Cast<APTMapEnvironment>(
+        UGameplayStatics::GetActorOfClass(GetWorld(), APTMapEnvironment::StaticClass()));
+    return MapEnvCache;
+}
+
+FVector APTSculptPlayerController::GetPlacePoint(bool& bOutOutside) const
+{
+    FVector S, D;
+    if (!GetCameraRay(S, D)) { bOutOutside = false; return FVector::ZeroVector; }
+    const FVector Raw = S + D * AirDepth; // a "distancia de brazo", SIN clampear al box
+    bOutOutside = Volume && !Volume->IsInsideCanvas(Raw);
+    return Raw;
+}
+
+bool APTSculptPlayerController::IsPlaceMode() const
+{
+    if (!IsMapAuthorMode() || !Volume) return false;
+    bool bOut = false; GetPlacePoint(bOut);
+    return bOut; // fuera del box = modo colocar (la herramienta decide colocar/borrar/nada)
+}
+
+void APTSculptPlayerController::DoBakeAsset()
+{
+    APTMapEnvironment* Env = GetMapEnv();
+    if (!Env || !Volume) return;
+    const int32 Idx = Env->BakeAssetFromVolume(Volume);
+    if (Idx == INDEX_NONE) return;          // box vacío
+    CurrentAsset = Idx;                      // el nuevo asset queda seleccionado
+    Volume->Multicast_ClearAll();            // limpiar el box para la próxima pieza
+    UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Asset horneado #%d (total %d)."), Idx, Env->GetNumAssets());
+}
+
+void APTSculptPlayerController::PlaceCurrentAsset()
+{
+    APTMapEnvironment* Env = GetMapEnv();
+    if (!Env || Env->GetNumAssets() == 0) return;
+    if (!Env->GetAssetMesh(CurrentAsset)) return;
+    bool bOut = false; const FVector P = GetPlacePoint(bOut);
+    Env->PlaceInstance(CurrentAsset, FTransform(StampRotation, P, FVector(AssetScale)));
+}
+
+void APTSculptPlayerController::EraseAssetUnderCursor()
+{
+    APTMapEnvironment* Env = GetMapEnv();
+    if (!Env) return;
+    bool bOut = false; const FVector P = GetPlacePoint(bOut);
+    Env->RemoveInstanceNear(P, FMath::Max(80.f, AssetScale * 120.f));
+}
+
+void APTSculptPlayerController::CycleAsset(int32 Dir)
+{
+    APTMapEnvironment* Env = GetMapEnv();
+    const int32 N = Env ? Env->GetNumAssets() : 0;
+    if (N <= 0) return;
+    CurrentAsset = ((CurrentAsset + Dir) % N + N) % N;
+}
+
+void APTSculptPlayerController::TickAuthorProps(float Dt)
+{
+    if (!IsMapAuthorMode())
+    {
+        if (AssetPreview) AssetPreview->SetVisibility(false);
+        return;
+    }
+
+    bool bOut = false; const FVector P = GetPlacePoint(bOut);
+
+    // Hornear: mantener Enter 3s DENTRO del box (esculpís y horneás la pieza).
+    if (!bOut && IsInputKeyDown(EKeys::Enter))
+    {
+        BakeHoldTime += Dt;
+        if (!bBakedThisHold && BakeHoldTime >= BakeHoldDuration) { DoBakeAsset(); bBakedThisHold = true; }
+    }
+    else { BakeHoldTime = 0.f; bBakedThisHold = false; }
+
+    // Preview del asset a colocar (solo afuera + Add + hay assets).
+    APTMapEnvironment* Env = GetMapEnv();
+    const bool bShowAsset = bOut && (EditMode == EPTEditMode::Add) && !bEyesTool
+                          && Env && Env->GetNumAssets() > 0 && AssetPreview;
+    if (bShowAsset)
+    {
+        UStaticMesh* M = Env->GetAssetMesh(CurrentAsset);
+        if (M)
+        {
+            if (AssetPreview->GetStaticMesh() != M) AssetPreview->SetStaticMesh(M);
+            AssetPreview->SetWorldTransform(FTransform(StampRotation, P, FVector(AssetScale)));
+            AssetPreview->SetVisibility(true);
+        }
+        else AssetPreview->SetVisibility(false);
+    }
+    else if (AssetPreview) AssetPreview->SetVisibility(false);
+
+    // En modo colocar, ocultar el preview normal de esculpido para no confundir.
+    if (bOut)
+    {
+        if (PreviewActor) PreviewActor->SetActorHiddenInGame(true);
+        if (SculptGrid)   SculptGrid->SetVisibility(false);
+        if (BoundaryMesh) BoundaryMesh->SetVisibility(false);
+    }
+}

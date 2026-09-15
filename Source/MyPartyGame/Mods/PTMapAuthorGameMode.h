@@ -30,6 +30,11 @@ public:
     UPROPERTY(EditDefaultsOnly, Category="MapAuthor")
     TSubclassOf<APTSculptVolume> VolumeClass;
 
+    /** BP del actor de ENTORNO (props). Asignar un BP con PropMaterial (material de arcilla vertex-color).
+     *  Si es null, se spawnea la clase C++ (props con material por defecto). */
+    UPROPERTY(EditDefaultsOnly, Category="MapAuthor")
+    TSubclassOf<class APTMapEnvironment> EnvironmentClass;
+
 protected:
     virtual void BeginPlay() override;
     virtual void HandleStartingNewPlayer_Implementation(APlayerController* NewPlayer) override;
@@ -38,6 +43,8 @@ private:
     /** Si el nivel no trae un APTSculptVolume, spawnea uno (VolumeClass) en el origen. */
     void EnsureVolume();
     APTSculptVolume* FindVolume() const;
+    /** Asegura que exista un APTMapEnvironment (props) en el nivel. */
+    void EnsureEnvironment();
     /** Carga el escenario guardado (blob) en el volumen, para continuar donde lo dejaste. */
     void LoadSavedMapIntoVolume();
     FTimerHandle LoadSavedTimer;

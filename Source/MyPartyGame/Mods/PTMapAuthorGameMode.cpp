@@ -5,6 +5,7 @@
 #include "../Lobby/PTPlayerState.h"
 #include "../Sculpt/PTSculptPlayerController.h"
 #include "../Sculpt/PTSculptVolume.h"
+#include "PTMapEnvironment.h"
 #include "../PTGameInstance.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
@@ -25,6 +26,7 @@ void APTMapAuthorGameMode::BeginPlay()
 {
     Super::BeginPlay();
     EnsureVolume();
+    EnsureEnvironment();
     // Cargar el escenario guardado (si existe) para continuar donde lo dejaste. Diferido para que el
     // volumen (BeginPlay/Init) ya esté listo antes de aplicarle el snapshot.
     if (UWorld* W = GetWorld())
@@ -71,4 +73,13 @@ void APTMapAuthorGameMode::EnsureVolume()
     Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
     APTSculptVolume* V = GetWorld()->SpawnActor<APTSculptVolume>(VolumeClass, FTransform::Identity, Params);
     UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Volumen de esculpido %s."), V ? TEXT("spawneado") : TEXT("NO se pudo spawnear"));
+}
+
+void APTMapAuthorGameMode::EnsureEnvironment()
+{
+    if (UGameplayStatics::GetActorOfClass(GetWorld(), APTMapEnvironment::StaticClass())) return;
+    FActorSpawnParameters Params;
+    Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    UClass* Cls = EnvironmentClass ? *EnvironmentClass : APTMapEnvironment::StaticClass();
+    GetWorld()->SpawnActor<APTMapEnvironment>(Cls, FTransform::Identity, Params);
 }
