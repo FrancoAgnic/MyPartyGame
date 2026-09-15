@@ -1,0 +1,24 @@
+[h1]Sculpturillo v0.7.10[/h1]
+
+[h2]Sculpting[/h2]
+[list]
+[*] The drawing cube now shrinks away between turns and pops back with a bounce, clearing the previous sculpture as it collapses.
+[*] Fixed getting stuck inside the cube on turn change: the boundary now grows with the cube and anyone caught inside is moved out, so you can always keep playing.
+[*] "Detail on surface" mode (Alt) now follows the surface of your existing sculpture instead of drawing on a flat plane, and you can stack detail on top of previous detail.
+[*] Painting detail geometry now paints the detail you added, not the base underneath.
+[*] Undoing detail strokes now also clears the color that was painted with them (no more leftover ghost color).
+[*] The depth grid hides while using the straight-line axis modes so it no longer clashes with the axis plane, and it no longer floods the screen at very large brush scales.
+[/list]
+
+[h2]Head sculpt (Locker)[/h2]
+[list]
+[*] Eyes can now be removed with the Erase tool.
+[*] The Alt (detail) hint only shows while the Add tool is selected.
+[/list]
+
+[h2]HUD[/h2]
+[list]
+[*] Network status icons (packet loss / high ping / disconnect) now display correctly.
+[*] Cleaner, aligned hotbar with framed tool slots and icon keycaps.
+[*] New command to replace player names with generic labels in-game (player list and chat) for recording, without spectating.
+[/list]
