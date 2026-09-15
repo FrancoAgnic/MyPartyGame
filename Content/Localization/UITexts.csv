@@ -95,6 +95,7 @@ SHAPE_CONE,Cono,Cone,Cone,Kegel,Cône,Cono
 SHAPE_HINT,Formas,Shapes,Formas,Formen,Formes,Forme
 HINT_SAVE_COLOR,Guardar color,Save Color,Salvar cor,Farbe speichern,Enregistrer la couleur,Salva colore
 HINT_COLOR,Color,Color,Cor,Farbe,Couleur,Colore
+MAP_SAVED,Escenario guardado,Map saved,Cenário salvo,Karte gespeichert,Carte enregistrée,Mappa salvata
 HINT_PLANE_VERTICAL,Plano vertical,Vertical Plane,Plano vertical,Vertikale Ebene,Plan vertical,Piano verticale
 HINT_PLANE_HORIZONTAL,Plano horizontal,Horizontal Plane,Plano horizontal,Horizontale Ebene,Plan horizontal,Piano orizzontale
 PICKER_SAVE_COLOR,E — Guardar color,E — Save Color,E — Salvar cor,E — Farbe speichern,E — Enregistrer la couleur,E — Salva colore

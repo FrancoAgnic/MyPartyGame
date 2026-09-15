@@ -103,6 +103,15 @@ protected:
     // brush de este Image dentro del WBP; C++ solo lo muestra/oculta.
     UPROPERTY(meta=(BindWidgetOptional)) class UImage* OutOfBoundsIcon;
 
+    // ── Modo AUTORÍA de mapa (crear mapa desde el juego) ─────────────────────
+    // Contenedor que se muestra SOLO en modo autoría (crear mapa). Botones Guardar/Salir + estado.
+    UPROPERTY(meta=(BindWidgetOptional)) class UWidget*    AuthorPanel;
+    UPROPERTY(meta=(BindWidgetOptional)) class UButton*    SaveMapButton;   // guarda el escenario a archivo
+    UPROPERTY(meta=(BindWidgetOptional)) class UButton*    ExitAuthorButton;// vuelve al menú principal
+    UPROPERTY(meta=(BindWidgetOptional)) class UTextBlock* AuthorStatusText;// "Guardado", etc.
+    UFUNCTION() void OnSaveMapClicked();
+    UFUNCTION() void OnExitAuthorClicked();
+
     // ── Iconos de estado de red (arriba a la izquierda). Se muestran SOLO cuando hay problema. Poné tus
     //    texturas 24x24 en estos Image del WBP (nombres EXACTOS); el código los prende/apaga. ──
     UPROPERTY(meta=(BindWidgetOptional)) class UImage* IconPacketLoss;   // paquetes perdidos
@@ -236,6 +245,10 @@ private:
 
     APTSculptGameState*        GetGS() const;
     APTSculptPlayerController* GetSculptPC() const;
+
+    // ── Modo autoría (crear mapa) ──
+    bool IsAuthorMode() const;      // true si el GameMode es APTMapAuthorGameMode
+    void UpdateAuthorPanels();      // hotbar visible + oculta UI de partida + muestra Guardar/Salir
 
     void RefreshTick();          // polling: pinta estado/reloj/panel/input según la fase
     void UpdateNetIcons();       // prende/apaga los iconos de red (packet loss / ping alto / caída)

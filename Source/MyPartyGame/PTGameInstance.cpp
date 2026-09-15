@@ -190,6 +190,30 @@ void UPTGameInstance::EnterMapAuthoring()
     UGameplayStatics::OpenLevel(this, FName(*MapAuthorLevel), /*bAbsolute=*/true, Options);
 }
 
+FString UPTGameInstance::AuthoredMapBlobPath() const
+{
+    // Archivo de trabajo del escenario que estás modelando (blob de la escultura). MapMods_Output está en
+    // .gitignore. Fase 3 (publicar) tomará este blob + título/miniatura para subirlo al Workshop.
+    return FPaths::Combine(FPaths::ProjectDir(), TEXT("MapMods_Output"), TEXT("Authoring"), TEXT("sculpt.bin"));
+}
+
+void UPTGameInstance::SaveAuthoredMap(const TArray<uint8>& Blob)
+{
+    if (Blob.Num() == 0) return;
+    const FString Path = AuthoredMapBlobPath();
+    if (FFileHelper::SaveArrayToFile(Blob, *Path))
+    { UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Escenario guardado: %d bytes en %s"), Blob.Num(), *Path); }
+    else
+    { UE_LOG(LogTemp, Warning, TEXT("[MapAuthor] No se pudo guardar el escenario en %s"), *Path); }
+}
+
+bool UPTGameInstance::LoadAuthoredMap(TArray<uint8>& OutBlob) const
+{
+    const FString Path = AuthoredMapBlobPath();
+    if (!FPaths::FileExists(Path)) return false;
+    return FFileHelper::LoadFileToArray(OutBlob, *Path) && OutBlob.Num() > 0;
+}
+
 // "titulos_peliculas" / "titulos-peliculas" → "Titulos Peliculas" (fallback de título si no lo escriben).
 static FString PT_PrettifyTitle(const FString& In)
 {

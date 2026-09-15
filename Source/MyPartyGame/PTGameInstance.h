@@ -116,6 +116,11 @@ public:
     // Abre el nivel plantilla del MapKit en modo AUTORÍA (esculpido libre, sin partida): fuerza
     // BP_MapAuthorGameMode por la URL. Standalone/solo. Lo llama el botón "Crear mapa" del Workshop.
     UFUNCTION(BlueprintCallable, Category="MapMod") void EnterMapAuthoring();
+    // Guardar/cargar el escenario que estás modelando (blob de la escultura) en un archivo de trabajo
+    // local. Lo usa el HUD de autoría (Guardar) y el GameMode de autoría (cargar al entrar).
+    void    SaveAuthoredMap(const TArray<uint8>& Blob);
+    bool    LoadAuthoredMap(TArray<uint8>& OutBlob) const;
+    FString AuthoredMapBlobPath() const;
     // Ruta del nivel plantilla y del GameMode de autoría (editables por si cambian de lugar).
     UPROPERTY(EditAnywhere, Category="MapMod") FString MapAuthorLevel = TEXT("/MapKit/Mapa_Plantilla");
     UPROPERTY(EditAnywhere, Category="MapMod") FString MapAuthorGameMode = TEXT("/Game/Template/Character/BP_MapAuthorGameMode.BP_MapAuthorGameMode_C");

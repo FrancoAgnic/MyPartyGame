@@ -5,8 +5,10 @@
 #include "../Lobby/PTPlayerState.h"
 #include "../Sculpt/PTSculptPlayerController.h"
 #include "../Sculpt/PTSculptVolume.h"
+#include "../PTGameInstance.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
+#include "TimerManager.h"
 
 APTMapAuthorGameMode::APTMapAuthorGameMode()
 {
@@ -23,6 +25,23 @@ void APTMapAuthorGameMode::BeginPlay()
 {
     Super::BeginPlay();
     EnsureVolume();
+    // Cargar el escenario guardado (si existe) para continuar donde lo dejaste. Diferido para que el
+    // volumen (BeginPlay/Init) ya esté listo antes de aplicarle el snapshot.
+    if (UWorld* W = GetWorld())
+        W->GetTimerManager().SetTimer(LoadSavedTimer, this, &APTMapAuthorGameMode::LoadSavedMapIntoVolume, 0.4f, false);
+}
+
+void APTMapAuthorGameMode::LoadSavedMapIntoVolume()
+{
+    APTSculptVolume* V = FindVolume();
+    UPTGameInstance* GI = GetGameInstance<UPTGameInstance>();
+    if (!V || !GI) return;
+    TArray<uint8> Blob;
+    if (GI->LoadAuthoredMap(Blob))
+    {
+        V->LoadSnapshot(Blob);
+        UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Escenario guardado cargado (%d bytes)."), Blob.Num());
+    }
 }
 
 void APTMapAuthorGameMode::HandleStartingNewPlayer_Implementation(APlayerController* NewPlayer)

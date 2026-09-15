@@ -38,4 +38,7 @@ private:
     /** Si el nivel no trae un APTSculptVolume, spawnea uno (VolumeClass) en el origen. */
     void EnsureVolume();
     APTSculptVolume* FindVolume() const;
+    /** Carga el escenario guardado (blob) en el volumen, para continuar donde lo dejaste. */
+    void LoadSavedMapIntoVolume();
+    FTimerHandle LoadSavedTimer;
 };

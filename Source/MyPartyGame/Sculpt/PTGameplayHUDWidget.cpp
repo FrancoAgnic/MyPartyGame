@@ -22,6 +22,8 @@
 #include "Engine/Engine.h"
 #include "../PTNetStats.h"
 #include "../PTGameInstance.h" // modo captura dev (Player N)
+#include "../Mods/PTMapAuthorGameMode.h" // modo autoría de mapa
+#include "PTSculptVolume.h"               // guardar el escenario (snapshot)
 #include "TimerManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
@@ -65,6 +67,12 @@ bool UPTGameplayHUDWidget::Initialize()
     // Lista de controles (pantalla de ayuda opcional) + barra de herramientas: se arman una vez.
     RebuildControls();
     BuildToolbar();
+
+    // Modo autoría (crear mapa): botones Guardar/Salir. Ocultos por defecto (solo se ven en autoría).
+    if (SaveMapButton)    SaveMapButton->OnClicked.AddDynamic(this, &UPTGameplayHUDWidget::OnSaveMapClicked);
+    if (ExitAuthorButton) ExitAuthorButton->OnClicked.AddDynamic(this, &UPTGameplayHUDWidget::OnExitAuthorClicked);
+    if (AuthorPanel)      AuthorPanel->SetVisibility(ESlateVisibility::Collapsed);
+    if (AuthorStatusText) AuthorStatusText->SetVisibility(ESlateVisibility::Collapsed);
 
     // Iconos de red: aplicar la textura por código (si se asignó en Details) → no dependen del brush del WBP.
     if (IconPacketLoss   && IconNetPacketLoss)   IconPacketLoss->SetBrushFromTexture(IconNetPacketLoss,     true);
@@ -279,9 +287,11 @@ void UPTGameplayHUDWidget::RefreshToolbar()
                                    && SpecChar == G->CurrentSculptor->GetPawn();
 
     // La barra es del escultor: se ve cuando TE toca dibujar, o cuando espectás a quien dibuja.
-    // En modo captura (PTHideHotbar / tecla 3) se fuerza oculta.
-    const bool bSculpting = !bHideHotbar && G && G->TurnPhase == EPTTurnPhase::Drawing
-                          && (G->IsLocalPlayerSculptor() || bSpectatingSculptor);
+    // En modo captura (PTHideHotbar / tecla 3) se fuerza oculta. En modo AUTORÍA (crear mapa) siempre
+    // visible (esculpís libre, sin turnos).
+    const bool bSculpting = !bHideHotbar && (IsAuthorMode() ||
+                          (G && G->TurnPhase == EPTTurnPhase::Drawing
+                           && (G->IsLocalPlayerSculptor() || bSpectatingSculptor)));
     const ESlateVisibility Vis = bSculpting ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
     if (ToolsBox)  ToolsBox->SetVisibility(Vis);
     if (ClearBox)  ClearBox->SetVisibility(Vis);
@@ -413,6 +423,49 @@ APTSculptPlayerController* UPTGameplayHUDWidget::GetSculptPC() const
     return Cast<APTSculptPlayerController>(GetOwningPlayer());
 }
 
+bool UPTGameplayHUDWidget::IsAuthorMode() const
+{
+    return GetWorld() && Cast<APTMapAuthorGameMode>(GetWorld()->GetAuthGameMode()) != nullptr;
+}
+
+void UPTGameplayHUDWidget::UpdateAuthorPanels()
+{
+    // Ocultar TODA la UI de partida (no aplica en autoría).
+    auto Hide = [](UWidget* W){ if (W) W->SetVisibility(ESlateVisibility::Collapsed); };
+    Hide(TxtSculptor); Hide(TxtWord); Hide(TxtTimer); Hide(TxtRound);
+    Hide(WordPickPanel); Hide(ScoreboardBox); Hide(ResultsPanel);
+    Hide(GuessPopup); Hide(AllGuessedPopup);
+    Hide(TxtChat); Hide(ChatInput); Hide(ChatScroll);
+
+    // Mostrar los controles de autoría (Guardar / Salir).
+    if (AuthorPanel)      AuthorPanel->SetVisibility(ESlateVisibility::Visible);
+    if (SaveMapButton)    SaveMapButton->SetVisibility(ESlateVisibility::Visible);
+    if (ExitAuthorButton) ExitAuthorButton->SetVisibility(ESlateVisibility::Visible);
+}
+
+void UPTGameplayHUDWidget::OnSaveMapClicked()
+{
+    UWorld* W = GetWorld();
+    UPTGameInstance* GI = GetGameInstance<UPTGameInstance>();
+    APTSculptVolume* Vol = W ? Cast<APTSculptVolume>(
+        UGameplayStatics::GetActorOfClass(W, APTSculptVolume::StaticClass())) : nullptr;
+    if (!GI || !Vol) return;
+    TArray<uint8> Blob;
+    Vol->SaveSnapshot(Blob);       // geometría + pintura del escenario
+    GI->SaveAuthoredMap(Blob);     // → archivo de trabajo local
+    if (AuthorStatusText)
+    {
+        AuthorStatusText->SetText(PTText::Get(TEXT("MAP_SAVED")));
+        AuthorStatusText->SetVisibility(ESlateVisibility::Visible);
+    }
+}
+
+void UPTGameplayHUDWidget::OnExitAuthorClicked()
+{
+    // Volver al menú principal. El escenario se conserva en el archivo de trabajo (Guardar) para retomarlo.
+    UGameplayStatics::OpenLevel(this, FName(TEXT("/Game/Template/levels/MainMenu")));
+}
+
 void UPTGameplayHUDWidget::RefreshTick()
 {
     APTSculptGameState* G = GetGS();
@@ -426,6 +479,16 @@ void UPTGameplayHUDWidget::RefreshTick()
         G->OnAllGuessed.AddDynamic(this, &UPTGameplayHUDWidget::OnAllGuessed);
         bChatBound = true;
     }
+
+    // Modo AUTORÍA de mapa: no hay partida (sin APTSculptGameState). Mostrar el hotbar de esculpido y los
+    // controles de autoría (Guardar/Salir); ocultar toda la UI de partida. Se maneja aparte y se corta acá.
+    if (IsAuthorMode())
+    {
+        RefreshToolbar();
+        UpdateAuthorPanels();
+        return;
+    }
+
     if (!G) return;
 
     // Sonidos (tick por segundo, countdown, pista, fin de turno). Va ANTES de resetear bLocalGuessed,
