@@ -80,11 +80,11 @@ public:
     UFUNCTION(BlueprintCallable, Category="WordPack")
     void PublishWordPack(const FString& CsvPath, const FString& Title, const FString& Description, const FString& PreviewPath);
 
-    /** Publica un MAPA al Workshop: sube la carpeta del mapa cocinado (map.pak + mod.json) con tag "Map".
-     *  MapPakPath = ruta al map.pak (Kit_CocinarMapa.bat → MapMods_Output\map.pak); el mod.json debe estar
-     *  al lado. Async → OnWordPackPublished (mismo delegate). Requiere Steam + Workshop habilitado. */
+    /** Publica un MAPA creado in-game al Workshop: sube la carpeta del mapa (sculpt.bin + mod.json) con
+     *  tag "Map". MapFolder = carpeta del mapa autoreado (UPTGameInstance::AuthoredMapDir). El título del
+     *  popup se escribe en el mod.json. Async → OnWordPackPublished. Requiere Steam + Workshop habilitado. */
     UFUNCTION(BlueprintCallable, Category="WordPack")
-    void PublishMap(const FString& MapPakPath, const FString& Title, const FString& Description, const FString& PreviewPath);
+    void PublishMap(const FString& MapFolder, const FString& Title, const FString& Description, const FString& PreviewPath);
 
     /** Busca en el CATÁLOGO del Workshop (todos los items publicados) por texto, filtrando por Tag
      *  ("WordBank" para bancos, "Map" para mapas). Async → OnWorkshopSearchComplete. */

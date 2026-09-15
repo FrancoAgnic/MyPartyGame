@@ -65,6 +65,9 @@ protected:
     // Dentro del popup: elegir el CSV del banco (NO publica; guarda la selección). Al elegir, si hay
     // CsvButtonLabel, se le pone el nombre del archivo. (Se sigue llamando UploadCsvButton por compat.)
     UPROPERTY(meta = (BindWidgetOptional)) UButton*          UploadCsvButton;
+    // Sección MAPAS del popup: selector de tus mapas creados in-game (se llena con los mapas guardados).
+    // Elegís uno de la lista y se publica su escenario (blob). Solo se usa en la pestaña Mapas.
+    UPROPERTY(meta = (BindWidgetOptional)) class UComboBoxString* MapSelectCombo;
     // TextBlock DENTRO del botón del CSV: su texto pasa a ser el nombre del archivo elegido. Opcional.
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*       CsvButtonLabel;
     // Botón para elegir la MINIATURA (imagen). Al elegir, se muestra en ThumbnailImage.
@@ -102,6 +105,7 @@ protected:
     UFUNCTION() void OnBackClicked();
     UFUNCTION() void OnPublishClicked();     // abre el popup (y resetea la selección)
     UFUNCTION() void OnCreateMapClicked();   // entra al modo autoría de mapa (esculpido libre)
+    UFUNCTION() void OnMapSelected(FString SelectedItem, ESelectInfo::Type Type); // eligió un mapa de la lista
     UFUNCTION() void OnUploadCsvClicked();   // elige el CSV (no publica); pone el nombre en el botón
     UFUNCTION() void OnThumbnailClicked();   // elige la imagen; la muestra en ThumbnailImage
     UFUNCTION() void OnApplyPublishClicked();// APLICAR → publica el item al Workshop
@@ -127,6 +131,8 @@ private:
     int32        UploadDots = 0;    // cuántos puntos mostrar en "Subiendo archivo..."
     FTimerHandle UploadAnimTimer;   // anima el texto de carga
     void ResetPublishForm();        // limpia selección/preview/labels del popup
+    void RefreshAuthoredMapList();  // llena MapSelectCombo con tus mapas creados in-game
+    TArray<FString> AuthoredMapSlugs; // slugs paralelos a los items del combo (por índice)
 
     // Aviso de validación ("Faltan: ..."): aparece unos segundos y se oculta solo.
     FTimerHandle     PublishMsgHideTimer;

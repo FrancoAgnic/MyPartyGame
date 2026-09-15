@@ -11,6 +11,7 @@
 #include "Components/TextBlock.h"
 #include "Components/EditableTextBox.h"
 #include "Components/MultiLineEditableTextBox.h"
+#include "Components/ComboBoxString.h"
 #include "Components/Image.h"
 #include "ImageUtils.h"              // ImportFileAsTexture2D (preview de la miniatura)
 #include "Engine/Texture2D.h"
@@ -35,6 +36,7 @@ void UPTWorkshopBrowserWidget::NativeConstruct()
     if (SearchButton)       SearchButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnSearchClicked);
     if (PublishButton)      PublishButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnPublishClicked);
     if (CreateMapButton)    CreateMapButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnCreateMapClicked);
+    if (MapSelectCombo)     MapSelectCombo->OnSelectionChanged.AddDynamic(this, &UPTWorkshopBrowserWidget::OnMapSelected);
     if (UploadCsvButton)    UploadCsvButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnUploadCsvClicked);
     if (ThumbnailButton)    ThumbnailButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnThumbnailClicked);
     if (ApplyPublishButton) ApplyPublishButton->OnClicked.AddDynamic(this, &UPTWorkshopBrowserWidget::OnApplyPublishClicked);
@@ -188,10 +190,15 @@ void UPTWorkshopBrowserWidget::AddItem(const FString& ItemId)
 
 void UPTWorkshopBrowserWidget::OnPublishClicked()
 {
-    // Abre el popup (elegir CSV → miniatura → Aplicar). Arranca con el formulario limpio.
+    // Abre el popup (elegir contenido → miniatura → Aplicar). Arranca con el formulario limpio.
     if (PublishPopup)
     {
         ResetPublishForm();
+        const bool bMaps = (ActiveTab == 1);
+        // Sección según la pestaña: Bancos = botón elegir CSV; Mapas = selector de tus mapas creados.
+        if (UploadCsvButton) UploadCsvButton->SetVisibility(bMaps ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+        if (MapSelectCombo)  MapSelectCombo->SetVisibility(bMaps ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+        if (bMaps) RefreshAuthoredMapList();
         PublishPopup->SetVisibility(ESlateVisibility::Visible);
         PlayPopInOn(PublishPopup);
         return;
@@ -199,12 +206,46 @@ void UPTWorkshopBrowserWidget::OnPublishClicked()
     OnUploadCsvClicked(); // WBP sin popup: al menos deja elegir el CSV
 }
 
+void UPTWorkshopBrowserWidget::RefreshAuthoredMapList()
+{
+    if (!MapSelectCombo) return;
+    UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance());
+    if (!GI) return;
+    MapSelectCombo->ClearOptions();
+    AuthoredMapSlugs.Reset();
+    TArray<FString> Slugs, Titles;
+    GI->ListAuthoredMaps(Slugs, Titles);
+    for (int32 i = 0; i < Slugs.Num(); ++i)
+    {
+        AuthoredMapSlugs.Add(Slugs[i]);
+        MapSelectCombo->AddOption(Titles.IsValidIndex(i) ? Titles[i] : Slugs[i]);
+    }
+    if (AuthoredMapSlugs.Num() > 0)
+    {
+        MapSelectCombo->SetSelectedIndex(0);
+        PendingCsvPath = GI->AuthoredMapDir(AuthoredMapSlugs[0]); // carpeta del mapa a publicar
+    }
+    else
+    {
+        PendingCsvPath.Reset(); // sin mapas guardados → el aviso de "faltan" lo marca al Aplicar
+    }
+}
+
+void UPTWorkshopBrowserWidget::OnMapSelected(FString SelectedItem, ESelectInfo::Type Type)
+{
+    if (!MapSelectCombo) return;
+    UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance());
+    const int32 Idx = MapSelectCombo->GetSelectedIndex();
+    if (GI && AuthoredMapSlugs.IsValidIndex(Idx))
+        PendingCsvPath = GI->AuthoredMapDir(AuthoredMapSlugs[Idx]); // carpeta del mapa elegido
+}
+
 void UPTWorkshopBrowserWidget::OnCreateMapClicked()
 {
     // Entra al nivel plantilla del MapKit en modo autoría (esculpido libre). Es un travel local:
     // se sale de la sesión actual. La UI del Workshop se va con el mundo viejo.
     if (UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance()))
-        GI->EnterMapAuthoring();
+        GI->CreateNewLevel();
 }
 
 void UPTWorkshopBrowserWidget::ResetPublishForm()
@@ -248,9 +289,11 @@ void UPTWorkshopBrowserWidget::OnUploadCsvClicked()
     if (bUploading) return;
     UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance());
     if (!GI) return;
+    // En Mapas no se elige archivo: el mapa se toma del selector (RefreshAuthoredMapList). Este botón solo
+    // aplica a Bancos (elegir CSV). Si llega en Mapas, re-escanear la lista.
+    if (ActiveTab == 1) { RefreshAuthoredMapList(); return; }
     FString Path;
-    const bool bMaps = (ActiveTab == 1);
-    if (bMaps ? !GI->PickMapPakFile(Path) : !GI->PickCsvFile(Path)) return;
+    if (!GI->PickCsvFile(Path)) return;
     PendingCsvPath = Path;
     if (CsvButtonLabel) CsvButtonLabel->SetText(FText::FromString(FPaths::GetBaseFilename(Path)));
     if (PublishStatusText) PublishStatusText->SetVisibility(ESlateVisibility::Collapsed);

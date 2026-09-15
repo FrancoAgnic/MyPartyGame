@@ -245,9 +245,9 @@ void UPTMainMenuWidget::OnWorkshopClicked()
 
 void UPTMainMenuWidget::OnCreateLevelClicked()
 {
-    // Entra al modo autoría de mapa (esculpir un escenario libre para después publicarlo).
+    // Arranca un mapa NUEVO y entra a esculpirlo (para después publicarlo).
     if (UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance()))
-        GI->EnterMapAuthoring();
+        GI->CreateNewLevel();
 }
 
 // ==========================================================================

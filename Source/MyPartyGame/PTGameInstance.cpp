@@ -7,6 +7,11 @@
 #include "Kismet/GameplayStatics.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Misc/DateTime.h"
+#include "HAL/FileManager.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+#include "Dom/JsonObject.h"
 #include "DesktopPlatformModule.h"
 #include "IDesktopPlatform.h"
 #include "Framework/Application/SlateApplication.h"
@@ -180,38 +185,102 @@ void UPTGameInstance::SelectDefaultMap()
     OnSelectedMapChanged.Broadcast();
 }
 
+void UPTGameInstance::CreateNewLevel()
+{
+    // Slug fresco por timestamp (único y ordenable). El título se define al guardar/publicar.
+    CurrentAuthoringSlug = FString::Printf(TEXT("Map_%s"), *FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S")));
+    IFileManager::Get().MakeDirectory(*AuthoredMapDir(CurrentAuthoringSlug), /*Tree=*/true);
+    UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Nuevo mapa: %s"), *CurrentAuthoringSlug);
+    EnterMapAuthoring();
+}
+
+void UPTGameInstance::EditLevel(const FString& Slug)
+{
+    if (Slug.IsEmpty()) return;
+    CurrentAuthoringSlug = Slug;
+    EnterMapAuthoring();
+}
+
 void UPTGameInstance::EnterMapAuthoring()
 {
     // Abre el nivel plantilla del MapKit forzando el GameMode de autoría por la URL (?game=...).
     // Es un travel local (standalone): salís de la sesión actual y entrás solo a esculpir el mapa.
     if (MapAuthorLevel.IsEmpty()) return;
+    if (CurrentAuthoringSlug.IsEmpty()) // entrada directa sin pasar por Crear/Editar → arrancar uno nuevo
+        CurrentAuthoringSlug = FString::Printf(TEXT("Map_%s"), *FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S")));
     const FString Options = FString::Printf(TEXT("game=%s"), *MapAuthorGameMode);
-    UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Entrando a autoría: %s (%s)"), *MapAuthorLevel, *Options);
+    UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Entrando a autoría: %s (%s) slug=%s"), *MapAuthorLevel, *Options, *CurrentAuthoringSlug);
     UGameplayStatics::OpenLevel(this, FName(*MapAuthorLevel), /*bAbsolute=*/true, Options);
 }
 
-FString UPTGameInstance::AuthoredMapBlobPath() const
+FString UPTGameInstance::AuthoredLevelsDir() const
 {
-    // Archivo de trabajo del escenario que estás modelando (blob de la escultura). MapMods_Output está en
-    // .gitignore. Fase 3 (publicar) tomará este blob + título/miniatura para subirlo al Workshop.
-    return FPaths::Combine(FPaths::ProjectDir(), TEXT("MapMods_Output"), TEXT("Authoring"), TEXT("sculpt.bin"));
+    return FPaths::Combine(FPaths::ProjectDir(), TEXT("MapMods_Output"), TEXT("Levels"));
+}
+FString UPTGameInstance::AuthoredMapDir(const FString& Slug) const
+{
+    return FPaths::Combine(AuthoredLevelsDir(), Slug);
+}
+FString UPTGameInstance::AuthoredMapBlobPath(const FString& Slug) const
+{
+    return FPaths::Combine(AuthoredMapDir(Slug), TEXT("sculpt.bin"));
 }
 
 void UPTGameInstance::SaveAuthoredMap(const TArray<uint8>& Blob)
 {
-    if (Blob.Num() == 0) return;
-    const FString Path = AuthoredMapBlobPath();
-    if (FFileHelper::SaveArrayToFile(Blob, *Path))
-    { UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Escenario guardado: %d bytes en %s"), Blob.Num(), *Path); }
-    else
-    { UE_LOG(LogTemp, Warning, TEXT("[MapAuthor] No se pudo guardar el escenario en %s"), *Path); }
+    if (Blob.Num() == 0 || CurrentAuthoringSlug.IsEmpty()) return;
+    const FString Dir  = AuthoredMapDir(CurrentAuthoringSlug);
+    IFileManager::Get().MakeDirectory(*Dir, /*Tree=*/true);
+    const FString Path = AuthoredMapBlobPath(CurrentAuthoringSlug);
+    if (!FFileHelper::SaveArrayToFile(Blob, *Path))
+    { UE_LOG(LogTemp, Warning, TEXT("[MapAuthor] No se pudo guardar el escenario en %s"), *Path); return; }
+
+    // Asegurar un mod.json con el título (por defecto = slug) para que el mapa aparezca en la lista/publish.
+    const FString JsonPath = FPaths::Combine(Dir, TEXT("mod.json"));
+    if (!FPaths::FileExists(JsonPath))
+    {
+        const FString Json = FString::Printf(
+            TEXT("{ \"Title\": \"%s\", \"MapName\": \"/MapKit/Mapa_Plantilla\", \"Author\": \"\" }"),
+            *CurrentAuthoringSlug);
+        FFileHelper::SaveStringToFile(Json, *JsonPath);
+    }
+    UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Escenario guardado: %d bytes en %s"), Blob.Num(), *Path);
 }
 
 bool UPTGameInstance::LoadAuthoredMap(TArray<uint8>& OutBlob) const
 {
-    const FString Path = AuthoredMapBlobPath();
+    if (CurrentAuthoringSlug.IsEmpty()) return false;
+    const FString Path = AuthoredMapBlobPath(CurrentAuthoringSlug);
     if (!FPaths::FileExists(Path)) return false;
     return FFileHelper::LoadFileToArray(OutBlob, *Path) && OutBlob.Num() > 0;
+}
+
+void UPTGameInstance::ListAuthoredMaps(TArray<FString>& OutSlugs, TArray<FString>& OutTitles) const
+{
+    OutSlugs.Reset(); OutTitles.Reset();
+    const FString Root = AuthoredLevelsDir();
+    if (!FPaths::DirectoryExists(Root)) return;
+    TArray<FString> Dirs;
+    IFileManager::Get().FindFiles(Dirs, *(Root / TEXT("*")), /*Files=*/false, /*Directories=*/true);
+    Dirs.Sort();
+    for (const FString& Name : Dirs)
+    {
+        if (Name == TEXT(".") || Name == TEXT("..")) continue;
+        const FString Dir = FPaths::Combine(Root, Name);
+        if (!FPaths::FileExists(FPaths::Combine(Dir, TEXT("sculpt.bin")))) continue; // sin escenario guardado
+        // Título del mod.json si existe; si no, el slug.
+        FString Title = Name;
+        FString Json;
+        if (FFileHelper::LoadFileToString(Json, *FPaths::Combine(Dir, TEXT("mod.json"))))
+        {
+            TSharedPtr<FJsonObject> Obj;
+            const TSharedRef<TJsonReader<>> R = TJsonReaderFactory<>::Create(Json);
+            if (FJsonSerializer::Deserialize(R, Obj) && Obj.IsValid() && Obj->HasField(TEXT("Title")))
+                Title = Obj->GetStringField(TEXT("Title"));
+        }
+        OutSlugs.Add(Name);
+        OutTitles.Add(Title);
+    }
 }
 
 // "titulos_peliculas" / "titulos-peliculas" → "Titulos Peliculas" (fallback de título si no lo escriben).

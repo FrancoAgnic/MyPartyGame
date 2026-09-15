@@ -703,7 +703,7 @@ void UPTWordPackSubsystem::PublishWordPack(const FString& CsvPath, const FString
 #endif
 }
 
-void UPTWordPackSubsystem::PublishMap(const FString& MapPakPath, const FString& Title,
+void UPTWordPackSubsystem::PublishMap(const FString& MapFolder, const FString& Title,
                                       const FString& Description, const FString& PreviewPath)
 {
 #if PT_WITH_STEAM
@@ -712,22 +712,17 @@ void UPTWordPackSubsystem::PublishMap(const FString& MapPakPath, const FString& 
         OnWordPackPublished.Broadcast(false, TEXT("Steam no disponible"));
         return;
     }
-    if (!FPaths::FileExists(MapPakPath))
+    // Mapa creado IN-GAME = carpeta con sculpt.bin (escenario esculpido serializado). Se sube esa carpeta
+    // al Workshop (tag "Map"); al jugarlo, el juego carga el nivel plantilla y le aplica el sculpt.bin.
+    const FString SrcBlob = FPaths::Combine(MapFolder, TEXT("sculpt.bin"));
+    if (!FPaths::FileExists(SrcBlob))
     {
-        OnWordPackPublished.Broadcast(false, TEXT("No existe el map.pak"));
-        return;
-    }
-    // El mod.json (MapName/Title/Author) tiene que estar al lado del map.pak (lo genera Kit_CocinarMapa.bat).
-    const FString SrcDir  = FPaths::GetPath(MapPakPath);
-    const FString SrcJson = FPaths::Combine(SrcDir, TEXT("mod.json"));
-    if (!FPaths::FileExists(SrcJson))
-    {
-        OnWordPackPublished.Broadcast(false, TEXT("Falta mod.json junto al map.pak"));
+        OnWordPackPublished.Broadcast(false, TEXT("No existe el escenario (sculpt.bin)"));
         return;
     }
 
     // ISteamUGC sube una CARPETA. Staging en %TEMP% (siempre escribible):
-    //   <base>/content/ → map.pak + mod.json  → SetItemContent (ruta ABSOLUTA + nativa)
+    //   <base>/content/ → sculpt.bin + mod.json  → SetItemContent (ruta ABSOLUTA + nativa)
     //   <base>/preview.png → miniatura FUERA de content.
     FString Base = FPaths::Combine(FString(FPlatformProcess::UserTempDir()),
                                    TEXT("SculpturilloWorkshop"),
@@ -739,8 +734,14 @@ void UPTWordPackSubsystem::PublishMap(const FString& MapPakPath, const FString& 
 
     IFileManager& FM = IFileManager::Get();
     const bool bDir   = FM.MakeDirectory(*Content, /*Tree=*/true);
-    const bool bPak   = (FM.Copy(*FPaths::Combine(Content, TEXT("map.pak")), *MapPakPath) == COPY_OK);
-    const bool bJson  = (FM.Copy(*FPaths::Combine(Content, TEXT("mod.json")), *SrcJson) == COPY_OK);
+    const bool bBlob  = (FM.Copy(*FPaths::Combine(Content, TEXT("sculpt.bin")), *SrcBlob) == COPY_OK);
+
+    // mod.json con el TÍTULO del popup (autoritativo) + el nivel base que se carga al jugar.
+    FString EffTitle = Title; EffTitle.TrimStartAndEndInline();
+    if (EffTitle.IsEmpty()) EffTitle = PT_PrettifyName(FPaths::GetCleanFilename(MapFolder));
+    const FString ModJson = FString::Printf(
+        TEXT("{ \"Title\": \"%s\", \"MapName\": \"/MapKit/Mapa_Plantilla\", \"Author\": \"\" }"), *EffTitle);
+    const bool bJson = FFileHelper::SaveStringToFile(ModJson, *FPaths::Combine(Content, TEXT("mod.json")));
 
     // Preview: misma lógica que los bancos (achicar a ≤512 y re-encodar; fallback branded; fallback sólido).
     FString UsePreview;
@@ -774,17 +775,15 @@ void UPTWordPackSubsystem::PublishMap(const FString& MapPakPath, const FString& 
     }
     if (!UsePreview.IsEmpty()) FPaths::MakePlatformFilename(UsePreview);
 
-    UE_LOG(LogPTWordPacks, Warning, TEXT("[PublishMap] Content='%s' dir=%d pak=%d json=%d preview='%s'"),
-        *Content, bDir ? 1 : 0, bPak ? 1 : 0, bJson ? 1 : 0, *UsePreview);
-    if (!bPak || !bJson)
+    UE_LOG(LogPTWordPacks, Warning, TEXT("[PublishMap] Content='%s' dir=%d blob=%d json=%d preview='%s'"),
+        *Content, bDir ? 1 : 0, bBlob ? 1 : 0, bJson ? 1 : 0, *UsePreview);
+    if (!bBlob || !bJson)
     {
         OnWordPackPublished.Broadcast(false, FString::Printf(TEXT("No se pudo armar el staging: %s"), *Content));
         return;
     }
 
-    FString EffectiveTitle = Title;
-    EffectiveTitle.TrimStartAndEndInline();
-    if (EffectiveTitle.IsEmpty()) EffectiveTitle = PT_PrettifyName(FPaths::GetBaseFilename(SrcDir));
+    const FString EffectiveTitle = EffTitle;
 
     delete Publisher;
     Publisher = new FPTWorkshopPublish();

@@ -112,15 +112,36 @@ public:
     // Notifica a la UI que cambió el mapa elegido (reusa el mismo tipo de delegate).
     FPTOnSelectedWordPackChanged OnSelectedMapChanged;
 
-    // ── Crear mapa desde el juego (autoría) ──────────────────────────────────────────────────
-    // Abre el nivel plantilla del MapKit en modo AUTORÍA (esculpido libre, sin partida): fuerza
-    // BP_MapAuthorGameMode por la URL. Standalone/solo. Lo llama el botón "Crear mapa" del Workshop.
+    // ── Crear mapa desde el juego (autoría, VARIOS mapas) ────────────────────────────────────
+    // Cada mapa autoreado = una CARPETA <ProjectDir>/MapMods_Output/Levels/<slug>/ con:
+    //   sculpt.bin  → el escenario serializado (SaveSnapshot del volumen)
+    //   mod.json    → { Title, MapName=/MapKit/Mapa_Plantilla, Author }
+    //   preview.png → miniatura (opcional, se elige al publicar)
+    // El GameInstance recuerda qué mapa se está editando (CurrentAuthoringSlug) a través del travel.
+
+    /** Arranca un mapa NUEVO (slug fresco) y entra a esculpirlo. Lo llama "Crear niveles" / "Crear mapa". */
+    UFUNCTION(BlueprintCallable, Category="MapMod") void CreateNewLevel();
+    /** Entra a editar un mapa ya guardado (por slug) → carga su escenario. Lo llama "Editar" de la lista. */
+    UFUNCTION(BlueprintCallable, Category="MapMod") void EditLevel(const FString& Slug);
+    /** Abre el nivel plantilla en modo autoría con el mapa actual (CurrentAuthoringSlug). */
     UFUNCTION(BlueprintCallable, Category="MapMod") void EnterMapAuthoring();
-    // Guardar/cargar el escenario que estás modelando (blob de la escultura) en un archivo de trabajo
-    // local. Lo usa el HUD de autoría (Guardar) y el GameMode de autoría (cargar al entrar).
+
+    // Guardar/cargar el escenario del mapa ACTUAL (blob). Lo usa el menú de pausa (Guardar) y el GameMode
+    // de autoría (cargar al entrar).
     void    SaveAuthoredMap(const TArray<uint8>& Blob);
     bool    LoadAuthoredMap(TArray<uint8>& OutBlob) const;
-    FString AuthoredMapBlobPath() const;
+
+    // Slug del mapa que se está editando (vacío = ninguno). Persiste por el travel (el GI vive toda la app).
+    UPROPERTY(BlueprintReadOnly, Category="MapMod") FString CurrentAuthoringSlug;
+
+    // Rutas de almacenamiento de mapas autoreados.
+    FString AuthoredLevelsDir() const;                 // .../MapMods_Output/Levels
+    FString AuthoredMapDir(const FString& Slug) const; // .../Levels/<slug>
+    FString AuthoredMapBlobPath(const FString& Slug) const; // .../<slug>/sculpt.bin
+
+    /** Lista los mapas autoreados (con sculpt.bin) para el selector del publish. Devuelve pares slug↔título. */
+    UFUNCTION(BlueprintCallable, Category="MapMod") void ListAuthoredMaps(TArray<FString>& OutSlugs, TArray<FString>& OutTitles) const;
+
     // Ruta del nivel plantilla y del GameMode de autoría (editables por si cambian de lugar).
     UPROPERTY(EditAnywhere, Category="MapMod") FString MapAuthorLevel = TEXT("/MapKit/Mapa_Plantilla");
     UPROPERTY(EditAnywhere, Category="MapMod") FString MapAuthorGameMode = TEXT("/Game/Template/Character/BP_MapAuthorGameMode.BP_MapAuthorGameMode_C");
