@@ -18,7 +18,11 @@ void UPTToolSlotWidget::SetSlot(UTexture2D* Icon, const FText& KeyName, const FT
     const bool bUseKeyIcon = (KeyIconTex != nullptr) && (KeyIcon != nullptr);
     if (KeyIcon)
     {
-        if (KeyIconTex) KeyIcon->SetBrushFromTexture(KeyIconTex);
+        // bMatchSize=true: el brush toma el tamaño NATIVO de cada textura → cada keycap respeta su propia
+        // escala/aspecto (RMB y Backspace tienen proporciones distintas y no se estiran a una caja fija).
+        // Requisito en el WBP: el Image KeyIcon SIN "Size Override" (Size To Content); envolvelo en un
+        // SizeBox con Max Desired si querés un tope para texturas grandes.
+        if (KeyIconTex) KeyIcon->SetBrushFromTexture(KeyIconTex, /*bMatchSize=*/true);
         KeyIcon->SetVisibility(bUseKeyIcon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
     }
     if (KeyText)
