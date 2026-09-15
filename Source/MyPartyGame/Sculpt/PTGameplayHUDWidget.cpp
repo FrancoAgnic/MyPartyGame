@@ -101,6 +101,27 @@ void UPTGameplayHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDelta
     }
 }
 
+// Keycap COMPACTO: el engine devuelve nombres largos ("Left Alt", "Backspace", "Spacebar") que ensanchan
+// el slot y desalinean el hotbar. Los mapeamos a etiquetas cortas y parejas. Se usa igual en el preview
+// del diseñador y en juego → mismo texto, mismo ancho, WYSIWYG.
+static FText PT_ShortKeyLabel(const FKey& Key)
+{
+    static const TMap<FName, FString> Short = {
+        { EKeys::LeftAlt.GetFName(),      TEXT("Alt")   },
+        { EKeys::RightAlt.GetFName(),     TEXT("Alt")   },
+        { EKeys::LeftShift.GetFName(),    TEXT("Shift") },
+        { EKeys::RightShift.GetFName(),   TEXT("Shift") },
+        { EKeys::LeftControl.GetFName(),  TEXT("Ctrl")  },
+        { EKeys::RightControl.GetFName(), TEXT("Ctrl")  },
+        { EKeys::BackSpace.GetFName(),    TEXT("Bksp")  },
+        { EKeys::SpaceBar.GetFName(),     TEXT("Space") },
+        { EKeys::Enter.GetFName(),        TEXT("Enter") },
+        { EKeys::Escape.GetFName(),       TEXT("Esc")   },
+    };
+    if (const FString* S = Short.Find(Key.GetFName())) return FText::FromString(*S);
+    return Key.GetDisplayName();
+}
+
 UPTToolSlotWidget* UPTGameplayHUDWidget::CreateSlotIn(UPanelWidget* Box, UTexture2D* Icon,
                                                      const FText& KeyName, const FText& Label)
 {
@@ -128,7 +149,7 @@ void UPTGameplayHUDWidget::BuildToolbar()
     auto MakeSlot = [this](UPanelWidget* Box, UTexture2D* Icon, const FKey& Key, const FText& Label)
         -> UPTToolSlotWidget*
     {
-        return CreateSlotIn(Box, Icon, Key.GetDisplayName(), Label);
+        return CreateSlotIn(Box, Icon, PT_ShortKeyLabel(Key), Label);
     };
 
     // Tools: la tecla sale de PTInput (misma tabla que bindea el controller) → si se rebindea,
@@ -177,15 +198,16 @@ void UPTGameplayHUDWidget::BuildToolbarPreview()
 {
     if (!ToolSlotClass) return;
 
+    // Usa las MISMAS teclas y etiquetas cortas que en juego → el preview es fiel al gameplay.
     // Tools 1/2/3/4 (con marca de "equipado" en la primera, como se ve en juego).
     if (ToolsBox)
     {
         ToolsBox->ClearChildren();
         ToolSlots.Reset();
-        ToolSlots.Add(CreateSlotIn(ToolsBox, IconAdd,   FText::FromString(TEXT("1")), PTText::Get(TEXT("TOOL_ADD"))));
-        ToolSlots.Add(CreateSlotIn(ToolsBox, IconErase, FText::FromString(TEXT("2")), PTText::Get(TEXT("TOOL_ERASE"))));
-        ToolSlots.Add(CreateSlotIn(ToolsBox, IconPaint, FText::FromString(TEXT("3")), PTText::Get(TEXT("TOOL_PAINT"))));
-        ToolSlots.Add(CreateSlotIn(ToolsBox, IconEyes,  FText::FromString(TEXT("4")), PTText::Get(TEXT("TOOL_EYES"))));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconAdd,   PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModeAdd"))),   PTText::Get(TEXT("TOOL_ADD"))));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconErase, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModeErase"))), PTText::Get(TEXT("TOOL_ERASE"))));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconPaint, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModePaint"))), PTText::Get(TEXT("TOOL_PAINT"))));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconEyes,  PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModeEyes"))),  PTText::Get(TEXT("TOOL_EYES"))));
         if (ToolSlots.Num() > 0 && ToolSlots[0]) ToolSlots[0]->SetSelected(true);
     }
 
@@ -194,7 +216,7 @@ void UPTGameplayHUDWidget::BuildToolbarPreview()
     {
         ShapesBox->ClearChildren();
         ShapeHintSlot = CreateSlotIn(ShapesBox, IconShapesHint ? IconShapesHint : IconSphere,
-                                     FText::FromString(TEXT("TAB")), PTText::Get(TEXT("SHAPE_HINT")));
+                                     PT_ShortKeyLabel(PTInput::GetKey(TEXT("CycleShape"))), PTText::Get(TEXT("SHAPE_HINT")));
     }
 
     // Atajos contextuales de ejemplo (los que se ven con Agregar): Z / X / ALT.
@@ -202,16 +224,16 @@ void UPTGameplayHUDWidget::BuildToolbarPreview()
     {
         HintsBox->ClearChildren();
         HintSlots.Reset();
-        HintSlots.Add(CreateSlotIn(HintsBox, IconAxisVert,  FText::FromString(TEXT("Z")),   PTText::Get(TEXT("HINT_PLANE_VERTICAL"))));
-        HintSlots.Add(CreateSlotIn(HintsBox, IconAxisHoriz, FText::FromString(TEXT("X")),   PTText::Get(TEXT("HINT_PLANE_HORIZONTAL"))));
-        HintSlots.Add(CreateSlotIn(HintsBox, IconDetail,    FText::FromString(TEXT("ALT")), PTText::Get(TEXT("TOOL_DETAIL"))));
+        HintSlots.Add(CreateSlotIn(HintsBox, IconAxisVert,  PT_ShortKeyLabel(PTInput::GetKey(TEXT("AxisVertical"))),   PTText::Get(TEXT("HINT_PLANE_VERTICAL"))));
+        HintSlots.Add(CreateSlotIn(HintsBox, IconAxisHoriz, PT_ShortKeyLabel(PTInput::GetKey(TEXT("AxisHorizontal"))), PTText::Get(TEXT("HINT_PLANE_HORIZONTAL"))));
+        HintSlots.Add(CreateSlotIn(HintsBox, IconDetail,    PT_ShortKeyLabel(FKey(EKeys::LeftAlt)),                    PTText::Get(TEXT("TOOL_DETAIL"))));
     }
 
     // Borrar todo (BACKSPACE).
     if (ClearBox)
     {
         ClearBox->ClearChildren();
-        ClearSlot = CreateSlotIn(ClearBox, IconClearAll, FText::FromString(TEXT("BSPACE")),
+        ClearSlot = CreateSlotIn(ClearBox, IconClearAll, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ClearAll"))),
                                  PTText::Get(TEXT("TOOL_CLEAR_ALL")));
     }
 }
@@ -284,7 +306,7 @@ void UPTGameplayHUDWidget::RefreshToolbar()
 
         auto AddHint = [this](UTexture2D* Icon, const FKey& Key, const FText& Label) -> UPTToolSlotWidget*
         {
-            UPTToolSlotWidget* S = CreateSlotIn(HintsBox, Icon, Key.GetDisplayName(), Label);
+            UPTToolSlotWidget* S = CreateSlotIn(HintsBox, Icon, PT_ShortKeyLabel(Key), Label);
             if (S) HintSlots.Add(S);
             return S;
         };
