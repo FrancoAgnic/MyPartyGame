@@ -177,11 +177,13 @@ void UPTHeadSculptHUDWidget::Refresh(APTLobbyPlayerController* PC)
         }
     }
 
-    // ALT (detalle en capa aparte): es de la CABEZA. No aplica con el foco en el cuerpo. Se resalta al mantener Alt.
+    // ALT (detalle sobre la superficie): SOLO tiene sentido con Agregar arcilla equipado (modo 1). En
+    // Erase/Paint/Ojos o con el foco en el cuerpo se OCULTA. Se resalta al mantener Alt.
     if (DetailSlot)
     {
-        DetailSlot->SetVisibility(bBodyFocus ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
-        if (!bBodyFocus) DetailSlot->SetSelected(PC->IsHeadSurfaceSnapActive());
+        const bool bShowDetail = !bBodyFocus && (Equipped == 0); // 0 = Add
+        DetailSlot->SetVisibility(bShowDetail ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+        if (bShowDetail) DetailSlot->SetSelected(PC->IsHeadSurfaceSnapActive());
     }
 
     const bool  bPaintTool = PC->IsHeadPaintingTool();
