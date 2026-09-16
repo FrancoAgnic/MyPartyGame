@@ -589,7 +589,8 @@ private:
     void TickAuthorProps(float Dt);        // preview del asset + bake por Enter-3s (llamado en PlayerTick)
     void PlaceCurrentAsset();              // coloca una instancia del asset actual
     void EraseAssetUnderCursor();          // borra la instancia bajo el cursor
-    void CycleAsset(int32 Dir);            // cambia el asset actual (TAB afuera)
+    void CycleAsset(int32 Dir);            // cambia el asset actual (fallback sin radial)
+    void OpenAssetRadial();                // radial de assets con miniaturas (TAB afuera, modo Add)
     void DoBakeAsset();                    // hornea el box → asset + limpia el box
     // Punto "de brazo" SIN clampear al box (para colocar props afuera). OutOutside=true si cae fuera del box.
     FVector GetPlacePoint(bool& bOutOutside) const;
@@ -604,6 +605,8 @@ private:
     float BakeHoldTime = 0.f;               // acumulador del "mantener Enter" para hornear
     bool  bBakedThisHold = false;           // ya horneó en este mantenido (evita repetir)
     static constexpr float BakeHoldDuration = 3.0f;
+    int32 AssetBeforeRadial = 0;            // asset antes de abrir el radial (para cancelar en zona muerta)
+    int32 LastAssetRadialPage = 0;          // última página del radial de assets (reabrir ahí)
 
     // Pone/saca el overlay amarillo en el mesh de cada jugador según quién esculpe.
     void UpdateSculptorHighlights();

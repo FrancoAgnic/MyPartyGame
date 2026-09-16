@@ -14,6 +14,7 @@
 class UHierarchicalInstancedStaticMeshComponent;
 class UStaticMesh;
 class UMaterialInterface;
+class UTextureRenderTarget2D;
 class APTSculptVolume;
 
 // Geometría horneada de un prop (malla compacta que se guarda una sola vez por asset único).
@@ -48,6 +49,10 @@ public:
     UStaticMesh* GetAssetMesh(int32 AssetIdx) const;
     const FPTPropGeometry* GetAssetGeometry(int32 AssetIdx) const;
 
+    /** Miniatura del asset (render de la malla a un RenderTarget) para el radial de assets. Se genera
+     *  la primera vez y se cachea. Devuelve null si el índice no existe. */
+    UTextureRenderTarget2D* GetAssetThumbnail(int32 AssetIdx, int32 Size = 128);
+
     /** Coloca una instancia del asset en ese transform (mundo). */
     void PlaceInstance(int32 AssetIdx, const FTransform& WorldXf);
     /** Borra la instancia más cercana a WorldPos dentro de Radius (cualquier asset). true si borró. */
@@ -76,6 +81,8 @@ private:
     TArray<FPTPropAsset> Assets;
     // Orden global de colocación (índice de asset por cada instancia colocada) → para el undo LIFO de props.
     TArray<int32> PlaceOrder;
+    // Miniaturas cacheadas (alineadas con Assets); UPROPERTY para que no las junte el GC.
+    UPROPERTY(Transient) TArray<UTextureRenderTarget2D*> Thumbnails;
 
     UStaticMesh* BuildStaticMesh(const FPTPropGeometry& Geo) const; // bake runtime (MeshDescription)
 };

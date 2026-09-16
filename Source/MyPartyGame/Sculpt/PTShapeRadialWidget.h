@@ -58,6 +58,13 @@ public:
     /** Prepara el radial abriendo en StartPage (para reabrir en la última página usada). */
     void BeginRadial(int32 StartPage = 0);
 
+    /** Abre el radial en modo ASSET (autoría de mapa): en vez de las formas, muestra estas miniaturas
+     *  (una por prop horneado). El resto (páginas, hover, selección) funciona igual. */
+    void BeginAssetRadial(const TArray<FSlateBrush>& InIcons, int32 StartPage = 0);
+    bool IsAssetMode() const { return bAssetMode; }
+    /** Índice GLOBAL del asset seleccionado. false si está en zona muerta. Solo en modo asset. */
+    bool GetSelectedAsset(int32& OutAssetIndex) const;
+
     /** Página actual (para que el PlayerController la recuerde entre aperturas). */
     int32 GetCurrentPage() const { return CurrentPage; }
 
@@ -101,6 +108,11 @@ private:
     int32 SelectedIndex = -1; // slot dentro de la página (0=arriba,1=der,2=abajo,3=izq)
     int32 CurrentPage   = 0;
 
+    // Modo ASSET: iconos runtime (miniaturas de props) en vez de ShapeSlots.
+    bool  bAssetMode = false;
+    TArray<FSlateBrush> AssetIcons;
+    int32 SlotCount() const { return bAssetMode ? AssetIcons.Num() : ShapeSlots.Num(); }
+
     int32 NumPages() const;
-    void  BuildPage();        // vuelca los 4 iconos de la página actual al UPTRadialMenu
+    void  BuildPage();        // vuelca los iconos de la página actual al UPTRadialMenu
 };

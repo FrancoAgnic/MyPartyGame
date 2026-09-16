@@ -21,6 +21,8 @@
 #include "../Lobby/PTLobbyCharacter.h"
 #include "PTSculptPlane.h"
 #include "../Mods/PTMapEnvironment.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Styling/SlateBrush.h"
 #include "../Mods/PTMapAuthorGameMode.h"
 #include "../PTInputBindings.h"
 #include "../Lobby/PTPlayerState.h"
@@ -587,14 +589,24 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         if (WasInputKeyJustPressed(EKeys::MouseScrollDown)) ShapeRadial->NextPage();
 
         ShapeRadial->UpdateSelection();
-        EPTStampShape HoverShape;
-        if (ShapeRadial->GetSelectedShape(HoverShape))
+        if (ShapeRadial->IsAssetMode())
         {
-            if (StampShape != HoverShape) SetShape(HoverShape);
+            // Modo autoría: el hover cambia el asset actual EN VIVO (se ve en el AssetPreview).
+            int32 HoverAsset;
+            if (ShapeRadial->GetSelectedAsset(HoverAsset)) { CurrentAsset = HoverAsset; }
+            else                                            { CurrentAsset = AssetBeforeRadial; }
         }
-        else if (StampShape != ShapeBeforeRadial)
+        else
         {
-            SetShape(ShapeBeforeRadial); // cursor en el centro → preview vuelve a la forma actual
+            EPTStampShape HoverShape;
+            if (ShapeRadial->GetSelectedShape(HoverShape))
+            {
+                if (StampShape != HoverShape) SetShape(HoverShape);
+            }
+            else if (StampShape != ShapeBeforeRadial)
+            {
+                SetShape(ShapeBeforeRadial); // cursor en el centro → preview vuelve a la forma actual
+            }
         }
     }
 
@@ -1870,9 +1882,9 @@ void APTSculptPlayerController::CycleShapes()
 
 void APTSculptPlayerController::OnShapeRadialPressed()
 {
-    // Modo colocar (autoría): TAB cambia el asset actual (por ahora cicla; radial de assets = P2).
+    // Modo colocar (autoría): TAB abre el radial de assets (miniaturas de los props horneados).
     if (IsPlaceMode() && EditMode == EPTEditMode::Add && !bEyesTool)
-    { CycleAsset(+1); return; }
+    { OpenAssetRadial(); return; }
 
     if (bShapeRadialActive) return;
 
@@ -1913,14 +1925,24 @@ void APTSculptPlayerController::OnShapeRadialReleased()
 
     if (ShapeRadial)
     {
-        // Recordar la página en la que quedó, para reabrir ahí la próxima vez.
-        LastShapePage = ShapeRadial->GetCurrentPage();
+        if (ShapeRadial->IsAssetMode())
+        {
+            // Radial de assets (autoría): soltar sobre un slot elige ese asset; en el centro, el previo.
+            LastAssetRadialPage = ShapeRadial->GetCurrentPage();
+            int32 Selected;
+            CurrentAsset = ShapeRadial->GetSelectedAsset(Selected) ? Selected : AssetBeforeRadial;
+        }
+        else
+        {
+            // Recordar la página en la que quedó, para reabrir ahí la próxima vez.
+            LastShapePage = ShapeRadial->GetCurrentPage();
 
-        // Soltar sobre un slot → esa forma; soltar en el centro (zona muerta) → volver a la de antes
-        // (el hover la había cambiado en vivo).
-        EPTStampShape Selected;
-        if (ShapeRadial->GetSelectedShape(Selected)) SetShape(Selected);
-        else                                         SetShape(ShapeBeforeRadial);
+            // Soltar sobre un slot → esa forma; soltar en el centro (zona muerta) → volver a la de antes
+            // (el hover la había cambiado en vivo).
+            EPTStampShape Selected;
+            if (ShapeRadial->GetSelectedShape(Selected)) SetShape(Selected);
+            else                                         SetShape(ShapeBeforeRadial);
+        }
 
         ShapeRadial->RemoveFromParent(); // NativeDestruct restaura el cursor
         ShapeRadial = nullptr;
@@ -2313,6 +2335,44 @@ void APTSculptPlayerController::CycleAsset(int32 Dir)
     const int32 N = Env ? Env->GetNumAssets() : 0;
     if (N <= 0) return;
     CurrentAsset = ((CurrentAsset + Dir) % N + N) % N;
+}
+
+void APTSculptPlayerController::OpenAssetRadial()
+{
+    if (bShapeRadialActive) return;
+    APTMapEnvironment* Env = GetMapEnv();
+    if (!Env || Env->GetNumAssets() == 0) return;
+
+    // Sin WBP del radial → fallback: ciclar el asset (comportamiento viejo).
+    if (!ShapeRadialClass) { CycleAsset(+1); return; }
+    ShapeRadial = CreateWidget<UPTShapeRadialWidget>(this, ShapeRadialClass);
+    if (!ShapeRadial) { CycleAsset(+1); return; }
+
+    // Armar una miniatura por asset (render de la malla a un RenderTarget, cacheado en el entorno).
+    TArray<FSlateBrush> Icons;
+    Icons.Reserve(Env->GetNumAssets());
+    for (int32 i = 0; i < Env->GetNumAssets(); ++i)
+    {
+        FSlateBrush Br;
+        if (UTextureRenderTarget2D* RT = Env->GetAssetThumbnail(i))
+        {
+            Br.SetResourceObject(RT);
+            Br.ImageSize = FVector2D(96.f, 96.f);
+        }
+        Icons.Add(Br);
+    }
+
+    AssetBeforeRadial = CurrentAsset;
+    ShapeRadial->AddToViewport(20);
+    ShapeRadial->BeginAssetRadial(Icons, LastAssetRadialPage);
+    SetInputMode(FInputModeGameAndUI());
+    bShowMouseCursor = true;
+
+    int32 VX = 0, VY = 0;
+    GetViewportSize(VX, VY);
+    if (VX > 0 && VY > 0) SetMouseLocation(VX / 2, VY / 2);
+
+    bShapeRadialActive = true;
 }
 
 void APTSculptPlayerController::TickAuthorProps(float Dt)

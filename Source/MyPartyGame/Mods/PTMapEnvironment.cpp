@@ -10,6 +10,15 @@
 #include "MeshDescriptionBuilder.h"
 #include "Serialization/MemoryWriter.h"
 #include "Serialization/MemoryReader.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Engine/StaticMeshActor.h"
+#include "Engine/SceneCapture2D.h"
+#include "Engine/DirectionalLight.h"
+#include "Components/SceneCaptureComponent2D.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/DirectionalLightComponent.h"
+#include "Kismet/KismetRenderingLibrary.h"
+#include "Engine/World.h"
 
 APTMapEnvironment::APTMapEnvironment()
 {
@@ -144,6 +153,80 @@ const FPTPropGeometry* APTMapEnvironment::GetAssetGeometry(int32 AssetIdx) const
     return Assets.IsValidIndex(AssetIdx) ? &Assets[AssetIdx].Geo : nullptr;
 }
 
+UTextureRenderTarget2D* APTMapEnvironment::GetAssetThumbnail(int32 AssetIdx, int32 Size)
+{
+    if (!Assets.IsValidIndex(AssetIdx)) return nullptr;
+    if (Thumbnails.IsValidIndex(AssetIdx) && Thumbnails[AssetIdx]) return Thumbnails[AssetIdx];
+
+    UWorld* W = GetWorld();
+    UStaticMesh* Mesh = Assets[AssetIdx].Mesh;
+    if (!W || !Mesh) return nullptr;
+    Size = FMath::Clamp(Size, 64, 512);
+
+    UTextureRenderTarget2D* RT = UKismetRenderingLibrary::CreateRenderTarget2D(this, Size, Size, RTF_RGBA8);
+    if (!RT) return nullptr;
+
+    // Malla temporal LEJOS del mapa, para renderizarla aislada (sin el resto de la escena).
+    const FVector Far(0.f, 0.f, 200000.f);
+    AStaticMeshActor* MA = W->SpawnActor<AStaticMeshActor>();
+    if (!MA) return nullptr;
+    UStaticMeshComponent* MC = MA->GetStaticMeshComponent();
+    MC->SetMobility(EComponentMobility::Movable);
+    MC->SetStaticMesh(Mesh);
+    if (PropMaterial) MC->SetMaterial(0, PropMaterial);
+    MC->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    MA->SetActorLocation(Far);
+
+    // Encuadre 3/4 según el radio del bounding sphere de la malla.
+    const FBoxSphereBounds B = Mesh->GetBounds();
+    const FVector  Center = Far + B.Origin;              // Origin ~0 (la geo está centrada)
+    const float    Radius = FMath::Max(1.f, (float)B.SphereRadius);
+    const float    FOV    = 45.f;
+    const float    Dist   = Radius / FMath::Tan(FMath::DegreesToRadians(FOV * 0.5f)) * 1.35f;
+    const FVector  Dir    = FVector(1.f, 0.55f, -0.5f).GetSafeNormal(); // cámara → objeto
+    const FVector  Loc    = Center - Dir * Dist;
+
+    ASceneCapture2D* Cap = W->SpawnActor<ASceneCapture2D>();
+    if (!Cap) { MA->Destroy(); return nullptr; }
+    USceneCaptureComponent2D* C = Cap->GetCaptureComponent2D();
+    C->TextureTarget       = RT;
+    C->CaptureSource       = ESceneCaptureSource::SCS_FinalColorLDR;
+    C->bCaptureEveryFrame  = false;
+    C->bCaptureOnMovement  = false;
+    C->FOVAngle            = FOV;
+    C->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
+    C->ShowOnlyActors.Add(MA);
+    C->ShowFlags.SetDynamicShadows(false);
+    C->ShowFlags.SetAtmosphere(false);
+    C->ShowFlags.SetFog(false);
+    Cap->SetActorLocation(Loc);
+    Cap->SetActorRotation(Dir.Rotation());
+
+    // Luz limpia frontal (sin sombras) para que la miniatura no salga negra.
+    ADirectionalLight* Light = W->SpawnActor<ADirectionalLight>();
+    if (Light)
+    {
+        if (UDirectionalLightComponent* LC = Cast<UDirectionalLightComponent>(Light->GetLightComponent()))
+        {
+            LC->SetMobility(EComponentMobility::Movable);
+            LC->SetIntensity(3.5f);
+            LC->SetCastShadows(false);
+            LC->SetLightColor(FLinearColor::White);
+        }
+        Light->SetActorRotation(FVector(1.f, 0.3f, -0.8f).GetSafeNormal().Rotation());
+    }
+
+    C->CaptureScene();
+
+    Cap->Destroy();
+    MA->Destroy();
+    if (Light) Light->Destroy();
+
+    if (Thumbnails.Num() < Assets.Num()) Thumbnails.SetNumZeroed(Assets.Num());
+    Thumbnails[AssetIdx] = RT;
+    return RT;
+}
+
 void APTMapEnvironment::PlaceInstance(int32 AssetIdx, const FTransform& WorldXf)
 {
     if (!Assets.IsValidIndex(AssetIdx) || !Assets[AssetIdx].HISM) return;
@@ -214,6 +297,8 @@ void APTMapEnvironment::ClearAll()
     for (FPTPropAsset& A : Assets)
         if (A.HISM) A.HISM->DestroyComponent();
     Assets.Reset();
+    PlaceOrder.Reset();
+    Thumbnails.Reset();
 }
 
 void APTMapEnvironment::SerializeEnvironment(TArray<uint8>& Out)

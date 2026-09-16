@@ -10,7 +10,22 @@
 
 int32 UPTShapeRadialWidget::NumPages() const
 {
-    return FMath::Max(1, FMath::DivideAndRoundUp(ShapeSlots.Num(), SlotsPerPage));
+    return FMath::Max(1, FMath::DivideAndRoundUp(SlotCount(), SlotsPerPage));
+}
+
+void UPTShapeRadialWidget::BeginAssetRadial(const TArray<FSlateBrush>& InIcons, int32 StartPage)
+{
+    bAssetMode = true;
+    AssetIcons = InIcons;
+    BeginRadial(StartPage);
+}
+
+bool UPTShapeRadialWidget::GetSelectedAsset(int32& OutAssetIndex) const
+{
+    if (!bAssetMode || SelectedIndex < 0) return false; // zona muerta → mantener el asset actual
+    const int32 G = CurrentPage * SlotsPerPage + SelectedIndex;
+    if (AssetIcons.IsValidIndex(G)) { OutAssetIndex = G; return true; }
+    return false;
 }
 
 void UPTShapeRadialWidget::BeginRadial(int32 StartPage)
@@ -60,16 +75,24 @@ void UPTShapeRadialWidget::BuildPage()
 {
     if (!Radial) return;
 
-    // Cargar en el radial los (hasta 4) iconos de la página actual, en orden cardinal.
+    // Cargar en el radial los iconos de la página actual, en orden cardinal (formas o miniaturas de assets).
     Radial->Slots.Reset();
     const int32 Base = CurrentPage * SlotsPerPage;
     for (int32 i = 0; i < SlotsPerPage; ++i)
     {
         const int32 G = Base + i;
-        if (!ShapeSlots.IsValidIndex(G)) break;
+        if (G >= SlotCount()) break;
         FPTRadialSlot S;
-        S.Icon = ShapeSlots[G].Icon;
-        S.Tag  = FName(*ShapeSlots[G].Name.ToString());
+        if (bAssetMode)
+        {
+            S.Icon = AssetIcons[G];
+            S.Tag  = FName(*FString::FromInt(G));
+        }
+        else
+        {
+            S.Icon = ShapeSlots[G].Icon;
+            S.Tag  = FName(*ShapeSlots[G].Name.ToString());
+        }
         Radial->Slots.Add(S);
     }
     // Layout cardinal: slot 0 arriba, horario (0=arriba,1=der,2=abajo,3=izq).
@@ -99,7 +122,7 @@ void UPTShapeRadialWidget::UpdateSelection()
 {
     // Cuántos slots tiene la página actual (la última puede tener menos de 4).
     const int32 Base       = CurrentPage * SlotsPerPage;
-    const int32 SlotsHere  = FMath::Clamp(ShapeSlots.Num() - Base, 0, SlotsPerPage);
+    const int32 SlotsHere  = FMath::Clamp(SlotCount() - Base, 0, SlotsPerPage);
     if (SlotsHere <= 0) return;
 
     // Centro y cursor en espacio LOCAL del widget (sin DPI) para un deadzone consistente.
