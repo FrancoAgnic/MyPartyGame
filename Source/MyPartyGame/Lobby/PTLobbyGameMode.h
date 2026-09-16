@@ -97,6 +97,13 @@ public:
     // Llamar tras cualquier cambio que pueda afectar el resultado: ready toggle, join, leave.
     void CheckReadyState();
 
+    // ── P4: gate de "todos tienen el mapa" ──
+    // Recalcula APTPlayerState::bHasSelectedMap de cada jugador contra el mapa actualmente elegido
+    // (el host lo tiene por definición; los clientes según su ConfirmedMapId). Solo servidor.
+    void RecomputeHasMapFlags();
+    // Lo llama el PlayerController cuando un cliente confirma que ya tiene el mapa: recomputa + revisa ready.
+    void OnPlayerMapStatusChanged();
+
 private:
     int32 PlayersJoined = 0;
 

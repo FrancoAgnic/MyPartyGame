@@ -66,12 +66,22 @@ public:
      *  mapa que el host eligió pero que él no tenía. No-op para mods locales o sin Steam. */
     UFUNCTION(BlueprintCallable, Category="MapMod") void RequestWorkshopDownload(const FString& WorkshopIdStr);
 
+    /** ¿Este mod está disponible localmente para jugar (pak o sculpt.bin presente)? Para el gate del lobby. */
+    UFUNCTION(BlueprintCallable, Category="MapMod") bool HasModContent(const FString& Id) const;
+
+    /** (Cliente) Guarda un mapa de PROPS recibido por chunks del host en el cache local (MapModsCache/)
+     *  y re-escanea, para que quede jugable por su Id (sin depender del Workshop). true si lo guardó. */
+    bool SaveReceivedPropMap(const FString& ModId, const FString& Title, const TArray<uint8>& Blob);
+
     FPTOnMapModsUpdated OnMapModsUpdated;
 
 private:
     void ScanLocalMapMods();
+    void ScanCacheMapMods(); // mapas de props recibidos del host por chunks (MapModsCache/)
     void ScanWorkshopMaps(); // items suscritos del Workshop cuyo contenido es un map.pak (mapas de mod)
     void AddModFromFolder(const FString& Folder, const FString& Id, bool bWorkshop);
+    static FString CacheRootDir();               // <ProjectDir>/MapModsCache
+    static FString SanitizeIdForFolder(const FString& Id);
 
     UPROPERTY() TArray<FPTMapMod> Mods;
     TSet<FString> MountedPakPaths; // paks ya montados en este proceso (para no re-montar)

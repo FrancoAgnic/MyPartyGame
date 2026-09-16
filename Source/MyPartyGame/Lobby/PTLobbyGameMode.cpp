@@ -61,10 +61,16 @@ void APTLobbyGameMode::SyncMatchSettingsToState()
         PTGS->MatchRevealFraction = S.RevealFraction;
         PTGS->MatchWordPackTitle  = GI->SelectedWordPackTitle;
         PTGS->MatchMapTitle       = GI->SelectedMapTitle;
+        PTGS->MatchMapModId       = S.MapModId;
     }
     if (UMultiplayerSessionsSubsystem* Sessions =
             GetGameInstance() ? GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>() : nullptr)
         PTGS->bMatchFriendsOnly = Sessions->IsSessionFriendsOnly();
+
+    // Cambió el mapa elegido → recomputar quién lo tiene (el host sí; los clientes lo re-bajan por su
+    // OnRep_MatchMapModId) y revisar el gate del countdown.
+    RecomputeHasMapFlags();
+    CheckReadyState();
 }
 
 void APTLobbyGameMode::SetHostSettingsPanelOpen(bool bOpen)
@@ -130,6 +136,9 @@ void APTLobbyGameMode::PostLogin(APlayerController* NewPlayer)
 
     // Un jugador nuevo entra sin listo (bIsReady=false por default): si había countdown en
     // curso, esto lo cancela (CheckReadyState ve que ya no están todos listos).
+    // También recomputa el gate del mapa: un recién llegado arranca sin el mapa custom (si hay) hasta
+    // que su cliente lo reciba (su OnRep_MatchMapModId dispara la descarga automática).
+    RecomputeHasMapFlags();
     CheckReadyState();
 }
 
@@ -317,6 +326,14 @@ void APTLobbyGameMode::CheckReadyState()
     }
     if (NumActive < MinPlayersToStart) bAllReady = false;
 
+    // P4: no arrancar hasta que TODOS tengan descargado el mapa custom elegido.
+    for (APlayerState* PS : PTGS->PlayerArray)
+    {
+        const APTPlayerState* PTPS = Cast<APTPlayerState>(PS);
+        if (PTPS && PTPS->bIsDevSpectator) continue;
+        if (!PTPS || !PTPS->bHasSelectedMap) { bAllReady = false; break; }
+    }
+
     const bool bCounting = GetWorldTimerManager().IsTimerActive(CountdownTimerHandle);
 
     if (bAllReady && !bCounting)
@@ -335,6 +352,39 @@ void APTLobbyGameMode::CheckReadyState()
         PTGS->LobbyState = EPTLobbyState::WaitingForPlayers;
         UE_LOG(LogTemp, Log, TEXT("[Lobby] Countdown cancelado."));
     }
+}
+
+void APTLobbyGameMode::RecomputeHasMapFlags()
+{
+    if (!HasAuthority()) return;
+    APTGameState* PTGS = GetGameState<APTGameState>();
+    UPTGameInstance* GI = GetGameInstance<UPTGameInstance>();
+    if (!PTGS || !GI) return;
+
+    const FString SelId = GI->PendingMatchSettings.MapModId;
+    UPTMapModSubsystem* MM = GI->GetSubsystem<UPTMapModSubsystem>();
+    const bool bServerHas = SelId.IsEmpty() || (MM && MM->HasModContent(SelId));
+
+    for (APlayerState* PS : PTGS->PlayerArray)
+    {
+        APTPlayerState* PTPS = Cast<APTPlayerState>(PS);
+        if (!PTPS) continue;
+        if (SelId.IsEmpty())
+        {
+            PTPS->bHasSelectedMap = true; // mapa oficial: nadie baja nada
+            continue;
+        }
+        // El host lee su propio disco; los remotos, según lo que confirmaron tener.
+        const APlayerController* PC = Cast<APlayerController>(PTPS->GetOwner());
+        const bool bIsLocalHost = PC && PC->IsLocalController();
+        PTPS->bHasSelectedMap = bIsLocalHost ? bServerHas : (PTPS->ConfirmedMapId == SelId);
+    }
+}
+
+void APTLobbyGameMode::OnPlayerMapStatusChanged()
+{
+    RecomputeHasMapFlags();
+    CheckReadyState();
 }
 
 void APTLobbyGameMode::CountdownTick()

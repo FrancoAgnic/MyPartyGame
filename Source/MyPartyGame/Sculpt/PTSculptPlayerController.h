@@ -596,6 +596,16 @@ private:
     FVector GetPlacePoint(bool& bOutOutside) const;
 
     UPROPERTY(Transient) class APTMapEnvironment* MapEnvCache = nullptr;
+    // Clase del entorno de props (asignar BP_MapEnvironment con el material de arcilla). Se usa para
+    // spawnear el entorno tanto en autoría como al cargar un mapa de props jugado (cada máquina el suyo).
+    UPROPERTY(EditAnywhere, Category="MapEnv") TSubclassOf<class APTMapEnvironment> EnvironmentClass;
+
+    // ── P4: carga LOCAL del mapa de props al jugar (cada máquina carga su propia copia del sculpt.bin) ──
+    void TickPropMapLoad();          // (timer) lee GameState->MatchMapModId y carga el entorno local
+    FTimerHandle PropMapLoadTimer;
+    int32 PropMapLoadTries = 0;
+    bool  bPropMapLoaded = false;
+
     // El preview del asset vive en su PROPIO actor (no en PreviewActor) para que ocultar el preview de
     // esculpido no lo oculte a él (es lo que se ve al colocar/borrar props FUERA del box).
     UPROPERTY() AActor*                              PropPreviewActor = nullptr;

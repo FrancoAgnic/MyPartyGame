@@ -21,8 +21,10 @@
 #include "../Lobby/PTLobbyCharacter.h"
 #include "PTSculptPlane.h"
 #include "../Mods/PTMapEnvironment.h"
+#include "../Mods/PTMapModSubsystem.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Styling/SlateBrush.h"
+#include "Misc/FileHelper.h"
 #include "../Mods/PTMapAuthorGameMode.h"
 #include "../PTInputBindings.h"
 #include "../Lobby/PTPlayerState.h"
@@ -293,6 +295,49 @@ void APTSculptPlayerController::BeginPlay()
     if (IsLocalController())
         Spectator = NewObject<UPTSpectatorComponent>(this, TEXT("SpectatorCam"));
     if (Spectator) Spectator->RegisterComponent();
+
+    // P4: al jugar un mapa de props, cada máquina carga su propia copia local del sculpt.bin en su
+    // entorno (el id llega replicado por el GameState). En autoría NO (ese modo carga su mapa aparte).
+    if (IsLocalController() && !IsMapAuthorMode())
+        GetWorldTimerManager().SetTimer(PropMapLoadTimer, this, &APTSculptPlayerController::TickPropMapLoad, 0.5f, true);
+}
+
+void APTSculptPlayerController::TickPropMapLoad()
+{
+    if (bPropMapLoaded) { GetWorldTimerManager().ClearTimer(PropMapLoadTimer); return; }
+
+    // Cortar tras ~15s: si a esta altura no hay mapa de props, es el mapa oficial (nada que cargar).
+    if (++PropMapLoadTries > 30) { GetWorldTimerManager().ClearTimer(PropMapLoadTimer); return; }
+
+    APTGameState* GS = GetWorld() ? GetWorld()->GetGameState<APTGameState>() : nullptr;
+    if (!GS) return;
+    const FString ModId = GS->MatchMapModId;
+    if (ModId.IsEmpty()) return; // todavía sin id (o mapa oficial): seguir esperando hasta el corte
+
+    UPTMapModSubsystem* MM = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTMapModSubsystem>() : nullptr;
+    if (!MM) return;
+    FString BlobPath = MM->GetModBlobPath(ModId);
+    if (BlobPath.IsEmpty()) { MM->RescanMods(); BlobPath = MM->GetModBlobPath(ModId); }
+    if (BlobPath.IsEmpty()) return; // aún no tengo el archivo local (se recibió en el lobby): reintentar
+
+    TArray<uint8> Blob;
+    if (!FFileHelper::LoadFileToArray(Blob, *BlobPath) || Blob.Num() == 0) return;
+
+    APTMapEnvironment* Env = Cast<APTMapEnvironment>(
+        UGameplayStatics::GetActorOfClass(GetWorld(), APTMapEnvironment::StaticClass()));
+    if (!Env)
+    {
+        FActorSpawnParameters P;
+        P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+        UClass* Cls = EnvironmentClass ? *EnvironmentClass : APTMapEnvironment::StaticClass();
+        Env = GetWorld()->SpawnActor<APTMapEnvironment>(Cls, FTransform::Identity, P);
+    }
+    if (!Env) return;
+
+    Env->DeserializeEnvironment(Blob);
+    bPropMapLoaded = true;
+    GetWorldTimerManager().ClearTimer(PropMapLoadTimer);
+    UE_LOG(LogTemp, Log, TEXT("[SculptPC] Mapa de props cargado localmente (%d bytes, mod '%s')."), Blob.Num(), *ModId);
 }
 
 // ── Comandos de consola dev (cámara espectador) ─────────────────────────────

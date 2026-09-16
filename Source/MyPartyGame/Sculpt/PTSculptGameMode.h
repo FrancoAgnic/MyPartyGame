@@ -67,10 +67,6 @@ public:
     // del primer turno lo estabiliza (ver CheckStart).
     UPROPERTY(EditDefaultsOnly, Category="Game") float StartDelay = 2.0f;
 
-    // Clase del actor de entorno para los mapas de PROPS (asignar BP_MapEnvironment con el material de
-    // arcilla). Si el host jugó un mapa de props (MapModId), se spawnea y se le carga el sculpt.bin.
-    UPROPERTY(EditDefaultsOnly, Category="Game") TSubclassOf<APTMapEnvironment> EnvironmentClass;
-
     // Llamado por el PlayerController del escultor cuando elige una de las 3 palabras.
     void HandleWordChosen(APTPlayerState* Chooser, int32 ChoiceIndex);
 
@@ -108,9 +104,9 @@ private:
     FTimerHandle PhaseTimer;
     FTimerHandle RevealTimer;
     FTimerHandle StartDelayTimer;   // arranque diferido del primer turno (ver StartDelay)
-    FTimerHandle PropMapLoadTimer;  // carga diferida del entorno de props (esperar a que el nivel asiente)
+    FTimerHandle PropMapLoadTimer;  // publica el id del mapa de props en el GameState (diferido)
 
-    // Si el host jugó un mapa de PROPS, spawnea el APTMapEnvironment y le aplica el sculpt.bin del mod.
+    // Publica MatchMapModId en el GameState (server) para que cada máquina cargue su copia local.
     void LoadPropMapEnvironment();
     bool         bStartScheduled = false; // evita re-agendar el arranque en cada CheckStart
 

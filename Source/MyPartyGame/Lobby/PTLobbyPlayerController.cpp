@@ -40,6 +40,7 @@
 #include "../UI/PTColorPickerWidget.h"
 #include "Serialization/MemoryWriter.h"
 #include "Serialization/MemoryReader.h"
+#include "Misc/FileHelper.h" // P4: leer el sculpt.bin del host para mandarlo por chunks
 
 // Magic del blob de estado CRUDO de la cabeza (RawState del Locker, para re-editar): campo SDF del
 // volumen + ojos locales. 'PTR2' = PT Raw v2 (distinto del blob COCINADO 'PTH2').
@@ -300,6 +301,115 @@ void APTLobbyPlayerController::Server_MapReady_Implementation()
 {
     if (APTLobbyGameMode* GM = GetWorld()->GetAuthGameMode<APTLobbyGameMode>())
         GM->OnClientMapReady(this);
+}
+
+// ── P4: auto-distribución del mapa de props en el lobby ──────────────────────────────────────────
+
+void APTLobbyPlayerController::EnsureSelectedMapAvailable(const FString& ModId)
+{
+    // (Cliente local) El host anunció qué mapa está elegido. Si no hay mapa custom, o ya lo tengo,
+    // aviso listo; si no lo tengo, se lo pido al host (lo manda por chunks).
+    UPTMapModSubsystem* MM = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTMapModSubsystem>() : nullptr;
+
+    if (ModId.IsEmpty())
+    {
+        LastMapAskedId.Reset();
+        Server_ReportHasMap(FString()); // mapa oficial: nada que bajar
+        return;
+    }
+
+    if (MM)
+    {
+        MM->RescanMods();
+        if (MM->HasModContent(ModId)) { Server_ReportHasMap(ModId); return; }
+    }
+
+    // No lo tengo → pedirlo al host (una sola vez por id, para no spamear).
+    if (LastMapAskedId != ModId)
+    {
+        LastMapAskedId = ModId;
+        MapRecvBuf.Reset();
+        MapRecvModId = ModId;
+        Server_RequestMapBlob(ModId);
+    }
+}
+
+void APTLobbyPlayerController::Server_RequestMapBlob_Implementation(const FString& ModId)
+{
+    // (Servidor/host) Un cliente pide el mapa. Leo mi copia local del sculpt.bin y se lo mando por chunks.
+    UPTGameInstance* GI = GetGameInstance<UPTGameInstance>();
+    UPTMapModSubsystem* MM = GI ? GI->GetSubsystem<UPTMapModSubsystem>() : nullptr;
+    if (!MM) return;
+
+    // Seguridad: solo sirvo el mapa que está realmente elegido.
+    const FString SelId = GI ? GI->PendingMatchSettings.MapModId : FString();
+    if (ModId.IsEmpty() || ModId != SelId) return;
+
+    const FString BlobPath = MM->GetModBlobPath(ModId);
+    if (BlobPath.IsEmpty()) return; // el host no lo tiene como mapa de props (o es .pak) → nada que mandar
+
+    if (!FFileHelper::LoadFileToArray(MapSendBuf, *BlobPath) || MapSendBuf.Num() == 0) return;
+
+    const FPTMapMod* Mod = MM->FindMod(ModId);
+    MapSendModId        = ModId;
+    MapSendTitle        = Mod ? Mod->Title : FString();
+    MapSendNext         = 0;
+    MapSendTotalChunks  = FMath::DivideAndRoundUp(MapSendBuf.Num(), MapChunkBytes);
+
+    // Pacear el envío (1 chunk por tick del timer) para no desbordar el canal confiable de esta conexión.
+    GetWorldTimerManager().SetTimer(MapSendTimer, this, &APTLobbyPlayerController::PumpMapSend, 0.03f, true);
+    UE_LOG(LogTemp, Log, TEXT("[MapMod] Enviando mapa '%s' a un cliente: %d bytes en %d chunks."),
+        *ModId, MapSendBuf.Num(), MapSendTotalChunks);
+}
+
+void APTLobbyPlayerController::PumpMapSend()
+{
+    if (MapSendNext >= MapSendTotalChunks || MapSendBuf.Num() == 0)
+    {
+        GetWorldTimerManager().ClearTimer(MapSendTimer);
+        MapSendBuf.Reset();
+        return;
+    }
+    const int32 Start = MapSendNext * MapChunkBytes;
+    const int32 Count = FMath::Min(MapChunkBytes, MapSendBuf.Num() - Start);
+    TArray<uint8> Chunk;
+    Chunk.Append(MapSendBuf.GetData() + Start, Count);
+    Client_ReceiveMapBlobChunk(MapSendModId, MapSendTitle, MapSendNext, MapSendTotalChunks, MapSendBuf.Num(), Chunk);
+    ++MapSendNext;
+}
+
+void APTLobbyPlayerController::Client_ReceiveMapBlobChunk_Implementation(const FString& ModId, const FString& Title,
+    int32 ChunkIndex, int32 TotalChunks, int32 TotalBytes, const TArray<uint8>& Data)
+{
+    if (MapRecvModId != ModId) { MapRecvModId = ModId; MapRecvBuf.Reset(); }
+    if (ChunkIndex == 0) { MapRecvBuf.Reset(); MapRecvBuf.Reserve(TotalBytes); }
+    MapRecvBuf.Append(Data);
+
+    if (ChunkIndex + 1 < TotalChunks) return; // faltan chunks
+
+    // Último chunk: guardar en el cache local y avisar al host que ya lo tengo.
+    if (MapRecvBuf.Num() == TotalBytes)
+    {
+        if (UPTMapModSubsystem* MM = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTMapModSubsystem>() : nullptr)
+        {
+            if (MM->SaveReceivedPropMap(ModId, Title, MapRecvBuf))
+                Server_ReportHasMap(ModId);
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[MapMod] Mapa '%s' incompleto (%d/%d bytes); reintento."), *ModId, MapRecvBuf.Num(), TotalBytes);
+        LastMapAskedId.Reset(); // permitir re-pedir
+    }
+    MapRecvBuf.Reset();
+}
+
+void APTLobbyPlayerController::Server_ReportHasMap_Implementation(const FString& ModId)
+{
+    if (APTPlayerState* PS = GetPlayerState<APTPlayerState>())
+        PS->ConfirmedMapId = ModId;
+    if (APTLobbyGameMode* GM = GetWorld()->GetAuthGameMode<APTLobbyGameMode>())
+        GM->OnPlayerMapStatusChanged(); // recomputa flags de mapa + revisa el countdown
 }
 
 void APTLobbyPlayerController::PTMapMod(int32 Index)

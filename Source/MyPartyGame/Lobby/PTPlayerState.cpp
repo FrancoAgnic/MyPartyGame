@@ -24,6 +24,7 @@ void APTPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     DOREPLIFETIME(APTPlayerState, DisplayName);
     DOREPLIFETIME(APTPlayerState, bIsHost);
     DOREPLIFETIME(APTPlayerState, bIsReady);
+    DOREPLIFETIME(APTPlayerState, bHasSelectedMap);
     DOREPLIFETIME(APTPlayerState, bHasGuessedThisTurn);
     DOREPLIFETIME(APTPlayerState, GameScore);
     // HeadBlob NO va acá a propósito: viaja troceado por RPC (ver UploadHead / SendHeadTo).

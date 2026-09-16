@@ -2,6 +2,9 @@
 
 #include "PTGameState.h"
 #include "Net/UnrealNetwork.h"
+#include "PTLobbyPlayerController.h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
 
 void APTGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -17,5 +20,16 @@ void APTGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
     DOREPLIFETIME(APTGameState, bMatchFriendsOnly);
     DOREPLIFETIME(APTGameState, MatchWordPackTitle);
     DOREPLIFETIME(APTGameState, MatchMapTitle);
+    DOREPLIFETIME(APTGameState, MatchMapModId);
     DOREPLIFETIME(APTGameState, bHostSettingsPanelOpen);
+}
+
+void APTGameState::OnRep_MatchMapModId()
+{
+    // (Cliente) Cambió el mapa elegido por el host → asegurarse de tenerlo localmente (auto-descarga/
+    // recepción por chunks). Lo maneja el PlayerController local, que tiene los RPC al servidor.
+    if (UWorld* W = GetWorld())
+        if (APlayerController* PC = W->GetFirstPlayerController())
+            if (APTLobbyPlayerController* LPC = Cast<APTLobbyPlayerController>(PC))
+                LPC->EnsureSelectedMapAvailable(MatchMapModId);
 }

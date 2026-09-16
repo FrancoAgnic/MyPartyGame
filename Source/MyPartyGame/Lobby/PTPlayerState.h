@@ -33,6 +33,16 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")
     bool bIsReady = false;
 
+    // ¿Este jugador ya tiene descargado/recibido el mapa custom elegido por el host? El lobby no deja
+    // arrancar el countdown hasta que TODOS lo tengan (auto-transferencia por chunks desde el host).
+    // El HUD lo usa para mostrar "descargando mapa…". Lo maneja el servidor (RecomputeHasMapFlags).
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")
+    bool bHasSelectedMap = true;
+
+    // [Solo servidor] Id del mapa que este cliente confirmó tener localmente (para comparar contra el
+    // mapa actualmente elegido: si el host cambia de mapa, este queda viejo y hay que re-descargar).
+    FString ConfirmedMapId;
+
     // ── Partida (Sculpturillo) ──────────────────────────────────────────────
     // Si este jugador ya adivinó la palabra del turno actual. El servidor lo resetea
     // al empezar cada turno. Se usa para el HUD ("quién adivinó") y para saber cuándo

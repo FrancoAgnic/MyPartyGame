@@ -7,11 +7,9 @@
 #include "../PTGameInstance.h"
 #include "../PTWordBank.h"
 #include "../PTTextTable.h"
-#include "../Mods/PTMapModSubsystem.h"
-#include "../Mods/PTMapEnvironment.h"
+#include "../Lobby/PTGameState.h"
 #include "GameFramework/PlayerState.h"
 #include "Kismet/GameplayStatics.h"
-#include "Misc/FileHelper.h"
 #include "TimerManager.h"
 #include "Engine/World.h"
 
@@ -29,44 +27,20 @@ void APTSculptGameMode::BeginPlay()
     Super::BeginPlay();
     if (WordBank.Num() == 0) SeedDefaultWords();
 
-    // ¿El host llegó acá jugando un mapa de PROPS? Cargar su escenario (sculpt.bin) en el entorno.
-    // Diferido para que el nivel (SculptVolume, etc.) ya esté asentado.
+    // Publicar el mapa de props elegido en el GameState (replicado) → cada máquina (host y clientes)
+    // carga su propia copia local del sculpt.bin en su entorno (el PlayerController lo hace). Así NO se
+    // replica la geometría en vivo: cada uno ya tiene el archivo (recibido en el lobby). Diferido para
+    // que el GameState ya exista.
     if (UWorld* W = GetWorld())
-        W->GetTimerManager().SetTimer(PropMapLoadTimer, this, &APTSculptGameMode::LoadPropMapEnvironment, 0.5f, false);
+        W->GetTimerManager().SetTimer(PropMapLoadTimer, this, &APTSculptGameMode::LoadPropMapEnvironment, 0.3f, false);
 }
 
 void APTSculptGameMode::LoadPropMapEnvironment()
 {
     UPTGameInstance* GI = GetGameInstance<UPTGameInstance>();
-    if (!GI) return;
-    const FString ModId = GI->PendingMatchSettings.MapModId;
-    if (ModId.IsEmpty()) return; // mapa oficial (sin props)
-
-    UPTMapModSubsystem* MM = GI->GetSubsystem<UPTMapModSubsystem>();
-    const FString BlobPath = MM ? MM->GetModBlobPath(ModId) : FString();
-    if (BlobPath.IsEmpty()) return; // no es un mapa de props (o es un .pak) → nada que cargar
-
-    TArray<uint8> Blob;
-    if (!FFileHelper::LoadFileToArray(Blob, *BlobPath) || Blob.Num() == 0)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("[SculptGM] No se pudo leer el escenario de props '%s'."), *BlobPath);
-        return;
-    }
-
-    // Reusar el entorno del nivel si ya hay uno; si no, spawnear (el BP trae el material de arcilla).
-    APTMapEnvironment* Env = Cast<APTMapEnvironment>(
-        UGameplayStatics::GetActorOfClass(GetWorld(), APTMapEnvironment::StaticClass()));
-    if (!Env)
-    {
-        FActorSpawnParameters Params;
-        Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-        UClass* Cls = EnvironmentClass ? *EnvironmentClass : APTMapEnvironment::StaticClass();
-        Env = GetWorld()->SpawnActor<APTMapEnvironment>(Cls, FTransform::Identity, Params);
-    }
-    if (!Env) return;
-
-    Env->DeserializeEnvironment(Blob); // reconstruye StaticMesh + HISM y recoloca las instancias
-    UE_LOG(LogTemp, Log, TEXT("[SculptGM] Mapa de props cargado (%d bytes, mod '%s')."), Blob.Num(), *ModId);
+    APTGameState* GS = GetGameState<APTGameState>();
+    if (!GI || !GS) return;
+    GS->MatchMapModId = GI->PendingMatchSettings.MapModId; // replica a los clientes (y al host)
 }
 
 APTSculptGameState* APTSculptGameMode::GS() const

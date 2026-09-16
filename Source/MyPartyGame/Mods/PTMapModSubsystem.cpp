@@ -64,6 +64,7 @@ void UPTMapModSubsystem::RescanMods()
 {
     Mods.Reset();
     ScanLocalMapMods();
+    ScanCacheMapMods();
     ScanWorkshopMaps();
     UE_LOG(LogPTMapMods, Log, TEXT("RescanMods: %d mapa(s)-mod."), Mods.Num());
     OnMapModsUpdated.Broadcast();
@@ -125,6 +126,70 @@ void UPTMapModSubsystem::ScanLocalMapMods()
     }
 }
 
+FString UPTMapModSubsystem::CacheRootDir()
+{
+    return FPaths::Combine(FPaths::ProjectDir(), TEXT("MapModsCache"));
+}
+
+FString UPTMapModSubsystem::SanitizeIdForFolder(const FString& Id)
+{
+    FString S = Id;
+    S.ReplaceInline(TEXT(":"), TEXT("_"));
+    S.ReplaceInline(TEXT("/"), TEXT("_"));
+    S.ReplaceInline(TEXT("\\"), TEXT("_"));
+    return S;
+}
+
+void UPTMapModSubsystem::ScanCacheMapMods()
+{
+    // Mapas de props que el host nos transfirió por chunks (guardados en MapModsCache/<id>/).
+    const FString Root = CacheRootDir();
+    if (!FPaths::DirectoryExists(Root)) return;
+
+    TArray<FString> SubDirs;
+    IFileManager::Get().FindFiles(SubDirs, *(Root / TEXT("*")), /*Files=*/false, /*Directories=*/true);
+    SubDirs.Sort();
+    for (const FString& Name : SubDirs)
+    {
+        if (Name == TEXT(".") || Name == TEXT("..")) continue;
+        // El Id real viene del "Id" del mod.json (AddModFromFolder lo respeta); el nombre de carpeta es
+        // solo el id saneado, así que pasamos ese como fallback.
+        AddModFromFolder(FPaths::Combine(Root, Name), Name, /*bWorkshop=*/false);
+    }
+}
+
+bool UPTMapModSubsystem::HasModContent(const FString& Id) const
+{
+    const FPTMapMod* Mod = FindMod(Id);
+    if (!Mod) return false;
+    if (Mod->bPropMap) return !Mod->BlobPath.IsEmpty() && FPaths::FileExists(Mod->BlobPath);
+    return !Mod->PakPath.IsEmpty() && FPaths::FileExists(Mod->PakPath);
+}
+
+bool UPTMapModSubsystem::SaveReceivedPropMap(const FString& ModId, const FString& Title, const TArray<uint8>& Blob)
+{
+    if (ModId.IsEmpty() || Blob.Num() == 0) return false;
+    const FString Dir = FPaths::Combine(CacheRootDir(), SanitizeIdForFolder(ModId));
+    IFileManager& FM = IFileManager::Get();
+    FM.MakeDirectory(*Dir, /*Tree=*/true);
+
+    const FString BlobFile = FPaths::Combine(Dir, TEXT("sculpt.bin"));
+    if (!FFileHelper::SaveArrayToFile(Blob, *BlobFile)) return false;
+
+    // mod.json con el Id ORIGINAL (para que FindMod(ModId) matchee) + la plantilla del juego.
+    FString EscTitle = Title, EscId = ModId;
+    EscTitle.ReplaceInline(TEXT("\\"), TEXT("\\\\")); EscTitle.ReplaceInline(TEXT("\""), TEXT("\\\""));
+    EscId.ReplaceInline(TEXT("\\"), TEXT("\\\\"));    EscId.ReplaceInline(TEXT("\""), TEXT("\\\""));
+    const FString Json = FString::Printf(
+        TEXT("{ \"Id\": \"%s\", \"Title\": \"%s\", \"MapName\": \"/MapKit/Mapa_Plantilla\", \"Author\": \"\" }"),
+        *EscId, *EscTitle);
+    FFileHelper::SaveStringToFile(Json, *FPaths::Combine(Dir, TEXT("mod.json")));
+
+    RescanMods();
+    UE_LOG(LogPTMapMods, Log, TEXT("[MapMod] Mapa de props recibido y guardado en cache: '%s' (%d bytes)."), *ModId, Blob.Num());
+    return true;
+}
+
 void UPTMapModSubsystem::AddModFromFolder(const FString& Folder, const FString& Id, bool bWorkshop)
 {
     const FString PakPath  = FPaths::Combine(Folder, TEXT("map.pak"));
@@ -149,7 +214,10 @@ void UPTMapModSubsystem::AddModFromFolder(const FString& Folder, const FString& 
     }
 
     FPTMapMod Mod;
-    Mod.Id            = Id;
+    // Id: si el mod.json trae uno explícito (mapas de props recibidos por chunks), ese manda — así el
+    // cache queda indexado por el MISMO Id que usó el host. Si no, el pasado por el escaneo.
+    Mod.Id            = (Obj->HasField(TEXT("Id")) && !Obj->GetStringField(TEXT("Id")).IsEmpty())
+                        ? Obj->GetStringField(TEXT("Id")) : Id;
     Mod.bFromWorkshop = bWorkshop;
     Mod.bPropMap      = !bHasPak && bHasBlob; // props si no hay pak pero sí sculpt.bin
     Mod.PakPath       = bHasPak  ? PakPath  : FString();

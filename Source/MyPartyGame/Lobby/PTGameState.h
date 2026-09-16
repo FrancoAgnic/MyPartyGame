@@ -52,6 +52,10 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") FString MatchWordPackTitle;
     // Título del mapa custom activo. Vacío = mapa oficial (Lvl-01).
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") FString MatchMapTitle;
+    // Id del mapa custom activo (workshop id o "local:..."). Vacío = mapa oficial. Los clientes lo
+    // observan (OnRep) para AUTO-descargarlo/recibirlo del host en el lobby si no lo tienen.
+    UPROPERTY(ReplicatedUsing=OnRep_MatchMapModId, BlueprintReadOnly, Category="Match") FString MatchMapModId;
+    UFUNCTION() void OnRep_MatchMapModId();
 
     // true mientras el host tiene ABIERTO su panel de Game Settings: los clientes muestran su
     // panelcito read-only solo en ese lapso (lo ven cambiar en vivo mientras el host edita).
