@@ -31,12 +31,17 @@
 #include "Components/EditableTextBox.h"
 #include "Components/ScrollBox.h"
 #include "Components/RichTextBlock.h"
+#include "Framework/Application/SlateApplication.h"
 
 bool UPTLobbyHUDWidget::Initialize()
 {
     if (!Super::Initialize()) return false;
 
-    if (ChatInput) ChatInput->OnTextCommitted.AddDynamic(this, &UPTLobbyHUDWidget::OnChatCommitted);
+    if (ChatInput)        ChatInput->OnTextCommitted.AddDynamic(this, &UPTLobbyHUDWidget::OnChatCommitted);
+    if (ChatBarButton)    ChatBarButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnChatBarClicked);
+    if (ChatCloseButton)  ChatCloseButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnChatCloseClicked);
+    if (ChatClickCatcher) ChatClickCatcher->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnChatCloseClicked);
+    SetChatExpanded(false); // arranca colapsado (solo la barrita) → no roba el foco del teclado al entrar
 
     if (CopyCodeButton)  CopyCodeButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnCopyCodeClicked);
     if (LeaveGameButton) LeaveGameButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnLeaveGameClicked);
@@ -315,6 +320,41 @@ void UPTLobbyHUDWidget::RefreshSettingsView()
     }
 }
 
+void UPTLobbyHUDWidget::OnChatBarClicked()  { SetChatExpanded(true);  }
+void UPTLobbyHUDWidget::OnChatCloseClicked(){ SetChatExpanded(false); }
+
+void UPTLobbyHUDWidget::SetChatExpanded(bool bExpanded)
+{
+    bChatExpanded = bExpanded;
+    if (ChatPanel)        ChatPanel->SetVisibility(bExpanded ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+    if (ChatBarButton)    ChatBarButton->SetVisibility(bExpanded ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+    if (ChatClickCatcher) ChatClickCatcher->SetVisibility(bExpanded ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+
+    if (bExpanded)
+    {
+        // Abrir: limpiar "no leídos", scrollear al final y dar foco al input para escribir.
+        bChatUnread = false;
+        OnChatUnreadChanged(false);
+        if (ChatUnreadIndicator) ChatUnreadIndicator->SetVisibility(ESlateVisibility::Collapsed);
+        if (ChatScroll) ChatScroll->ScrollToEnd();
+        if (ChatInput)  ChatInput->SetKeyboardFocus();
+    }
+    else
+    {
+        // Cerrar: sacar el foco del teclado del input → el WASD vuelve a mover al personaje en el lobby.
+        if (ChatInput) ChatInput->SetText(FText::GetEmpty());
+        if (FSlateApplication::IsInitialized())
+            FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::Cleared);
+        if (APlayerController* PC = GetOwningPlayer())
+        {
+            FInputModeGameAndUI Mode;
+            Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+            PC->SetInputMode(Mode);
+            PC->SetShowMouseCursor(true);
+        }
+    }
+}
+
 void UPTLobbyHUDWidget::OnChatCommitted(const FText& Text, ETextCommit::Type CommitMethod)
 {
     // Solo enviar con ENTER (no al perder foco). Vaciar la caja y devolverle el foco para seguir chateando.
@@ -324,7 +364,7 @@ void UPTLobbyHUDWidget::OnChatCommitted(const FText& Text, ETextCommit::Type Com
     if (Msg.IsEmpty()) return;
     if (APTLobbyPlayerController* PC = Cast<APTLobbyPlayerController>(GetOwningPlayer()))
         PC->Server_SendLobbyChat(Msg);
-    if (ChatInput) ChatInput->SetKeyboardFocus();
+    if (bChatExpanded && ChatInput) ChatInput->SetKeyboardFocus(); // seguir escribiendo
 }
 
 void UPTLobbyHUDWidget::OnLobbyChatLine(const FString& Name, const FString& Message)
@@ -343,6 +383,14 @@ void UPTLobbyHUDWidget::OnLobbyChatLine(const FString& Name, const FString& Mess
     ChatLog += FString::Printf(TEXT("<name>%s</>: %s\n"), *DispName.Left(14), *Message);
     if (TxtChat)    TxtChat->SetText(FText::FromString(ChatLog));
     if (ChatScroll) ChatScroll->ScrollToEnd();
+
+    // Chat colapsado + llegó un mensaje → marcar "no leído" y avisar al WBP para que parpadee la barrita.
+    if (!bChatExpanded && !bChatUnread)
+    {
+        bChatUnread = true;
+        OnChatUnreadChanged(true);
+        if (ChatUnreadIndicator) ChatUnreadIndicator->SetVisibility(ESlateVisibility::HitTestInvisible);
+    }
 }
 
 void UPTLobbyHUDWidget::OnCopyCodeClicked()

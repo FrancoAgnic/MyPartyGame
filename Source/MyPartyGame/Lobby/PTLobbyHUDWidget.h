@@ -118,12 +118,28 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) class UEditableTextBox*  ChatInput;
     UPROPERTY(meta = (BindWidgetOptional)) class URichTextBlock*    TxtChat;   // RichText: permite color por tags
     UPROPERTY(meta = (BindWidgetOptional)) class UScrollBox*        ChatScroll;
+    // Chat COLAPSABLE: por defecto solo se ve la barrita (ChatBarButton). Al clickearla se abre el panel
+    // (ChatPanel) con el log + input; la cruz roja (ChatCloseButton) o clickear afuera (ChatClickCatcher)
+    // lo colapsan y devuelven el foco al movimiento del personaje.
+    UPROPERTY(meta = (BindWidgetOptional)) class UWidget* ChatPanel;          // contenedor del chat abierto (log+input+cruz)
+    UPROPERTY(meta = (BindWidgetOptional)) class UButton* ChatBarButton;      // barrita colapsada → abrir
+    UPROPERTY(meta = (BindWidgetOptional)) class UButton* ChatCloseButton;    // cruz roja → cerrar
+    UPROPERTY(meta = (BindWidgetOptional)) class UButton* ChatClickCatcher;   // (opcional) full-screen detrás → click afuera cierra
+    UPROPERTY(meta = (BindWidgetOptional)) class UWidget* ChatUnreadIndicator;// (opcional) se muestra si hay mensajes sin leer
+
     UFUNCTION() void OnChatCommitted(const FText& Text, ETextCommit::Type CommitMethod);
     UFUNCTION() void OnLobbyChatLine(const FString& Name, const FString& Message);
+    UFUNCTION() void OnChatBarClicked();
+    UFUNCTION() void OnChatCloseClicked();
+    void SetChatExpanded(bool bExpanded);
+    /** El WBP puede animar el parpadeo del outline de la barra cuando llega un mensaje sin leer. */
+    UFUNCTION(BlueprintImplementableEvent, Category="Lobby") void OnChatUnreadChanged(bool bHasUnread);
 
 private:
     FTimerHandle RefreshTimerHandle;
     FString CachedRoomCode;
     FString ChatLog;
     bool    bChatBound = false;
+    bool    bChatExpanded = false;
+    bool    bChatUnread = false;
 };
