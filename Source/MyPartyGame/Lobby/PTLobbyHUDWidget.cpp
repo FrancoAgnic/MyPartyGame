@@ -38,7 +38,12 @@ bool UPTLobbyHUDWidget::Initialize()
     if (!Super::Initialize()) return false;
 
     if (ChatInput)        ChatInput->OnTextCommitted.AddDynamic(this, &UPTLobbyHUDWidget::OnChatCommitted);
-    if (ChatBarButton)    ChatBarButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnChatBarClicked);
+    if (ChatBarButton)
+    {
+        ChatBarButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnChatBarClicked);
+        ChatBarUpStyle = ChatBarButton->WidgetStyle; // guardar la flecha ARRIBA (la que pusiste en el botón)
+        bChatBarStyleCached = true;
+    }
     if (ChatClickCatcher) ChatClickCatcher->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnChatCloseClicked);
     SetChatExpanded(false); // arranca colapsado (solo la barrita) → no roba el foco del teclado al entrar
 
@@ -322,15 +327,28 @@ void UPTLobbyHUDWidget::RefreshSettingsView()
 void UPTLobbyHUDWidget::OnChatBarClicked()  { SetChatExpanded(!bChatExpanded); } // la barrita ALTERNA
 void UPTLobbyHUDWidget::OnChatCloseClicked(){ SetChatExpanded(false); }
 
+void UPTLobbyHUDWidget::ApplyChatBarArrow(bool bExpanded)
+{
+    // La barra queda quieta; solo intercambia sus texturas: abierto = flecha ABAJO, cerrado = flecha ARRIBA.
+    if (!ChatBarButton || !bChatBarStyleCached) return;
+    FButtonStyle St = ChatBarUpStyle; // parte de la original (conserva tamaños, pressed, etc.)
+    if (bExpanded)
+    {
+        if (ChatBarDownNormal)  St.Normal.SetResourceObject(ChatBarDownNormal);
+        if (ChatBarDownHovered) St.Hovered.SetResourceObject(ChatBarDownHovered);
+        if (ChatBarDownHovered) St.Pressed.SetResourceObject(ChatBarDownHovered);
+    }
+    ChatBarButton->WidgetStyle = St;
+    ChatBarButton->SynchronizeProperties();
+}
+
 void UPTLobbyHUDWidget::SetChatExpanded(bool bExpanded)
 {
     bChatExpanded = bExpanded;
     if (ChatPanel)        ChatPanel->SetVisibility(bExpanded ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-    // La barrita queda SIEMPRE visible (es el toggle); solo cambia su flecha ↑/↓.
-    if (ChatArrowUp)      ChatArrowUp->SetVisibility(bExpanded ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
-    if (ChatArrowDown)    ChatArrowDown->SetVisibility(bExpanded ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+    // La barra queda SIEMPRE visible y en el mismo lugar; solo cambia la textura de su flecha ↑/↓.
+    ApplyChatBarArrow(bExpanded);
     if (ChatClickCatcher) ChatClickCatcher->SetVisibility(bExpanded ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-    OnChatExpandedChanged(bExpanded); // el WBP anima la "ventana" que crece hacia arriba / cambia el ícono
 
     if (bExpanded)
     {

@@ -6,6 +6,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Styling/SlateTypes.h" // FButtonStyle (barra de chat)
 #include "../PTMatchSettings.h"
 #include "../UI/PTUserWidget.h"
 #include "PTLobbyHUDWidget.generated.h"
@@ -123,10 +124,14 @@ protected:
     // vuelve al movimiento del personaje. (Esto NO afecta el chat del gameplay, que queda igual.)
     UPROPERTY(meta = (BindWidgetOptional)) class UWidget* ChatPanel;          // contenedor del chat abierto (log+input)
     UPROPERTY(meta = (BindWidgetOptional)) class UButton* ChatBarButton;      // la barrita: toggle abrir/cerrar
-    UPROPERTY(meta = (BindWidgetOptional)) class UWidget* ChatArrowUp;        // ícono flecha ARRIBA (visible cerrado)
-    UPROPERTY(meta = (BindWidgetOptional)) class UWidget* ChatArrowDown;      // ícono flecha ABAJO (visible abierto)
     UPROPERTY(meta = (BindWidgetOptional)) class UButton* ChatClickCatcher;   // (opcional) full-screen detrás → click afuera cierra
     UPROPERTY(meta = (BindWidgetOptional)) class UWidget* ChatUnreadIndicator;// (opcional) glow de mensaje sin leer
+
+    // La flecha de la barra vive en el PROPIO botón (Normal/Hover). Cuando el chat se ABRE, el código le
+    // intercambia las texturas a las de la flecha ABAJO; al cerrar restaura las de ARRIBA (las que pusiste
+    // en el botón). Asigná acá las dos texturas de la flecha ABAJO (normal y hover).
+    UPROPERTY(EditAnywhere, Category="Lobby|Chat") class UTexture2D* ChatBarDownNormal  = nullptr;
+    UPROPERTY(EditAnywhere, Category="Lobby|Chat") class UTexture2D* ChatBarDownHovered = nullptr;
 
     UFUNCTION() void OnChatCommitted(const FText& Text, ETextCommit::Type CommitMethod);
     UFUNCTION() void OnLobbyChatLine(const FString& Name, const FString& Message);
@@ -135,8 +140,6 @@ protected:
     void SetChatExpanded(bool bExpanded);
     /** El WBP puede animar el glow de la barra cuando llega un mensaje sin leer (true) / al abrir (false). */
     UFUNCTION(BlueprintImplementableEvent, Category="Lobby") void OnChatUnreadChanged(bool bHasUnread);
-    /** El WBP puede animar la apertura/cierre (ej: "ventana" que crece hacia arriba) y/o cambiar el ícono. */
-    UFUNCTION(BlueprintImplementableEvent, Category="Lobby") void OnChatExpandedChanged(bool bExpanded);
 
 private:
     FTimerHandle RefreshTimerHandle;
@@ -145,4 +148,8 @@ private:
     bool    bChatBound = false;
     bool    bChatExpanded = false;
     bool    bChatUnread = false;
+    // Estilo original del botón de la barra (flecha ARRIBA) cacheado en Initialize, para restaurarlo al cerrar.
+    FButtonStyle ChatBarUpStyle;
+    bool    bChatBarStyleCached = false;
+    void ApplyChatBarArrow(bool bExpanded); // intercambia las texturas del botón (up/down)
 };
