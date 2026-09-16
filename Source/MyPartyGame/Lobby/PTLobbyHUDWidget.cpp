@@ -30,6 +30,7 @@
 #include "PTGameSettingsWidget.h"
 #include "Components/EditableTextBox.h"
 #include "Components/ScrollBox.h"
+#include "Components/RichTextBlock.h"
 
 bool UPTLobbyHUDWidget::Initialize()
 {
@@ -337,7 +338,9 @@ void UPTLobbyHUDWidget::OnLobbyChatLine(const FString& Name, const FString& Mess
                     if (PS && PS->GetPlayerName() == Name)
                     { const FString Cap = GI->GetCaptureName(PS); if (!Cap.IsEmpty()) { DispName = Cap; } break; }
 
-    ChatLog += FString::Printf(TEXT("%s: %s\n"), *DispName.Left(14), *Message);
+    // RichText: el nombre va con el estilo "name" (si existe en el Text Style Set del WBP; si no, color
+    // default). El mensaje en texto plano.
+    ChatLog += FString::Printf(TEXT("<name>%s</>: %s\n"), *DispName.Left(14), *Message);
     if (TxtChat)    TxtChat->SetText(FText::FromString(ChatLog));
     if (ChatScroll) ChatScroll->ScrollToEnd();
 }

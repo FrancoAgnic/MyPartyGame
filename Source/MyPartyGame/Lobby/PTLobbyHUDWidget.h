@@ -115,9 +115,9 @@ protected:
     // ── Chat del lobby (opcional) ──
     // Poné en el WBP (nombres EXACTOS): ChatInput (EditableTextBox), TxtChat (TextBlock), ChatScroll
     // (ScrollBox, opcional). Escribís en ChatInput y con Enter se envía a todos.
-    UPROPERTY(meta = (BindWidgetOptional)) class UEditableTextBox* ChatInput;
-    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*             TxtChat;
-    UPROPERTY(meta = (BindWidgetOptional)) class UScrollBox*       ChatScroll;
+    UPROPERTY(meta = (BindWidgetOptional)) class UEditableTextBox*  ChatInput;
+    UPROPERTY(meta = (BindWidgetOptional)) class URichTextBlock*    TxtChat;   // RichText: permite color por tags
+    UPROPERTY(meta = (BindWidgetOptional)) class UScrollBox*        ChatScroll;
     UFUNCTION() void OnChatCommitted(const FText& Text, ETextCommit::Type CommitMethod);
     UFUNCTION() void OnLobbyChatLine(const FString& Name, const FString& Message);
 
