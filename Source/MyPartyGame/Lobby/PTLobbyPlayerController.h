@@ -85,9 +85,6 @@ public:
     UFUNCTION(BlueprintCallable, Category="MapMod") void ConfirmMapDownload();
     /** (Cliente) El usuario rechazó bajar el mapa (queda sin poder marcar listo hasta que cambie el mapa). */
     UFUNCTION(BlueprintCallable, Category="MapMod") void DeclineMapDownload();
-    /** El WBP implementa esto para mostrar el popup "El host eligió el mapa X. ¿Descargarlo?" — Sí llama a
-     *  ConfirmMapDownload(), No a DeclineMapDownload(). Se dispara en el cliente que no tiene el mapa. */
-    UFUNCTION(BlueprintImplementableEvent, Category="MapMod") void OnShowMapDownloadPrompt(const FString& MapTitle);
     /** (Cliente→Servidor) Confirma que ya tiene el mapa 'ModId' localmente (para el gate del lobby). */
     UFUNCTION(Server, Reliable) void Server_ReportHasMap(const FString& ModId);
 
@@ -254,6 +251,12 @@ private:
     FTimerHandle MapDownloadPoll;      // poll de la descarga de Steam (rescanea hasta tenerlo)
     int32        MapDownloadTries = 0;
     void TryMapDownloadStep();
+    void ShowMapDownloadPrompt(const FString& MapTitle); // crea/muestra el popup de descarga
+    void HideMapDownloadPrompt();
+    /** WBP del popup de descarga de mapa (deriva de UPTMapDownloadPromptWidget). Asignar en
+     *  BP_LobbyPlayerController (solo la clase; no hace falta tocar el Graph). */
+    UPROPERTY(EditAnywhere, Category="Lobby") TSubclassOf<class UPTMapDownloadPromptWidget> MapDownloadPromptClass;
+    UPROPERTY() class UPTMapDownloadPromptWidget* MapDownloadPrompt = nullptr;
 
     // Fija la vista a la cámara diorama y bloquea el look (el mouse es para la UI). Reintenta
     // hasta encontrar la cámara (puede no estar lista en BeginPlay / al poseer el pawn).

@@ -8,6 +8,7 @@
 #include "PTPlayerState.h"
 #include "PTLobbyGameMode.h"
 #include "../Mods/PTMapModSubsystem.h" // DEV PTMapMod: montar/viajar a un mapa de mod (M1)
+#include "../UI/PTMapDownloadPromptWidget.h" // P4: popup "Descargar mapa" (Steam)
 #include "PTMainMenuWidget.h"
 #include "PTLobbyHUDWidget.h"
 #include "EnhancedInputSubsystems.h"
@@ -313,16 +314,17 @@ void APTLobbyPlayerController::EnsureSelectedMapAvailable(const FString& ModId)
 
     if (ModId.IsEmpty())
     {
-        // Cambió a mapa oficial / ninguno: cancelar cualquier descarga en curso y avisar listo.
+        // Cambió a mapa oficial / ninguno: cancelar cualquier descarga en curso, cerrar el popup, avisar listo.
         PendingDownloadModId.Reset();
         GetWorldTimerManager().ClearTimer(MapDownloadPoll);
+        HideMapDownloadPrompt();
         Server_ReportHasMap(FString());
         return;
     }
 
-    if (MM) { MM->RescanMods(); if (MM->HasModContent(ModId)) { Server_ReportHasMap(ModId); return; } }
+    if (MM) { MM->RescanMods(); if (MM->HasModContent(ModId)) { HideMapDownloadPrompt(); Server_ReportHasMap(ModId); return; } }
 
-    // No lo tengo → preguntar (una vez por id). El WBP muestra el popup; Sí → ConfirmMapDownload().
+    // No lo tengo → mostrar el popup de descarga (una vez por id). Botón "Descargar" → ConfirmMapDownload().
     if (PendingDownloadModId != ModId)
     {
         PendingDownloadModId = ModId;
@@ -330,8 +332,24 @@ void APTLobbyPlayerController::EnsureSelectedMapAvailable(const FString& ModId)
         FString Title = ModId;
         if (const APTGameState* GS = GetWorld() ? GetWorld()->GetGameState<APTGameState>() : nullptr)
             if (!GS->MatchMapTitle.IsEmpty()) Title = GS->MatchMapTitle;
-        OnShowMapDownloadPrompt(Title);
+        ShowMapDownloadPrompt(Title);
     }
+}
+
+void APTLobbyPlayerController::ShowMapDownloadPrompt(const FString& MapTitle)
+{
+    if (!MapDownloadPromptClass) return; // sin WBP asignado no hay popup (el cliente no podrá bajar)
+    if (!MapDownloadPrompt)
+    {
+        MapDownloadPrompt = CreateWidget<UPTMapDownloadPromptWidget>(this, MapDownloadPromptClass);
+        if (MapDownloadPrompt) MapDownloadPrompt->AddToViewport(90);
+    }
+    if (MapDownloadPrompt) MapDownloadPrompt->ShowFor(MapTitle);
+}
+
+void APTLobbyPlayerController::HideMapDownloadPrompt()
+{
+    if (MapDownloadPrompt) MapDownloadPrompt->HidePanel();
 }
 
 void APTLobbyPlayerController::ConfirmMapDownload()
