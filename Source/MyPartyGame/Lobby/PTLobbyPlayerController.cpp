@@ -558,6 +558,7 @@ void APTLobbyPlayerController::ShowLobbyOverlay()
             {
                 HUD->ShowHUD();
                 ActiveOverlay = HUD; // para colapsarlo al esculpir la cabeza
+                LobbyHUD = HUD;       // para abrir el chat con ENTER
             }
         }
         else
@@ -632,7 +633,7 @@ void APTLobbyPlayerController::SetupInputComponent()
     InputComponent->BindKey(EKeys::RightAlt, IE_Pressed,  this, &APTLobbyPlayerController::OnHeadSurfaceSnapPressed);
     InputComponent->BindKey(EKeys::RightAlt, IE_Released, this, &APTLobbyPlayerController::OnHeadSurfaceSnapReleased);
     // Enter = confirmar la edición (guarda + equipa + vuelve al Locker). Escape = popup guardar/descartar.
-    InputComponent->BindKey(EKeys::Enter,  IE_Pressed, this, &APTLobbyPlayerController::ConfirmHeadEdit);
+    InputComponent->BindKey(EKeys::Enter,  IE_Pressed, this, &APTLobbyPlayerController::OnLobbyEnter);
     InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &APTLobbyPlayerController::RequestHeadBack);
     // TAB = ciclar la forma del sello (esfera/cubo/cilindro/cono), igual que el gameplay.
     // MANTENER TAB → menú radial de formas (como el gameplay); al soltar aplica la forma del hover.
@@ -1883,6 +1884,15 @@ void APTLobbyPlayerController::EnterHeadSculpt()
 // Flujo por TECLAS (en edición el cursor no sirve):
 //   ENTER  → si el popup está abierto = Sí (guardar); si no = confirmar directo (guardar + equipar).
 //   ESCAPE → si el popup está cerrado = abrirlo; si ya está abierto = No (descartar y salir).
+void APTLobbyPlayerController::OnLobbyEnter()
+{
+    // En modo esculpir-cabeza, ENTER confirma la edición (comportamiento previo).
+    if (bHeadSculptMode) { ConfirmHeadEdit(); return; }
+    // En el lobby normal, ENTER abre el chat (si está cerrado) y le da foco al input. Al enviar/cerrar
+    // desde el input lo maneja el propio HUD (OnChatCommitted).
+    if (LobbyHUD) LobbyHUD->OpenChatFromEnter();
+}
+
 void APTLobbyPlayerController::ConfirmHeadEdit()
 {
     if (!bHeadSculptMode) return;

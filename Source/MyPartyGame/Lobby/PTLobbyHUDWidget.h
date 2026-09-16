@@ -28,6 +28,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Lobby")
     void ShowHUD();
 
+    /** ENTER (juego con foco) abre el chat y da foco al input. Lo llama el PlayerController. Si ya está
+     *  abierto no hace nada (con el input enfocado, Enter lo maneja OnChatCommitted). */
+    void OpenChatFromEnter();
+
 protected:
     virtual bool Initialize() override;
     virtual void NativeDestruct() override;
@@ -123,8 +127,7 @@ protected:
     // el panel (ChatPanel); la flecha de la barra cambia ↑ (cerrado) ↔ ↓ (abierto). Al cerrar, el foco
     // vuelve al movimiento del personaje. (Esto NO afecta el chat del gameplay, que queda igual.)
     UPROPERTY(meta = (BindWidgetOptional)) class UWidget* ChatPanel;          // contenedor del chat abierto (log+input)
-    UPROPERTY(meta = (BindWidgetOptional)) class UButton* ChatBarButton;      // la barrita: toggle abrir/cerrar
-    UPROPERTY(meta = (BindWidgetOptional)) class UButton* ChatClickCatcher;   // (opcional) full-screen detrás → click afuera cierra
+    UPROPERTY(meta = (BindWidgetOptional)) class UButton* ChatBarButton;      // la barrita: SOLO indicador (flecha ↑/↓ + glow), no clickeable
     UPROPERTY(meta = (BindWidgetOptional)) class UWidget* ChatUnreadIndicator;// (opcional) glow de mensaje sin leer
 
     // La flecha de la barra vive en el PROPIO botón (Normal/Hover). Cuando el chat se ABRE, el código le
@@ -134,9 +137,8 @@ protected:
     UPROPERTY(EditAnywhere, Category="Lobby|Chat") class UTexture2D* ChatBarDownHovered = nullptr;
 
     UFUNCTION() void OnChatCommitted(const FText& Text, ETextCommit::Type CommitMethod);
+    UFUNCTION() void OnChatTextChanged(const FText& Text); // cancela el auto-cierre mientras escribís
     UFUNCTION() void OnLobbyChatLine(const FString& Name, const FString& Message);
-    UFUNCTION() void OnChatBarClicked();   // toggle
-    UFUNCTION() void OnChatCloseClicked(); // (para el catcher opcional)
     void SetChatExpanded(bool bExpanded);
     /** El WBP puede animar el glow de la barra cuando llega un mensaje sin leer (true) / al abrir (false). */
     UFUNCTION(BlueprintImplementableEvent, Category="Lobby") void OnChatUnreadChanged(bool bHasUnread);
@@ -152,4 +154,7 @@ private:
     FButtonStyle ChatBarUpStyle;
     bool    bChatBarStyleCached = false;
     void ApplyChatBarArrow(bool bExpanded); // intercambia las texturas del botón (up/down)
+    FTimerHandle ChatAutoCloseTimer;         // cierra el chat 3s después de enviar si no seguís
+    void CloseChatAuto() { SetChatExpanded(false); }
+    static constexpr float ChatAutoCloseDelay = 3.0f;
 };

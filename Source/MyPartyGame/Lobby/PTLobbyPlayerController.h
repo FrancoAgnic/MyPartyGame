@@ -243,6 +243,10 @@ protected:
 
 private:
     UPROPERTY() UPTLobbyEscapeMenuWidget* EscapeMenuWidget = nullptr;
+    // HUD del lobby en sesión (lista + chat). Se guarda para poder abrir el chat con ENTER.
+    UPROPERTY() class UPTLobbyHUDWidget* LobbyHUD = nullptr;
+    // ENTER en el lobby: en modo cabeza confirma; si no, abre el chat del lobby (foco al input).
+    void OnLobbyEnter();
 
     // Handshake de mapa de mod (cliente): monta/baja el pak y avisa "listo". Polling acotado por timeout.
     void TryPrepareMapStep();

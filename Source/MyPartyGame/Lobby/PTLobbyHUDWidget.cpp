@@ -37,15 +37,18 @@ bool UPTLobbyHUDWidget::Initialize()
 {
     if (!Super::Initialize()) return false;
 
-    if (ChatInput)        ChatInput->OnTextCommitted.AddDynamic(this, &UPTLobbyHUDWidget::OnChatCommitted);
+    if (ChatInput)
+    {
+        ChatInput->OnTextCommitted.AddDynamic(this, &UPTLobbyHUDWidget::OnChatCommitted);
+        ChatInput->OnTextChanged.AddDynamic(this, &UPTLobbyHUDWidget::OnChatTextChanged);
+    }
+    // La barra NO es clickeable: es solo indicador (flecha ↑/↓ + glow). El chat se abre/cierra con ENTER.
     if (ChatBarButton)
     {
-        ChatBarButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnChatBarClicked);
         ChatBarUpStyle = ChatBarButton->WidgetStyle; // guardar la flecha ARRIBA (la que pusiste en el botón)
         bChatBarStyleCached = true;
     }
-    if (ChatClickCatcher) ChatClickCatcher->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnChatCloseClicked);
-    SetChatExpanded(false); // arranca colapsado (solo la barrita) → no roba el foco del teclado al entrar
+    SetChatExpanded(false); // arranca colapsado → NO roba el foco del teclado al entrar (foco = juego)
 
     if (CopyCodeButton)  CopyCodeButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnCopyCodeClicked);
     if (LeaveGameButton) LeaveGameButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnLeaveGameClicked);
@@ -324,8 +327,12 @@ void UPTLobbyHUDWidget::RefreshSettingsView()
     }
 }
 
-void UPTLobbyHUDWidget::OnChatBarClicked()  { SetChatExpanded(!bChatExpanded); } // la barrita ALTERNA
-void UPTLobbyHUDWidget::OnChatCloseClicked(){ SetChatExpanded(false); }
+void UPTLobbyHUDWidget::OpenChatFromEnter()
+{
+    // ENTER con el juego enfocado (chat cerrado) → abrir. Si ya está abierto, el input tiene el foco y
+    // ENTER lo maneja OnChatCommitted (enviar / cerrar).
+    if (!bChatExpanded) SetChatExpanded(true);
+}
 
 void UPTLobbyHUDWidget::ApplyChatBarArrow(bool bExpanded)
 {
@@ -348,7 +355,6 @@ void UPTLobbyHUDWidget::SetChatExpanded(bool bExpanded)
     if (ChatPanel)        ChatPanel->SetVisibility(bExpanded ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
     // La barra queda SIEMPRE visible y en el mismo lugar; solo cambia la textura de su flecha ↑/↓.
     ApplyChatBarArrow(bExpanded);
-    if (ChatClickCatcher) ChatClickCatcher->SetVisibility(bExpanded ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 
     if (bExpanded)
     {
@@ -361,7 +367,8 @@ void UPTLobbyHUDWidget::SetChatExpanded(bool bExpanded)
     }
     else
     {
-        // Cerrar: sacar el foco del teclado del input → el WASD vuelve a mover al personaje en el lobby.
+        // Cerrar: cancelar el auto-cierre y sacar el foco del teclado → el WASD vuelve a mover al personaje.
+        if (GetWorld()) GetWorld()->GetTimerManager().ClearTimer(ChatAutoCloseTimer);
         if (ChatInput) ChatInput->SetText(FText::GetEmpty());
         if (FSlateApplication::IsInitialized())
             FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::Cleared);
@@ -375,16 +382,29 @@ void UPTLobbyHUDWidget::SetChatExpanded(bool bExpanded)
     }
 }
 
+void UPTLobbyHUDWidget::OnChatTextChanged(const FText& /*Text*/)
+{
+    // Estás escribiendo → cancelar el auto-cierre (no cerrar mientras componés un mensaje).
+    if (GetWorld()) GetWorld()->GetTimerManager().ClearTimer(ChatAutoCloseTimer);
+}
+
 void UPTLobbyHUDWidget::OnChatCommitted(const FText& Text, ETextCommit::Type CommitMethod)
 {
-    // Solo enviar con ENTER (no al perder foco). Vaciar la caja y devolverle el foco para seguir chateando.
+    // El input tiene el foco (chat abierto). ENTER: si hay texto, enviar; si está vacío, cerrar (toggle).
     if (CommitMethod != ETextCommit::OnEnter) return;
     const FString Msg = Text.ToString().TrimStartAndEnd();
+
+    if (Msg.IsEmpty()) { SetChatExpanded(false); return; } // ENTER con la caja vacía = cerrar
+
     if (ChatInput) ChatInput->SetText(FText::GetEmpty());
-    if (Msg.IsEmpty()) return;
     if (APTLobbyPlayerController* PC = Cast<APTLobbyPlayerController>(GetOwningPlayer()))
         PC->Server_SendLobbyChat(Msg);
-    if (bChatExpanded && ChatInput) ChatInput->SetKeyboardFocus(); // seguir escribiendo
+    if (ChatInput) ChatInput->SetKeyboardFocus(); // seguir escribiendo
+
+    // Tras enviar: si no seguís escribiendo, el chat se cierra solo a los 3s (OnChatTextChanged lo cancela).
+    if (GetWorld())
+        GetWorld()->GetTimerManager().SetTimer(ChatAutoCloseTimer, this,
+            &UPTLobbyHUDWidget::CloseChatAuto, ChatAutoCloseDelay, false);
 }
 
 void UPTLobbyHUDWidget::OnLobbyChatLine(const FString& Name, const FString& Message)
