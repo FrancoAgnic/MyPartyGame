@@ -148,6 +148,26 @@ void APTMapEnvironment::PlaceInstance(int32 AssetIdx, const FTransform& WorldXf)
 {
     if (!Assets.IsValidIndex(AssetIdx) || !Assets[AssetIdx].HISM) return;
     Assets[AssetIdx].HISM->AddInstance(WorldXf, /*bWorldSpace=*/true);
+    PlaceOrder.Add(AssetIdx); // para el undo LIFO
+}
+
+bool APTMapEnvironment::GetNearestInstance(const FVector& WorldPos, float Radius, int32& OutAsset, FTransform& OutXf) const
+{
+    float BestD2 = Radius * Radius; OutAsset = INDEX_NONE;
+    for (int32 a = 0; a < Assets.Num(); ++a)
+    {
+        UHierarchicalInstancedStaticMeshComponent* H = Assets[a].HISM;
+        if (!H) continue;
+        const int32 Count = H->GetInstanceCount();
+        for (int32 i = 0; i < Count; ++i)
+        {
+            FTransform Xf;
+            if (!H->GetInstanceTransform(i, Xf, /*bWorldSpace=*/true)) continue;
+            const float D2 = FVector::DistSquared(Xf.GetLocation(), WorldPos);
+            if (D2 < BestD2) { BestD2 = D2; OutAsset = a; OutXf = Xf; }
+        }
+    }
+    return OutAsset != INDEX_NONE;
 }
 
 bool APTMapEnvironment::RemoveInstanceNear(const FVector& WorldPos, float Radius)
@@ -170,9 +190,23 @@ bool APTMapEnvironment::RemoveInstanceNear(const FVector& WorldPos, float Radius
     if (BestAsset != INDEX_NONE)
     {
         Assets[BestAsset].HISM->RemoveInstance(BestInst);
+        // Mantener PlaceOrder consistente (sacar una ocurrencia de ese asset, la última).
+        for (int32 k = PlaceOrder.Num() - 1; k >= 0; --k)
+            if (PlaceOrder[k] == BestAsset) { PlaceOrder.RemoveAt(k); break; }
         return true;
     }
     return false;
+}
+
+bool APTMapEnvironment::RemoveLastInstance()
+{
+    if (PlaceOrder.Num() == 0) return false;
+    const int32 A = PlaceOrder.Pop();
+    if (!Assets.IsValidIndex(A) || !Assets[A].HISM) return false;
+    const int32 Last = Assets[A].HISM->GetInstanceCount() - 1;
+    if (Last < 0) return false;
+    Assets[A].HISM->RemoveInstance(Last); // el último de ese asset = el más reciente
+    return true;
 }
 
 void APTMapEnvironment::ClearAll()

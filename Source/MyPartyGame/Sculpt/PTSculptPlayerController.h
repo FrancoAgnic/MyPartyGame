@@ -595,6 +595,9 @@ private:
     FVector GetPlacePoint(bool& bOutOutside) const;
 
     UPROPERTY(Transient) class APTMapEnvironment* MapEnvCache = nullptr;
+    // El preview del asset vive en su PROPIO actor (no en PreviewActor) para que ocultar el preview de
+    // esculpido no lo oculte a él (es lo que se ve al colocar/borrar props FUERA del box).
+    UPROPERTY() AActor*                              PropPreviewActor = nullptr;
     UPROPERTY(Transient) class UStaticMeshComponent* AssetPreview = nullptr; // preview del asset a colocar
     int32 CurrentAsset = 0;                 // índice del asset elegido en la paleta
     float AssetScale   = 1.f;               // escala del asset a colocar (rueda)

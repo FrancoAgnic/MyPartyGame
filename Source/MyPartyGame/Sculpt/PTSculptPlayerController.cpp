@@ -143,18 +143,6 @@ void APTSculptPlayerController::BeginPlay()
         // al preview una prioridad alta para que siempre se dibuje por encima del boundary (que va a -100).
         PreviewMesh->SetTranslucentSortPriority(10);
 
-        // Preview del ASSET a colocar (modo autoría): sigue el cursor con transform absoluto (independiente
-        // del preview de la forma). Attacheado al PreviewActor (que sí vive en el mundo) para que renderice.
-        AssetPreview = NewObject<UStaticMeshComponent>(PreviewActor, TEXT("AssetPreviewComp"));
-        AssetPreview->SetupAttachment(PreviewMesh);
-        AssetPreview->SetUsingAbsoluteLocation(true);
-        AssetPreview->SetUsingAbsoluteRotation(true);
-        AssetPreview->SetUsingAbsoluteScale(true);
-        AssetPreview->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-        AssetPreview->SetCastShadow(false);
-        AssetPreview->RegisterComponent();
-        AssetPreview->SetVisibility(false);
-
         // Mesh estático opcional (cuando el usuario asigna sus propios meshes).
         PreviewStaticMesh = NewObject<UStaticMeshComponent>(PreviewActor, TEXT("PreviewStaticMesh"));
         PreviewStaticMesh->SetupAttachment(PreviewMesh);
@@ -274,6 +262,21 @@ void APTSculptPlayerController::BeginPlay()
             if (GridOv) SculptGrid->SetOverlayMaterial(GridOv);
         }
         SculptGrid->SetVisibility(false);
+    }
+
+    // Actor propio para el preview del ASSET a colocar (modo autoría de mapa). Va en un actor aparte del
+    // PreviewActor de esculpido: así, cuando salís del box y se oculta el preview de la forma, el preview
+    // del asset (o el resalte de la instancia a borrar) sigue renderizándose.
+    PropPreviewActor = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(),
+                                                      FVector::ZeroVector, FRotator::ZeroRotator, SP);
+    if (PropPreviewActor)
+    {
+        AssetPreview = NewObject<UStaticMeshComponent>(PropPreviewActor, TEXT("AssetPreviewComp"));
+        PropPreviewActor->SetRootComponent(AssetPreview);
+        AssetPreview->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        AssetPreview->SetCastShadow(false);
+        AssetPreview->RegisterComponent();
+        AssetPreview->SetVisibility(false);
     }
 
     // HUD de la partida: solo el jugador local lo crea. Maneja fase/reloj/chat/elección
@@ -435,6 +438,8 @@ void APTSculptPlayerController::SetupInputComponent()
 
 void APTSculptPlayerController::OnOpenChat()
 {
+    // En modo autoría de mapa NO hay chat de texto (además Enter se usa para hornear). Ignorar.
+    if (IsMapAuthorMode()) return;
     if (GameplayHUD) GameplayHUD->FocusChat();
 }
 
@@ -1608,13 +1613,22 @@ void APTSculptPlayerController::OnClearAllReleased()
 {
     // Toque CORTO (soltaste antes de completar los 3s) = deshacer la última acción.
     // Mantener hasta el final = borrar todo (eso lo dispara el tick, que ya limpió bClearHeld).
-    if (bClearHeld && ClearHoldTime < UndoTapMaxTime && CanLocalPlayerSculpt())
+    if (bClearHeld && ClearHoldTime < UndoTapMaxTime)
     {
-        Server_Undo();
-        if (SculptSounds) SculptSounds->PlayUndoSimple(Volume ? Volume->GetActorLocation()
-                                                               : (GetPawn() ? GetPawn()->GetActorLocation() : FVector::ZeroVector));
-        if (GEngine) GEngine->AddOnScreenDebugMessage(987723, 1.2f, FColor(150, 220, 255),
-            PTText::GetStr(TEXT("SCULPT_UNDO")));
+        // Undo INDIVIDUAL por contexto: fuera del box (modo colocar) deshace el último PROP colocado;
+        // dentro del box (o en partida) deshace la última acción de la ESCULTURA.
+        if (IsPlaceMode())
+        {
+            if (APTMapEnvironment* Env = GetMapEnv()) Env->RemoveLastInstance();
+        }
+        else if (CanLocalPlayerSculpt())
+        {
+            Server_Undo();
+            if (SculptSounds) SculptSounds->PlayUndoSimple(Volume ? Volume->GetActorLocation()
+                                                                   : (GetPawn() ? GetPawn()->GetActorLocation() : FVector::ZeroVector));
+            if (GEngine) GEngine->AddOnScreenDebugMessage(987723, 1.2f, FColor(150, 220, 255),
+                PTText::GetStr(TEXT("SCULPT_UNDO")));
+        }
     }
     bClearHeld    = false;
     ClearHoldTime = 0.f;
@@ -2319,22 +2333,38 @@ void APTSculptPlayerController::TickAuthorProps(float Dt)
     }
     else { BakeHoldTime = 0.f; bBakedThisHold = false; }
 
-    // Preview del asset a colocar (solo afuera + Add + hay assets).
+    // Preview del asset (FUERA del box): con Add = el asset elegido siguiendo el cursor; con Erase = resaltar
+    // la instancia más cercana (lo que se va a borrar). AssetPreview vive en su propio actor → no lo afecta
+    // ocultar el PreviewActor de esculpido.
     APTMapEnvironment* Env = GetMapEnv();
-    const bool bShowAsset = bOut && (EditMode == EPTEditMode::Add) && !bEyesTool
-                          && Env && Env->GetNumAssets() > 0 && AssetPreview;
-    if (bShowAsset)
+    bool bShowAsset = false;
+    if (bOut && AssetPreview && Env && Env->GetNumAssets() > 0 && !bEyesTool)
     {
-        UStaticMesh* M = Env->GetAssetMesh(CurrentAsset);
-        if (M)
+        if (EditMode == EPTEditMode::Add)
         {
-            if (AssetPreview->GetStaticMesh() != M) AssetPreview->SetStaticMesh(M);
-            AssetPreview->SetWorldTransform(FTransform(StampRotation, P, FVector(AssetScale)));
-            AssetPreview->SetVisibility(true);
+            if (UStaticMesh* M = Env->GetAssetMesh(CurrentAsset))
+            {
+                if (AssetPreview->GetStaticMesh() != M) AssetPreview->SetStaticMesh(M);
+                AssetPreview->SetWorldTransform(FTransform(StampRotation, P, FVector(AssetScale)));
+                bShowAsset = true;
+            }
         }
-        else AssetPreview->SetVisibility(false);
+        else if (EditMode == EPTEditMode::Erase)
+        {
+            int32 A = INDEX_NONE; FTransform Xf;
+            if (Env->GetNearestInstance(P, FMath::Max(80.f, AssetScale * 120.f), A, Xf))
+            {
+                if (UStaticMesh* M = Env->GetAssetMesh(A))
+                {
+                    if (AssetPreview->GetStaticMesh() != M) AssetPreview->SetStaticMesh(M);
+                    Xf.SetScale3D(Xf.GetScale3D() * 1.08f); // apenas más grande → se ve el resalte
+                    AssetPreview->SetWorldTransform(Xf);
+                    bShowAsset = true;
+                }
+            }
+        }
     }
-    else if (AssetPreview) AssetPreview->SetVisibility(false);
+    if (AssetPreview) AssetPreview->SetVisibility(bShowAsset);
 
     // En modo colocar, ocultar el preview normal de esculpido para no confundir.
     if (bOut)

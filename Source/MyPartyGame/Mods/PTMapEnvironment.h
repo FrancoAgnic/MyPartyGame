@@ -52,6 +52,11 @@ public:
     void PlaceInstance(int32 AssetIdx, const FTransform& WorldXf);
     /** Borra la instancia más cercana a WorldPos dentro de Radius (cualquier asset). true si borró. */
     bool RemoveInstanceNear(const FVector& WorldPos, float Radius);
+    /** Deshace la última instancia colocada (undo de props). true si sacó algo. */
+    bool RemoveLastInstance();
+    /** Instancia más cercana a WorldPos dentro de Radius (para el preview de "qué se va a borrar").
+     *  Devuelve su asset + transform. false si no hay ninguna cerca. */
+    bool GetNearestInstance(const FVector& WorldPos, float Radius, int32& OutAsset, FTransform& OutXf) const;
 
     /** Serializa el mapa (geometría de cada asset único + transforms de todas las instancias) a un blob.
      *  Es el contenido del mapa que se guarda/publica/replica. */
@@ -69,6 +74,8 @@ private:
         UHierarchicalInstancedStaticMeshComponent* HISM = nullptr;
     };
     TArray<FPTPropAsset> Assets;
+    // Orden global de colocación (índice de asset por cada instancia colocada) → para el undo LIFO de props.
+    TArray<int32> PlaceOrder;
 
     UStaticMesh* BuildStaticMesh(const FPTPropGeometry& Geo) const; // bake runtime (MeshDescription)
 };
