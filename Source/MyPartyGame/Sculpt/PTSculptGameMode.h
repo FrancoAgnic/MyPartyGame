@@ -10,6 +10,7 @@
 class APTPlayerState;
 class APTSculptGameState;
 class APTSculptVolume;
+class APTMapEnvironment;
 
 // Hereda de APTLobbyGameMode (AGameMode) para reusar su posesión/pawn/reconexión que
 // SÍ funciona; solo cambia el PlayerController, el GameState y agrega el loop por turnos.
@@ -66,6 +67,10 @@ public:
     // del primer turno lo estabiliza (ver CheckStart).
     UPROPERTY(EditDefaultsOnly, Category="Game") float StartDelay = 2.0f;
 
+    // Clase del actor de entorno para los mapas de PROPS (asignar BP_MapEnvironment con el material de
+    // arcilla). Si el host jugó un mapa de props (MapModId), se spawnea y se le carga el sculpt.bin.
+    UPROPERTY(EditDefaultsOnly, Category="Game") TSubclassOf<APTMapEnvironment> EnvironmentClass;
+
     // Llamado por el PlayerController del escultor cuando elige una de las 3 palabras.
     void HandleWordChosen(APTPlayerState* Chooser, int32 ChoiceIndex);
 
@@ -103,6 +108,10 @@ private:
     FTimerHandle PhaseTimer;
     FTimerHandle RevealTimer;
     FTimerHandle StartDelayTimer;   // arranque diferido del primer turno (ver StartDelay)
+    FTimerHandle PropMapLoadTimer;  // carga diferida del entorno de props (esperar a que el nivel asiente)
+
+    // Si el host jugó un mapa de PROPS, spawnea el APTMapEnvironment y le aplica el sculpt.bin del mod.
+    void LoadPropMapEnvironment();
     bool         bStartScheduled = false; // evita re-agendar el arranque en cada CheckStart
 
     // Estado del turno (solo servidor). La palabra real vive acá (todas sus traducciones), jamás

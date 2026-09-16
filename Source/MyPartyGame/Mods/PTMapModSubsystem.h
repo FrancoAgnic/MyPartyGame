@@ -28,9 +28,11 @@ struct FPTMapMod
     UPROPERTY(BlueprintReadOnly, Category="MapMod") FString Title;
     UPROPERTY(BlueprintReadOnly, Category="MapMod") FString Author;
     UPROPERTY(BlueprintReadOnly, Category="MapMod") FString MapName;    // ruta de paquete a la que se viaja
-    UPROPERTY(BlueprintReadOnly, Category="MapMod") FString PakPath;    // ruta absoluta al map.pak
+    UPROPERTY(BlueprintReadOnly, Category="MapMod") FString PakPath;    // ruta absoluta al map.pak (mapa .pak)
+    UPROPERTY(BlueprintReadOnly, Category="MapMod") FString BlobPath;   // ruta absoluta al sculpt.bin (mapa de PROPS)
     UPROPERTY(BlueprintReadOnly, Category="MapMod") FString PreviewPath;// preview.png local (si hay)
     UPROPERTY(BlueprintReadOnly, Category="MapMod") bool    bFromWorkshop = false;
+    UPROPERTY(BlueprintReadOnly, Category="MapMod") bool    bPropMap = false; // true = mapa de props (sculpt.bin), no .pak
     UPROPERTY(BlueprintReadOnly, Category="MapMod") bool    bMounted = false;
 };
 
@@ -57,6 +59,8 @@ public:
     UFUNCTION(BlueprintCallable, Category="MapMod") bool IsMounted(const FString& Id) const;
     /** Ruta de paquete del mapa (MapName) para viajar; vacío si no existe el mod. */
     UFUNCTION(BlueprintCallable, Category="MapMod") FString GetTravelMap(const FString& Id) const;
+    /** Ruta local al sculpt.bin del mapa de props (vacío si no es un mapa de props o no existe). */
+    UFUNCTION(BlueprintCallable, Category="MapMod") FString GetModBlobPath(const FString& Id) const;
     /** (Cliente) Se asegura de tener el item del Workshop: si el Id es numérico (workshop) y no está,
      *  lo SUSCRIBE + DownloadItem (el watcher rescanea al terminar). Para que un cliente pueda montar un
      *  mapa que el host eligió pero que él no tenía. No-op para mods locales o sin Steam. */

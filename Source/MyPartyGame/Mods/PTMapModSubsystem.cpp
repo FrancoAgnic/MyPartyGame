@@ -128,8 +128,13 @@ void UPTMapModSubsystem::ScanLocalMapMods()
 void UPTMapModSubsystem::AddModFromFolder(const FString& Folder, const FString& Id, bool bWorkshop)
 {
     const FString PakPath  = FPaths::Combine(Folder, TEXT("map.pak"));
+    const FString BlobPath = FPaths::Combine(Folder, TEXT("sculpt.bin"));
     const FString JsonPath = FPaths::Combine(Folder, TEXT("mod.json"));
-    if (!FPaths::FileExists(PakPath))  return; // sin .pak no es un mapa-mod válido
+    // Dos formatos: mapa .pak (map.pak, cocinado) o mapa de PROPS (sculpt.bin, in-game). Sin ninguno de
+    // los dos no es un mapa-mod (ej: un banco de palabras con words.csv se ignora solo).
+    const bool bHasPak  = FPaths::FileExists(PakPath);
+    const bool bHasBlob = FPaths::FileExists(BlobPath);
+    if (!bHasPak && !bHasBlob) return;
     if (!FPaths::FileExists(JsonPath)) { UE_LOG(LogPTMapMods, Warning, TEXT("[MapMod] '%s' sin mod.json → ignorado."), *Folder); return; }
 
     // mod.json → { MapName, Title, Author }
@@ -145,13 +150,18 @@ void UPTMapModSubsystem::AddModFromFolder(const FString& Folder, const FString& 
 
     FPTMapMod Mod;
     Mod.Id            = Id;
-    Mod.PakPath       = PakPath;
     Mod.bFromWorkshop = bWorkshop;
+    Mod.bPropMap      = !bHasPak && bHasBlob; // props si no hay pak pero sí sculpt.bin
+    Mod.PakPath       = bHasPak  ? PakPath  : FString();
+    Mod.BlobPath      = bHasBlob ? BlobPath : FString();
     Mod.MapName       = Obj->GetStringField(TEXT("MapName"));
     Mod.Title         = Obj->HasField(TEXT("Title"))  ? Obj->GetStringField(TEXT("Title"))  : FPaths::GetCleanFilename(Folder);
     Mod.Author        = Obj->HasField(TEXT("Author")) ? Obj->GetStringField(TEXT("Author")) : FString();
-    Mod.bMounted      = MountedPakPaths.Contains(PakPath);
+    // Los mapas de props no montan pak → siempre "listos"; los .pak, según estén montados.
+    Mod.bMounted      = Mod.bPropMap || MountedPakPaths.Contains(PakPath);
 
+    // Los mapas de props viajan a la plantilla que viene con el juego; si el mod.json no la trae, la ponemos.
+    if (Mod.MapName.IsEmpty() && Mod.bPropMap) Mod.MapName = TEXT("/MapKit/Mapa_Plantilla");
     if (Mod.MapName.IsEmpty())
     {
         UE_LOG(LogPTMapMods, Warning, TEXT("[MapMod] mod.json sin 'MapName' en '%s' → ignorado."), *Folder);
@@ -168,6 +178,7 @@ bool UPTMapModSubsystem::MountMod(const FString& Id)
 {
     const FPTMapMod* Mod = FindMod(Id);
     if (!Mod) return false;
+    if (Mod->bPropMap) return true; // mapa de props: no hay pak que montar (usa la plantilla del juego)
     if (MountedPakPaths.Contains(Mod->PakPath)) return true; // ya montado
 
     if (!FCoreDelegates::MountPak.IsBound())
@@ -197,13 +208,20 @@ bool UPTMapModSubsystem::MountMod(const FString& Id)
 bool UPTMapModSubsystem::IsMounted(const FString& Id) const
 {
     const FPTMapMod* Mod = FindMod(Id);
-    return Mod && MountedPakPaths.Contains(Mod->PakPath);
+    if (!Mod) return false;
+    return Mod->bPropMap || MountedPakPaths.Contains(Mod->PakPath);
 }
 
 FString UPTMapModSubsystem::GetTravelMap(const FString& Id) const
 {
     const FPTMapMod* Mod = FindMod(Id);
     return Mod ? Mod->MapName : FString();
+}
+
+FString UPTMapModSubsystem::GetModBlobPath(const FString& Id) const
+{
+    const FPTMapMod* Mod = FindMod(Id);
+    return (Mod && Mod->bPropMap) ? Mod->BlobPath : FString();
 }
 
 void UPTMapModSubsystem::RequestWorkshopDownload(const FString& WorkshopIdStr)
