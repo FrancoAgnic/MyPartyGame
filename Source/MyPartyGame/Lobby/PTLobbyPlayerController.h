@@ -74,18 +74,20 @@ public:
     UFUNCTION(Client, Reliable) void Client_PrepareModMap(const FString& ModId, const FString& MapPath);
     UFUNCTION(Server, Reliable) void Server_MapReady();
 
-    // ── P4: auto-distribución del mapa de props en el LOBBY (estilo Golf It) ──
-    // Cuando el host elige un mapa custom, cada cliente que no lo tenga lo recibe AUTOMÁTICAMENTE del
-    // host por chunks (Steam-independiente). El lobby no deja arrancar hasta que TODOS lo tengan.
-    /** (Cliente, local) Se asegura de tener el mapa 'ModId': si ya lo tiene avisa listo; si no, lo pide
-     *  al host. Vacío = mapa oficial (nada que bajar). Lo llama APTGameState::OnRep_MatchMapModId. */
+    // ── P4: auto-distribución del mapa custom en el LOBBY (por Steam Workshop) ──
+    // Cuando el host elige un mapa que un cliente no tiene, se le PREGUNTA si lo quiere bajar; al confirmar
+    // se suscribe+descarga por Steam (su CDN, NO por la conexión del host → sin colapsar la sala). El lobby
+    // no deja arrancar hasta que TODOS lo tengan.
+    /** (Cliente, local) Si no tiene el mapa 'ModId', muestra el popup de confirmación; si ya lo tiene avisa
+     *  listo. Vacío = mapa oficial. Lo llama APTGameState::OnRep_MatchMapModId. */
     void EnsureSelectedMapAvailable(const FString& ModId);
-    /** (Cliente→Servidor) Pide el blob del mapa de props al host (lo manda por chunks). */
-    UFUNCTION(Server, Reliable) void Server_RequestMapBlob(const FString& ModId);
-    /** (Servidor→Cliente) Un chunk del sculpt.bin del mapa. Al completar, el cliente lo guarda y avisa. */
-    UFUNCTION(Client, Reliable) void Client_ReceiveMapBlobChunk(const FString& ModId, const FString& Title,
-                                                                int32 ChunkIndex, int32 TotalChunks,
-                                                                int32 TotalBytes, const TArray<uint8>& Data);
+    /** (Cliente) El usuario confirmó en el popup: suscribe+descarga el mapa por Steam y pollea hasta tenerlo. */
+    UFUNCTION(BlueprintCallable, Category="MapMod") void ConfirmMapDownload();
+    /** (Cliente) El usuario rechazó bajar el mapa (queda sin poder marcar listo hasta que cambie el mapa). */
+    UFUNCTION(BlueprintCallable, Category="MapMod") void DeclineMapDownload();
+    /** El WBP implementa esto para mostrar el popup "El host eligió el mapa X. ¿Descargarlo?" — Sí llama a
+     *  ConfirmMapDownload(), No a DeclineMapDownload(). Se dispara en el cliente que no tiene el mapa. */
+    UFUNCTION(BlueprintImplementableEvent, Category="MapMod") void OnShowMapDownloadPrompt(const FString& MapTitle);
     /** (Cliente→Servidor) Confirma que ya tiene el mapa 'ModId' localmente (para el gate del lobby). */
     UFUNCTION(Server, Reliable) void Server_ReportHasMap(const FString& ModId);
 
@@ -247,16 +249,11 @@ private:
     int32        MapPrepTries = 0;
     FTimerHandle MapPrepPoll;
 
-    // ── P4: transferencia por chunks del mapa de props ──
-    // Emisor (servidor): buffer del blob a mandar a ESTE cliente, troceado y paceado por timer (para no
-    // desbordar el canal confiable). Receptor (cliente): buffer de reensamblado.
-    static constexpr int32 MapChunkBytes = 32 * 1024; // 32 KB por RPC confiable
-    TArray<uint8> MapSendBuf;   int32 MapSendNext = 0; int32 MapSendTotalChunks = 0;
-    FString       MapSendModId, MapSendTitle;
-    FTimerHandle  MapSendTimer;
-    void PumpMapSend();         // manda el próximo chunk al cliente (servidor)
-    TArray<uint8> MapRecvBuf;   FString MapRecvModId;   // reensamblado (cliente)
-    FString       LastMapAskedId;                       // evita re-pedir el mismo mapa en loop
+    // ── P4: descarga del mapa custom por Steam (cliente) ──
+    FString      PendingDownloadModId; // mapa que el host eligió y este cliente no tiene (esperando/descargando)
+    FTimerHandle MapDownloadPoll;      // poll de la descarga de Steam (rescanea hasta tenerlo)
+    int32        MapDownloadTries = 0;
+    void TryMapDownloadStep();
 
     // Fija la vista a la cámara diorama y bloquea el look (el mouse es para la UI). Reintenta
     // hasta encontrar la cámara (puede no estar lista en BeginPlay / al poseer el pawn).
