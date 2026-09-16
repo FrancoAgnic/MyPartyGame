@@ -17,9 +17,14 @@ bool UPTPlayerRowWidget::Initialize()
 
 void UPTPlayerRowWidget::SetRow(const FString& Name, bool bHost, bool bReady,
                                 const FLinearColor& ReadyColor, const FLinearColor& NotReadyColor, int32 MaxChars,
-                                APTPlayerState* Target, bool bCanKick)
+                                APTPlayerState* Target, bool bCanKick, bool bDownloadingMap)
 {
     TargetPS = Target;
+
+    // Logo "descargando mapa": visible solo mientras ese jugador todavía baja el mapa custom.
+    if (MapDownloadIcon)
+        MapDownloadIcon->SetVisibility(bDownloadingMap ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+    OnDownloadingMapChanged(bDownloadingMap); // el WBP arranca/para su animación
 
     if (NameText)
     {

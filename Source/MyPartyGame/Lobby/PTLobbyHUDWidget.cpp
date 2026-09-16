@@ -141,8 +141,10 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
                 {
                     // Kick: solo lo ve el host, en filas de OTROS (no en la del propio host).
                     const bool bCanKick = bLocalIsHost && !PTPS->bIsHost;
+                    // Descargando el mapa custom = todavía no lo tiene (bHasSelectedMap replicado).
+                    const bool bDownloadingMap = !PTPS->bHasSelectedMap;
                     Row->SetRow(NameFor(PTPS), PTPS->bIsHost, PTPS->bIsReady,
-                                ReadyColor, NotReadyColor, MaxNameChars, PTPS, bCanKick);
+                                ReadyColor, NotReadyColor, MaxNameChars, PTPS, bCanKick, bDownloadingMap);
                     PlayersBox->AddChildToVerticalBox(Row);
                 }
             }

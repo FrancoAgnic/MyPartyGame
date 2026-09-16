@@ -23,10 +23,16 @@ class MYPARTYGAME_API UPTPlayerRowWidget : public UUserWidget
     GENERATED_BODY()
 public:
     /** Configura la fila. MaxChars recorta el nombre para que no se salga de la pantalla.
-     *  Target = PlayerState de esta fila; bCanKick = mostrar el botón Kick (vos sos host y no es host/vos). */
+     *  Target = PlayerState de esta fila; bCanKick = mostrar el botón Kick (vos sos host y no es host/vos).
+     *  bDownloadingMap = este jugador todavía está descargando el mapa custom elegido por el host. */
     void SetRow(const FString& Name, bool bHost, bool bReady,
                 const FLinearColor& ReadyColor, const FLinearColor& NotReadyColor, int32 MaxChars,
-                APTPlayerState* Target = nullptr, bool bCanKick = false);
+                APTPlayerState* Target = nullptr, bool bCanKick = false, bool bDownloadingMap = false);
+
+    /** El WBP implementa esto para prender/apagar la animación del logo "descargando mapa". Se llama
+     *  cada refresh con el estado actual (true = mostrar/animar; false = ocultar). */
+    UFUNCTION(BlueprintImplementableEvent, Category="Row")
+    void OnDownloadingMapChanged(bool bDownloading);
 
 protected:
     virtual bool Initialize() override;
@@ -38,6 +44,10 @@ protected:
     // Banderita del idioma del jugador (al lado del nombre). Nombrala EXACTO "LangFlag" en el WBP; la
     // textura la pone el código según el idioma que tenga seteado ese jugador. Opcional.
     UPROPERTY(meta = (BindWidgetOptional)) UImage*     LangFlag;
+    // Logo "descargando mapa" (se muestra solo mientras ese jugador baja el mapa custom). Nombralo EXACTO
+    // "MapDownloadIcon" en el WBP. El código lo muestra/oculta; la animación la hacés vos en el WBP
+    // (por ejemplo con OnDownloadingMapChanged para arrancar/parar una animación de widget).
+    UPROPERTY(meta = (BindWidgetOptional)) UImage*     MapDownloadIcon;
 
     // Texturas del check (asignar en el WBP de la fila): con tilde = listo; vacía/aspa = no listo.
     UPROPERTY(EditAnywhere, Category = "Row") UTexture2D* ReadyTex    = nullptr;

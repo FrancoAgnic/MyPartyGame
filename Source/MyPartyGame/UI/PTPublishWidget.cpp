@@ -81,9 +81,9 @@ void UPTPublishWidget::SwitchTab(int32 Tab)
     // Controles sueltos (por si el WBP no usa contenedores BankPanel/MapPanel).
     if (UploadCsvButton) UploadCsvButton->SetVisibility(bMaps ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
     if (MapSelectCombo)  MapSelectCombo->SetVisibility(bMaps ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-    // La miniatura del mapa NO se edita acá (se saca dentro del nivel): ocultar el botón de elegir imagen
-    // en Mapas. En Bancos sí se elige. El preview igual se muestra (imagen del mapa).
-    if (ThumbnailButton) ThumbnailButton->SetVisibility(bMaps ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+    // El botón de miniatura sirve en AMBAS pestañas (banco y mapas): en mapas se autocompleta con la
+    // miniatura que guardaste en el nivel, pero se puede cambiar acá también.
+    if (ThumbnailButton) ThumbnailButton->SetVisibility(ESlateVisibility::Visible);
     ResetForm();
     if (bMaps) RefreshMapList();
     ApplyTabVisual();
