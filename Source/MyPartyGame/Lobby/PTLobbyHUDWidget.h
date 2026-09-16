@@ -118,22 +118,25 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) class UEditableTextBox*  ChatInput;
     UPROPERTY(meta = (BindWidgetOptional)) class URichTextBlock*    TxtChat;   // RichText: permite color por tags
     UPROPERTY(meta = (BindWidgetOptional)) class UScrollBox*        ChatScroll;
-    // Chat COLAPSABLE: por defecto solo se ve la barrita (ChatBarButton). Al clickearla se abre el panel
-    // (ChatPanel) con el log + input; la cruz roja (ChatCloseButton) o clickear afuera (ChatClickCatcher)
-    // lo colapsan y devuelven el foco al movimiento del personaje.
-    UPROPERTY(meta = (BindWidgetOptional)) class UWidget* ChatPanel;          // contenedor del chat abierto (log+input+cruz)
-    UPROPERTY(meta = (BindWidgetOptional)) class UButton* ChatBarButton;      // barrita colapsada → abrir
-    UPROPERTY(meta = (BindWidgetOptional)) class UButton* ChatCloseButton;    // cruz roja → cerrar
+    // Chat COLAPSABLE del LOBBY: siempre se ve la barrita (ChatBarButton). Clickearla ALTERNA abrir/cerrar
+    // el panel (ChatPanel); la flecha de la barra cambia ↑ (cerrado) ↔ ↓ (abierto). Al cerrar, el foco
+    // vuelve al movimiento del personaje. (Esto NO afecta el chat del gameplay, que queda igual.)
+    UPROPERTY(meta = (BindWidgetOptional)) class UWidget* ChatPanel;          // contenedor del chat abierto (log+input)
+    UPROPERTY(meta = (BindWidgetOptional)) class UButton* ChatBarButton;      // la barrita: toggle abrir/cerrar
+    UPROPERTY(meta = (BindWidgetOptional)) class UWidget* ChatArrowUp;        // ícono flecha ARRIBA (visible cerrado)
+    UPROPERTY(meta = (BindWidgetOptional)) class UWidget* ChatArrowDown;      // ícono flecha ABAJO (visible abierto)
     UPROPERTY(meta = (BindWidgetOptional)) class UButton* ChatClickCatcher;   // (opcional) full-screen detrás → click afuera cierra
-    UPROPERTY(meta = (BindWidgetOptional)) class UWidget* ChatUnreadIndicator;// (opcional) se muestra si hay mensajes sin leer
+    UPROPERTY(meta = (BindWidgetOptional)) class UWidget* ChatUnreadIndicator;// (opcional) glow de mensaje sin leer
 
     UFUNCTION() void OnChatCommitted(const FText& Text, ETextCommit::Type CommitMethod);
     UFUNCTION() void OnLobbyChatLine(const FString& Name, const FString& Message);
-    UFUNCTION() void OnChatBarClicked();
-    UFUNCTION() void OnChatCloseClicked();
+    UFUNCTION() void OnChatBarClicked();   // toggle
+    UFUNCTION() void OnChatCloseClicked(); // (para el catcher opcional)
     void SetChatExpanded(bool bExpanded);
-    /** El WBP puede animar el parpadeo del outline de la barra cuando llega un mensaje sin leer. */
+    /** El WBP puede animar el glow de la barra cuando llega un mensaje sin leer (true) / al abrir (false). */
     UFUNCTION(BlueprintImplementableEvent, Category="Lobby") void OnChatUnreadChanged(bool bHasUnread);
+    /** El WBP puede animar la apertura/cierre (ej: "ventana" que crece hacia arriba) y/o cambiar el ícono. */
+    UFUNCTION(BlueprintImplementableEvent, Category="Lobby") void OnChatExpandedChanged(bool bExpanded);
 
 private:
     FTimerHandle RefreshTimerHandle;

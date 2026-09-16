@@ -39,7 +39,6 @@ bool UPTLobbyHUDWidget::Initialize()
 
     if (ChatInput)        ChatInput->OnTextCommitted.AddDynamic(this, &UPTLobbyHUDWidget::OnChatCommitted);
     if (ChatBarButton)    ChatBarButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnChatBarClicked);
-    if (ChatCloseButton)  ChatCloseButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnChatCloseClicked);
     if (ChatClickCatcher) ChatClickCatcher->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnChatCloseClicked);
     SetChatExpanded(false); // arranca colapsado (solo la barrita) → no roba el foco del teclado al entrar
 
@@ -320,15 +319,18 @@ void UPTLobbyHUDWidget::RefreshSettingsView()
     }
 }
 
-void UPTLobbyHUDWidget::OnChatBarClicked()  { SetChatExpanded(true);  }
+void UPTLobbyHUDWidget::OnChatBarClicked()  { SetChatExpanded(!bChatExpanded); } // la barrita ALTERNA
 void UPTLobbyHUDWidget::OnChatCloseClicked(){ SetChatExpanded(false); }
 
 void UPTLobbyHUDWidget::SetChatExpanded(bool bExpanded)
 {
     bChatExpanded = bExpanded;
     if (ChatPanel)        ChatPanel->SetVisibility(bExpanded ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-    if (ChatBarButton)    ChatBarButton->SetVisibility(bExpanded ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+    // La barrita queda SIEMPRE visible (es el toggle); solo cambia su flecha ↑/↓.
+    if (ChatArrowUp)      ChatArrowUp->SetVisibility(bExpanded ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+    if (ChatArrowDown)    ChatArrowDown->SetVisibility(bExpanded ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
     if (ChatClickCatcher) ChatClickCatcher->SetVisibility(bExpanded ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+    OnChatExpandedChanged(bExpanded); // el WBP anima la "ventana" que crece hacia arriba / cambia el ícono
 
     if (bExpanded)
     {
