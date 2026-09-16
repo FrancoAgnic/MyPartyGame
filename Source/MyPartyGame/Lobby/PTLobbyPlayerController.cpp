@@ -304,6 +304,16 @@ void APTLobbyPlayerController::Server_MapReady_Implementation()
         GM->OnClientMapReady(this);
 }
 
+void APTLobbyPlayerController::Server_SendLobbyChat_Implementation(const FString& Message)
+{
+    const FString Text = Message.TrimStartAndEnd().Left(200);
+    if (Text.IsEmpty()) return;
+    const APTPlayerState* PS = GetPlayerState<APTPlayerState>();
+    const FString Name = PS ? PS->GetDisplayNameSafe() : TEXT("?");
+    if (APTGameState* GS = GetWorld()->GetGameState<APTGameState>())
+        GS->Multicast_LobbyChat(Name, Text);
+}
+
 // ── P4: auto-distribución del mapa de props en el lobby ──────────────────────────────────────────
 
 void APTLobbyPlayerController::EnsureSelectedMapAvailable(const FString& ModId)

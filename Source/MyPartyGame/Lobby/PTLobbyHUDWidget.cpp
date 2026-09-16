@@ -28,10 +28,14 @@
 #include "../UI/PTFriendsWidget.h"
 #include "../UI/PTWordPackWidget.h"
 #include "PTGameSettingsWidget.h"
+#include "Components/EditableTextBox.h"
+#include "Components/ScrollBox.h"
 
 bool UPTLobbyHUDWidget::Initialize()
 {
     if (!Super::Initialize()) return false;
+
+    if (ChatInput) ChatInput->OnTextCommitted.AddDynamic(this, &UPTLobbyHUDWidget::OnChatCommitted);
 
     if (CopyCodeButton)  CopyCodeButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnCopyCodeClicked);
     if (LeaveGameButton) LeaveGameButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnLeaveGameClicked);
@@ -101,6 +105,13 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
 {
     APTGameState* PTGS = GetWorld() ? GetWorld()->GetGameState<APTGameState>() : nullptr;
     if (!PTGS) return;
+
+    // Enganchar el chat del lobby una vez que el GameState ya existe (el HUD puede crearse antes).
+    if (!bChatBound)
+    {
+        PTGS->OnLobbyChat.AddDynamic(this, &UPTLobbyHUDWidget::OnLobbyChatLine);
+        bChatBound = true;
+    }
 
     const APTPlayerState* LocalPS = GetOwningPlayer() ? GetOwningPlayer()->GetPlayerState<APTPlayerState>() : nullptr;
     const bool bLocalIsHost = LocalPS && LocalPS->bIsHost;
@@ -301,6 +312,34 @@ void UPTLobbyHUDWidget::RefreshSettingsView()
         FFormatOrderedArguments Args; Args.Add(Map);
         SV_MapText->SetText(PTText::Format(TEXT("SV_MAP"), Args));
     }
+}
+
+void UPTLobbyHUDWidget::OnChatCommitted(const FText& Text, ETextCommit::Type CommitMethod)
+{
+    // Solo enviar con ENTER (no al perder foco). Vaciar la caja y devolverle el foco para seguir chateando.
+    if (CommitMethod != ETextCommit::OnEnter) return;
+    const FString Msg = Text.ToString().TrimStartAndEnd();
+    if (ChatInput) ChatInput->SetText(FText::GetEmpty());
+    if (Msg.IsEmpty()) return;
+    if (APTLobbyPlayerController* PC = Cast<APTLobbyPlayerController>(GetOwningPlayer()))
+        PC->Server_SendLobbyChat(Msg);
+    if (ChatInput) ChatInput->SetKeyboardFocus();
+}
+
+void UPTLobbyHUDWidget::OnLobbyChatLine(const FString& Name, const FString& Message)
+{
+    // Modo captura dev: nombre → "Player N" (local).
+    FString DispName = Name;
+    if (const UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
+        if (GI->IsCaptureMode() && !Name.IsEmpty())
+            if (const APTGameState* G = GetWorld() ? GetWorld()->GetGameState<APTGameState>() : nullptr)
+                for (APlayerState* PS : G->PlayerArray)
+                    if (PS && PS->GetPlayerName() == Name)
+                    { const FString Cap = GI->GetCaptureName(PS); if (!Cap.IsEmpty()) { DispName = Cap; } break; }
+
+    ChatLog += FString::Printf(TEXT("%s: %s\n"), *DispName.Left(14), *Message);
+    if (TxtChat)    TxtChat->SetText(FText::FromString(ChatLog));
+    if (ChatScroll) ChatScroll->ScrollToEnd();
 }
 
 void UPTLobbyHUDWidget::OnCopyCodeClicked()

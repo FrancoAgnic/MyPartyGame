@@ -24,6 +24,11 @@ void APTGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
     DOREPLIFETIME(APTGameState, bHostSettingsPanelOpen);
 }
 
+void APTGameState::Multicast_LobbyChat_Implementation(const FString& Name, const FString& Message)
+{
+    OnLobbyChat.Broadcast(Name, Message);
+}
+
 void APTGameState::OnRep_MatchMapModId()
 {
     // (Cliente) Cambió el mapa elegido por el host → asegurarse de tenerlo localmente (auto-descarga/

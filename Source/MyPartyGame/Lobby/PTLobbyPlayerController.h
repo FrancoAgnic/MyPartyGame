@@ -45,6 +45,10 @@ public:
     UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Lobby")
     void Server_SetReady(bool bInReady);
 
+    /** Chat del lobby: el cliente manda un mensaje; el server lo difunde a todos (con su nombre). */
+    UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Lobby")
+    void Server_SendLobbyChat(const FString& Message);
+
     /** El HOST expulsa a un jugador de la sala. Valida en el server que quien llama sea el host y
      *  que el objetivo no sea el propio host. Lo llama el botón Kick de la fila (UPTPlayerRowWidget). */
     UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Lobby")

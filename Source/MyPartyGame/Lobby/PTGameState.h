@@ -14,6 +14,9 @@ enum class EPTLobbyState : uint8
     InGame            UMETA(DisplayName="InGame")
 };
 
+// Chat del LOBBY: el HUD se engancha a este delegate para mostrar cada línea.
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPTOnLobbyChat, const FString&, Name, const FString&, Message);
+
 UCLASS()
 class MYPARTYGAME_API APTGameState : public AGameState
 {
@@ -21,6 +24,11 @@ class MYPARTYGAME_API APTGameState : public AGameState
 
 public:
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+    // ── Chat del lobby ──
+    // El HUD se suscribe a OnLobbyChat; el server difunde cada mensaje con Multicast_LobbyChat.
+    UPROPERTY(BlueprintAssignable, Category="Lobby") FPTOnLobbyChat OnLobbyChat;
+    UFUNCTION(NetMulticast, Reliable) void Multicast_LobbyChat(const FString& Name, const FString& Message);
 
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")
     EPTLobbyState LobbyState = EPTLobbyState::WaitingForPlayers;
