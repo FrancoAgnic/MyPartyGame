@@ -2179,6 +2179,12 @@ void APTSculptPlayerController::Server_SendChat_Implementation(const FString& Me
         GM->HandleChat(GetPlayerState<APTPlayerState>(), Message);
 }
 
+void APTSculptPlayerController::Client_ShowCloseGuess_Implementation()
+{
+    // Aviso privado "¡casi!" — se muestra como una línea de chat con estilo aparte (solo para este cliente).
+    if (GameplayHUD) GameplayHUD->ShowCloseGuessNotice();
+}
+
 void APTSculptPlayerController::Server_RequestPlayAgain_Implementation()
 {
     if (APTSculptGameMode* GM = GetWorld()->GetAuthGameMode<APTSculptGameMode>())

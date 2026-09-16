@@ -300,6 +300,11 @@ public:
     UFUNCTION(Server, Reliable, BlueprintCallable, Category="Game")
     void Server_SendChat(const FString& Message);
 
+    /** [Server→cliente que escribió] Aviso PRIVADO de que estuvo CERCA de adivinar (plural/typo). Lo
+     *  muestra el HUD como una línea de chat "casi" (no lo ven los demás → no spoilea). */
+    UFUNCTION(Client, Reliable)
+    void Client_ShowCloseGuess();
+
     /** Pantalla de fin de partida (solo el anfitrión): volver a jugar o volver al lobby.
      *  El servidor valida que el que lo pide sea el host. Llamar desde el HUD. */
     UFUNCTION(Server, Reliable, BlueprintCallable, Category="Game")

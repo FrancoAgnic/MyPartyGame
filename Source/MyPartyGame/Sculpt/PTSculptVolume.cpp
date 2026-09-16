@@ -370,6 +370,16 @@ void APTSculptVolume::BeginPlay()
     if (UMaterialInterface* M = ClayMaterialOverride ? ClayMaterialOverride
                                 : (ClayMID ? (UMaterialInterface*)ClayMID : ClayMaterial))
         Mesh->SetMaterial(0, M);
+
+    // La animación de colapso/crecimiento del turno escala el actor entero. Cualquier StaticMesh que el
+    // usuario haya puesto en el BP (p.ej. el marco que delimita el área) DEBE ser Movable: en una build
+    // COCINADA los componentes Static tienen su transform congelado y NO escalan en runtime (en el editor
+    // sí, por eso "andaba en el engine pero no en la build"). Forzarlos a Movable lo arregla.
+    TArray<UStaticMeshComponent*> SMComps;
+    GetComponents<UStaticMeshComponent>(SMComps);
+    for (UStaticMeshComponent* SM : SMComps)
+        if (SM && SM->Mobility != EComponentMobility::Movable)
+            SM->SetMobility(EComponentMobility::Movable);
 }
 
 void APTSculptVolume::Tick(float DeltaTime)
@@ -2274,6 +2284,10 @@ void APTSculptVolume::Multicast_CollapseVolume_Implementation()
 void APTSculptVolume::Multicast_GrowVolume_Implementation()
 {
     // Crecimiento al EMPEZAR el nuevo turno: escala actual (≈0) → 1 con rebote.
+    // Red de seguridad anti-escultura-vieja: si el colapso anterior no llegó a limpiar en ESTE cliente
+    // (llegó laggeado y el Grow pisó el Collapse antes de que su Tick ejecutara ClearAll), limpiar ahora.
+    // Al empezar un turno el lienzo SIEMPRE debe estar en blanco, así que esto es seguro.
+    ClearAll();
     VolAnimStartScale = GetActorScale3D().X;
     VolAnimPhase = 2;
     VolAnimT     = 0.f;

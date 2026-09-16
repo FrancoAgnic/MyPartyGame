@@ -81,6 +81,10 @@ public:
     // Server-only: la palabra real nunca sale de acá.
     bool DoesGuessMatch(const FString& Guess) const;
 
+    // ¿El texto está CERCA de alguna traducción (plural / 1-2 letras de diferencia) sin ser exacto?
+    // Para avisarle "¡casi!" al que escribió. Server-only.
+    bool IsCloseGuess(const FString& Guess) const;
+
     // Al terminar la partida (fase GameOver), el HUD del anfitrión llama a una de estas
     // vía el PlayerController. Solo el host puede; se ignora si lo pide otro.
     void RequestPlayAgain(APTPlayerState* Requester);

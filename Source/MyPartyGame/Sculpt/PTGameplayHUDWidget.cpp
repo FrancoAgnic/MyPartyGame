@@ -793,12 +793,19 @@ void UPTGameplayHUDWidget::OnChatLine(const FString& Name, const FString& Messag
     {
     case EPTChatType::Correct: Line = FString::Printf(TEXT("<name>%s</> <correct>%s</>"), *ShortName,
                                                       *PTText::GetStr(TEXT("CHAT_GUESSED_IT"))); break;
+    case EPTChatType::Close:   Line = FString::Printf(TEXT("<close>%s</>"),
+                                                      *PTText::GetStr(TEXT("CHAT_CLOSE_GUESS"))); break;
     case EPTChatType::System:  Line = Message; break;
     default:                   Line = FString::Printf(TEXT("<name>%s</>: %s"), *ShortName, *Message); break; // Normal
     }
     ChatLog += Line + TEXT("\n");
     if (TxtChat)    TxtChat->SetText(FText::FromString(ChatLog));
     if (ChatScroll) ChatScroll->ScrollToEnd();
+}
+
+void UPTGameplayHUDWidget::ShowCloseGuessNotice()
+{
+    OnChatLine(FString(), FString(), EPTChatType::Close);
 }
 
 void UPTGameplayHUDWidget::OnYouGuessed(const FString& Word, int32 Points)

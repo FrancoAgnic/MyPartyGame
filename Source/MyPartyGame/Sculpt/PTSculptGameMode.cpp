@@ -578,6 +578,15 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
             return;
         }
 
+        // CERCA (plural / typo / tilde): avisar SOLO al que escribió ("¡casi!") y no mostrar el mensaje a
+        // nadie (así no spoilea una palabra casi igual a la secreta). Antes esto pasaba "sin feedback".
+        if (bEligibleGuesser && IsCloseGuess(Text))
+        {
+            if (APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(Sender->GetOwningController()))
+                PC->Client_ShowCloseGuess();
+            return;
+        }
+
         // Anti-spoiler: no dejar que NINGUNA traducción aparezca en el chat, en ningún idioma
         // (si no, un jugador podría spoilear a los demás escribiendo la palabra en otro idioma).
         const FString NT = Normalize(Text);
@@ -601,6 +610,45 @@ bool APTSculptGameMode::DoesGuessMatch(const FString& Guess) const
     const FString G = Normalize(Guess);
     for (const FString& W : CurrentWord.Words)
         if (!W.IsEmpty() && G == Normalize(W)) return true;
+    return false;
+}
+
+// Distancia de edición (Levenshtein) entre dos strings ya normalizados.
+static int32 PT_EditDistance(const FString& A, const FString& B)
+{
+    const int32 n = A.Len(), m = B.Len();
+    if (n == 0) return m;
+    if (m == 0) return n;
+    TArray<int32> Prev, Cur;
+    Prev.SetNum(m + 1); Cur.SetNum(m + 1);
+    for (int32 j = 0; j <= m; ++j) Prev[j] = j;
+    for (int32 i = 1; i <= n; ++i)
+    {
+        Cur[0] = i;
+        for (int32 j = 1; j <= m; ++j)
+        {
+            const int32 Cost = (A[i - 1] == B[j - 1]) ? 0 : 1;
+            Cur[j] = FMath::Min3(Prev[j] + 1, Cur[j - 1] + 1, Prev[j - 1] + Cost);
+        }
+        Prev = Cur;
+    }
+    return Prev[m];
+}
+
+bool APTSculptGameMode::IsCloseGuess(const FString& Guess) const
+{
+    if (!CurrentWord.IsValidEntry()) return false;
+    const FString G = Normalize(Guess);
+    if (G.Len() < 3) return false; // muy corto: no arriesgar falsos "casi"
+    for (const FString& W : CurrentWord.Words)
+    {
+        if (W.IsEmpty()) continue;
+        const FString NW = Normalize(W);
+        if (NW.IsEmpty() || G == NW) continue; // vacío o exacto (eso ya es acierto)
+        // Umbral por largo: palabras cortas 1 letra, largas hasta 2 (plural, tilde, typo simple).
+        const int32 Tol = (NW.Len() >= 7) ? 2 : 1;
+        if (PT_EditDistance(G, NW) <= Tol) return true;
+    }
     return false;
 }
 

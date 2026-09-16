@@ -268,7 +268,11 @@ void PTText::LocalizeWidgetTree(UUserWidget* Widget)
         // falta) y colisionan con abreviaturas de una letra del CSV. Ej: la animación que revela LETRAS de
         // la palabra muestra "S" un frame → matcheaba HUD_SECONDS_SHORT (FR="s") y quedaba pisada por "seg".
         if (Cur.Len() <= 1) return false;
-        const FName* Key = GReverse.Find(NormalizeForLookup(Cur));
+        // Idem tras quitar guiones/espacios/asteriscos: la palabra ENMASCARADA ("_ S _ _") se normaliza a
+        // una sola letra ("s") y colisionaba con HUD_SECONDS_SHORT → se veía "seg" pisando la letra revelada.
+        const FString Norm = NormalizeForLookup(Cur);
+        if (Norm.Len() <= 1) return false;
+        const FName* Key = GReverse.Find(Norm);
         if (!Key) return false;
 
         Out = PTText::Get(*Key);

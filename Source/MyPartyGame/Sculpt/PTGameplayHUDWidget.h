@@ -33,6 +33,9 @@ public:
      *  interpretar teclas de juego (ej: BACKSPACE de "borrar todo") mientras estás escribiendo. */
     bool IsChatOpen() const { return bChatOpen; }
 
+    /** Aviso PRIVADO "¡casi!" (estuviste cerca de adivinar): línea de chat con estilo aparte, solo local. */
+    void ShowCloseGuessNotice();
+
     /** Rellena la lista de controles desde PTInput::GetBindings() (fuente de verdad única).
      *  Llamar de nuevo tras un rebind y la UI queda actualizada. */
     void RebuildControls();

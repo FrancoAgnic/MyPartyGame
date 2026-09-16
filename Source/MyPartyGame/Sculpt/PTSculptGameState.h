@@ -22,8 +22,9 @@ enum class EPTTurnPhase : uint8
 //  Normal  → "Nombre: Mensaje"
 //  Correct → "Nombre adivinó la palabra!" (Message se ignora, anti-spoiler)
 //  System  → "Message" (Nombre se ignora; ej: "La palabra era: perro")
+//  Close   → aviso PRIVADO "¡Casi! estás cerca" (solo al que escribió; Name/Message se ignoran)
 UENUM(BlueprintType)
-enum class EPTChatType : uint8 { Normal, Correct, System };
+enum class EPTChatType : uint8 { Normal, Correct, System, Close };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FPTOnTurnPhaseChanged);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FPTOnChatLine, const FString&, Name, const FString&, Message, EPTChatType, Type);
