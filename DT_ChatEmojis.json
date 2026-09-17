@@ -1,0 +1,222 @@
+[
+  {
+    "Name": "e_1f336",
+    "Brush": {
+      "ImageSize": {
+        "X": 28.0,
+        "Y": 28.0
+      },
+      "DrawAs": "Image",
+      "ResourceObject": "/Game/Template/UI/Emojis/1f336.1f336"
+    }
+  },
+  {
+    "Name": "e_1f346",
+    "Brush": {
+      "ImageSize": {
+        "X": 28.0,
+        "Y": 28.0
+      },
+      "DrawAs": "Image",
+      "ResourceObject": "/Game/Template/UI/Emojis/1f346.1f346"
+    }
+  },
+  {
+    "Name": "e_1f37b",
+    "Brush": {
+      "ImageSize": {
+        "X": 28.0,
+        "Y": 28.0
+      },
+      "DrawAs": "Image",
+      "ResourceObject": "/Game/Template/UI/Emojis/1f37b.1f37b"
+    }
+  },
+  {
+    "Name": "e_1f389",
+    "Brush": {
+      "ImageSize": {
+        "X": 28.0,
+        "Y": 28.0
+      },
+      "DrawAs": "Image",
+      "ResourceObject": "/Game/Template/UI/Emojis/1f389.1f389"
+    }
+  },
+  {
+    "Name": "e_1f3c5",
+    "Brush": {
+      "ImageSize": {
+        "X": 28.0,
+        "Y": 28.0
+      },
+      "DrawAs": "Image",
+      "ResourceObject": "/Game/Template/UI/Emojis/1f3c5.1f3c5"
+    }
+  },
+  {
+    "Name": "e_1f440",
+    "Brush": {
+      "ImageSize": {
+        "X": 28.0,
+        "Y": 28.0
+      },
+      "DrawAs": "Image",
+      "ResourceObject": "/Game/Template/UI/Emojis/1f440.1f440"
+    }
+  },
+  {
+    "Name": "e_1f4af",
+    "Brush": {
+      "ImageSize": {
+        "X": 28.0,
+        "Y": 28.0
+      },
+      "DrawAs": "Image",
+      "ResourceObject": "/Game/Template/UI/Emojis/1f4af.1f4af"
+    }
+  },
+  {
+    "Name": "e_1f5e3",
+    "Brush": {
+      "ImageSize": {
+        "X": 28.0,
+        "Y": 28.0
+      },
+      "DrawAs": "Image",
+      "ResourceObject": "/Game/Template/UI/Emojis/1f5e3.1f5e3"
+    }
+  },
+  {
+    "Name": "e_1f600",
+    "Brush": {
+      "ImageSize": {
+        "X": 28.0,
+        "Y": 28.0
+      },
+      "DrawAs": "Image",
+      "ResourceObject": "/Game/Template/UI/Emojis/1f600.1f600"
+    }
+  },
+  {
+    "Name": "e_1f60d",
+    "Brush": {
+      "ImageSize": {
+        "X": 28.0,
+        "Y": 28.0
+      },
+      "DrawAs": "Image",
+      "ResourceObject": "/Game/Template/UI/Emojis/1f60d.1f60d"
+    }
+  },
+  {
+    "Name": "e_1f6ab",
+    "Brush": {
+      "ImageSize": {
+        "X": 28.0,
+        "Y": 28.0
+      },
+      "DrawAs": "Image",
+      "ResourceObject": "/Game/Template/UI/Emojis/1f6ab.1f6ab"
+    }
+  },
+  {
+    "Name": "e_1f921",
+    "Brush": {
+      "ImageSize": {
+        "X": 28.0,
+        "Y": 28.0
+      },
+      "DrawAs": "Image",
+      "ResourceObject": "/Game/Template/UI/Emojis/1f921.1f921"
+    }
+  },
+  {
+    "Name": "e_1f923",
+    "Brush": {
+      "ImageSize": {
+        "X": 28.0,
+        "Y": 28.0
+      },
+      "DrawAs": "Image",
+      "ResourceObject": "/Game/Template/UI/Emojis/1f923.1f923"
+    }
+  },
+  {
+    "Name": "e_1f929",
+    "Brush": {
+      "ImageSize": {
+        "X": 28.0,
+        "Y": 28.0
+      },
+      "DrawAs": "Image",
+      "ResourceObject": "/Game/Template/UI/Emojis/1f929.1f929"
+    }
+  },
+  {
+    "Name": "e_1f92a",
+    "Brush": {
+      "ImageSize": {
+        "X": 28.0,
+        "Y": 28.0
+      },
+      "DrawAs": "Image",
+      "ResourceObject": "/Game/Template/UI/Emojis/1f92a.1f92a"
+    }
+  },
+  {
+    "Name": "e_1f92c",
+    "Brush": {
+      "ImageSize": {
+        "X": 28.0,
+        "Y": 28.0
+      },
+      "DrawAs": "Image",
+      "ResourceObject": "/Game/Template/UI/Emojis/1f92c.1f92c"
+    }
+  },
+  {
+    "Name": "e_1f92e",
+    "Brush": {
+      "ImageSize": {
+        "X": 28.0,
+        "Y": 28.0
+      },
+      "DrawAs": "Image",
+      "ResourceObject": "/Game/Template/UI/Emojis/1f92e.1f92e"
+    }
+  },
+  {
+    "Name": "e_1f92f",
+    "Brush": {
+      "ImageSize": {
+        "X": 28.0,
+        "Y": 28.0
+      },
+      "DrawAs": "Image",
+      "ResourceObject": "/Game/Template/UI/Emojis/1f92f.1f92f"
+    }
+  },
+  {
+    "Name": "e_2620",
+    "Brush": {
+      "ImageSize": {
+        "X": 28.0,
+        "Y": 28.0
+      },
+      "DrawAs": "Image",
+      "ResourceObject": "/Game/Template/UI/Emojis/2620.2620"
+    }
+  },
+  {
+    "Name": "e_26a0",
+    "Brush": {
+      "ImageSize": {
+        "X": 28.0,
+        "Y": 28.0
+      },
+      "DrawAs": "Image",
+      "ResourceObject": "/Game/Template/UI/Emojis/26a0.26a0"
+    }
+  }
+]
