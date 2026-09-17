@@ -35,6 +35,7 @@ public:
 protected:
     virtual bool Initialize() override;
     virtual void NativeDestruct() override;
+    virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
     UPROPERTY(meta = (BindWidget))         UVerticalBox* PlayersBox;
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   PlayersCountText;   // "4/8"
@@ -149,10 +150,9 @@ protected:
     UFUNCTION() void OnChatTextChanged(const FText& Text); // cancela el auto-cierre mientras escribís
     UFUNCTION() void OnLobbyChatLine(const FString& Name, const FString& Message);
     void SetChatExpanded(bool bExpanded);
-    void ScrollChatToEndDeferred(); // auto-scroll al último mensaje (reintenta unos frames por el auto-wrap)
-    UFUNCTION() void TickScrollToEnd();
-    FTimerHandle ChatScrollTimer;
-    int32 ChatScrollTicks = 0;
+    void ScrollChatToEndDeferred(); // "pega" el scroll al final por unos frames (por el auto-wrap)
+    bool  bChatStickToEnd = false;  // mientras true, cada frame fuerza el scroll al final
+    float ChatStickElapsed = 0.f;
     /** El WBP puede animar el glow de la barra cuando llega un mensaje sin leer (true) / al abrir (false). */
     UFUNCTION(BlueprintImplementableEvent, Category="Lobby") void OnChatUnreadChanged(bool bHasUnread);
 

@@ -428,20 +428,23 @@ void UPTLobbyHUDWidget::DownloadThumbnailTo(UImage* Target, const FString& URL)
 
 void UPTLobbyHUDWidget::ScrollChatToEndDeferred()
 {
-    if (ChatScroll) ChatScroll->ScrollToEnd(); // intento inmediato
-    // Reintentar unos frames: con Auto Wrap, el alto REAL del RichText recién se calcula tras el prepass;
-    // un solo ScrollToEnd queda corto cuando un mensaje envuelve en varias líneas.
-    ChatScrollTicks = 0;
-    if (UWorld* W = GetWorld())
-        W->GetTimerManager().SetTimer(ChatScrollTimer, this, &UPTLobbyHUDWidget::TickScrollToEnd, 0.03f, true);
+    // "Pegar" el scroll al final por ~0.5s: NativeTick lo fuerza CADA frame, así por más largo que sea el
+    // mensaje (auto-wrap) el layout se asienta y siempre queda visible su última línea sobre el input.
+    if (ChatScroll) ChatScroll->ScrollToEnd();
+    bChatStickToEnd = true;
+    ChatStickElapsed = 0.f;
 }
 
-void UPTLobbyHUDWidget::TickScrollToEnd()
+void UPTLobbyHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
-    if (TxtChat)    TxtChat->ForceLayoutPrepass();   // recalcular el alto con el wrap aplicado
-    if (ChatScroll) ChatScroll->ScrollToEnd();
-    if (++ChatScrollTicks >= 6) // ~0.18s: alcanza para que el layout del wrap se asiente
-        if (UWorld* W = GetWorld()) W->GetTimerManager().ClearTimer(ChatScrollTimer);
+    Super::NativeTick(MyGeometry, InDeltaTime);
+    if (bChatStickToEnd && ChatScroll)
+    {
+        if (TxtChat) TxtChat->ForceLayoutPrepass(); // recalcular el alto con el wrap aplicado
+        ChatScroll->ScrollToEnd();                  // mantener el final visible mientras se asienta el layout
+        ChatStickElapsed += InDeltaTime;
+        if (ChatStickElapsed >= 0.5f) bChatStickToEnd = false;
+    }
 }
 
 void UPTLobbyHUDWidget::OpenChatFromEnter()
