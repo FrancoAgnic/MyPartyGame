@@ -313,6 +313,10 @@ void APTLobbyPlayerController::Server_SendLobbyChat_Implementation(const FString
     const FString Name = PS ? PS->GetDisplayNameSafe() : TEXT("?");
     if (APTGameState* GS = GetWorld()->GetGameState<APTGameState>())
         GS->Multicast_LobbyChat(Name, Text);
+
+    // Globo de chat sobre la cabeza del que escribió (como en el gameplay): se ve en todas las máquinas.
+    if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn()))
+        Char->Multicast_ShowChatBubble(Text, /*bGuess=*/false);
 }
 
 // ── P4: auto-distribución del mapa de props en el lobby ──────────────────────────────────────────
