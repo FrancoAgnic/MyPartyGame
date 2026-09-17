@@ -251,6 +251,10 @@ private:
     UPROPERTY() class UPTLobbyHUDWidget* LobbyHUD = nullptr;
     // ENTER en el lobby: en modo cabeza confirma; si no, abre el chat del lobby (foco al input).
     void OnLobbyEnter();
+    // Anti-spam del chat del lobby (server-side): último envío y su texto, para frenar mensajes muy
+    // seguidos y duplicados (copiar/pegar).
+    double  LastLobbyChatTime = -100.0;
+    FString LastLobbyChatText;
 
     // Handshake de mapa de mod (cliente): monta/baja el pak y avisa "listo". Polling acotado por timeout.
     void TryPrepareMapStep();

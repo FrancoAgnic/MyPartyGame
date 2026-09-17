@@ -309,6 +309,14 @@ void APTLobbyPlayerController::Server_SendLobbyChat_Implementation(const FString
 {
     const FString Text = Message.TrimStartAndEnd().Left(200);
     if (Text.IsEmpty()) return;
+
+    // Anti-spam (server-side): mínimo intervalo entre mensajes + bloquear duplicados seguidos (copiar/pegar).
+    const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+    if (Now - LastLobbyChatTime < 0.8) return;                                   // muy seguido
+    if (Text == LastLobbyChatText && (Now - LastLobbyChatTime) < 8.0) return;    // mismo texto repetido
+    LastLobbyChatTime = Now;
+    LastLobbyChatText = Text;
+
     const APTPlayerState* PS = GetPlayerState<APTPlayerState>();
     const FString Name = PS ? PS->GetDisplayNameSafe() : TEXT("?");
     if (APTGameState* GS = GetWorld()->GetGameState<APTGameState>())
