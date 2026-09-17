@@ -149,6 +149,7 @@ protected:
     UFUNCTION() void OnChatTextChanged(const FText& Text); // cancela el auto-cierre mientras escribís
     UFUNCTION() void OnLobbyChatLine(const FString& Name, const FString& Message);
     void SetChatExpanded(bool bExpanded);
+    void ScrollChatToEndDeferred(); // auto-scroll al último mensaje (diferido un tick)
     /** El WBP puede animar el glow de la barra cuando llega un mensaje sin leer (true) / al abrir (false). */
     UFUNCTION(BlueprintImplementableEvent, Category="Lobby") void OnChatUnreadChanged(bool bHasUnread);
 

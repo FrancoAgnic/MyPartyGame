@@ -426,6 +426,15 @@ void UPTLobbyHUDWidget::DownloadThumbnailTo(UImage* Target, const FString& URL)
     Req->ProcessRequest();
 }
 
+void UPTLobbyHUDWidget::ScrollChatToEndDeferred()
+{
+    if (ChatScroll) ChatScroll->ScrollToEnd(); // intento inmediato
+    // ...y de nuevo el próximo tick, cuando el RichText ya recalculó su alto con el texto nuevo.
+    if (UWorld* W = GetWorld())
+        W->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this]()
+        { if (ChatScroll) ChatScroll->ScrollToEnd(); }));
+}
+
 void UPTLobbyHUDWidget::OpenChatFromEnter()
 {
     // ENTER con el juego enfocado. Dos casos:
@@ -489,7 +498,7 @@ void UPTLobbyHUDWidget::SetChatExpanded(bool bExpanded)
         bChatUnread = false;
         OnChatUnreadChanged(false);
         if (ChatUnreadIndicator) ChatUnreadIndicator->SetVisibility(ESlateVisibility::Collapsed);
-        if (ChatScroll) ChatScroll->ScrollToEnd();
+        ScrollChatToEndDeferred(); // al abrir, mostrar los últimos mensajes
         FocusChatInput();
     }
     else
@@ -542,8 +551,10 @@ void UPTLobbyHUDWidget::OnLobbyChatLine(const FString& Name, const FString& Mess
     // RichText: el nombre va con el estilo "name" (si existe en el Text Style Set del WBP; si no, color
     // default). El mensaje en texto plano.
     ChatLog += FString::Printf(TEXT("<name>%s</>: %s\n"), *DispName.Left(14), *Message);
-    if (TxtChat)    TxtChat->SetText(FText::FromString(ChatLog));
-    if (ChatScroll) ChatScroll->ScrollToEnd();
+    if (TxtChat) TxtChat->SetText(FText::FromString(ChatLog));
+    // Auto-scroll al último: diferido un tick porque el RichText recién recalcula su alto DESPUÉS de
+    // setear el texto (si scrolleáramos ya, iría al final VIEJO y los mensajes nuevos quedarían abajo).
+    ScrollChatToEndDeferred();
 
     // Chat colapsado + llegó un mensaje → marcar "no leído": el botón de la barra pasa a su material con
     // pulse (UpdateChatBarVisual) + avisos opcionales para el WBP.
