@@ -5,6 +5,7 @@
 #include "Components/Slider.h"
 #include "Components/Button.h"
 #include "Kismet/GameplayStatics.h"
+#include "GameFramework/PlayerController.h"
 
 namespace
 {
@@ -41,9 +42,27 @@ void UPTSkySettingsWidget::ShowPanel()
     PopulateFromEnv();
     SetVisibility(ESlateVisibility::Visible);
     PlayPopIn();
+    // Dar foco + mouse al panel (al abrir con F el juego tenía el foco y no había cursor).
+    if (APlayerController* PC = GetOwningPlayer())
+    {
+        FInputModeGameAndUI M;
+        M.SetWidgetToFocus(TakeWidget());
+        M.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+        PC->SetInputMode(M);
+        PC->SetShowMouseCursor(true);
+    }
 }
 
-void UPTSkySettingsWidget::HidePanel() { SetVisibility(ESlateVisibility::Collapsed); }
+void UPTSkySettingsWidget::HidePanel()
+{
+    SetVisibility(ESlateVisibility::Collapsed);
+    // Devolver el foco al juego (esculpido) y ocultar el cursor.
+    if (APlayerController* PC = GetOwningPlayer())
+    {
+        PC->SetInputMode(FInputModeGameOnly());
+        PC->SetShowMouseCursor(false);
+    }
+}
 void UPTSkySettingsWidget::OnCloseClicked() { HidePanel(); }
 
 void UPTSkySettingsWidget::PopulateFromEnv()

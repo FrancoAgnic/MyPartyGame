@@ -9,6 +9,10 @@ void UPTColorWheelWidget::NativeConstruct()
     Super::NativeConstruct();
     if (SatSlider)   SatSlider->OnValueChanged.AddDynamic(this, &UPTColorWheelWidget::OnSatChanged);
     if (ValueSlider) ValueSlider->OnValueChanged.AddDynamic(this, &UPTColorWheelWidget::OnValueChanged);
+    // La Image por defecto NO es hit-testeable → el click la atraviesa y no llega el evento. Forzarla a
+    // Visible (y el widget también) para poder mantener-arrastrar-soltar sobre la rueda.
+    SetVisibility(ESlateVisibility::Visible);
+    if (Wheel) Wheel->SetVisibility(ESlateVisibility::Visible);
 }
 
 FLinearColor UPTColorWheelWidget::GetColor() const
