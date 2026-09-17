@@ -315,6 +315,16 @@ void UPTGameplayHUDWidget::RefreshToolbar()
     for (int32 i = 0; i < ToolSlots.Num(); ++i)
         if (ToolSlots[i]) ToolSlots[i]->SetSelected(i == ToolIdx);
 
+    // Modo COLOCAR (autoría, preview FUERA del box): Paint(3)/Ojos(4) y el color picker (RMB) no se usan
+    // al poner assets → colapsarlos; adentro del box vuelven. En gameplay normal IsPlaceMode()=false.
+    {
+        const bool bPlace = PC->IsPlaceMode();
+        auto SlotVis = [](UWidget* W, bool bShow){ if (W) W->SetVisibility(bShow ? ESlateVisibility::Visible : ESlateVisibility::Collapsed); };
+        if (ToolSlots.IsValidIndex(2)) SlotVis(ToolSlots[2], !bPlace); // Paint
+        if (ToolSlots.IsValidIndex(3)) SlotVis(ToolSlots[3], !bPlace); // Ojos
+        SlotVis(ColorSlot, !bPlace);                                   // RMB → color picker
+    }
+
     // ── Formas: se ven con herramientas que usan formas (Agregar). Ojos/Borrar/Paint no. ──
     const bool bShowShapes = bSpectatingSculptor ? (SpecTool == 0) : PC->ToolUsesShapes();
     if (ShapesBox) ShapesBox->SetVisibility(bShowShapes ? ESlateVisibility::HitTestInvisible
@@ -435,7 +445,7 @@ void UPTGameplayHUDWidget::UpdateAuthorPanels()
     Hide(TxtSculptor); Hide(TxtWord); Hide(TxtTimer); Hide(TxtRound);
     Hide(WordPickPanel); Hide(ScoreboardBox); Hide(ResultsPanel);
     Hide(GuessPopup); Hide(AllGuessedPopup);
-    Hide(TxtChat); Hide(ChatInput); Hide(ChatScroll);
+    Hide(TxtChat); Hide(ChatInput); Hide(ChatScroll); Hide(ChatPanel); // + el contenedor (fondo/"Enter to chat")
 
     // Mostrar los controles de autoría (Guardar / Salir).
     if (AuthorPanel)      AuthorPanel->SetVisibility(ESlateVisibility::Visible);

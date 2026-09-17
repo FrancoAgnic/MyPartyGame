@@ -152,6 +152,8 @@ public:
     // Mallas de las CAPAS de detalle (para hornearlas junto a la base en la cabeza custom).
     const TArray<UProceduralMeshComponent*>& GetDetailMeshes() const { return DetailMeshes; }
     const TMap<int32, UProceduralMeshComponent*>& GetSVOChunkMeshes() const { return SVOChunkMeshes; }
+    // Malla de los OJOS colocados (para hornearlos junto a la arcilla en un asset del editor de mapas).
+    UProceduralMeshComponent* GetEyesMesh() const { return EyesMesh; }
 
     /** ¿Ese punto del mundo cae DENTRO del lienzo (el BoundsBox)? Para no dejar poner cosas
      *  (ej: ojos) fuera de la zona de modelado. */

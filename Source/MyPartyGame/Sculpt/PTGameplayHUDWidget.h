@@ -174,6 +174,9 @@ protected:
     // RichTextBlock: el nombre usa el estilo "name" (color); el mensaje queda en el default.
     UPROPERTY(meta=(BindWidgetOptional)) class URichTextBlock* TxtChat;    // log de chat (Auto Wrap)
     UPROPERTY(meta=(BindWidgetOptional)) UEditableTextBox* ChatInput;
+    // Contenedor de TODO el chat (fondo + "Enter to chat" + log + input). Para ocultarlo entero en el
+    // editor de mapas. Nombralo EXACTO "ChatPanel" en el WBP y meté el chat adentro.
+    UPROPERTY(meta=(BindWidgetOptional)) class UWidget* ChatPanel;
 
     // ── Rondas + marcador + pantalla de fin (todos opcionales) ──
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*       TxtRound;      // "Ronda 2 / 3"

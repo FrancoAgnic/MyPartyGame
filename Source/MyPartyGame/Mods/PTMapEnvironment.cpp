@@ -54,6 +54,7 @@ static void PT_GatherVolumeGeometry(APTSculptVolume* Volume, FPTPropGeometry& Ou
     AddSection(Volume->GetMeshComponent());
     for (const auto& Pair : Volume->GetSVOChunkMeshes()) AddSection(Pair.Value);
     for (UProceduralMeshComponent* DM : Volume->GetDetailMeshes()) AddSection(DM);
+    AddSection(Volume->GetEyesMesh()); // ojos colocados → se hornean junto a la arcilla
 
     // Recentrar en el centro del bounding box → el prop queda centrado en su origen (colocar/rotar/escalar
     // intuitivo). Guardamos la geometría ya centrada.

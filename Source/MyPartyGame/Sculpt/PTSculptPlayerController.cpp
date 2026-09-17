@@ -2444,44 +2444,43 @@ void APTSculptPlayerController::TickAuthorProps(float Dt)
     }
     else { BakeHoldTime = 0.f; bBakedThisHold = false; }
 
-    // Preview del asset (FUERA del box): con Add = el asset elegido siguiendo el cursor; con Erase = resaltar
-    // la instancia más cercana (lo que se va a borrar). AssetPreview vive en su propio actor → no lo afecta
-    // ocultar el PreviewActor de esculpido.
+    // FUERA del box:
+    //  · Add   → preview del ASSET elegido siguiendo el cursor (AssetPreview, actor aparte).
+    //  · Erase → preview de la BROCHA de borrar (la esfera con material de grilla, igual que dentro del box)
+    //            en el punto de colocación, para ver dónde se va a borrar.
     APTMapEnvironment* Env = GetMapEnv();
+    const bool bEraseOut = bOut && (EditMode == EPTEditMode::Erase) && !bEyesTool;
     bool bShowAsset = false;
-    if (bOut && AssetPreview && Env && Env->GetNumAssets() > 0 && !bEyesTool)
+    if (bOut && !bEraseOut && AssetPreview && Env && Env->GetNumAssets() > 0 && !bEyesTool
+        && EditMode == EPTEditMode::Add)
     {
-        if (EditMode == EPTEditMode::Add)
+        if (UStaticMesh* M = Env->GetAssetMesh(CurrentAsset))
         {
-            if (UStaticMesh* M = Env->GetAssetMesh(CurrentAsset))
-            {
-                if (AssetPreview->GetStaticMesh() != M) AssetPreview->SetStaticMesh(M);
-                AssetPreview->SetWorldTransform(FTransform(StampRotation, P, FVector(AssetScale)));
-                bShowAsset = true;
-            }
-        }
-        else if (EditMode == EPTEditMode::Erase)
-        {
-            int32 A = INDEX_NONE; FTransform Xf;
-            if (Env->GetNearestInstance(P, FMath::Max(80.f, AssetScale * 120.f), A, Xf))
-            {
-                if (UStaticMesh* M = Env->GetAssetMesh(A))
-                {
-                    if (AssetPreview->GetStaticMesh() != M) AssetPreview->SetStaticMesh(M);
-                    Xf.SetScale3D(Xf.GetScale3D() * 1.08f); // apenas más grande → se ve el resalte
-                    AssetPreview->SetWorldTransform(Xf);
-                    bShowAsset = true;
-                }
-            }
+            if (AssetPreview->GetStaticMesh() != M) AssetPreview->SetStaticMesh(M);
+            AssetPreview->SetWorldTransform(FTransform(StampRotation, P, FVector(AssetScale)));
+            bShowAsset = true;
         }
     }
     if (AssetPreview) AssetPreview->SetVisibility(bShowAsset);
 
-    // En modo colocar, ocultar el preview normal de esculpido para no confundir.
     if (bOut)
     {
-        if (PreviewActor) PreviewActor->SetActorHiddenInGame(true);
-        if (SculptGrid)   SculptGrid->SetVisibility(false);
-        if (BoundaryMesh) BoundaryMesh->SetVisibility(false);
+        if (bEraseOut)
+        {
+            // Mostrar la brocha de borrar (PreviewMesh/PreviewStaticMesh) en el punto de colocación; ocultar
+            // los ayudantes que no aplican afuera (quedarían en la posición vieja, pegados al box).
+            if (PreviewActor)
+            {
+                PreviewActor->SetActorHiddenInGame(false);
+                PreviewActor->SetActorLocation(P);
+            }
+            if (AxisGizmo)   AxisGizmo->SetVisibility(false);
+            if (PaintRing)   PaintRing->SetVisibility(false);
+            if (ShadowDecal) ShadowDecal->SetVisibility(false);
+            if (HeightStick) HeightStick->SetVisibility(false);
+        }
+        else if (PreviewActor) PreviewActor->SetActorHiddenInGame(true); // Add: se ve el AssetPreview
+        if (SculptGrid)   SculptGrid->SetVisibility(false);   // la grilla 3D no aplica afuera
+        if (BoundaryMesh) BoundaryMesh->SetVisibility(false); // el límite del box tampoco
     }
 }

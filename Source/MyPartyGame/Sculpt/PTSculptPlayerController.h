@@ -586,11 +586,13 @@ private:
     bool CanLocalPlayerSculpt() const;
 
     // ── Editor de props (modo autoría de mapa) ───────────────────────────────
+public:
     bool IsMapAuthorMode() const;          // el GameMode es APTMapAuthorGameMode
     class APTMapEnvironment* GetMapEnv() const; // busca/cachea el actor de entorno del nivel
     // Modo COLOCAR: en autoría, con el pincel FUERA del box y herramienta Add/Erase. Add coloca assets,
-    // Erase los borra; Paint/Ojos quedan desactivados afuera.
+    // Erase los borra; Paint/Ojos quedan desactivados afuera. (Lo lee el HUD para colapsar slots.)
     bool IsPlaceMode() const;
+private:
     void TickAuthorProps(float Dt);        // preview del asset + bake por Enter-3s (llamado en PlayerTick)
     void PlaceCurrentAsset();              // coloca una instancia del asset actual
     void EraseAssetUnderCursor();          // borra la instancia bajo el cursor
