@@ -550,10 +550,12 @@ void UPTLobbyHUDWidget::OnLobbyChatLine(const FString& Name, const FString& Mess
 
     // RichText: el nombre va con el estilo "name" (si existe en el Text Style Set del WBP; si no, color
     // default). El mensaje en texto plano.
-    ChatLog += FString::Printf(TEXT("<name>%s</>: %s\n"), *DispName.Left(14), *Message);
-    if (TxtChat) TxtChat->SetText(FText::FromString(ChatLog));
-    // Auto-scroll al último: diferido un tick porque el RichText recién recalcula su alto DESPUÉS de
-    // setear el texto (si scrolleáramos ya, iría al final VIEJO y los mensajes nuevos quedarían abajo).
+    ChatLines.Add(FString::Printf(TEXT("<name>%s</>: %s"), *DispName.Left(14), *Message));
+    // Mostrar SOLO los últimos N (los viejos se van "subiendo" y salen) → el más reciente queda siempre
+    // arriba del input sin que la caja crezca hacia abajo ni lo tape.
+    const int32 Keep = FMath::Max(1, MaxVisibleChatLines);
+    if (ChatLines.Num() > Keep) ChatLines.RemoveAt(0, ChatLines.Num() - Keep);
+    if (TxtChat) TxtChat->SetText(FText::FromString(FString::Join(ChatLines, TEXT("\n"))));
     ScrollChatToEndDeferred();
 
     // Chat colapsado + llegó un mensaje → marcar "no leído": el botón de la barra pasa a su material con
