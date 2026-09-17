@@ -42,6 +42,7 @@
 #include "Serialization/MemoryWriter.h"
 #include "Serialization/MemoryReader.h"
 #include "Misc/FileHelper.h" // P4: leer el sculpt.bin del host para mandarlo por chunks
+#include "Framework/Application/SlateApplication.h" // devolver el foco al viewport tras el chat
 
 // Magic del blob de estado CRUDO de la cabeza (RawState del Locker, para re-editar): campo SDF del
 // volumen + ojos locales. 'PTR2' = PT Raw v2 (distinto del blob COCINADO 'PTH2').
@@ -433,6 +434,15 @@ void APTLobbyPlayerController::PTMapMod(int32 Index)
     UE_LOG(LogTemp, Log, TEXT("[PTMapMod] Montado '%s' → viajando a '%s'."), *Id, *Map);
     if (APTLobbyGameMode* GM = GetWorld()->GetAuthGameMode<APTLobbyGameMode>())
         GM->TravelToModMap(Map);
+}
+
+void APTLobbyPlayerController::RestoreLobbyMovementFocus()
+{
+    // Reaplicar el modo de input diegético del lobby y —clave— devolverle el foco de teclado al VIEWPORT
+    // del juego. Sin esto, tras escribir en el chat el WASD no responde hasta hacer click en la pantalla.
+    ApplyDioramaInputMode();
+    if (FSlateApplication::IsInitialized())
+        FSlateApplication::Get().SetAllUserFocusToGameViewport();
 }
 
 void APTLobbyPlayerController::ApplyDioramaInputMode()

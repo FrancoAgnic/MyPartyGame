@@ -49,6 +49,10 @@ public:
     UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Lobby")
     void Server_SendLobbyChat(const FString& Message);
 
+    /** Devuelve el input/foco al movimiento del lobby (reaplica el modo diegético + enfoca el viewport
+     *  del juego). Lo llama el HUD del chat al cerrar/enviar para que el WASD vuelva SIN tener que clickear. */
+    void RestoreLobbyMovementFocus();
+
     /** El HOST expulsa a un jugador de la sala. Valida en el server que quien llama sea el host y
      *  que el objetivo no sea el propio host. Lo llama el botón Kick de la fila (UPTPlayerRowWidget). */
     UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Lobby")

@@ -373,15 +373,10 @@ void UPTLobbyHUDWidget::FocusChatInput()
 
 void UPTLobbyHUDWidget::ReturnFocusToGame()
 {
-    if (FSlateApplication::IsInitialized())
-        FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::Cleared);
-    if (APlayerController* PC = GetOwningPlayer())
-    {
-        FInputModeGameAndUI Mode; // el lobby es diegético (cursor visible + WASD al juego)
-        Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-        PC->SetInputMode(Mode);
-        PC->SetShowMouseCursor(true);
-    }
+    // Reaplicar el input del lobby + enfocar el VIEWPORT del juego (lo hace el PlayerController). Así el
+    // WASD vuelve INMEDIATAMENTE, sin tener que clickear la pantalla.
+    if (APTLobbyPlayerController* PC = Cast<APTLobbyPlayerController>(GetOwningPlayer()))
+        PC->RestoreLobbyMovementFocus();
 }
 
 void UPTLobbyHUDWidget::SetChatExpanded(bool bExpanded)
