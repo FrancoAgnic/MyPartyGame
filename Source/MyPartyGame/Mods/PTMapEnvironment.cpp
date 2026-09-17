@@ -19,6 +19,15 @@
 #include "Components/DirectionalLightComponent.h"
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Engine/World.h"
+#include "Kismet/GameplayStatics.h"
+#include "Engine/DirectionalLight.h"
+#include "Components/DirectionalLightComponent.h"
+#include "Engine/SkyLight.h"
+#include "Components/SkyLightComponent.h"
+#include "Engine/ExponentialHeightFog.h"
+#include "Components/ExponentialHeightFogComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "GameFramework/Actor.h"
 
 APTMapEnvironment::APTMapEnvironment()
 {
@@ -64,6 +73,63 @@ static void PT_GatherVolumeGeometry(APTSculptVolume* Volume, FPTPropGeometry& Ou
         for (const FVector3f& V : Out.Verts) Box += V;
         const FVector3f C = Box.GetCenter();
         for (FVector3f& V : Out.Verts) V -= C;
+    }
+}
+
+void APTMapEnvironment::SetSkySettings(const FPTSkySettings& In)
+{
+    SkySettings = In;
+    ApplySkySettings();
+}
+
+void APTMapEnvironment::ApplySkySettings()
+{
+    UWorld* W = GetWorld();
+    if (!W) return;
+    const FPTSkySettings& S = SkySettings;
+
+    // ── Sol (primer DirectionalLight del nivel) ── TimeOfDay 0→amanecer(0°) .5→mediodía(-90°) 1→atardecer(-180°)
+    const float Pitch = FMath::Lerp(0.f, -180.f, FMath::Clamp(S.TimeOfDay, 0.f, 1.f));
+    if (ADirectionalLight* Sun = Cast<ADirectionalLight>(UGameplayStatics::GetActorOfClass(W, ADirectionalLight::StaticClass())))
+    {
+        Sun->SetActorRotation(FRotator(Pitch, S.SunYaw, 0.f));
+        if (UDirectionalLightComponent* LC = Cast<UDirectionalLightComponent>(Sun->GetLightComponent()))
+        {
+            LC->SetLightColor(S.SunColor);
+            LC->SetIntensity(FMath::Max(0.f, S.SunIntensity));
+        }
+    }
+
+    // ── Luz ambiental (SkyLight) ──
+    if (ASkyLight* Sky = Cast<ASkyLight>(UGameplayStatics::GetActorOfClass(W, ASkyLight::StaticClass())))
+        if (USkyLightComponent* SLC = Sky->GetLightComponent())
+        {
+            SLC->SetLightColor(S.AmbientColor);
+            SLC->SetIntensity(FMath::Max(0.f, S.AmbientIntensity));
+        }
+
+    // ── Niebla (ExponentialHeightFog) ──
+    if (AExponentialHeightFog* Fog = Cast<AExponentialHeightFog>(UGameplayStatics::GetActorOfClass(W, AExponentialHeightFog::StaticClass())))
+        if (UExponentialHeightFogComponent* FC = Fog->GetComponent())
+        {
+            FC->SetFogInscatteringColor(S.FogColor);
+            FC->SetFogDensity(FMath::Max(0.f, S.FogDensity));
+        }
+
+    // ── Sky Sphere (actor con tag "MapSky") → material con parámetros SkyTop/SkyHorizon/SunColor ──
+    TArray<AActor*> SkyActors;
+    UGameplayStatics::GetAllActorsWithTag(W, FName("MapSky"), SkyActors);
+    for (AActor* A : SkyActors)
+    {
+        if (!A) continue;
+        UStaticMeshComponent* SM = A->FindComponentByClass<UStaticMeshComponent>();
+        if (!SM || SM->GetNumMaterials() == 0) continue;
+        UMaterialInstanceDynamic* MID = Cast<UMaterialInstanceDynamic>(SM->GetMaterial(0));
+        if (!MID) MID = SM->CreateDynamicMaterialInstance(0);
+        if (!MID) continue;
+        MID->SetVectorParameterValue(TEXT("SkyTop"),     S.SkyTopColor);
+        MID->SetVectorParameterValue(TEXT("SkyHorizon"), S.SkyHorizonColor);
+        MID->SetVectorParameterValue(TEXT("SunColor"),   S.SunColor);
     }
 }
 
@@ -302,11 +368,22 @@ void APTMapEnvironment::ClearAll()
     Thumbnails.Reset();
 }
 
+// Serializa los ajustes de ambiente (mismo orden en lectura/escritura).
+static void PT_SerializeSky(FArchive& Ar, FPTSkySettings& S)
+{
+    Ar << S.TimeOfDay; Ar << S.SunYaw;
+    Ar << S.SkyTopColor; Ar << S.SkyHorizonColor;
+    Ar << S.SunColor; Ar << S.SunIntensity;
+    Ar << S.FogColor; Ar << S.FogDensity;
+    Ar << S.AmbientColor; Ar << S.AmbientIntensity;
+}
+
 void APTMapEnvironment::SerializeEnvironment(TArray<uint8>& Out)
 {
     Out.Reset();
     FMemoryWriter Ar(Out, /*bIsPersistent=*/true);
-    int32 Version = 1; Ar << Version;
+    int32 Version = 2; Ar << Version; // v2: incluye SkySettings
+    PT_SerializeSky(Ar, SkySettings);
     int32 NumAssets = Assets.Num(); Ar << NumAssets;
     for (FPTPropAsset& A : Assets)
     {
@@ -332,6 +409,7 @@ void APTMapEnvironment::DeserializeEnvironment(const TArray<uint8>& In)
     if (In.Num() == 0) return;
     FMemoryReader Ar(In, /*bIsPersistent=*/true);
     int32 Version = 0; Ar << Version;
+    if (Version >= 2) PT_SerializeSky(Ar, SkySettings); // ambiente guardado con el mapa
     int32 NumAssets = 0; Ar << NumAssets;
     for (int32 a = 0; a < NumAssets; ++a)
     {
@@ -348,4 +426,5 @@ void APTMapEnvironment::DeserializeEnvironment(const TArray<uint8>& In)
             if (Idx != INDEX_NONE) PlaceInstance(Idx, Xf);
         }
     }
+    ApplySkySettings(); // aplicar el ambiente cargado (sol/cielo/niebla) en esta máquina
 }

@@ -17,6 +17,32 @@ class UMaterialInterface;
 class UTextureRenderTarget2D;
 class APTSculptVolume;
 
+// Ajustes de ambiente del mapa (momento del día + colores del cielo + niebla/ambiente). Se editan en el
+// editor de mapas, se guardan con el mapa y se aplican en todas las máquinas al cargarlo.
+USTRUCT(BlueprintType)
+struct FPTSkySettings
+{
+    GENERATED_BODY()
+
+    // Momento del día: 0=amanecer (sol en el horizonte este), 0.5=mediodía (sol arriba), 1=atardecer.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sky") float TimeOfDay = 0.5f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sky") float SunYaw    = 0.f; // orientación del sol
+
+    // Colores del cielo (para el material del Sky Sphere: parámetros "SkyTop" / "SkyHorizon").
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sky") FLinearColor SkyTopColor     = FLinearColor(0.10f, 0.35f, 0.85f);
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sky") FLinearColor SkyHorizonColor = FLinearColor(0.70f, 0.85f, 1.00f);
+
+    // Sol (DirectionalLight).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sky") FLinearColor SunColor     = FLinearColor(1.0f, 0.96f, 0.85f);
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sky") float        SunIntensity = 3.0f;
+
+    // Niebla (ExponentialHeightFog) + luz ambiental (SkyLight).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sky") FLinearColor FogColor     = FLinearColor(0.60f, 0.75f, 0.90f);
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sky") float        FogDensity   = 0.02f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sky") FLinearColor AmbientColor = FLinearColor(0.50f, 0.60f, 0.75f);
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sky") float        AmbientIntensity = 1.0f;
+};
+
 // Geometría horneada de un prop (malla compacta que se guarda una sola vez por asset único).
 struct FPTPropGeometry
 {
@@ -36,6 +62,16 @@ public:
 
     /** Material de los props (vertex color tipo arcilla). Asignar en BP; si es null, usa el default. */
     UPROPERTY(EditAnywhere, Category="MapEnv") UMaterialInterface* PropMaterial = nullptr;
+
+    // ── Ambiente del mapa (sol / cielo / niebla) ──
+    /** Ajustes de ambiente actuales (se guardan/cargan con el mapa). */
+    UPROPERTY(EditAnywhere, Category="MapEnv") FPTSkySettings SkySettings;
+    /** Setea nuevos ajustes y los aplica en vivo (lo llama el panel del editor de mapas). */
+    UFUNCTION(BlueprintCallable, Category="MapEnv") void SetSkySettings(const FPTSkySettings& In);
+    const FPTSkySettings& GetSkySettings() const { return SkySettings; }
+    /** Aplica SkySettings al mundo: sol (DirectionalLight), niebla (ExponentialHeightFog), luz ambiental
+     *  (SkyLight) y el material del Sky Sphere (actor con tag "MapSky"). */
+    UFUNCTION(BlueprintCallable, Category="MapEnv") void ApplySkySettings();
 
     /** Hornea toda la escultura del box (base + capas + SVO) a un asset y lo agrega a la paleta.
      *  Devuelve el índice del asset, o INDEX_NONE si el box está vacío. Centra la geometría en su bbox. */
