@@ -429,10 +429,19 @@ void UPTLobbyHUDWidget::DownloadThumbnailTo(UImage* Target, const FString& URL)
 void UPTLobbyHUDWidget::ScrollChatToEndDeferred()
 {
     if (ChatScroll) ChatScroll->ScrollToEnd(); // intento inmediato
-    // ...y de nuevo el próximo tick, cuando el RichText ya recalculó su alto con el texto nuevo.
+    // Reintentar unos frames: con Auto Wrap, el alto REAL del RichText recién se calcula tras el prepass;
+    // un solo ScrollToEnd queda corto cuando un mensaje envuelve en varias líneas.
+    ChatScrollTicks = 0;
     if (UWorld* W = GetWorld())
-        W->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this]()
-        { if (ChatScroll) ChatScroll->ScrollToEnd(); }));
+        W->GetTimerManager().SetTimer(ChatScrollTimer, this, &UPTLobbyHUDWidget::TickScrollToEnd, 0.03f, true);
+}
+
+void UPTLobbyHUDWidget::TickScrollToEnd()
+{
+    if (TxtChat)    TxtChat->ForceLayoutPrepass();   // recalcular el alto con el wrap aplicado
+    if (ChatScroll) ChatScroll->ScrollToEnd();
+    if (++ChatScrollTicks >= 6) // ~0.18s: alcanza para que el layout del wrap se asiente
+        if (UWorld* W = GetWorld()) W->GetTimerManager().ClearTimer(ChatScrollTimer);
 }
 
 void UPTLobbyHUDWidget::OpenChatFromEnter()
