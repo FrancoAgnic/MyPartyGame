@@ -549,6 +549,43 @@ void UPTLobbyHUDWidget::OnChatCommitted(const FText& Text, ETextCommit::Type Com
             &UPTLobbyHUDWidget::CloseChatAuto, ChatAutoCloseDelay, false);
 }
 
+// ¿El codepoint es un emoji? (rangos principales; alcanza para el chat de un party game).
+static bool PT_IsEmojiCP(uint32 CP)
+{
+    return (CP >= 0x1F300 && CP <= 0x1FAFF) || // símbolos & pictogramas, caras, objetos, banderas, etc.
+           (CP >= 0x1F000 && CP <= 0x1F2FF) || // mahjong/dominó/cartas/enclosed
+           (CP >= 0x2600  && CP <= 0x27BF)  || // misc symbols + dingbats (☀ ✂ ✅ ...)
+           (CP >= 0x2B00  && CP <= 0x2BFF)  || // estrellas/flechas (⭐ ⬆ ...)
+           (CP >= 0x2190  && CP <= 0x21FF)  || // flechas
+           (CP >= 0x2300  && CP <= 0x23FF);    // ⌚ ⏰ ⏳ ...
+}
+
+// Convierte los emoji unicode del texto en tags <img id="e_<hex>"/> (los renderiza el image decorator del
+// RichTextBlock, a color) y escapa < > & para no romper el parseo. El resto del texto queda igual.
+static FString PT_MessageToRich(const FString& In)
+{
+    FString Out;
+    const int32 N = In.Len();
+    for (int32 i = 0; i < N; ++i)
+    {
+        const int32 Start = i;
+        uint32 CP = (uint32)In[i];
+        if (CP >= 0xD800 && CP <= 0xDBFF && i + 1 < N) // combinar surrogate pair → codepoint real
+        {
+            const uint32 Lo = (uint32)In[i + 1];
+            if (Lo >= 0xDC00 && Lo <= 0xDFFF) { CP = 0x10000 + ((CP - 0xD800) << 10) + (Lo - 0xDC00); ++i; }
+        }
+        // Modificadores invisibles (variation selector, ZWJ, tonos de piel): se descartan.
+        if (CP == 0x200D || CP == 0xFE0F || CP == 0xFE0E || (CP >= 0x1F3FB && CP <= 0x1F3FF)) continue;
+        if (PT_IsEmojiCP(CP)) { Out += FString::Printf(TEXT("<img id=\"e_%x\"/>"), CP); continue; }
+        if (CP == (uint32)'<') { Out += TEXT("&lt;");  continue; }
+        if (CP == (uint32)'>') { Out += TEXT("&gt;");  continue; }
+        if (CP == (uint32)'&') { Out += TEXT("&amp;"); continue; }
+        Out += In.Mid(Start, i - Start + 1); // code units originales (1 o 2)
+    }
+    return Out;
+}
+
 void UPTLobbyHUDWidget::OnLobbyChatLine(const FString& Name, const FString& Message)
 {
     // Modo captura dev: nombre → "Player N" (local).
@@ -562,7 +599,8 @@ void UPTLobbyHUDWidget::OnLobbyChatLine(const FString& Name, const FString& Mess
 
     // RichText: el nombre va con el estilo "name" (si existe en el Text Style Set del WBP; si no, color
     // default). El mensaje en texto plano.
-    ChatLines.Add(FString::Printf(TEXT("<name>%s</>: %s"), *DispName.Left(14), *Message));
+    // Nombre con estilo de color; mensaje con emojis convertidos a <img> (color) y < > & escapados.
+    ChatLines.Add(FString::Printf(TEXT("<name>%s</>: %s"), *DispName.Left(14), *PT_MessageToRich(Message)));
     // Mostrar SOLO los últimos N (los viejos se van "subiendo" y salen) → el más reciente queda siempre
     // arriba del input sin que la caja crezca hacia abajo ni lo tape.
     const int32 Keep = FMath::Max(1, MaxVisibleChatLines);
