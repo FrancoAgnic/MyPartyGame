@@ -329,32 +329,65 @@ void UPTLobbyHUDWidget::RefreshSettingsView()
 
 void UPTLobbyHUDWidget::OpenChatFromEnter()
 {
-    // ENTER con el juego enfocado (chat cerrado) → abrir. Si ya está abierto, el input tiene el foco y
-    // ENTER lo maneja OnChatCommitted (enviar / cerrar).
-    if (!bChatExpanded) SetChatExpanded(true);
+    // ENTER con el juego enfocado. Dos casos:
+    //  · chat cerrado → abrir + foco al input.
+    //  · chat abierto pero en los 3s de gracia tras enviar (foco en el juego) → cancelar el cierre y volver
+    //    a escribir.
+    if (GetWorld()) GetWorld()->GetTimerManager().ClearTimer(ChatAutoCloseTimer);
+    if (!bChatExpanded) SetChatExpanded(true); // abre (ya enfoca el input)
+    else                FocusChatInput();       // estaba en gracia → volver a escribir
 }
 
-void UPTLobbyHUDWidget::ApplyChatBarArrow(bool bExpanded)
+void UPTLobbyHUDWidget::UpdateChatBarVisual()
 {
-    // La barra queda quieta; solo intercambia sus texturas: abierto = flecha ABAJO, cerrado = flecha ARRIBA.
+    // La barra queda quieta; solo cambia la imagen del botón según el estado.
     if (!ChatBarButton || !bChatBarStyleCached) return;
-    FButtonStyle St = ChatBarUpStyle; // parte de la original (conserva tamaños, pressed, etc.)
-    if (bExpanded)
+    FButtonStyle St = ChatBarUpStyle; // base: flecha ARRIBA (conserva tamaños/pressed originales)
+    if (bChatExpanded)
     {
         if (ChatBarDownNormal)  St.Normal.SetResourceObject(ChatBarDownNormal);
-        if (ChatBarDownHovered) St.Hovered.SetResourceObject(ChatBarDownHovered);
-        if (ChatBarDownHovered) St.Pressed.SetResourceObject(ChatBarDownHovered);
+        if (ChatBarDownHovered){ St.Hovered.SetResourceObject(ChatBarDownHovered); St.Pressed.SetResourceObject(ChatBarDownHovered); }
+    }
+    else if (bChatUnread && ChatBarUnreadMaterial) // colapsado + mensaje sin leer → material con pulse
+    {
+        St.Normal.SetResourceObject(ChatBarUnreadMaterial);
+        St.Hovered.SetResourceObject(ChatBarUnreadMaterial);
+        St.Pressed.SetResourceObject(ChatBarUnreadMaterial);
     }
     ChatBarButton->WidgetStyle = St;
     ChatBarButton->SynchronizeProperties();
 }
 
+void UPTLobbyHUDWidget::FocusChatInput()
+{
+    if (APlayerController* PC = GetOwningPlayer())
+    {
+        FInputModeGameAndUI Mode;
+        if (ChatInput) Mode.SetWidgetToFocus(ChatInput->TakeWidget());
+        Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+        PC->SetInputMode(Mode);
+        PC->SetShowMouseCursor(true);
+    }
+    if (ChatInput) ChatInput->SetKeyboardFocus();
+}
+
+void UPTLobbyHUDWidget::ReturnFocusToGame()
+{
+    if (FSlateApplication::IsInitialized())
+        FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::Cleared);
+    if (APlayerController* PC = GetOwningPlayer())
+    {
+        FInputModeGameAndUI Mode; // el lobby es diegético (cursor visible + WASD al juego)
+        Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+        PC->SetInputMode(Mode);
+        PC->SetShowMouseCursor(true);
+    }
+}
+
 void UPTLobbyHUDWidget::SetChatExpanded(bool bExpanded)
 {
     bChatExpanded = bExpanded;
-    if (ChatPanel)        ChatPanel->SetVisibility(bExpanded ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-    // La barra queda SIEMPRE visible y en el mismo lugar; solo cambia la textura de su flecha ↑/↓.
-    ApplyChatBarArrow(bExpanded);
+    if (ChatPanel) ChatPanel->SetVisibility(bExpanded ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 
     if (bExpanded)
     {
@@ -363,23 +396,16 @@ void UPTLobbyHUDWidget::SetChatExpanded(bool bExpanded)
         OnChatUnreadChanged(false);
         if (ChatUnreadIndicator) ChatUnreadIndicator->SetVisibility(ESlateVisibility::Collapsed);
         if (ChatScroll) ChatScroll->ScrollToEnd();
-        if (ChatInput)  ChatInput->SetKeyboardFocus();
+        FocusChatInput();
     }
     else
     {
-        // Cerrar: cancelar el auto-cierre y sacar el foco del teclado → el WASD vuelve a mover al personaje.
+        // Cerrar: cancelar el auto-cierre, vaciar la caja y devolver el foco al movimiento.
         if (GetWorld()) GetWorld()->GetTimerManager().ClearTimer(ChatAutoCloseTimer);
         if (ChatInput) ChatInput->SetText(FText::GetEmpty());
-        if (FSlateApplication::IsInitialized())
-            FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::Cleared);
-        if (APlayerController* PC = GetOwningPlayer())
-        {
-            FInputModeGameAndUI Mode;
-            Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-            PC->SetInputMode(Mode);
-            PC->SetShowMouseCursor(true);
-        }
+        ReturnFocusToGame();
     }
+    UpdateChatBarVisual(); // flecha ↓/↑ o material pulse según estado
 }
 
 void UPTLobbyHUDWidget::OnChatTextChanged(const FText& /*Text*/)
@@ -399,9 +425,10 @@ void UPTLobbyHUDWidget::OnChatCommitted(const FText& Text, ETextCommit::Type Com
     if (ChatInput) ChatInput->SetText(FText::GetEmpty());
     if (APTLobbyPlayerController* PC = Cast<APTLobbyPlayerController>(GetOwningPlayer()))
         PC->Server_SendLobbyChat(Msg);
-    if (ChatInput) ChatInput->SetKeyboardFocus(); // seguir escribiendo
 
-    // Tras enviar: si no seguís escribiendo, el chat se cierra solo a los 3s (OnChatTextChanged lo cancela).
+    // Tras enviar: el foco vuelve al PERSONAJE enseguida (te movés) y el panel se queda 3s. Si apretás
+    // ENTER antes de que terminen, se interrumpe el cierre y volvés a escribir (OpenChatFromEnter).
+    ReturnFocusToGame();
     if (GetWorld())
         GetWorld()->GetTimerManager().SetTimer(ChatAutoCloseTimer, this,
             &UPTLobbyHUDWidget::CloseChatAuto, ChatAutoCloseDelay, false);
@@ -424,10 +451,12 @@ void UPTLobbyHUDWidget::OnLobbyChatLine(const FString& Name, const FString& Mess
     if (TxtChat)    TxtChat->SetText(FText::FromString(ChatLog));
     if (ChatScroll) ChatScroll->ScrollToEnd();
 
-    // Chat colapsado + llegó un mensaje → marcar "no leído" y avisar al WBP para que parpadee la barrita.
+    // Chat colapsado + llegó un mensaje → marcar "no leído": el botón de la barra pasa a su material con
+    // pulse (UpdateChatBarVisual) + avisos opcionales para el WBP.
     if (!bChatExpanded && !bChatUnread)
     {
         bChatUnread = true;
+        UpdateChatBarVisual();
         OnChatUnreadChanged(true);
         if (ChatUnreadIndicator) ChatUnreadIndicator->SetVisibility(ESlateVisibility::HitTestInvisible);
     }

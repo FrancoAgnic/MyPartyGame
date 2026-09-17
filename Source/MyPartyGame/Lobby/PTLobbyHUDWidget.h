@@ -135,6 +135,9 @@ protected:
     // en el botón). Asigná acá las dos texturas de la flecha ABAJO (normal y hover).
     UPROPERTY(EditAnywhere, Category="Lobby|Chat") class UTexture2D* ChatBarDownNormal  = nullptr;
     UPROPERTY(EditAnywhere, Category="Lobby|Chat") class UTexture2D* ChatBarDownHovered = nullptr;
+    // Material (con pulse) que reemplaza la imagen del botón cuando llega un mensaje y el chat está
+    // COLAPSADO. Al abrir el chat (o leerlo) vuelve a la flecha normal. Asigná tu material animado acá.
+    UPROPERTY(EditAnywhere, Category="Lobby|Chat") class UMaterialInterface* ChatBarUnreadMaterial = nullptr;
 
     UFUNCTION() void OnChatCommitted(const FText& Text, ETextCommit::Type CommitMethod);
     UFUNCTION() void OnChatTextChanged(const FText& Text); // cancela el auto-cierre mientras escribís
@@ -153,7 +156,9 @@ private:
     // Estilo original del botón de la barra (flecha ARRIBA) cacheado en Initialize, para restaurarlo al cerrar.
     FButtonStyle ChatBarUpStyle;
     bool    bChatBarStyleCached = false;
-    void ApplyChatBarArrow(bool bExpanded); // intercambia las texturas del botón (up/down)
+    void UpdateChatBarVisual(); // pone en el botón: flecha ↓ (abierto) / material pulse (no leído) / flecha ↑
+    void FocusChatInput();      // input mode UI + foco al input para escribir
+    void ReturnFocusToGame();   // saca el foco del teclado → el WASD mueve al personaje
     FTimerHandle ChatAutoCloseTimer;         // cierra el chat 3s después de enviar si no seguís
     void CloseChatAuto() { SetChatExpanded(false); }
     static constexpr float ChatAutoCloseDelay = 3.0f;
