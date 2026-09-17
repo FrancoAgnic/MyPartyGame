@@ -90,15 +90,18 @@ void APTMapEnvironment::ApplySkySettings()
 
     // ── Sol (primer DirectionalLight del nivel) ── TimeOfDay 0→amanecer(0°) .5→mediodía(-90°) 1→atardecer(-180°)
     const float Pitch = FMath::Lerp(0.f, -180.f, FMath::Clamp(S.TimeOfDay, 0.f, 1.f));
+    const FRotator SunRot(Pitch, S.SunYaw, 0.f);
     if (ADirectionalLight* Sun = Cast<ADirectionalLight>(UGameplayStatics::GetActorOfClass(W, ADirectionalLight::StaticClass())))
     {
-        Sun->SetActorRotation(FRotator(Pitch, S.SunYaw, 0.f));
+        Sun->SetActorRotation(SunRot);
         if (UDirectionalLightComponent* LC = Cast<UDirectionalLightComponent>(Sun->GetLightComponent()))
         {
             LC->SetLightColor(S.SunColor);
             LC->SetIntensity(FMath::Max(0.f, S.SunIntensity));
         }
     }
+    // Dirección HACIA el sol (para el disco del sol del material del cielo) = opuesto al "forward" de la luz.
+    const FVector SunDir = -SunRot.Vector();
 
     // ── Luz ambiental (SkyLight) ──
     if (ASkyLight* Sky = Cast<ASkyLight>(UGameplayStatics::GetActorOfClass(W, ASkyLight::StaticClass())))
@@ -127,9 +130,11 @@ void APTMapEnvironment::ApplySkySettings()
         UMaterialInstanceDynamic* MID = Cast<UMaterialInstanceDynamic>(SM->GetMaterial(0));
         if (!MID) MID = SM->CreateDynamicMaterialInstance(0);
         if (!MID) continue;
-        MID->SetVectorParameterValue(TEXT("SkyTop"),     S.SkyTopColor);
-        MID->SetVectorParameterValue(TEXT("SkyHorizon"), S.SkyHorizonColor);
-        MID->SetVectorParameterValue(TEXT("SunColor"),   S.SunColor);
+        MID->SetVectorParameterValue(TEXT("SkyTop"),      S.SkyTopColor);
+        MID->SetVectorParameterValue(TEXT("SkyHorizon"),  S.SkyHorizonColor);
+        MID->SetVectorParameterValue(TEXT("SunColor"),    S.SunColor);
+        MID->SetVectorParameterValue(TEXT("SunDirection"),
+            FLinearColor(SunDir.X, SunDir.Y, SunDir.Z, 0.f)); // dirección hacia el sol (para el disco)
     }
 }
 
