@@ -2369,6 +2369,7 @@ void APTSculptPlayerController::PlaceCurrentAsset()
     if (!Env || Env->GetNumAssets() == 0) return;
     if (!Env->GetAssetMesh(CurrentAsset)) return;
     bool bOut = false; const FVector P = GetPlacePoint(bOut);
+    if (Volume && Volume->IsInNoPlaceZone(P)) return; // zona libre alrededor del cubo: no se coloca acá
     Env->PlaceInstance(CurrentAsset, FTransform(StampRotation, P, FVector(AssetScale)));
 }
 
@@ -2451,7 +2452,9 @@ void APTSculptPlayerController::TickAuthorProps(float Dt)
     APTMapEnvironment* Env = GetMapEnv();
     const bool bEraseOut = bOut && (EditMode == EPTEditMode::Erase) && !bEyesTool;
     bool bShowAsset = false;
-    if (bOut && !bEraseOut && AssetPreview && Env && Env->GetNumAssets() > 0 && !bEyesTool
+    // En la zona libre alrededor del cubo NO se puede colocar → ocultar el preview del asset ahí (feedback).
+    const bool bInNoPlace = Volume && Volume->IsInNoPlaceZone(P);
+    if (bOut && !bEraseOut && !bInNoPlace && AssetPreview && Env && Env->GetNumAssets() > 0 && !bEyesTool
         && EditMode == EPTEditMode::Add)
     {
         if (UStaticMesh* M = Env->GetAssetMesh(CurrentAsset))

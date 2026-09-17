@@ -345,6 +345,28 @@ APTSculptVolume::APTSculptVolume()
     EyesMesh->SetupAttachment(Mesh);
     EyesMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     EyesMesh->SetCastShadow(false);
+
+    // Zona LIBRE alrededor del cubo (editor de mapas): dentro de esta caja NO se pueden colocar assets,
+    // para dejar despejado el área de spawns/juego. Ajustá su tamaño a gusto en el BP/nivel (arrastrando
+    // la caja o su Box Extent). Visible en editor, oculta en juego.
+    NoPlaceZone = CreateDefaultSubobject<UBoxComponent>(TEXT("NoPlaceZone"));
+    NoPlaceZone->SetupAttachment(Mesh);
+    NoPlaceZone->SetRelativeLocation(FVector::ZeroVector);
+    NoPlaceZone->SetBoxExtent(FVector(900.f, 900.f, 600.f)); // default holgado; el usuario lo ajusta
+    NoPlaceZone->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    NoPlaceZone->ShapeColor = FColor(255, 80, 80); // rojo: zona prohibida para assets
+    NoPlaceZone->bDrawOnlyIfSelected = false;
+    NoPlaceZone->SetHiddenInGame(true);
+}
+
+bool APTSculptVolume::IsInNoPlaceZone(const FVector& WorldPos) const
+{
+    if (!NoPlaceZone) return false;
+    // Pasar el punto al espacio LOCAL de la caja (respeta su posición/rotación/escala) y comparar con su
+    // extent → funciona aunque muevas/escales la caja en el editor.
+    const FVector L = NoPlaceZone->GetComponentTransform().InverseTransformPosition(WorldPos);
+    const FVector E = NoPlaceZone->GetUnscaledBoxExtent();
+    return FMath::Abs(L.X) <= E.X && FMath::Abs(L.Y) <= E.Y && FMath::Abs(L.Z) <= E.Z;
 }
 
 void APTSculptVolume::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

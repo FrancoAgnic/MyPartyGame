@@ -154,6 +154,8 @@ public:
     const TMap<int32, UProceduralMeshComponent*>& GetSVOChunkMeshes() const { return SVOChunkMeshes; }
     // Malla de los OJOS colocados (para hornearlos junto a la arcilla en un asset del editor de mapas).
     UProceduralMeshComponent* GetEyesMesh() const { return EyesMesh; }
+    // ¿Ese punto de mundo cae dentro de la zona LIBRE (NoPlaceZone)? Ahí no se pueden colocar assets.
+    bool IsInNoPlaceZone(const FVector& WorldPos) const;
 
     /** ¿Ese punto del mundo cae DENTRO del lienzo (el BoundsBox)? Para no dejar poner cosas
      *  (ej: ojos) fuera de la zona de modelado. */
@@ -294,6 +296,8 @@ protected:
 private:
     UPROPERTY(VisibleAnywhere) UProceduralMeshComponent* Mesh;
     UPROPERTY(VisibleAnywhere) UBoxComponent* BoundsBox;
+    // Zona libre alrededor del cubo: dentro de esta caja NO se colocan assets (área de spawns/juego).
+    UPROPERTY(VisibleAnywhere, Category="MapEditor") UBoxComponent* NoPlaceZone;
     UPROPERTY() UProceduralMeshComponent* EyesMesh = nullptr; // malla de ojos (aparte de la arcilla)
 
     // Ojos colocados (local al volumen: XYZ=centro, W=radio). Replicado → todos ven los mismos.
