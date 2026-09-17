@@ -112,8 +112,13 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) class UButton*    SaveMapButton;   // guarda el escenario a archivo
     UPROPERTY(meta=(BindWidgetOptional)) class UButton*    ExitAuthorButton;// vuelve al menú principal
     UPROPERTY(meta=(BindWidgetOptional)) class UTextBlock* AuthorStatusText;// "Guardado", etc.
+    UPROPERTY(meta=(BindWidgetOptional)) class UButton*    SkySettingsButton; // abre el panel de ambiente
     UFUNCTION() void OnSaveMapClicked();
     UFUNCTION() void OnExitAuthorClicked();
+    UFUNCTION() void OnSkySettingsClicked();
+    /** WBP del panel de ambiente (deriva de UPTSkySettingsWidget). Asignar en el BP del HUD. */
+    UPROPERTY(EditAnywhere, Category="MapEditor") TSubclassOf<class UPTSkySettingsWidget> SkySettingsClass;
+    UPROPERTY() class UPTSkySettingsWidget* SkyPanel = nullptr;
 
     // ── Iconos de estado de red (arriba a la izquierda). Se muestran SOLO cuando hay problema. Poné tus
     //    texturas 24x24 en estos Image del WBP (nombres EXACTOS); el código los prende/apaga. ──

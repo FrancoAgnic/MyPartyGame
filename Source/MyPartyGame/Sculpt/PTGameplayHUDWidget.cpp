@@ -23,6 +23,7 @@
 #include "../PTNetStats.h"
 #include "../PTGameInstance.h" // modo captura dev (Player N)
 #include "../Mods/PTMapAuthorGameMode.h" // modo autoría de mapa
+#include "../UI/PTSkySettingsWidget.h"    // panel de ambiente (sol/cielo/niebla)
 #include "PTSculptVolume.h"               // guardar el escenario (snapshot)
 #include "TimerManager.h"
 #include "Kismet/GameplayStatics.h"
@@ -71,6 +72,7 @@ bool UPTGameplayHUDWidget::Initialize()
     // Modo autoría (crear mapa): botones Guardar/Salir. Ocultos por defecto (solo se ven en autoría).
     if (SaveMapButton)    SaveMapButton->OnClicked.AddDynamic(this, &UPTGameplayHUDWidget::OnSaveMapClicked);
     if (ExitAuthorButton) ExitAuthorButton->OnClicked.AddDynamic(this, &UPTGameplayHUDWidget::OnExitAuthorClicked);
+    if (SkySettingsButton) SkySettingsButton->OnClicked.AddDynamic(this, &UPTGameplayHUDWidget::OnSkySettingsClicked);
     if (AuthorPanel)      AuthorPanel->SetVisibility(ESlateVisibility::Collapsed);
     if (AuthorStatusText) AuthorStatusText->SetVisibility(ESlateVisibility::Collapsed);
 
@@ -447,10 +449,22 @@ void UPTGameplayHUDWidget::UpdateAuthorPanels()
     Hide(GuessPopup); Hide(AllGuessedPopup);
     Hide(TxtChat); Hide(ChatInput); Hide(ChatScroll); Hide(ChatPanel); // + el contenedor (fondo/"Enter to chat")
 
-    // Mostrar los controles de autoría (Guardar / Salir).
+    // Mostrar los controles de autoría (Guardar / Salir / Ambiente).
     if (AuthorPanel)      AuthorPanel->SetVisibility(ESlateVisibility::Visible);
     if (SaveMapButton)    SaveMapButton->SetVisibility(ESlateVisibility::Visible);
     if (ExitAuthorButton) ExitAuthorButton->SetVisibility(ESlateVisibility::Visible);
+    if (SkySettingsButton)SkySettingsButton->SetVisibility(ESlateVisibility::Visible);
+}
+
+void UPTGameplayHUDWidget::OnSkySettingsClicked()
+{
+    if (!SkySettingsClass) return;
+    if (!SkyPanel)
+    {
+        SkyPanel = CreateWidget<UPTSkySettingsWidget>(this, SkySettingsClass);
+        if (SkyPanel) SkyPanel->AddToViewport(70);
+    }
+    if (SkyPanel) SkyPanel->ShowPanel();
 }
 
 void UPTGameplayHUDWidget::OnSaveMapClicked()
