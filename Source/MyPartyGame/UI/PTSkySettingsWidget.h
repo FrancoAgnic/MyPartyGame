@@ -5,11 +5,9 @@
 //
 // Scalars (USlider 0..1, se mapean a su rango):
 //   Slider_TimeOfDay, Slider_SunYaw, Slider_SunIntensity, Slider_FogDensity, Slider_AmbientIntensity
-// Colores: 5 BOTONES-swatch que abren la RUEDA de color (ColorWheel). Al elegir un color se aplica al que
-//   estabas editando. Nombres EXACTOS:
-//   Btn_SkyTop, Btn_SkyHorizon, Btn_SunColor, Btn_FogColor, Btn_AmbientColor  (Button)
-//   Swatch_SkyTop, Swatch_SkyHorizon, Swatch_SunColor, Swatch_FogColor, Swatch_AmbientColor (Image, se tiñen)
-//   ColorWheel (UPTColorWheelWidget)  → la rueda + 2 sliders (sat/valor); editás el color activo
+// Colores: cada uno tiene su PROPIA rueda embebida (UPTColorWheelWidget). Editás cada color directo.
+//   Nombres EXACTOS: Wheel_SkyTop, Wheel_SkyHorizon, Wheel_SunColor, Wheel_FogColor, Wheel_AmbientColor
+//   (cada uno es una instancia de tu WBP_ColorWheel colocada en el panel)
 // Botones opcionales: CloseButton
 
 #pragma once
@@ -22,10 +20,6 @@ class USlider;
 class UImage;
 class UButton;
 class UPTColorWheelWidget;
-
-// Qué color estás editando con la rueda.
-UENUM()
-enum class EPTSkyColorTarget : uint8 { None, SkyTop, SkyHorizon, Sun, Fog, Ambient };
 
 UCLASS()
 class MYPARTYGAME_API UPTSkySettingsWidget : public UPTUserWidget
@@ -52,37 +46,27 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) USlider* Slider_FogDensity;
     UPROPERTY(meta=(BindWidgetOptional)) USlider* Slider_AmbientIntensity;
 
-    // Colores: botones-swatch que abren la rueda + swatches que muestran el color.
-    UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_SkyTop;
-    UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_SkyHorizon;
-    UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_SunColor;
-    UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_FogColor;
-    UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_AmbientColor;
+    // Una rueda por color (cada una edita su color directo).
+    UPROPERTY(meta=(BindWidgetOptional)) UPTColorWheelWidget* Wheel_SkyTop;
+    UPROPERTY(meta=(BindWidgetOptional)) UPTColorWheelWidget* Wheel_SkyHorizon;
+    UPROPERTY(meta=(BindWidgetOptional)) UPTColorWheelWidget* Wheel_SunColor;
+    UPROPERTY(meta=(BindWidgetOptional)) UPTColorWheelWidget* Wheel_FogColor;
+    UPROPERTY(meta=(BindWidgetOptional)) UPTColorWheelWidget* Wheel_AmbientColor;
 
-    UPROPERTY(meta=(BindWidgetOptional)) UImage* Swatch_SkyTop;
-    UPROPERTY(meta=(BindWidgetOptional)) UImage* Swatch_SkyHorizon;
-    UPROPERTY(meta=(BindWidgetOptional)) UImage* Swatch_SunColor;
-    UPROPERTY(meta=(BindWidgetOptional)) UImage* Swatch_FogColor;
-    UPROPERTY(meta=(BindWidgetOptional)) UImage* Swatch_AmbientColor;
-
-    UPROPERTY(meta=(BindWidgetOptional)) UPTColorWheelWidget* ColorWheel; // rueda + 2 sliders (sat/valor)
     UPROPERTY(meta=(BindWidgetOptional)) UButton* CloseButton;
 
     UFUNCTION() void OnAnyChanged(float Value);      // sliders escalares → reconstruir + aplicar
     UFUNCTION() void OnCloseClicked();
-    UFUNCTION() void OnPickSkyTop();
-    UFUNCTION() void OnPickSkyHorizon();
-    UFUNCTION() void OnPickSun();
-    UFUNCTION() void OnPickFog();
-    UFUNCTION() void OnPickAmbient();
-    UFUNCTION() void OnWheelColorChanged(FLinearColor Color); // la rueda cambió el color activo
+    // Un handler por rueda (setea su color y aplica).
+    UFUNCTION() void OnSkyTopColor(FLinearColor C);
+    UFUNCTION() void OnSkyHorizonColor(FLinearColor C);
+    UFUNCTION() void OnSunColorChanged(FLinearColor C);
+    UFUNCTION() void OnFogColorChanged(FLinearColor C);
+    UFUNCTION() void OnAmbientColorChanged(FLinearColor C);
 
 private:
     class APTMapEnvironment* FindEnv() const;
-    void PopulateFromEnv();     // carga los sliders/swatches desde los settings actuales
+    void PopulateFromEnv();     // carga sliders + inicializa cada rueda desde los settings
     void ApplyFromSliders();    // reconstruye los ESCALARES desde los sliders y aplica
-    void UpdateSwatches(const FPTSkySettings& S);
-    void OpenWheelFor(EPTSkyColorTarget Target); // abre la rueda para editar ese color
     bool bLoadingUI = false;
-    EPTSkyColorTarget ActiveTarget = EPTSkyColorTarget::None;
 };

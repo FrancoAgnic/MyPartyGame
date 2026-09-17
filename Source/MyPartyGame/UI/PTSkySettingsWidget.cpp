@@ -3,7 +3,6 @@
 #include "PTSkySettingsWidget.h"
 #include "PTColorWheelWidget.h"
 #include "Components/Slider.h"
-#include "Components/Image.h"
 #include "Components/Button.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -21,14 +20,11 @@ void UPTSkySettingsWidget::NativeConstruct()
     for (USlider* S : Scalars)
         if (S) S->OnValueChanged.AddDynamic(this, &UPTSkySettingsWidget::OnAnyChanged);
 
-    if (Btn_SkyTop)      Btn_SkyTop->OnClicked.AddDynamic(this, &UPTSkySettingsWidget::OnPickSkyTop);
-    if (Btn_SkyHorizon)  Btn_SkyHorizon->OnClicked.AddDynamic(this, &UPTSkySettingsWidget::OnPickSkyHorizon);
-    if (Btn_SunColor)    Btn_SunColor->OnClicked.AddDynamic(this, &UPTSkySettingsWidget::OnPickSun);
-    if (Btn_FogColor)    Btn_FogColor->OnClicked.AddDynamic(this, &UPTSkySettingsWidget::OnPickFog);
-    if (Btn_AmbientColor)Btn_AmbientColor->OnClicked.AddDynamic(this, &UPTSkySettingsWidget::OnPickAmbient);
-
-    if (ColorWheel) ColorWheel->OnColorChanged.AddDynamic(this, &UPTSkySettingsWidget::OnWheelColorChanged);
-    if (ColorWheel) ColorWheel->SetVisibility(ESlateVisibility::Collapsed); // se muestra al elegir un color
+    if (Wheel_SkyTop)      Wheel_SkyTop->OnColorChanged.AddDynamic(this, &UPTSkySettingsWidget::OnSkyTopColor);
+    if (Wheel_SkyHorizon)  Wheel_SkyHorizon->OnColorChanged.AddDynamic(this, &UPTSkySettingsWidget::OnSkyHorizonColor);
+    if (Wheel_SunColor)    Wheel_SunColor->OnColorChanged.AddDynamic(this, &UPTSkySettingsWidget::OnSunColorChanged);
+    if (Wheel_FogColor)    Wheel_FogColor->OnColorChanged.AddDynamic(this, &UPTSkySettingsWidget::OnFogColorChanged);
+    if (Wheel_AmbientColor)Wheel_AmbientColor->OnColorChanged.AddDynamic(this, &UPTSkySettingsWidget::OnAmbientColorChanged);
 
     if (CloseButton) CloseButton->OnClicked.AddDynamic(this, &UPTSkySettingsWidget::OnCloseClicked);
     SetVisibility(ESlateVisibility::Collapsed);
@@ -42,8 +38,6 @@ APTMapEnvironment* UPTSkySettingsWidget::FindEnv() const
 
 void UPTSkySettingsWidget::ShowPanel()
 {
-    ActiveTarget = EPTSkyColorTarget::None;
-    if (ColorWheel) ColorWheel->SetVisibility(ESlateVisibility::Collapsed);
     PopulateFromEnv();
     SetVisibility(ESlateVisibility::Visible);
     PlayPopIn();
@@ -66,7 +60,12 @@ void UPTSkySettingsWidget::PopulateFromEnv()
     SetSV(Slider_AmbientIntensity, MaxAmbient      > 0 ? S.AmbientIntensity / MaxAmbient      : 0.f);
     bLoadingUI = false;
 
-    UpdateSwatches(S);
+    // Cada rueda arranca en su color actual (OpenWith no dispara OnColorChanged → sin loop).
+    if (Wheel_SkyTop)      Wheel_SkyTop->OpenWith(S.SkyTopColor);
+    if (Wheel_SkyHorizon)  Wheel_SkyHorizon->OpenWith(S.SkyHorizonColor);
+    if (Wheel_SunColor)    Wheel_SunColor->OpenWith(S.SunColor);
+    if (Wheel_FogColor)    Wheel_FogColor->OpenWith(S.FogColor);
+    if (Wheel_AmbientColor)Wheel_AmbientColor->OpenWith(S.AmbientColor);
 }
 
 void UPTSkySettingsWidget::OnAnyChanged(float /*Value*/)
@@ -90,57 +89,29 @@ void UPTSkySettingsWidget::ApplyFromSliders()
     Env->SetSkySettings(S); // aplica en vivo
 }
 
-void UPTSkySettingsWidget::UpdateSwatches(const FPTSkySettings& S)
+// ── Cada rueda edita su color directo ──
+void UPTSkySettingsWidget::OnSkyTopColor(FLinearColor C)
 {
-    if (Swatch_SkyTop)      Swatch_SkyTop->SetColorAndOpacity(S.SkyTopColor);
-    if (Swatch_SkyHorizon)  Swatch_SkyHorizon->SetColorAndOpacity(S.SkyHorizonColor);
-    if (Swatch_SunColor)    Swatch_SunColor->SetColorAndOpacity(S.SunColor);
-    if (Swatch_FogColor)    Swatch_FogColor->SetColorAndOpacity(S.FogColor);
-    if (Swatch_AmbientColor)Swatch_AmbientColor->SetColorAndOpacity(S.AmbientColor);
+    if (bLoadingUI) return;
+    if (APTMapEnvironment* Env = FindEnv()) { FPTSkySettings S = Env->GetSkySettings(); S.SkyTopColor = C; Env->SetSkySettings(S); }
 }
-
-// ── Elegir qué color se edita con la rueda ──
-void UPTSkySettingsWidget::OnPickSkyTop()     { OpenWheelFor(EPTSkyColorTarget::SkyTop); }
-void UPTSkySettingsWidget::OnPickSkyHorizon() { OpenWheelFor(EPTSkyColorTarget::SkyHorizon); }
-void UPTSkySettingsWidget::OnPickSun()        { OpenWheelFor(EPTSkyColorTarget::Sun); }
-void UPTSkySettingsWidget::OnPickFog()        { OpenWheelFor(EPTSkyColorTarget::Fog); }
-void UPTSkySettingsWidget::OnPickAmbient()    { OpenWheelFor(EPTSkyColorTarget::Ambient); }
-
-void UPTSkySettingsWidget::OpenWheelFor(EPTSkyColorTarget Target)
+void UPTSkySettingsWidget::OnSkyHorizonColor(FLinearColor C)
 {
-    ActiveTarget = Target;
-    const APTMapEnvironment* Env = FindEnv();
-    if (!Env || !ColorWheel) return;
-    const FPTSkySettings S = Env->GetSkySettings();
-    FLinearColor Cur = FLinearColor::White;
-    switch (Target)
-    {
-    case EPTSkyColorTarget::SkyTop:     Cur = S.SkyTopColor;     break;
-    case EPTSkyColorTarget::SkyHorizon: Cur = S.SkyHorizonColor; break;
-    case EPTSkyColorTarget::Sun:        Cur = S.SunColor;        break;
-    case EPTSkyColorTarget::Fog:        Cur = S.FogColor;        break;
-    case EPTSkyColorTarget::Ambient:    Cur = S.AmbientColor;    break;
-    default: break;
-    }
-    ColorWheel->SetVisibility(ESlateVisibility::Visible);
-    ColorWheel->OpenWith(Cur);
+    if (bLoadingUI) return;
+    if (APTMapEnvironment* Env = FindEnv()) { FPTSkySettings S = Env->GetSkySettings(); S.SkyHorizonColor = C; Env->SetSkySettings(S); }
 }
-
-void UPTSkySettingsWidget::OnWheelColorChanged(FLinearColor Color)
+void UPTSkySettingsWidget::OnSunColorChanged(FLinearColor C)
 {
-    if (ActiveTarget == EPTSkyColorTarget::None) return;
-    APTMapEnvironment* Env = FindEnv();
-    if (!Env) return;
-    FPTSkySettings S = Env->GetSkySettings();
-    switch (ActiveTarget)
-    {
-    case EPTSkyColorTarget::SkyTop:     S.SkyTopColor     = Color; break;
-    case EPTSkyColorTarget::SkyHorizon: S.SkyHorizonColor = Color; break;
-    case EPTSkyColorTarget::Sun:        S.SunColor        = Color; break;
-    case EPTSkyColorTarget::Fog:        S.FogColor        = Color; break;
-    case EPTSkyColorTarget::Ambient:    S.AmbientColor    = Color; break;
-    default: return;
-    }
-    Env->SetSkySettings(S); // aplica en vivo
-    UpdateSwatches(S);
+    if (bLoadingUI) return;
+    if (APTMapEnvironment* Env = FindEnv()) { FPTSkySettings S = Env->GetSkySettings(); S.SunColor = C; Env->SetSkySettings(S); }
+}
+void UPTSkySettingsWidget::OnFogColorChanged(FLinearColor C)
+{
+    if (bLoadingUI) return;
+    if (APTMapEnvironment* Env = FindEnv()) { FPTSkySettings S = Env->GetSkySettings(); S.FogColor = C; Env->SetSkySettings(S); }
+}
+void UPTSkySettingsWidget::OnAmbientColorChanged(FLinearColor C)
+{
+    if (bLoadingUI) return;
+    if (APTMapEnvironment* Env = FindEnv()) { FPTSkySettings S = Env->GetSkySettings(); S.AmbientColor = C; Env->SetSkySettings(S); }
 }
