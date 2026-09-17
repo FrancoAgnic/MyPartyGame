@@ -58,6 +58,9 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") bool    bMatchFriendsOnly   = false;
     // Título del banco de palabras activo. Vacío = banco por defecto.
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") FString MatchWordPackTitle;
+    // Id + URL de miniatura del banco activo (para que TODOS vean la miniatura en el lobby).
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") FString MatchWordPackId;
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") FString MatchWordPackPreviewURL;
     // Título del mapa custom activo. Vacío = mapa oficial (Lvl-01).
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") FString MatchMapTitle;
     // Id del mapa custom activo (workshop id o "local:..."). Vacío = mapa oficial. Los clientes lo

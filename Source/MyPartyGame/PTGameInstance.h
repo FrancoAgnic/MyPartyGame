@@ -99,6 +99,9 @@ public:
     UFUNCTION(BlueprintCallable, Category="WordPack") bool PickMapPakFile(FString& OutPath);
     // Título del banco elegido (vacío = default), para mostrarlo en el lobby.
     UPROPERTY(BlueprintReadOnly, Category="WordPack") FString SelectedWordPackTitle;
+    // Id + URL de miniatura del banco elegido (para replicar y que todos vean la miniatura en el lobby).
+    UPROPERTY(BlueprintReadOnly, Category="WordPack") FString SelectedWordPackId;
+    UPROPERTY(BlueprintReadOnly, Category="WordPack") FString SelectedWordPackPreviewURL;
     // Notifica a la UI que cambió el banco elegido (ver SelectWordPack/SelectDefaultWordBank).
     FPTOnSelectedWordPackChanged OnSelectedWordPackChanged;
 

@@ -59,7 +59,9 @@ void APTLobbyGameMode::SyncMatchSettingsToState()
         PTGS->MatchTurnDuration   = S.TurnDuration;
         PTGS->MatchNumRounds      = S.NumRounds;
         PTGS->MatchRevealFraction = S.RevealFraction;
-        PTGS->MatchWordPackTitle  = GI->SelectedWordPackTitle;
+        PTGS->MatchWordPackTitle      = GI->SelectedWordPackTitle;
+        PTGS->MatchWordPackId         = GI->SelectedWordPackId;
+        PTGS->MatchWordPackPreviewURL = GI->SelectedWordPackPreviewURL;
         PTGS->MatchMapTitle       = GI->SelectedMapTitle;
         PTGS->MatchMapModId       = S.MapModId;
     }

@@ -32,6 +32,14 @@
 #include "Components/ScrollBox.h"
 #include "Components/RichTextBlock.h"
 #include "Framework/Application/SlateApplication.h"
+#include "../Mods/PTWordPackSubsystem.h" // FPTWordPack (miniatura del banco)
+#include "../Mods/PTMapModSubsystem.h"   // FPTMapMod (miniatura del mapa)
+#include "ImageUtils.h"                    // ImportFileAsTexture2D / ImportBufferAsTexture2D
+#include "Engine/Texture2D.h"
+#include "Misc/Paths.h"
+#include "HttpModule.h"
+#include "Interfaces/IHttpRequest.h"
+#include "Interfaces/IHttpResponse.h"
 
 bool UPTLobbyHUDWidget::Initialize()
 {
@@ -325,6 +333,97 @@ void UPTLobbyHUDWidget::RefreshSettingsView()
         FFormatOrderedArguments Args; Args.Add(Map);
         SV_MapText->SetText(PTText::Format(TEXT("SV_MAP"), Args));
     }
+
+    RefreshSettingsThumbnails(); // miniaturas de mapa/banco (local o por HTTP)
+}
+
+void UPTLobbyHUDWidget::RefreshSettingsThumbnails()
+{
+    const APTGameState* PTGS = GetWorld() ? GetWorld()->GetGameState<APTGameState>() : nullptr;
+    if (!PTGS) return;
+    UGameInstance* GI = GetGameInstance();
+
+    // ── MAPA: preview.png local (el host lo tiene; los clientes tras descargarlo en el lobby) ──
+    if (SV_MapThumbnail)
+    {
+        const FString Id = PTGS->MatchMapModId;
+        if (Id.IsEmpty())
+        {
+            if (CachedMapThumbKey != TEXT("__none__"))
+            { CachedMapThumbKey = TEXT("__none__"); SV_MapThumbnail->SetVisibility(ESlateVisibility::Collapsed); }
+        }
+        else if (CachedMapThumbKey != Id)
+        {
+            FString Path;
+            if (UPTMapModSubsystem* MM = GI ? GI->GetSubsystem<UPTMapModSubsystem>() : nullptr)
+            {
+                if (const FPTMapMod* M = MM->FindMod(Id)) Path = M->PreviewPath;
+                if (Path.IsEmpty()) { MM->RescanMods(); if (const FPTMapMod* M2 = MM->FindMod(Id)) Path = M2->PreviewPath; }
+            }
+            if (!Path.IsEmpty() && FPaths::FileExists(Path))
+                if (UTexture2D* Tex = FImageUtils::ImportFileAsTexture2D(Path))
+                {
+                    SV_MapThumbnail->SetBrushFromTexture(Tex, false);
+                    SV_MapThumbnail->SetVisibility(ESlateVisibility::HitTestInvisible);
+                    CachedMapThumbKey = Id; // cachear solo cuando se logró (si no, reintenta al bajar el mapa)
+                }
+        }
+    }
+
+    // ── BANCO: local si esta máquina tiene el banco (oficial/suscripto); si no, por HTTP (PreviewURL) ──
+    if (SV_WordPackThumbnail)
+    {
+        const FString Id  = PTGS->MatchWordPackId;
+        const FString URL = PTGS->MatchWordPackPreviewURL;
+        const FString Key = Id + TEXT("|") + URL;
+        if (Id.IsEmpty() && URL.IsEmpty())
+        {
+            if (CachedPackThumbKey != TEXT("__none__"))
+            { CachedPackThumbKey = TEXT("__none__"); SV_WordPackThumbnail->SetVisibility(ESlateVisibility::Collapsed); }
+        }
+        else if (CachedPackThumbKey != Key)
+        {
+            FString Path;
+            if (UPTWordPackSubsystem* WP = GI ? GI->GetSubsystem<UPTWordPackSubsystem>() : nullptr)
+                if (const FPTWordPack* P = WP->FindPack(Id)) Path = P->PreviewPath;
+            if (!Path.IsEmpty() && FPaths::FileExists(Path))
+            {
+                if (UTexture2D* Tex = FImageUtils::ImportFileAsTexture2D(Path))
+                {
+                    SV_WordPackThumbnail->SetBrushFromTexture(Tex, false);
+                    SV_WordPackThumbnail->SetVisibility(ESlateVisibility::HitTestInvisible);
+                    CachedPackThumbKey = Key;
+                }
+            }
+            else if (!URL.IsEmpty())
+            {
+                DownloadThumbnailTo(SV_WordPackThumbnail, URL);
+                CachedPackThumbKey = Key; // la descarga es async; marcar para no re-pedir en loop
+            }
+        }
+    }
+}
+
+void UPTLobbyHUDWidget::DownloadThumbnailTo(UImage* Target, const FString& URL)
+{
+    if (!Target || URL.IsEmpty()) return;
+    TWeakObjectPtr<UImage> W = Target;
+    TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Req = FHttpModule::Get().CreateRequest();
+    Req->SetURL(URL);
+    Req->SetVerb(TEXT("GET"));
+    Req->OnProcessRequestComplete().BindLambda(
+        [W](FHttpRequestPtr, FHttpResponsePtr Resp, bool bOk)
+        {
+            if (!bOk || !Resp) return;
+            const TArray<uint8>& Bytes = Resp->GetContent();
+            if (UImage* Img = W.Get())
+                if (UTexture2D* Tex = FImageUtils::ImportBufferAsTexture2D(Bytes))
+                {
+                    Img->SetBrushFromTexture(Tex, false);
+                    Img->SetVisibility(ESlateVisibility::HitTestInvisible);
+                }
+        });
+    Req->ProcessRequest();
 }
 
 void UPTLobbyHUDWidget::OpenChatFromEnter()

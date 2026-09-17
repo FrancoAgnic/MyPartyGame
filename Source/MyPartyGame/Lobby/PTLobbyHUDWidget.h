@@ -114,8 +114,14 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* SV_RevealText;   // "Revelado: 30%"
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* SV_WordPackText; // "Biblioteca: X / Default"
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* SV_MapText;      // "Mapa: X / Oficial"
+    // Miniaturas del banco/mapa elegidos (opcionales). El código las carga desde el archivo local (si la
+    // máquina tiene ese item) o las baja por HTTP (PreviewURL del Workshop). Nombres EXACTOS.
+    UPROPERTY(meta = (BindWidgetOptional)) class UImage* SV_WordPackThumbnail;
+    UPROPERTY(meta = (BindWidgetOptional)) class UImage* SV_MapThumbnail;
 
     void RefreshSettingsView(); // rellena los SV_* desde APTGameState
+    void RefreshSettingsThumbnails(); // carga/baja las miniaturas (con caché para no repetir)
+    void DownloadThumbnailTo(class UImage* Target, const FString& URL); // HTTP → textura
 
     // ── Chat del lobby (opcional) ──
     // Poné en el WBP (nombres EXACTOS): ChatInput (EditableTextBox), TxtChat (TextBlock), ChatScroll
@@ -151,6 +157,9 @@ private:
     FString CachedRoomCode;
     FString ChatLog;
     bool    bChatBound = false;
+    // Caché de miniaturas ya cargadas (clave = id/url/path) para no re-cargar/re-bajar cada refresco.
+    FString CachedMapThumbKey;
+    FString CachedPackThumbKey;
     bool    bChatExpanded = false;
     bool    bChatUnread = false;
     // Estilo original del botón de la barra (flecha ARRIBA) cacheado en Initialize, para restaurarlo al cerrar.
