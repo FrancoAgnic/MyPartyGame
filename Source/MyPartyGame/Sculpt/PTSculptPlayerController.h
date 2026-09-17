@@ -596,6 +596,7 @@ private:
     void TickAuthorProps(float Dt);        // preview del asset + bake por Enter-3s (llamado en PlayerTick)
     void PlaceCurrentAsset();              // coloca una instancia del asset actual
     void EraseAssetUnderCursor();          // borra la instancia bajo el cursor
+    void OnToggleSkyPanel();               // abre/cierra el panel de ambiente (solo autoría)
     void CycleAsset(int32 Dir);            // cambia el asset actual (fallback sin radial)
     void OpenAssetRadial();                // radial de assets con miniaturas (TAB afuera, modo Add)
     void DoBakeAsset();                    // hornea el box → asset + limpia el box

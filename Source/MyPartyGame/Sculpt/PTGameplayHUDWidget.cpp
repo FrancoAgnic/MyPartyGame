@@ -454,9 +454,18 @@ void UPTGameplayHUDWidget::UpdateAuthorPanels()
     if (SaveMapButton)    SaveMapButton->SetVisibility(ESlateVisibility::Visible);
     if (ExitAuthorButton) ExitAuthorButton->SetVisibility(ESlateVisibility::Visible);
     if (SkySettingsButton)SkySettingsButton->SetVisibility(ESlateVisibility::Visible);
+
+    // Slot del hotbar para el panel de ambiente: ícono + tecla (F por defecto). Solo en autoría.
+    if (SkyPanelSlot)
+    {
+        SkyPanelSlot->SetSlot(IconSkyPanel, PT_ShortKeyLabel(PTInput::GetKey(TEXT("SkyPanel"))), FText::GetEmpty());
+        SkyPanelSlot->SetVisibility(ESlateVisibility::HitTestInvisible);
+    }
 }
 
-void UPTGameplayHUDWidget::OnSkySettingsClicked()
+void UPTGameplayHUDWidget::OnSkySettingsClicked() { ToggleSkyPanel(); }
+
+void UPTGameplayHUDWidget::ToggleSkyPanel()
 {
     if (!SkySettingsClass) return;
     if (!SkyPanel)
@@ -464,7 +473,10 @@ void UPTGameplayHUDWidget::OnSkySettingsClicked()
         SkyPanel = CreateWidget<UPTSkySettingsWidget>(this, SkySettingsClass);
         if (SkyPanel) SkyPanel->AddToViewport(70);
     }
-    if (SkyPanel) SkyPanel->ShowPanel();
+    if (!SkyPanel) return;
+    const bool bOpen = SkyPanel->GetVisibility() != ESlateVisibility::Collapsed;
+    if (bOpen) SkyPanel->HidePanel();
+    else       SkyPanel->ShowPanel();
 }
 
 void UPTGameplayHUDWidget::OnSaveMapClicked()

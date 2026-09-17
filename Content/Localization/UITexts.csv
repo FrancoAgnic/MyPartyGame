@@ -137,6 +137,7 @@ KEY_CLEAR_ALL,Deshacer / Borrar todo (3s),Undo / Clear All (3s),Desfazer / Apaga
 KEY_COLOR_PICK,Elegir color,Pick Color,Escolher cor,Farbe wählen,Choisir la couleur,Scegli colore
 KEY_SAVE_COLOR,Guardar color,Save Color,Salvar cor,Farbe speichern,Enregistrer la couleur,Salva colore
 KEY_CHAT,Chat,Chat,Chat,Chat,Chat,Chat
+KEY_SKY_PANEL,Ambiente,Environment,Ambiente,Umgebung,Ambiance,Ambiente
 KEY_PAUSE,Pausa,Pause,Pausa,Pause,Pause,Pausa
 HEAD_CTRL_CAMERA,WASD — Girar cámara,WASD — Rotate camera,WASD — Girar câmera,WASD — Kamera drehen,WASD — Tourner la caméra,WASD — Ruota camera
 HEAD_CTRL_BRUSH,Rueda — Tamaño,Wheel — Size,Roda — Tamanho,Rad — Größe,Molette — Taille,Rotella — Dimensione

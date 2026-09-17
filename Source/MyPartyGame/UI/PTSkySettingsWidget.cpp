@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "PTSkySettingsWidget.h"
+#include "PTColorWheelWidget.h"
 #include "Components/Slider.h"
 #include "Components/Image.h"
 #include "Components/Button.h"
@@ -16,17 +17,18 @@ void UPTSkySettingsWidget::NativeConstruct()
 {
     Super::NativeConstruct();
 
-    // Enganchar TODOS los sliders al mismo handler.
-    USlider* All[] = {
-        Slider_TimeOfDay, Slider_SunYaw, Slider_SunIntensity, Slider_FogDensity, Slider_AmbientIntensity,
-        Slider_SkyTop_R, Slider_SkyTop_G, Slider_SkyTop_B,
-        Slider_SkyHorizon_R, Slider_SkyHorizon_G, Slider_SkyHorizon_B,
-        Slider_SunColor_R, Slider_SunColor_G, Slider_SunColor_B,
-        Slider_FogColor_R, Slider_FogColor_G, Slider_FogColor_B,
-        Slider_AmbientColor_R, Slider_AmbientColor_G, Slider_AmbientColor_B
-    };
-    for (USlider* S : All)
+    USlider* Scalars[] = { Slider_TimeOfDay, Slider_SunYaw, Slider_SunIntensity, Slider_FogDensity, Slider_AmbientIntensity };
+    for (USlider* S : Scalars)
         if (S) S->OnValueChanged.AddDynamic(this, &UPTSkySettingsWidget::OnAnyChanged);
+
+    if (Btn_SkyTop)      Btn_SkyTop->OnClicked.AddDynamic(this, &UPTSkySettingsWidget::OnPickSkyTop);
+    if (Btn_SkyHorizon)  Btn_SkyHorizon->OnClicked.AddDynamic(this, &UPTSkySettingsWidget::OnPickSkyHorizon);
+    if (Btn_SunColor)    Btn_SunColor->OnClicked.AddDynamic(this, &UPTSkySettingsWidget::OnPickSun);
+    if (Btn_FogColor)    Btn_FogColor->OnClicked.AddDynamic(this, &UPTSkySettingsWidget::OnPickFog);
+    if (Btn_AmbientColor)Btn_AmbientColor->OnClicked.AddDynamic(this, &UPTSkySettingsWidget::OnPickAmbient);
+
+    if (ColorWheel) ColorWheel->OnColorChanged.AddDynamic(this, &UPTSkySettingsWidget::OnWheelColorChanged);
+    if (ColorWheel) ColorWheel->SetVisibility(ESlateVisibility::Collapsed); // se muestra al elegir un color
 
     if (CloseButton) CloseButton->OnClicked.AddDynamic(this, &UPTSkySettingsWidget::OnCloseClicked);
     SetVisibility(ESlateVisibility::Collapsed);
@@ -40,16 +42,14 @@ APTMapEnvironment* UPTSkySettingsWidget::FindEnv() const
 
 void UPTSkySettingsWidget::ShowPanel()
 {
+    ActiveTarget = EPTSkyColorTarget::None;
+    if (ColorWheel) ColorWheel->SetVisibility(ESlateVisibility::Collapsed);
     PopulateFromEnv();
     SetVisibility(ESlateVisibility::Visible);
     PlayPopIn();
 }
 
-void UPTSkySettingsWidget::HidePanel()
-{
-    SetVisibility(ESlateVisibility::Collapsed);
-}
-
+void UPTSkySettingsWidget::HidePanel() { SetVisibility(ESlateVisibility::Collapsed); }
 void UPTSkySettingsWidget::OnCloseClicked() { HidePanel(); }
 
 void UPTSkySettingsWidget::PopulateFromEnv()
@@ -58,18 +58,12 @@ void UPTSkySettingsWidget::PopulateFromEnv()
     if (!Env) return;
     const FPTSkySettings S = Env->GetSkySettings();
 
-    bLoadingUI = true; // no re-aplicar mientras seteo los sliders
-    SetSV(Slider_TimeOfDay,       S.TimeOfDay);
-    SetSV(Slider_SunYaw,          MaxSunYaw       > 0 ? S.SunYaw       / MaxSunYaw       : 0.f);
-    SetSV(Slider_SunIntensity,    MaxSunIntensity > 0 ? S.SunIntensity / MaxSunIntensity : 0.f);
-    SetSV(Slider_FogDensity,      MaxFogDensity   > 0 ? S.FogDensity   / MaxFogDensity   : 0.f);
-    SetSV(Slider_AmbientIntensity,MaxAmbient      > 0 ? S.AmbientIntensity / MaxAmbient  : 0.f);
-
-    SetSV(Slider_SkyTop_R, S.SkyTopColor.R);       SetSV(Slider_SkyTop_G, S.SkyTopColor.G);       SetSV(Slider_SkyTop_B, S.SkyTopColor.B);
-    SetSV(Slider_SkyHorizon_R, S.SkyHorizonColor.R); SetSV(Slider_SkyHorizon_G, S.SkyHorizonColor.G); SetSV(Slider_SkyHorizon_B, S.SkyHorizonColor.B);
-    SetSV(Slider_SunColor_R, S.SunColor.R);         SetSV(Slider_SunColor_G, S.SunColor.G);         SetSV(Slider_SunColor_B, S.SunColor.B);
-    SetSV(Slider_FogColor_R, S.FogColor.R);         SetSV(Slider_FogColor_G, S.FogColor.G);         SetSV(Slider_FogColor_B, S.FogColor.B);
-    SetSV(Slider_AmbientColor_R, S.AmbientColor.R); SetSV(Slider_AmbientColor_G, S.AmbientColor.G); SetSV(Slider_AmbientColor_B, S.AmbientColor.B);
+    bLoadingUI = true;
+    SetSV(Slider_TimeOfDay,        S.TimeOfDay);
+    SetSV(Slider_SunYaw,           MaxSunYaw       > 0 ? S.SunYaw           / MaxSunYaw       : 0.f);
+    SetSV(Slider_SunIntensity,     MaxSunIntensity > 0 ? S.SunIntensity     / MaxSunIntensity : 0.f);
+    SetSV(Slider_FogDensity,       MaxFogDensity   > 0 ? S.FogDensity       / MaxFogDensity   : 0.f);
+    SetSV(Slider_AmbientIntensity, MaxAmbient      > 0 ? S.AmbientIntensity / MaxAmbient      : 0.f);
     bLoadingUI = false;
 
     UpdateSwatches(S);
@@ -85,26 +79,15 @@ void UPTSkySettingsWidget::ApplyFromSliders()
 {
     APTMapEnvironment* Env = FindEnv();
     if (!Env) return;
-    FPTSkySettings S = Env->GetSkySettings(); // partir de lo actual → canales de color sin slider quedan igual
+    FPTSkySettings S = Env->GetSkySettings(); // partir de lo actual (colores intactos)
 
     S.TimeOfDay        = SVal(Slider_TimeOfDay, S.TimeOfDay);
-    S.SunYaw           = SVal(Slider_SunYaw, S.SunYaw / (MaxSunYaw > 0 ? MaxSunYaw : 1.f)) * MaxSunYaw;
+    S.SunYaw           = SVal(Slider_SunYaw, 0.f) * MaxSunYaw;
     S.SunIntensity     = SVal(Slider_SunIntensity, 0.f) * MaxSunIntensity;
     S.FogDensity       = SVal(Slider_FogDensity, 0.f) * MaxFogDensity;
     S.AmbientIntensity = SVal(Slider_AmbientIntensity, 0.f) * MaxAmbient;
 
-    auto Col = [](USlider* R, USlider* G, USlider* B, FLinearColor Cur)
-    {
-        return FLinearColor(SVal(R, Cur.R), SVal(G, Cur.G), SVal(B, Cur.B), 1.f);
-    };
-    S.SkyTopColor     = Col(Slider_SkyTop_R,     Slider_SkyTop_G,     Slider_SkyTop_B,     S.SkyTopColor);
-    S.SkyHorizonColor = Col(Slider_SkyHorizon_R, Slider_SkyHorizon_G, Slider_SkyHorizon_B, S.SkyHorizonColor);
-    S.SunColor        = Col(Slider_SunColor_R,   Slider_SunColor_G,   Slider_SunColor_B,   S.SunColor);
-    S.FogColor        = Col(Slider_FogColor_R,   Slider_FogColor_G,   Slider_FogColor_B,   S.FogColor);
-    S.AmbientColor    = Col(Slider_AmbientColor_R,Slider_AmbientColor_G,Slider_AmbientColor_B,S.AmbientColor);
-
     Env->SetSkySettings(S); // aplica en vivo
-    UpdateSwatches(S);
 }
 
 void UPTSkySettingsWidget::UpdateSwatches(const FPTSkySettings& S)
@@ -114,4 +97,50 @@ void UPTSkySettingsWidget::UpdateSwatches(const FPTSkySettings& S)
     if (Swatch_SunColor)    Swatch_SunColor->SetColorAndOpacity(S.SunColor);
     if (Swatch_FogColor)    Swatch_FogColor->SetColorAndOpacity(S.FogColor);
     if (Swatch_AmbientColor)Swatch_AmbientColor->SetColorAndOpacity(S.AmbientColor);
+}
+
+// ── Elegir qué color se edita con la rueda ──
+void UPTSkySettingsWidget::OnPickSkyTop()     { OpenWheelFor(EPTSkyColorTarget::SkyTop); }
+void UPTSkySettingsWidget::OnPickSkyHorizon() { OpenWheelFor(EPTSkyColorTarget::SkyHorizon); }
+void UPTSkySettingsWidget::OnPickSun()        { OpenWheelFor(EPTSkyColorTarget::Sun); }
+void UPTSkySettingsWidget::OnPickFog()        { OpenWheelFor(EPTSkyColorTarget::Fog); }
+void UPTSkySettingsWidget::OnPickAmbient()    { OpenWheelFor(EPTSkyColorTarget::Ambient); }
+
+void UPTSkySettingsWidget::OpenWheelFor(EPTSkyColorTarget Target)
+{
+    ActiveTarget = Target;
+    const APTMapEnvironment* Env = FindEnv();
+    if (!Env || !ColorWheel) return;
+    const FPTSkySettings S = Env->GetSkySettings();
+    FLinearColor Cur = FLinearColor::White;
+    switch (Target)
+    {
+    case EPTSkyColorTarget::SkyTop:     Cur = S.SkyTopColor;     break;
+    case EPTSkyColorTarget::SkyHorizon: Cur = S.SkyHorizonColor; break;
+    case EPTSkyColorTarget::Sun:        Cur = S.SunColor;        break;
+    case EPTSkyColorTarget::Fog:        Cur = S.FogColor;        break;
+    case EPTSkyColorTarget::Ambient:    Cur = S.AmbientColor;    break;
+    default: break;
+    }
+    ColorWheel->SetVisibility(ESlateVisibility::Visible);
+    ColorWheel->OpenWith(Cur);
+}
+
+void UPTSkySettingsWidget::OnWheelColorChanged(FLinearColor Color)
+{
+    if (ActiveTarget == EPTSkyColorTarget::None) return;
+    APTMapEnvironment* Env = FindEnv();
+    if (!Env) return;
+    FPTSkySettings S = Env->GetSkySettings();
+    switch (ActiveTarget)
+    {
+    case EPTSkyColorTarget::SkyTop:     S.SkyTopColor     = Color; break;
+    case EPTSkyColorTarget::SkyHorizon: S.SkyHorizonColor = Color; break;
+    case EPTSkyColorTarget::Sun:        S.SunColor        = Color; break;
+    case EPTSkyColorTarget::Fog:        S.FogColor        = Color; break;
+    case EPTSkyColorTarget::Ambient:    S.AmbientColor    = Color; break;
+    default: return;
+    }
+    Env->SetSkySettings(S); // aplica en vivo
+    UpdateSwatches(S);
 }

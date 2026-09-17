@@ -119,6 +119,13 @@ protected:
     /** WBP del panel de ambiente (deriva de UPTSkySettingsWidget). Asignar en el BP del HUD. */
     UPROPERTY(EditAnywhere, Category="MapEditor") TSubclassOf<class UPTSkySettingsWidget> SkySettingsClass;
     UPROPERTY() class UPTSkySettingsWidget* SkyPanel = nullptr;
+    // Slot del hotbar que muestra la tecla + ícono para abrir el panel de ambiente (solo en autoría).
+    UPROPERTY(meta=(BindWidgetOptional)) class UPTToolSlotWidget* SkyPanelSlot;
+    UPROPERTY(EditAnywhere, Category="MapEditor") UTexture2D* IconSkyPanel = nullptr; // ícono del slot (asignable)
+public:
+    /** Abre/cierra el panel de ambiente. Lo llama el botón del HUD y la tecla del PlayerController. */
+    void ToggleSkyPanel();
+protected:
 
     // ── Iconos de estado de red (arriba a la izquierda). Se muestran SOLO cuando hay problema. Poné tus
     //    texturas 24x24 en estos Image del WBP (nombres EXACTOS); el código los prende/apaga. ──

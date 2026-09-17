@@ -5,11 +5,11 @@
 //
 // Scalars (USlider 0..1, se mapean a su rango):
 //   Slider_TimeOfDay, Slider_SunYaw, Slider_SunIntensity, Slider_FogDensity, Slider_AmbientIntensity
-// Colores (USlider 0..1 por canal):
-//   Slider_SkyTop_R/G/B, Slider_SkyHorizon_R/G/B, Slider_SunColor_R/G/B,
-//   Slider_FogColor_R/G/B, Slider_AmbientColor_R/G/B
-// Swatches opcionales (UImage, se tiñen con el color): Swatch_SkyTop, Swatch_SkyHorizon, Swatch_SunColor,
-//   Swatch_FogColor, Swatch_AmbientColor
+// Colores: 5 BOTONES-swatch que abren la RUEDA de color (ColorWheel). Al elegir un color se aplica al que
+//   estabas editando. Nombres EXACTOS:
+//   Btn_SkyTop, Btn_SkyHorizon, Btn_SunColor, Btn_FogColor, Btn_AmbientColor  (Button)
+//   Swatch_SkyTop, Swatch_SkyHorizon, Swatch_SunColor, Swatch_FogColor, Swatch_AmbientColor (Image, se tiñen)
+//   ColorWheel (UPTColorWheelWidget)  → la rueda + 2 sliders (sat/valor); editás el color activo
 // Botones opcionales: CloseButton
 
 #pragma once
@@ -21,6 +21,11 @@
 class USlider;
 class UImage;
 class UButton;
+class UPTColorWheelWidget;
+
+// Qué color estás editando con la rueda.
+UENUM()
+enum class EPTSkyColorTarget : uint8 { None, SkyTop, SkyHorizon, Sun, Fog, Ambient };
 
 UCLASS()
 class MYPARTYGAME_API UPTSkySettingsWidget : public UPTUserWidget
@@ -47,21 +52,12 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) USlider* Slider_FogDensity;
     UPROPERTY(meta=(BindWidgetOptional)) USlider* Slider_AmbientIntensity;
 
-    UPROPERTY(meta=(BindWidgetOptional)) USlider* Slider_SkyTop_R;
-    UPROPERTY(meta=(BindWidgetOptional)) USlider* Slider_SkyTop_G;
-    UPROPERTY(meta=(BindWidgetOptional)) USlider* Slider_SkyTop_B;
-    UPROPERTY(meta=(BindWidgetOptional)) USlider* Slider_SkyHorizon_R;
-    UPROPERTY(meta=(BindWidgetOptional)) USlider* Slider_SkyHorizon_G;
-    UPROPERTY(meta=(BindWidgetOptional)) USlider* Slider_SkyHorizon_B;
-    UPROPERTY(meta=(BindWidgetOptional)) USlider* Slider_SunColor_R;
-    UPROPERTY(meta=(BindWidgetOptional)) USlider* Slider_SunColor_G;
-    UPROPERTY(meta=(BindWidgetOptional)) USlider* Slider_SunColor_B;
-    UPROPERTY(meta=(BindWidgetOptional)) USlider* Slider_FogColor_R;
-    UPROPERTY(meta=(BindWidgetOptional)) USlider* Slider_FogColor_G;
-    UPROPERTY(meta=(BindWidgetOptional)) USlider* Slider_FogColor_B;
-    UPROPERTY(meta=(BindWidgetOptional)) USlider* Slider_AmbientColor_R;
-    UPROPERTY(meta=(BindWidgetOptional)) USlider* Slider_AmbientColor_G;
-    UPROPERTY(meta=(BindWidgetOptional)) USlider* Slider_AmbientColor_B;
+    // Colores: botones-swatch que abren la rueda + swatches que muestran el color.
+    UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_SkyTop;
+    UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_SkyHorizon;
+    UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_SunColor;
+    UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_FogColor;
+    UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_AmbientColor;
 
     UPROPERTY(meta=(BindWidgetOptional)) UImage* Swatch_SkyTop;
     UPROPERTY(meta=(BindWidgetOptional)) UImage* Swatch_SkyHorizon;
@@ -69,15 +65,24 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) UImage* Swatch_FogColor;
     UPROPERTY(meta=(BindWidgetOptional)) UImage* Swatch_AmbientColor;
 
+    UPROPERTY(meta=(BindWidgetOptional)) UPTColorWheelWidget* ColorWheel; // rueda + 2 sliders (sat/valor)
     UPROPERTY(meta=(BindWidgetOptional)) UButton* CloseButton;
 
-    UFUNCTION() void OnAnyChanged(float Value); // cualquier slider → reconstruir + aplicar
+    UFUNCTION() void OnAnyChanged(float Value);      // sliders escalares → reconstruir + aplicar
     UFUNCTION() void OnCloseClicked();
+    UFUNCTION() void OnPickSkyTop();
+    UFUNCTION() void OnPickSkyHorizon();
+    UFUNCTION() void OnPickSun();
+    UFUNCTION() void OnPickFog();
+    UFUNCTION() void OnPickAmbient();
+    UFUNCTION() void OnWheelColorChanged(FLinearColor Color); // la rueda cambió el color activo
 
 private:
     class APTMapEnvironment* FindEnv() const;
-    void PopulateFromEnv();     // carga los sliders desde los settings actuales
-    void ApplyFromSliders();    // reconstruye FPTSkySettings desde los sliders y lo aplica
+    void PopulateFromEnv();     // carga los sliders/swatches desde los settings actuales
+    void ApplyFromSliders();    // reconstruye los ESCALARES desde los sliders y aplica
     void UpdateSwatches(const FPTSkySettings& S);
-    bool bLoadingUI = false;    // evita el loop mientras seteo los sliders al abrir
+    void OpenWheelFor(EPTSkyColorTarget Target); // abre la rueda para editar ese color
+    bool bLoadingUI = false;
+    EPTSkyColorTarget ActiveTarget = EPTSkyColorTarget::None;
 };

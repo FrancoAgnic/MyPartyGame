@@ -43,6 +43,7 @@ namespace PTInput
         Add(TEXT("ColorPick"),      TEXT("KEY_COLOR_PICK"),  EKeys::RightMouseButton);
         Add(TEXT("SaveColor"),      TEXT("KEY_SAVE_COLOR"),  EKeys::E);
         Add(TEXT("Chat"),           TEXT("KEY_CHAT"),        EKeys::Enter);
+        Add(TEXT("SkyPanel"),       TEXT("KEY_SKY_PANEL"),   EKeys::F); // editor de mapas: abrir panel de ambiente
         Add(TEXT("Pause"),          TEXT("KEY_PAUSE"),       EKeys::Escape);
     }
 

@@ -464,6 +464,9 @@ void APTSculptPlayerController::SetupInputComponent()
     InputComponent->BindKey(K(TEXT("RotateShape")), IE_Pressed,  this, &APTSculptPlayerController::OnShapeRotatePressed);
     InputComponent->BindKey(K(TEXT("RotateShape")), IE_Released, this, &APTSculptPlayerController::OnShapeRotateReleased);
 
+    // Editor de mapas: abrir el panel de AMBIENTE (sol/cielo/niebla). Solo hace algo en autoría.
+    InputComponent->BindKey(K(TEXT("SkyPanel")), IE_Pressed, this, &APTSculptPlayerController::OnToggleSkyPanel);
+
     // ALT (mantener) en Add: pegar el sello a la superficie de la arcilla ya dibujada (detallar de cerca).
     InputComponent->BindKey(EKeys::LeftAlt,  IE_Pressed,  this, &APTSculptPlayerController::OnSurfaceSnapPressed);
     InputComponent->BindKey(EKeys::LeftAlt,  IE_Released, this, &APTSculptPlayerController::OnSurfaceSnapReleased);
@@ -2379,6 +2382,12 @@ void APTSculptPlayerController::EraseAssetUnderCursor()
     if (!Env) return;
     bool bOut = false; const FVector P = GetPlacePoint(bOut);
     Env->RemoveInstanceNear(P, FMath::Max(80.f, AssetScale * 120.f));
+}
+
+void APTSculptPlayerController::OnToggleSkyPanel()
+{
+    if (!IsMapAuthorMode()) return;           // solo en el editor de mapas
+    if (GameplayHUD) GameplayHUD->ToggleSkyPanel();
 }
 
 void APTSculptPlayerController::CycleAsset(int32 Dir)
