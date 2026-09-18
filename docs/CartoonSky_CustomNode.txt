@@ -1,0 +1,75 @@
+========================================================================
+ CIELO CARTOON — Custom Node HLSL para M_CartoonSky (Sky Sphere)
+========================================================================
+
+Pegá este código en un nodo Custom del material. Output Type = CMOT Float3.
+Conectá la salida del Custom → Emissive Color.
+
+------------------------------------------------------------------------
+ CÓDIGO (pegar en el campo "Code" del nodo Custom)
+------------------------------------------------------------------------
+float3 dir = normalize(-CamVec);            // dirección de vista (hacia el cielo)
+float up  = saturate(dir.z);                // 0 en el horizonte, 1 en el cenit (Z arriba en UE)
+
+// Degradé horizonte -> cenit
+float t = pow(up, max(HorizonExp, 0.001));
+
+// Look CARTOON: cortar el degradé en bandas planas (Bands >= 2). Bands < 2 = degradé suave.
+if (Bands >= 2.0)
+{
+    t = floor(t * Bands) / max(Bands - 1.0, 1.0);
+    t = saturate(t);
+}
+float3 sky = lerp(SkyHorizon, SkyTop, t);
+
+// Sol (disco duro con borde suave + halo)
+float sd   = dot(dir, normalize(SunDir));                       // 1 mirando directo al sol
+float disc = smoothstep(SunSize - SunSoftness, SunSize, sd);    // disco
+float glow = pow(saturate(sd), max(SunGlow, 1.0));              // halo alrededor
+float3 col = sky + SunColor * (disc + glow * GlowStrength);
+
+return col;
+
+------------------------------------------------------------------------
+ INPUTS del nodo Custom (agregalos con estos nombres EXACTOS)
+------------------------------------------------------------------------
+  CamVec       (Float3)  -> conectar el nodo "CameraVector"
+  SkyTop       (Float3)  -> Vector Parameter  "SkyTop"
+  SkyHorizon   (Float3)  -> Vector Parameter  "SkyHorizon"
+  SunColor     (Float3)  -> Vector Parameter  "SunColor"
+  SunDir       (Float3)  -> Vector Parameter  "SunDirection"   (la setea el código)
+  HorizonExp   (Float)   -> Scalar Parameter  "HorizonExp"     (default 0.6)
+  Bands        (Float)   -> Scalar Parameter  "Bands"          (default 4 ; 0/1 = suave)
+  SunSize      (Float)   -> Scalar Parameter  "SunSize"        (default 0.995)
+  SunSoftness  (Float)   -> Scalar Parameter  "SunSoftness"    (default 0.01)
+  SunGlow      (Float)   -> Scalar Parameter  "SunGlow"        (default 60)
+  GlowStrength (Float)   -> Scalar Parameter  "GlowStrength"   (default 0.4)
+
+  (Para conectar un Vector Parameter (float4) a un input Float3: sale igual,
+   UE trunca a RGB. Si te tira error, poné un ComponentMask (RGB) en el medio.)
+
+------------------------------------------------------------------------
+ AJUSTES DEL MATERIAL (Details del material)
+------------------------------------------------------------------------
+  Material Domain           : Surface
+  Shading Model             : Unlit
+  Two Sided                 : true   (para ver el interior de la esfera)
+  (opcional) Is Sky          : dejar en default
+
+------------------------------------------------------------------------
+ VALORES DE PARÁMETROS RECOMENDADOS (defaults lindos)
+------------------------------------------------------------------------
+  SkyTop      = (0.10, 0.35, 0.85)   azul cielo
+  SkyHorizon  = (0.70, 0.85, 1.00)   celeste claro
+  SunColor    = (1.00, 0.96, 0.85)   blanco cálido
+  HorizonExp  = 0.6     (más bajo = horizonte más ancho)
+  Bands       = 4       (3-6 para look cartoon; 0 para degradé suave)
+  SunSize     = 0.995   (más cerca de 1 = sol más chico)
+  SunSoftness = 0.01
+  SunGlow     = 60
+  GlowStrength= 0.4
+
+Los parámetros SkyTop / SkyHorizon / SunColor / SunDirection los maneja el
+código (ApplySkySettings) desde los ajustes del mapa. El resto (HorizonExp,
+Bands, SunSize, etc.) los tuneás en el material; después el panel in-game
+puede exponer los que quieras.
