@@ -3,6 +3,7 @@
 #include "PTColorWheelWidget.h"
 #include "Components/Image.h"
 #include "Components/Slider.h"
+#include "Components/CanvasPanelSlot.h"
 
 void UPTColorWheelWidget::NativeConstruct()
 {
@@ -39,14 +40,49 @@ bool UPTColorWheelWidget::PickHueFromCursor(const FPointerEvent& E)
     const FGeometry& G = Wheel->GetCachedGeometry();
     const FVector2D Size = G.GetLocalSize();
     if (Size.X <= 0.f || Size.Y <= 0.f) return false;
+    const FVector2D C = Size * 0.5f;
     const FVector2D Local = G.AbsoluteToLocal(E.GetScreenSpacePosition());
-    const FVector2D D = Local - Size * 0.5f;
+    FVector2D D = Local - C;
     if (D.SizeSquared() < 1.f) return false; // muy al centro: ignorar
+    const float Radius = FMath::Min(Size.X, Size.Y) * 0.5f;
+    // Clampear al borde de la rueda para que el dot no se salga.
+    if (D.Size() > Radius) D = D.GetSafeNormal() * Radius;
     float Ang = FMath::Atan2(D.Y, D.X) / (2.f * PI); // -0.5..0.5
     if (Ang < 0.f) Ang += 1.f;
     Hue = Ang;
+    DotRadiusFrac = Radius > 0.f ? FMath::Clamp(D.Size() / Radius, 0.1f, 1.f) : 0.8f;
+    PlaceDot(C + D); // el dot queda exactamente donde está el cursor (clampeado)
     Recompute();
     return true;
+}
+
+void UPTColorWheelWidget::PlaceDot(const FVector2D& Local)
+{
+    if (!Dot) return;
+    if (UCanvasPanelSlot* CS = Cast<UCanvasPanelSlot>(Dot->Slot))
+    {
+        CS->SetAnchors(FAnchors(0.f, 0.f));
+        CS->SetAlignment(FVector2D(0.5f, 0.5f)); // centrar el dot en la posición
+        CS->SetPosition(Local);
+    }
+}
+
+void UPTColorWheelWidget::UpdateDotFromHue()
+{
+    if (!Wheel || !Dot) return;
+    const FVector2D Size = Wheel->GetCachedGeometry().GetLocalSize();
+    if (Size.X <= 0.f || Size.Y <= 0.f) return; // aún sin layout
+    const FVector2D C = Size * 0.5f;
+    const float Radius = FMath::Min(Size.X, Size.Y) * 0.5f * DotRadiusFrac;
+    const float A = Hue * 2.f * PI;
+    PlaceDot(C + FVector2D(FMath::Cos(A), FMath::Sin(A)) * Radius);
+}
+
+void UPTColorWheelWidget::NativeTick(const FGeometry& G, float Dt)
+{
+    Super::NativeTick(G, Dt);
+    // Mientras NO arrastrás, mantener el dot en su lugar según el Hue (cubre el init y el timing de layout).
+    if (!bDragging) UpdateDotFromHue();
 }
 
 void UPTColorWheelWidget::Recompute()

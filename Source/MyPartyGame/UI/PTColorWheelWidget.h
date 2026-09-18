@@ -7,6 +7,9 @@
 //   SatSlider    (Slider, opcional)    → saturación (0..1), vertical
 //   ValueSlider  (Slider, opcional)    → valor/brillo (0..1), vertical
 //   Preview      (Image, opcional)     → se tiñe con el color actual
+//   Dot          (Image, opcional)     → puntito que marca DÓNDE quedó el color en la rueda; sigue al
+//                                        mouse al arrastrar. IMPORTANTE: poné Wheel y Dot en un MISMO
+//                                        Canvas Panel, con el Wheel anclado a llenar (offsets 0,0).
 
 #pragma once
 #include "CoreMinimal.h"
@@ -34,6 +37,7 @@ public:
 
 protected:
     virtual void NativeConstruct() override;
+    virtual void NativeTick(const FGeometry& G, float Dt) override;
     virtual FReply NativeOnMouseButtonDown(const FGeometry& G, const FPointerEvent& E) override;
     virtual FReply NativeOnMouseMove(const FGeometry& G, const FPointerEvent& E) override;
     virtual FReply NativeOnMouseButtonUp(const FGeometry& G, const FPointerEvent& E) override;
@@ -42,14 +46,18 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) USlider* SatSlider   = nullptr;
     UPROPERTY(meta=(BindWidgetOptional)) USlider* ValueSlider = nullptr;
     UPROPERTY(meta=(BindWidgetOptional)) UImage*  Preview     = nullptr;
+    UPROPERTY(meta=(BindWidgetOptional)) UImage*  Dot         = nullptr; // marca dónde quedó el color
 
     UFUNCTION() void OnSatChanged(float V);
     UFUNCTION() void OnValueChanged(float V);
 
 private:
     float Hue = 0.f, Sat = 1.f, Val = 1.f; // 0..1
+    float DotRadiusFrac = 0.8f;            // radio (0..1) del dot en la rueda (se actualiza al clickear)
     bool  bDragging = false;
     bool  bLoading  = false;
-    bool  PickHueFromCursor(const FPointerEvent& E); // ángulo del cursor sobre la rueda → Hue
+    bool  PickHueFromCursor(const FPointerEvent& E); // ángulo del cursor sobre la rueda → Hue + dot
     void  Recompute();                               // arma el color y avisa + tiñe el preview
+    void  PlaceDot(const FVector2D& Local);          // posiciona el dot en coords del canvas
+    void  UpdateDotFromHue();                        // recoloca el dot según Hue + DotRadiusFrac
 };
