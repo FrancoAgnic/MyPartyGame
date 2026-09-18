@@ -149,6 +149,7 @@ protected:
     UFUNCTION() void OnChatCommitted(const FText& Text, ETextCommit::Type CommitMethod);
     UFUNCTION() void OnChatTextChanged(const FText& Text); // cancela el auto-cierre mientras escribís
     UFUNCTION() void OnLobbyChatLine(const FString& Name, const FString& Message);
+    UFUNCTION() void OnChatBarClicked(); // click en la barrita → abrir/cerrar el chat
     void SetChatExpanded(bool bExpanded);
     void ScrollChatToEndDeferred(); // "pega" el scroll al final por unos frames (por el auto-wrap)
     bool  bChatStickToEnd = false;  // mientras true, cada frame fuerza el scroll al final

@@ -50,9 +50,10 @@ bool UPTLobbyHUDWidget::Initialize()
         ChatInput->OnTextCommitted.AddDynamic(this, &UPTLobbyHUDWidget::OnChatCommitted);
         ChatInput->OnTextChanged.AddDynamic(this, &UPTLobbyHUDWidget::OnChatTextChanged);
     }
-    // La barra NO es clickeable: es solo indicador (flecha ↑/↓ + glow). El chat se abre/cierra con ENTER.
+    // La barra abre/cierra el chat con click (además de ENTER) e indica el estado (flecha ↑/↓ + glow).
     if (ChatBarButton)
     {
+        ChatBarButton->OnClicked.AddDynamic(this, &UPTLobbyHUDWidget::OnChatBarClicked);
         ChatBarUpStyle = ChatBarButton->WidgetStyle; // guardar la flecha ARRIBA (la que pusiste en el botón)
         bChatBarStyleCached = true;
     }
@@ -445,6 +446,12 @@ void UPTLobbyHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTim
         ChatStickElapsed += InDeltaTime;
         if (ChatStickElapsed >= 0.5f) bChatStickToEnd = false;
     }
+}
+
+void UPTLobbyHUDWidget::OnChatBarClicked()
+{
+    // Click en la barra: alterna abrir/cerrar (mismo toggle que ENTER).
+    SetChatExpanded(!bChatExpanded);
 }
 
 void UPTLobbyHUDWidget::OpenChatFromEnter()
