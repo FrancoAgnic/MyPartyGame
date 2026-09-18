@@ -1,0 +1,39 @@
+[h1]Sculpturillo v0.9.0 - Level Creator[/h1]
+
+[h2]Level Creator (new!)[/h2]
+[list]
+[*] Build your own maps in-game: sculpt props out of clay, bake them into reusable assets, and place them freely around the world to create custom scenery.
+[*] Asset radial with live thumbnails: press to open a wheel of every prop you baked, each rendered from the actual mesh.
+[*] Baked assets keep the vertex colors you sculpted them with.
+[*] Pivot placement: hold Enter to enter pivot mode, position the anchor of your asset with the cursor (with a 3D depth grid to guide you), then click to bake it with that pivot.
+[*] Large assets now push away from you as you scale them up, so a giant prop (like a mountain) no longer spawns on top of you or traps you inside the model.
+[*] No-place zone around the sculpting cube keeps the spawn/play area clear.
+[/list]
+
+[h2]Environment & Sky[/h2]
+[list]
+[*] New cartoon sky system: pick a time of day, customize sky colors, sun, fog and ambient light, plus cartoon "band" knobs, all from an in-game panel with sliders and color wheels.
+[*] Presets for Dawn / Noon / Sunset / Night, plus Reset and Random.
+[*] Your environment settings are saved with the map and applied on every machine.
+[/list]
+
+[h2]Map sharing[/h2]
+[list]
+[*] Publish your maps to the Steam Workshop and play them with friends.
+[*] Automatic map distribution in the lobby: if you pick a map a friend doesn't have, they get a prompt to download it before the match starts.
+[*] Map and word-pack thumbnails now show in the lobby and world settings.
+[/list]
+
+[h2]Lobby & Chat[/h2]
+[list]
+[*] Text chat in the lobby with emoji support and a collapsible chat bar (open with click or Enter).
+[*] Chat now reliably auto-scrolls to the newest message in both the lobby and in-game.
+[*] "You're close!" private notice when your guess is nearly right.
+[/list]
+
+[h2]Fixes[/h2]
+[list]
+[*] Fixed the sculpture sometimes lingering from the previous round.
+[*] Fixed the collapse animation of the cube for clients in packaged builds.
+[*] Fixed a localization glitch that showed "SEG" on short masked words.
+[/list]

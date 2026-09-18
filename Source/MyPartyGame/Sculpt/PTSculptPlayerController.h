@@ -631,16 +631,18 @@ private:
     int32 LastAssetRadialPage = 0;          // última página del radial de assets (reabrir ahí)
 
     // ── Modo PIVOT al hornear (mantener Enter 3s → acomodar el pivote → click confirma) ──────────
-    // En vez de hornear al toque, mantener Enter 3s entra a "modo pivote": aparece un marcador que
-    // sigue al cursor sobre la escultura (rueda = subir/bajar en Z); click izq confirma y hornea con ese
+    // En vez de hornear al toque, mantener Enter 3s entra a "modo pivote": aparece un marcador (mesh
+    // custom, p.ej. un axis) que sigue al cursor sobre la escultura; click izq confirma y hornea con ese
     // origen; Backspace cancela. Así el jugador elige dónde queda el "ancla" del asset al colocarlo.
     bool    bPivotMode  = false;            // true = eligiendo el pivote (no hornea hasta confirmar)
     FVector PivotWorld  = FVector::ZeroVector; // posición del pivote en el mundo (marcador)
-    float   PivotZOffset = 0.f;             // ajuste vertical del pivote con la rueda
     UPROPERTY(Transient) class UStaticMeshComponent* PivotMarker = nullptr; // marcador visual del pivote
-    /** Malla/material del marcador de pivote (opcional; si es null usa la esfera básica del engine). */
+    /** Malla/material del marcador de pivote (asignar TU mesh de axis en el BP; si es null usa la esfera
+     *  básica del engine). El marcador usa el mismo overlay X-ray que los previews (se ve por detrás). */
     UPROPERTY(EditAnywhere, Category="MapEnv") UStaticMesh*      PivotMarkerMesh     = nullptr;
     UPROPERTY(EditAnywhere, Category="MapEnv") UMaterialInterface* PivotMarkerMaterial = nullptr;
+    /** Escala del marcador de pivote (ajustá según el tamaño de tu mesh de axis). */
+    UPROPERTY(EditAnywhere, Category="MapEnv") float PivotMarkerScale = 1.0f;
     void EnterPivotMode();                  // arranca el modo pivote (default = base de la escultura)
     void UpdatePivotMarker();               // (tick) reubica el marcador bajo el cursor
     void ConfirmPivotBake();                // hornea el asset con PivotWorld y sale del modo

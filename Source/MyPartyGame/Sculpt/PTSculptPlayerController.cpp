@@ -297,7 +297,7 @@ void APTSculptPlayerController::BeginPlay()
             MarkerMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
         if (MarkerMesh) PivotMarker->SetStaticMesh(MarkerMesh);
         if (PivotMarkerMaterial) PivotMarker->SetMaterial(0, PivotMarkerMaterial);
-        PivotMarker->SetWorldScale3D(FVector(0.25f));
+        PivotMarker->SetWorldScale3D(FVector(FMath::Max(0.01f, PivotMarkerScale)));
         PivotMarker->RegisterComponent();
         PivotMarker->SetVisibility(false);
     }
@@ -966,8 +966,10 @@ void APTSculptPlayerController::UpdateSculptGrid(const FVector& StampPos)
     if (!SculptGrid) return;
     // Se muestra con las herramientas que ponen el sello en el aire (Add/Erase): ahí importa la profundidad.
     // En modo EJES (Z/X) se OCULTA: ahí ya está la grilla plana del plano de eje y las dos se mezclaban.
-    const bool bWant = Volume && SculptGridMID && !bEyesTool && !bAxisLock &&
-                       (EditMode == EPTEditMode::Add || EditMode == EPTEditMode::Erase);
+    // En modo pivote SIEMPRE queremos la grilla (referencia de profundidad), sin importar la herramienta.
+    const bool bWant = Volume && SculptGridMID &&
+                       (bPivotMode || (!bEyesTool && !bAxisLock &&
+                        (EditMode == EPTEditMode::Add || EditMode == EPTEditMode::Erase)));
     if (!bWant)
     {
         SculptGrid->SetVisibility(false);
@@ -1879,8 +1881,8 @@ void APTSculptPlayerController::Server_SetSculptPlane_Implementation(bool bEnabl
 
 void APTSculptPlayerController::OnScrollUp()
 {
-    // Modo pivote: la rueda sube el pivote en Z.
-    if (bPivotMode) { PivotZOffset += 5.f; return; }
+    // Modo pivote: la rueda no hace nada (el pivote se coloca solo con el cursor + click).
+    if (bPivotMode) return;
 
     // Modo colocar (autoría): la rueda ESCALA el asset a colocar.
     if (IsPlaceMode() && EditMode == EPTEditMode::Add && !bEyesTool)
@@ -1910,8 +1912,8 @@ void APTSculptPlayerController::OnScrollUp()
 
 void APTSculptPlayerController::OnScrollDown()
 {
-    // Modo pivote: la rueda baja el pivote en Z.
-    if (bPivotMode) { PivotZOffset -= 5.f; return; }
+    // Modo pivote: la rueda no hace nada (el pivote se coloca solo con el cursor + click).
+    if (bPivotMode) return;
 
     // Modo colocar (autoría): la rueda ESCALA el asset a colocar.
     if (IsPlaceMode() && EditMode == EPTEditMode::Add && !bEyesTool)
@@ -2411,19 +2413,23 @@ void APTSculptPlayerController::EnterPivotMode()
     FVector Origin, Extent;
     Volume->GetActorBounds(true, Origin, Extent);
     PivotWorld  = FVector(Origin.X, Origin.Y, Origin.Z - Extent.Z); // base-centro
-    PivotZOffset = 0.f;
     bPivotMode  = true;
-    if (PivotMarker) PivotMarker->SetVisibility(true);
+    if (PivotMarker)
+    {
+        // Mismo overlay X-ray que los previews de herramientas → el marcador se ve POR DETRÁS de la arcilla.
+        if (PreviewOverlayMaterial) PivotMarker->SetOverlayMaterial(PreviewOverlayMaterial);
+        PivotMarker->SetVisibility(true);
+    }
     if (GameplayHUD) GameplayHUD->SetPivotHintVisible(true);
-    UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Modo pivote ON (click=confirmar, rueda=Z, Backspace=cancelar)."));
+    UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Modo pivote ON (click=confirmar, Backspace=cancelar)."));
 }
 
 void APTSculptPlayerController::UpdatePivotMarker()
 {
     if (!bPivotMode || !PivotMarker) return;
-    // El marcador sigue el punto de la escultura bajo el cursor (clampeado al box) + ajuste de rueda en Z.
+    // El marcador sigue el punto de la escultura bajo el cursor (clampeado al box).
     FVector N; const FVector P = GetStampPoint(N);
-    PivotWorld = FVector(P.X, P.Y, P.Z + PivotZOffset);
+    PivotWorld = P;
     PivotMarker->SetWorldLocation(PivotWorld);
     PivotMarker->SetVisibility(true);
 }
@@ -2438,7 +2444,6 @@ void APTSculptPlayerController::ConfirmPivotBake()
 void APTSculptPlayerController::CancelPivotMode()
 {
     bPivotMode  = false;
-    PivotZOffset = 0.f;
     if (PivotMarker) PivotMarker->SetVisibility(false);
     if (GameplayHUD) GameplayHUD->SetPivotHintVisible(false);
 }
@@ -2525,8 +2530,19 @@ void APTSculptPlayerController::TickAuthorProps(float Dt)
     // hasta que el jugador confirme (click) o cancele (Backspace).
     if (bPivotMode)
     {
+        // Ocultar los previews de las herramientas de esculpido (tapaban el marcador del pivote)...
+        if (PreviewMesh)       PreviewMesh->SetVisibility(false);
+        if (PreviewStaticMesh) PreviewStaticMesh->SetVisibility(false);
+        if (PaintRing)         PaintRing->SetVisibility(false);
+        if (AxisGizmo)         AxisGizmo->SetVisibility(false);
+        if (HeightStick)       HeightStick->SetVisibility(false);
+        if (ShadowDecal)       ShadowDecal->SetVisibility(false);
+        if (AssetPreview)      AssetPreview->SetVisibility(false);
+        // ...pero MANTENER visible el actor (para la grilla) y MOSTRAR la grilla 3D como referencia de
+        // profundidad para ubicar bien el pivote.
+        if (PreviewActor) PreviewActor->SetActorHiddenInGame(false);
         UpdatePivotMarker();
-        if (AssetPreview) AssetPreview->SetVisibility(false);
+        UpdateSculptGrid(PivotWorld);
         BakeHoldTime = 0.f; bBakedThisHold = false;
         return;
     }
