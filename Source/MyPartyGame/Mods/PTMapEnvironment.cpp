@@ -153,23 +153,35 @@ void APTMapEnvironment::ApplySkySettings()
         MID->SetScalarParameterValue(TEXT("SunGlow"),    S.SunGlow);
     }
 
-    // ── Assets (HISM): mismo sol que el cielo, para que el cel-shading no dependa de SkyAtmosphere ──
-    for (const FPTPropAsset& A : Assets) ApplyAssetSunParams(A.HISM);
+    // ── Assets: mismo sol que el cielo (por si el material los usa); el MID es compartido ──
+    ApplyAssetSunParams();
 }
 
-void APTMapEnvironment::ApplyAssetSunParams(UHierarchicalInstancedStaticMeshComponent* HISM) const
+UMaterialInstanceDynamic* APTMapEnvironment::GetOrCreatePropMID()
 {
-    if (!HISM || HISM->GetNumMaterials() == 0) return;
-    UMaterialInstanceDynamic* MID = Cast<UMaterialInstanceDynamic>(HISM->GetMaterial(0));
-    if (!MID) MID = HISM->CreateDynamicMaterialInstance(0);
-    if (!MID) return;
+    if (PropMID) return PropMID;
+    if (!PropMaterial) return nullptr;
+    PropMID = UMaterialInstanceDynamic::Create(PropMaterial, this);
+    ApplyAssetSunParams();
+    return PropMID;
+}
+
+UMaterialInterface* APTMapEnvironment::GetPropMaterialForPreview()
+{
+    UMaterialInterface* M = GetOrCreatePropMID();
+    return M ? M : PropMaterial;
+}
+
+void APTMapEnvironment::ApplyAssetSunParams()
+{
+    if (!PropMID) return;
     const float Pitch = FMath::Lerp(0.f, -180.f, FMath::Clamp(SkySettings.TimeOfDay, 0.f, 1.f));
     const FVector SunDir = -FRotator(Pitch, SkySettings.SunYaw, 0.f).Vector(); // dirección HACIA el sol
     const FLinearColor SunDirCol(SunDir.X, SunDir.Y, SunDir.Z, 0.f);
     // Mismo nombre de parámetro que el cielo ("SunDir"); seteamos ambos por robustez (no-op el que falte).
-    MID->SetVectorParameterValue(TEXT("SunDir"),       SunDirCol);
-    MID->SetVectorParameterValue(TEXT("SunDirection"), SunDirCol);
-    MID->SetVectorParameterValue(TEXT("SunColor"),     SkySettings.SunColor);
+    PropMID->SetVectorParameterValue(TEXT("SunDir"),       SunDirCol);
+    PropMID->SetVectorParameterValue(TEXT("SunDirection"), SunDirCol);
+    PropMID->SetVectorParameterValue(TEXT("SunColor"),     SkySettings.SunColor);
 }
 
 int32 APTMapEnvironment::BakeAssetFromVolume(APTSculptVolume* Volume, bool bUsePivot, const FVector& PivotWorld)
@@ -181,83 +193,58 @@ int32 APTMapEnvironment::BakeAssetFromVolume(APTSculptVolume* Volume, bool bUseP
     return AddAsset(Geo);
 }
 
-UStaticMesh* APTMapEnvironment::BuildStaticMesh(const FPTPropGeometry& Geo) const
+void APTMapEnvironment::FillProcSection(UProceduralMeshComponent* PMC, int32 Section,
+                                        const FPTPropGeometry& Geo, const FTransform& Xf, bool bCollision)
 {
-    if (!Geo.IsValid()) return nullptr;
-
-    FMeshDescription MeshDesc;
-    FStaticMeshAttributes Attrs(MeshDesc);
-    Attrs.Register();
-
-    FMeshDescriptionBuilder Builder;
-    Builder.SetMeshDescription(&MeshDesc);
-    Builder.EnablePolyGroups();
-    Builder.SetNumUVLayers(1);
-
-    TArray<FVertexID> VertexIDs; VertexIDs.SetNum(Geo.Verts.Num());
-    for (int32 i = 0; i < Geo.Verts.Num(); ++i)
-        VertexIDs[i] = Builder.AppendVertex(FVector(Geo.Verts[i]));
-
-    const FPolygonGroupID PG = Builder.AppendPolygonGroup();
-
-    for (int32 t = 0; t + 2 < Geo.Tris.Num(); t += 3)
+    if (!PMC || !Geo.IsValid()) return;
+    const int32 NV = Geo.Verts.Num();
+    TArray<FVector> Verts;   Verts.SetNumUninitialized(NV);
+    TArray<FVector> Normals; Normals.SetNumUninitialized(NV);
+    TArray<FColor>  Colors;  Colors.SetNumUninitialized(NV);
+    for (int32 i = 0; i < NV; ++i)
     {
-        FVertexInstanceID VI[3];
-        bool bOk = true;
-        for (int32 c = 0; c < 3; ++c)
-        {
-            const int32 vi = Geo.Tris[t + c];
-            if (!Geo.Verts.IsValidIndex(vi)) { bOk = false; break; }
-            const FVertexInstanceID Id = Builder.AppendInstance(VertexIDs[vi]);
-            Builder.SetInstanceNormal(Id, Geo.Normals.IsValidIndex(vi) ? FVector(Geo.Normals[vi]) : FVector::UpVector);
-            Builder.SetInstanceColor(Id, FVector4f(FLinearColor(Geo.Colors.IsValidIndex(vi) ? Geo.Colors[vi] : FColor::White)));
-            Builder.SetInstanceUV(Id, FVector2D::ZeroVector, 0);
-            VI[c] = Id;
-        }
-        if (bOk) Builder.AppendTriangle(VI[0], VI[1], VI[2], PG);
+        Verts[i]   = Xf.TransformPosition(FVector(Geo.Verts[i]));
+        Normals[i] = Xf.TransformVectorNoScale(FVector(Geo.Normals.IsValidIndex(i) ? Geo.Normals[i] : FVector3f::ZAxisVector));
+        Colors[i]  = Geo.Colors.IsValidIndex(i) ? Geo.Colors[i] : FColor::White;
     }
-
-    UStaticMesh* Mesh = NewObject<UStaticMesh>(GetTransientPackage());
-    Mesh->GetStaticMaterials().Add(FStaticMaterial(PropMaterial));
-    Mesh->bAllowCPUAccess = true;
-
-    UStaticMesh::FBuildMeshDescriptionsParams Params;
-    Params.bBuildSimpleCollision = true;
-    Params.bFastBuild = true;
-    Mesh->BuildFromMeshDescriptions({ &MeshDesc }, Params);
-    return Mesh;
+    const TArray<FVector2D> NoUV;
+    const TArray<FProcMeshTangent> NoTan;
+    // ProceduralMeshComponent SÍ renderiza los vertex colors en build cocinada (a diferencia de un
+    // UStaticMesh construido en runtime), por eso los props horneados usan esto.
+    PMC->CreateMeshSection(Section, Verts, Geo.Tris, Normals, NoUV, Colors, NoTan, bCollision);
 }
 
 int32 APTMapEnvironment::AddAsset(const FPTPropGeometry& Geo)
 {
-    UStaticMesh* Mesh = BuildStaticMesh(Geo);
-    if (!Mesh) return INDEX_NONE;
+    if (!Geo.IsValid()) return INDEX_NONE;
 
-    UHierarchicalInstancedStaticMeshComponent* HISM =
-        NewObject<UHierarchicalInstancedStaticMeshComponent>(this);
-    HISM->SetupAttachment(GetRootComponent());
-    HISM->RegisterComponent();
-    HISM->SetStaticMesh(Mesh);
-    if (PropMaterial) HISM->SetMaterial(0, PropMaterial);
-    ApplyAssetSunParams(HISM); // crea el MID + inyecta el sol del ambiente (cel-shading correcto en build)
-    HISM->SetMobility(EComponentMobility::Movable);
-    HISM->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-    HISM->SetCollisionObjectType(ECC_WorldStatic);
+    UProceduralMeshComponent* PMC = NewObject<UProceduralMeshComponent>(this);
+    PMC->SetupAttachment(GetRootComponent());
+    PMC->RegisterComponent();
+    PMC->SetMobility(EComponentMobility::Movable);
+    PMC->bUseComplexAsSimpleCollision = true;
+    PMC->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+    PMC->SetCollisionObjectType(ECC_WorldStatic);
 
     FPTPropAsset A;
     A.Geo = Geo;
-    A.Mesh = Mesh;
-    A.HISM = HISM;
+    A.PMC = PMC;
     return Assets.Add(MoveTemp(A));
 }
 
-UStaticMesh* APTMapEnvironment::GetAssetMesh(int32 AssetIdx) const
-{
-    return Assets.IsValidIndex(AssetIdx) ? Assets[AssetIdx].Mesh : nullptr;
-}
 const FPTPropGeometry* APTMapEnvironment::GetAssetGeometry(int32 AssetIdx) const
 {
     return Assets.IsValidIndex(AssetIdx) ? &Assets[AssetIdx].Geo : nullptr;
+}
+
+float APTMapEnvironment::GetAssetRadius(int32 AssetIdx) const
+{
+    if (!Assets.IsValidIndex(AssetIdx)) return 0.f;
+    const FPTPropGeometry& G = Assets[AssetIdx].Geo;
+    if (G.Verts.Num() == 0) return 0.f;
+    FBox3f Box(ForceInit);
+    for (const FVector3f& V : G.Verts) Box += V;
+    return Box.GetExtent().Size();
 }
 
 UTextureRenderTarget2D* APTMapEnvironment::GetAssetThumbnail(int32 AssetIdx, int32 Size)
@@ -266,28 +253,29 @@ UTextureRenderTarget2D* APTMapEnvironment::GetAssetThumbnail(int32 AssetIdx, int
     if (Thumbnails.IsValidIndex(AssetIdx) && Thumbnails[AssetIdx]) return Thumbnails[AssetIdx];
 
     UWorld* W = GetWorld();
-    UStaticMesh* Mesh = Assets[AssetIdx].Mesh;
-    if (!W || !Mesh) return nullptr;
+    const FPTPropGeometry& Geo = Assets[AssetIdx].Geo;
+    if (!W || !Geo.IsValid()) return nullptr;
     Size = FMath::Clamp(Size, 64, 512);
 
     UTextureRenderTarget2D* RT = UKismetRenderingLibrary::CreateRenderTarget2D(this, Size, Size, RTF_RGBA8);
     if (!RT) return nullptr;
 
-    // Malla temporal LEJOS del mapa, para renderizarla aislada (sin el resto de la escena).
+    // Malla temporal (ProceduralMesh, para que se vean los vertex colors) LEJOS del mapa, aislada.
     const FVector Far(0.f, 0.f, 200000.f);
-    AStaticMeshActor* MA = W->SpawnActor<AStaticMeshActor>();
+    AActor* MA = W->SpawnActor<AActor>(AActor::StaticClass(), FTransform(Far));
     if (!MA) return nullptr;
-    UStaticMeshComponent* MC = MA->GetStaticMeshComponent();
+    UProceduralMeshComponent* MC = NewObject<UProceduralMeshComponent>(MA);
+    MA->SetRootComponent(MC);
+    MC->RegisterComponent();
     MC->SetMobility(EComponentMobility::Movable);
-    MC->SetStaticMesh(Mesh);
-    if (PropMaterial) MC->SetMaterial(0, PropMaterial);
+    FillProcSection(MC, 0, Geo, FTransform::Identity, /*bCollision=*/false);
+    if (UMaterialInterface* Mat = GetPropMaterialForPreview()) MC->SetMaterial(0, Mat);
     MC->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     MA->SetActorLocation(Far);
 
-    // Encuadre 3/4 según el radio del bounding sphere de la malla.
-    const FBoxSphereBounds B = Mesh->GetBounds();
-    const FVector  Center = Far + B.Origin;              // Origin ~0 (la geo está centrada)
-    const float    Radius = FMath::Max(1.f, (float)B.SphereRadius);
+    // Encuadre 3/4 según el radio (bbox de la geometría, centrada en ~0).
+    const float    Radius = FMath::Max(1.f, GetAssetRadius(AssetIdx));
+    const FVector  Center = Far;
     const float    FOV    = 45.f;
     const float    Dist   = Radius / FMath::Tan(FMath::DegreesToRadians(FOV * 0.5f)) * 1.35f;
     const FVector  Dir    = FVector(1.f, 0.55f, -0.5f).GetSafeNormal(); // cámara → objeto
@@ -334,10 +322,45 @@ UTextureRenderTarget2D* APTMapEnvironment::GetAssetThumbnail(int32 AssetIdx, int
     return RT;
 }
 
+void APTMapEnvironment::RebuildAssetMesh(FPTPropAsset& A)
+{
+    if (!A.PMC) return;
+    if (A.InstXf.Num() == 0) { A.PMC->ClearMeshSection(0); return; }
+
+    const FPTPropGeometry& G = A.Geo;
+    const int32 NVper = G.Verts.Num();
+    const int32 NTper = G.Tris.Num();
+    TArray<FVector> Verts;   Verts.Reserve(NVper * A.InstXf.Num());
+    TArray<FVector> Normals; Normals.Reserve(NVper * A.InstXf.Num());
+    TArray<FColor>  Colors;  Colors.Reserve(NVper * A.InstXf.Num());
+    TArray<int32>   Tris;    Tris.Reserve(NTper * A.InstXf.Num());
+
+    for (const FTransform& Xf : A.InstXf)
+    {
+        const int32 Base = Verts.Num();
+        for (int32 i = 0; i < NVper; ++i)
+        {
+            Verts.Add(Xf.TransformPosition(FVector(G.Verts[i])));
+            Normals.Add(Xf.TransformVectorNoScale(FVector(G.Normals.IsValidIndex(i) ? G.Normals[i] : FVector3f::ZAxisVector)));
+            Colors.Add(G.Colors.IsValidIndex(i) ? G.Colors[i] : FColor::White);
+        }
+        for (int32 t = 0; t < NTper; ++t) Tris.Add(Base + G.Tris[t]);
+    }
+
+    const TArray<FVector2D> NoUV;
+    const TArray<FProcMeshTangent> NoTan;
+    A.PMC->ClearMeshSection(0);
+    A.PMC->CreateMeshSection(0, Verts, Tris, Normals, NoUV, Colors, NoTan, /*bCollision=*/true);
+    UMaterialInterface* Mat = GetOrCreatePropMID(); if (!Mat) Mat = PropMaterial;
+    if (Mat) A.PMC->SetMaterial(0, Mat);
+}
+
 void APTMapEnvironment::PlaceInstance(int32 AssetIdx, const FTransform& WorldXf)
 {
-    if (!Assets.IsValidIndex(AssetIdx) || !Assets[AssetIdx].HISM) return;
-    Assets[AssetIdx].HISM->AddInstance(WorldXf, /*bWorldSpace=*/true);
+    if (!Assets.IsValidIndex(AssetIdx)) return;
+    FPTPropAsset& A = Assets[AssetIdx];
+    A.InstXf.Add(WorldXf);
+    RebuildAssetMesh(A);
     PlaceOrder.Add(AssetIdx); // para el undo LIFO
 }
 
@@ -345,18 +368,11 @@ bool APTMapEnvironment::GetNearestInstance(const FVector& WorldPos, float Radius
 {
     float BestD2 = Radius * Radius; OutAsset = INDEX_NONE;
     for (int32 a = 0; a < Assets.Num(); ++a)
-    {
-        UHierarchicalInstancedStaticMeshComponent* H = Assets[a].HISM;
-        if (!H) continue;
-        const int32 Count = H->GetInstanceCount();
-        for (int32 i = 0; i < Count; ++i)
+        for (const FTransform& Xf : Assets[a].InstXf)
         {
-            FTransform Xf;
-            if (!H->GetInstanceTransform(i, Xf, /*bWorldSpace=*/true)) continue;
             const float D2 = FVector::DistSquared(Xf.GetLocation(), WorldPos);
             if (D2 < BestD2) { BestD2 = D2; OutAsset = a; OutXf = Xf; }
         }
-    }
     return OutAsset != INDEX_NONE;
 }
 
@@ -365,21 +381,15 @@ bool APTMapEnvironment::RemoveInstanceNear(const FVector& WorldPos, float Radius
     float BestD2 = Radius * Radius;
     int32 BestAsset = INDEX_NONE, BestInst = INDEX_NONE;
     for (int32 a = 0; a < Assets.Num(); ++a)
-    {
-        UHierarchicalInstancedStaticMeshComponent* H = Assets[a].HISM;
-        if (!H) continue;
-        const int32 Count = H->GetInstanceCount();
-        for (int32 i = 0; i < Count; ++i)
+        for (int32 i = 0; i < Assets[a].InstXf.Num(); ++i)
         {
-            FTransform Xf;
-            if (!H->GetInstanceTransform(i, Xf, /*bWorldSpace=*/true)) continue;
-            const float D2 = FVector::DistSquared(Xf.GetLocation(), WorldPos);
+            const float D2 = FVector::DistSquared(Assets[a].InstXf[i].GetLocation(), WorldPos);
             if (D2 < BestD2) { BestD2 = D2; BestAsset = a; BestInst = i; }
         }
-    }
     if (BestAsset != INDEX_NONE)
     {
-        Assets[BestAsset].HISM->RemoveInstance(BestInst);
+        Assets[BestAsset].InstXf.RemoveAt(BestInst);
+        RebuildAssetMesh(Assets[BestAsset]);
         // Mantener PlaceOrder consistente (sacar una ocurrencia de ese asset, la última).
         for (int32 k = PlaceOrder.Num() - 1; k >= 0; --k)
             if (PlaceOrder[k] == BestAsset) { PlaceOrder.RemoveAt(k); break; }
@@ -392,20 +402,20 @@ bool APTMapEnvironment::RemoveLastInstance()
 {
     if (PlaceOrder.Num() == 0) return false;
     const int32 A = PlaceOrder.Pop();
-    if (!Assets.IsValidIndex(A) || !Assets[A].HISM) return false;
-    const int32 Last = Assets[A].HISM->GetInstanceCount() - 1;
-    if (Last < 0) return false;
-    Assets[A].HISM->RemoveInstance(Last); // el último de ese asset = el más reciente
+    if (!Assets.IsValidIndex(A) || Assets[A].InstXf.Num() == 0) return false;
+    Assets[A].InstXf.Pop(); // la última instancia de ese asset = la más reciente
+    RebuildAssetMesh(Assets[A]);
     return true;
 }
 
 void APTMapEnvironment::ClearAll()
 {
     for (FPTPropAsset& A : Assets)
-        if (A.HISM) A.HISM->DestroyComponent();
+        if (A.PMC) A.PMC->DestroyComponent();
     Assets.Reset();
     PlaceOrder.Reset();
     Thumbnails.Reset();
+    PropMID = nullptr; // se recrea en el próximo mapa/ambiente
 }
 
 // Serializa los ajustes de ambiente (mismo orden en lectura/escritura). Version-aware para compatibilidad.
@@ -433,12 +443,11 @@ void APTMapEnvironment::SerializeEnvironment(TArray<uint8>& Out)
         Ar << A.Geo.Colors;
         Ar << A.Geo.Tris;
         // Instancias de este asset (transforms en mundo).
-        int32 NInst = A.HISM ? A.HISM->GetInstanceCount() : 0;
+        int32 NInst = A.InstXf.Num();
         Ar << NInst;
         for (int32 i = 0; i < NInst; ++i)
         {
-            FTransform Xf;
-            if (A.HISM) A.HISM->GetInstanceTransform(i, Xf, /*bWorldSpace=*/true);
+            FTransform Xf = A.InstXf[i];
             Ar << Xf;
         }
     }

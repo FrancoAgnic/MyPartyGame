@@ -11,9 +11,10 @@
 #include "GameFramework/Actor.h"
 #include "PTMapEnvironment.generated.h"
 
-class UHierarchicalInstancedStaticMeshComponent;
+class UProceduralMeshComponent;
 class UStaticMesh;
 class UMaterialInterface;
+class UMaterialInstanceDynamic;
 class UTextureRenderTarget2D;
 class APTSculptVolume;
 
@@ -88,9 +89,16 @@ public:
     int32 AddAsset(const FPTPropGeometry& Geo);
 
     int32 GetNumAssets() const { return Assets.Num(); }
-    /** Malla de un asset (para el preview que sigue al cursor). */
-    UStaticMesh* GetAssetMesh(int32 AssetIdx) const;
+    /** Geometría horneada de un asset (para el preview que sigue al cursor). */
     const FPTPropGeometry* GetAssetGeometry(int32 AssetIdx) const;
+    /** Radio aproximado del asset (bbox), para alejar el preview al escalar. 0 si no existe. */
+    float GetAssetRadius(int32 AssetIdx) const;
+    /** Material de los props (con el MID del ambiente ya aplicado) para el preview del PlayerController. */
+    UMaterialInterface* GetPropMaterialForPreview();
+    /** Rellena una sección de un ProceduralMesh con la geometría del asset transformada por Xf (vertex
+     *  colors incluidos → se ven en build). Lo usa el entorno (instancias) y el preview del PC. */
+    static void FillProcSection(UProceduralMeshComponent* PMC, int32 Section, const FPTPropGeometry& Geo,
+                                const FTransform& Xf, bool bCollision);
 
     /** Miniatura del asset (render de la malla a un RenderTarget) para el radial de assets. Se genera
      *  la primera vez y se cachea. Devuelve null si el índice no existe. */
@@ -118,8 +126,14 @@ private:
     struct FPTPropAsset
     {
         FPTPropGeometry Geo;
-        UStaticMesh*    Mesh = nullptr;
-        UHierarchicalInstancedStaticMeshComponent* HISM = nullptr;
+        // Los props se dibujan con un ProceduralMeshComponent (NO StaticMesh): un StaticMesh construido en
+        // runtime NO renderiza sus vertex colors en build cocinada, el ProcMesh sí. Cada instancia colocada
+        // es una SECCIÓN del PMC con la geometría transformada a mundo.
+        // Todas las instancias de este asset se FUSIONAN en la sección 0 de un único PMC → ~1 draw call
+        // por asset (como el HISM), y con vertex colors que sí se ven en build. Se reconstruye al
+        // colocar/borrar (solo en autoría, nunca por frame).
+        UProceduralMeshComponent* PMC = nullptr;
+        TArray<FTransform> InstXf;      // transform (mundo) por instancia viva
     };
     TArray<FPTPropAsset> Assets;
     // Orden global de colocación (índice de asset por cada instancia colocada) → para el undo LIFO de props.
@@ -127,10 +141,11 @@ private:
     // Miniaturas cacheadas (alineadas con Assets); UPROPERTY para que no las junte el GC.
     UPROPERTY(Transient) TArray<UTextureRenderTarget2D*> Thumbnails;
 
-    UStaticMesh* BuildStaticMesh(const FPTPropGeometry& Geo) const; // bake runtime (MeshDescription)
-
-    // Inyecta la dirección/color del sol del ambiente en el MID del HISM del asset. Los assets cel-shadean
-    // con el sol del mapa (no con SkyAtmosphere, que no existe en el cielo cartoon): sin esto, en build
-    // cocinada el material sale plano/gris. Se llama al hornear/cargar y desde ApplySkySettings.
-    void ApplyAssetSunParams(UHierarchicalInstancedStaticMeshComponent* HISM) const;
+    // MID del material de props con el sol del ambiente inyectado (se comparte en todas las secciones/PMCs).
+    UPROPERTY(Transient) UMaterialInstanceDynamic* PropMID = nullptr;
+    UMaterialInstanceDynamic* GetOrCreatePropMID();
+    void RebuildAssetMesh(FPTPropAsset& A); // fusiona todas las instancias en la sección 0 del PMC
+    // Inyecta la dirección/color del sol del ambiente en el MID compartido. Se llama al hornear/cargar y
+    // desde ApplySkySettings.
+    void ApplyAssetSunParams();
 };

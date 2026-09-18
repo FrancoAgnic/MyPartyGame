@@ -275,7 +275,7 @@ void APTSculptPlayerController::BeginPlay()
                                                       FVector::ZeroVector, FRotator::ZeroRotator, SP);
     if (PropPreviewActor)
     {
-        AssetPreview = NewObject<UStaticMeshComponent>(PropPreviewActor, TEXT("AssetPreviewComp"));
+        AssetPreview = NewObject<UProceduralMeshComponent>(PropPreviewActor, TEXT("AssetPreviewComp"));
         PropPreviewActor->SetRootComponent(AssetPreview);
         AssetPreview->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         AssetPreview->SetCastShadow(false);
@@ -2452,7 +2452,7 @@ void APTSculptPlayerController::PlaceCurrentAsset()
 {
     APTMapEnvironment* Env = GetMapEnv();
     if (!Env || Env->GetNumAssets() == 0) return;
-    if (!Env->GetAssetMesh(CurrentAsset)) return;
+    if (!Env->GetAssetGeometry(CurrentAsset)) return;
     bool bOut = false; const FVector P = GetPlacePoint(bOut);
     if (Volume && Volume->IsInNoPlaceZone(P)) return; // zona libre alrededor del cubo: no se coloca acá
     Env->PlaceInstance(CurrentAsset, FTransform(StampRotation, P, FVector(AssetScale)));
@@ -2554,10 +2554,11 @@ void APTSculptPlayerController::TickAuthorProps(float Dt)
         float NewBoost = 0.f;
         if (EnvB && EditMode == EPTEditMode::Add && !bEyesTool)
         {
-            if (UStaticMesh* M = EnvB->GetAssetMesh(CurrentAsset))
+            const float R = EnvB->GetAssetRadius(CurrentAsset);
+            if (R > 0.f)
             {
                 // Radio del asset ya escalado; empujamos por ese radio para que el borde quede a brazo.
-                const float Radius = M->GetBounds().SphereRadius * AssetScale;
+                const float Radius = R * AssetScale;
                 NewBoost = FMath::Max(0.f, Radius - AirDepth * 0.5f);
             }
         }
@@ -2587,9 +2588,16 @@ void APTSculptPlayerController::TickAuthorProps(float Dt)
     if (bOut && !bEraseOut && !bInNoPlace && AssetPreview && Env && Env->GetNumAssets() > 0 && !bEyesTool
         && EditMode == EPTEditMode::Add)
     {
-        if (UStaticMesh* M = Env->GetAssetMesh(CurrentAsset))
+        if (const FPTPropGeometry* Geo = Env->GetAssetGeometry(CurrentAsset))
         {
-            if (AssetPreview->GetStaticMesh() != M) AssetPreview->SetStaticMesh(M);
+            // Rearmar la sección del preview solo cuando cambia el asset (no cada frame). La geometría va
+            // en espacio LOCAL (identidad); la posición/rotación/escala las da el transform del componente.
+            if (PreviewBuiltAsset != CurrentAsset)
+            {
+                APTMapEnvironment::FillProcSection(AssetPreview, 0, *Geo, FTransform::Identity, /*bCollision=*/false);
+                if (UMaterialInterface* Mat = Env->GetPropMaterialForPreview()) AssetPreview->SetMaterial(0, Mat);
+                PreviewBuiltAsset = CurrentAsset;
+            }
             AssetPreview->SetWorldTransform(FTransform(StampRotation, P, FVector(AssetScale)));
             bShowAsset = true;
         }

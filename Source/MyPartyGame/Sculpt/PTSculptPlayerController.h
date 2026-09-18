@@ -617,7 +617,10 @@ private:
     // El preview del asset vive en su PROPIO actor (no en PreviewActor) para que ocultar el preview de
     // esculpido no lo oculte a él (es lo que se ve al colocar/borrar props FUERA del box).
     UPROPERTY() AActor*                              PropPreviewActor = nullptr;
-    UPROPERTY(Transient) class UStaticMeshComponent* AssetPreview = nullptr; // preview del asset a colocar
+    // Preview del asset a colocar: ProceduralMesh (para que se vean los vertex colors en build, igual que
+    // los props horneados; un StaticMesh runtime no los renderiza en build cocinada).
+    UPROPERTY(Transient) class UProceduralMeshComponent* AssetPreview = nullptr;
+    int32 PreviewBuiltAsset = -1;           // asset cuya geometría está cargada en AssetPreview (para no rearmar cada frame)
     int32 CurrentAsset = 0;                 // índice del asset elegido en la paleta
     float AssetScale   = 1.f;               // escala del asset a colocar (rueda)
     // Empuje extra de la "distancia de brazo" al colocar un asset, proporcional a su tamaño escalado, para
