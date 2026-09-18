@@ -162,7 +162,7 @@ private:
     TArray<FString> ChatLines;   // historial (se muestran los últimos MaxVisibleChatLines)
     bool    bChatBound = false;
     // Cuántos mensajes recientes mostrar en la caja del chat (los más viejos se van "subiendo" y salen).
-    UPROPERTY(EditAnywhere, Category="Lobby|Chat") int32 MaxVisibleChatLines = 6;
+    UPROPERTY(EditAnywhere, Category="Lobby|Chat") int32 MaxVisibleChatLines = 8; // igual que el chat de gameplay
     // Caché de miniaturas ya cargadas (clave = id/url/path) para no re-cargar/re-bajar cada refresco.
     FString CachedMapThumbKey;
     FString CachedPackThumbKey;
