@@ -35,6 +35,13 @@ public:
 
     FLinearColor GetColor() const;
 
+    // ── Calibración del matiz según TU textura de rueda ──
+    // La rueda se lee por ángulo. En UMG el eje Y va hacia abajo, y cada textura tiene el rojo en distinto
+    // lugar / gira para distinto lado. Ajustá estos 2 valores hasta que el color aplicado coincida con
+    // dónde está el dot (ver instrucciones).
+    UPROPERTY(EditAnywhere, Category="Color") float HueOffsetDeg = 0.f;   // rota el matiz (0..360)
+    UPROPERTY(EditAnywhere, Category="Color") bool  bReverseHue  = false; // invierte el sentido del matiz
+
 protected:
     virtual void NativeConstruct() override;
     virtual void NativeTick(const FGeometry& G, float Dt) override;
@@ -60,4 +67,6 @@ private:
     void  Recompute();                               // arma el color y avisa + tiñe el preview
     void  PlaceDot(const FVector2D& Local);          // posiciona el dot en coords del canvas
     void  UpdateDotFromHue();                        // recoloca el dot según Hue + DotRadiusFrac
+    float AngleToHue(float AngRad) const;            // ángulo de pantalla → matiz (aplica offset/reverse)
+    float HueToAngleRad(float H) const;              // matiz → ángulo de pantalla (inverso, para el dot)
 };

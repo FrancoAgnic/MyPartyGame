@@ -48,13 +48,27 @@ bool UPTColorWheelWidget::PickHueFromCursor(const FPointerEvent& E)
     const float Radius = FMath::Min(Size.X, Size.Y) * 0.5f;
     // Clampear al borde de la rueda para que el dot no se salga.
     if (D.Size() > Radius) D = D.GetSafeNormal() * Radius;
-    float Ang = FMath::Atan2(D.Y, D.X) / (2.f * PI); // -0.5..0.5
-    if (Ang < 0.f) Ang += 1.f;
-    Hue = Ang;
+    Hue = AngleToHue(FMath::Atan2(D.Y, D.X));
     DotRadiusFrac = Radius > 0.f ? FMath::Clamp(D.Size() / Radius, 0.1f, 1.f) : 0.8f;
     PlaceDot(C + D); // punto en espacio LOCAL de la rueda (clampeado al borde)
     Recompute();
     return true;
+}
+
+float UPTColorWheelWidget::AngleToHue(float AngRad) const
+{
+    float H = AngRad / (2.f * PI);           // 0..1 (sentido de pantalla, Y hacia abajo)
+    if (bReverseHue) H = -H;
+    H += HueOffsetDeg / 360.f;
+    H = H - FMath::FloorToFloat(H);          // wrap a [0,1)
+    return H;
+}
+
+float UPTColorWheelWidget::HueToAngleRad(float H) const
+{
+    H -= HueOffsetDeg / 360.f;               // inverso de AngleToHue
+    if (bReverseHue) H = -H;
+    return H * 2.f * PI;
 }
 
 void UPTColorWheelWidget::PlaceDot(const FVector2D& WheelLocal)
@@ -80,7 +94,7 @@ void UPTColorWheelWidget::UpdateDotFromHue()
     if (Size.X <= 0.f || Size.Y <= 0.f) return; // aún sin layout
     const FVector2D C = Size * 0.5f;
     const float Radius = FMath::Min(Size.X, Size.Y) * 0.5f * DotRadiusFrac;
-    const float A = Hue * 2.f * PI;
+    const float A = HueToAngleRad(Hue);
     PlaceDot(C + FVector2D(FMath::Cos(A), FMath::Sin(A)) * Radius);
 }
 
