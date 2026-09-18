@@ -32,7 +32,9 @@ void UPTColorWheelWidget::OpenWith(const FLinearColor& Color)
     if (ValueSlider) ValueSlider->SetValue(Val);
     bLoading = false;
 
-    if (Preview) Preview->SetColorAndOpacity(GetColor());
+    const FLinearColor C = GetColor();
+    if (Preview) Preview->SetColorAndOpacity(C);
+    if (SatSlider) { SatSlider->SetSliderBarColor(C); SatSlider->SetSliderHandleColor(C); }
 }
 
 bool UPTColorWheelWidget::PickHueFromCursor(const FPointerEvent& E)
@@ -109,6 +111,12 @@ void UPTColorWheelWidget::Recompute()
 {
     const FLinearColor C = GetColor();
     if (Preview) Preview->SetColorAndOpacity(C);
+    // Teñir el slider de saturación con el color actual (para ver cuán saturado está).
+    if (SatSlider)
+    {
+        SatSlider->SetSliderBarColor(C);
+        SatSlider->SetSliderHandleColor(C);
+    }
     OnColorChanged.Broadcast(C);
 }
 
