@@ -41,6 +41,12 @@ struct FPTSkySettings
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sky") float        FogDensity   = 0.02f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sky") FLinearColor AmbientColor = FLinearColor(0.50f, 0.60f, 0.75f);
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sky") float        AmbientIntensity = 1.0f;
+
+    // Knobs "cartoon" del material del cielo (parámetros escalares del Sky Sphere).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sky") float Bands      = 4.0f;   // franjas planas (0 = degradé suave)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sky") float HorizonExp = 0.6f;   // ancho del horizonte
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sky") float SunSize    = 0.995f; // tamaño del disco del sol
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sky") float SunGlow    = 60.0f;  // halo del sol
 };
 
 // Geometría horneada de un prop (malla compacta que se guarda una sola vez por asset único).

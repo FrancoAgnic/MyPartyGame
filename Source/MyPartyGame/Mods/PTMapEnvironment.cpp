@@ -135,6 +135,10 @@ void APTMapEnvironment::ApplySkySettings()
         MID->SetVectorParameterValue(TEXT("SunColor"),    S.SunColor);
         MID->SetVectorParameterValue(TEXT("SunDirection"),
             FLinearColor(SunDir.X, SunDir.Y, SunDir.Z, 0.f)); // dirección hacia el sol (para el disco)
+        MID->SetScalarParameterValue(TEXT("Bands"),      S.Bands);
+        MID->SetScalarParameterValue(TEXT("HorizonExp"), S.HorizonExp);
+        MID->SetScalarParameterValue(TEXT("SunSize"),    S.SunSize);
+        MID->SetScalarParameterValue(TEXT("SunGlow"),    S.SunGlow);
     }
 }
 
@@ -373,22 +377,23 @@ void APTMapEnvironment::ClearAll()
     Thumbnails.Reset();
 }
 
-// Serializa los ajustes de ambiente (mismo orden en lectura/escritura).
-static void PT_SerializeSky(FArchive& Ar, FPTSkySettings& S)
+// Serializa los ajustes de ambiente (mismo orden en lectura/escritura). Version-aware para compatibilidad.
+static void PT_SerializeSky(FArchive& Ar, FPTSkySettings& S, int32 Version)
 {
     Ar << S.TimeOfDay; Ar << S.SunYaw;
     Ar << S.SkyTopColor; Ar << S.SkyHorizonColor;
     Ar << S.SunColor; Ar << S.SunIntensity;
     Ar << S.FogColor; Ar << S.FogDensity;
     Ar << S.AmbientColor; Ar << S.AmbientIntensity;
+    if (Version >= 3) { Ar << S.Bands; Ar << S.HorizonExp; Ar << S.SunSize; Ar << S.SunGlow; }
 }
 
 void APTMapEnvironment::SerializeEnvironment(TArray<uint8>& Out)
 {
     Out.Reset();
     FMemoryWriter Ar(Out, /*bIsPersistent=*/true);
-    int32 Version = 2; Ar << Version; // v2: incluye SkySettings
-    PT_SerializeSky(Ar, SkySettings);
+    int32 Version = 3; Ar << Version; // v3: + knobs cartoon (Bands/HorizonExp/SunSize/SunGlow)
+    PT_SerializeSky(Ar, SkySettings, Version);
     int32 NumAssets = Assets.Num(); Ar << NumAssets;
     for (FPTPropAsset& A : Assets)
     {
@@ -414,7 +419,7 @@ void APTMapEnvironment::DeserializeEnvironment(const TArray<uint8>& In)
     if (In.Num() == 0) return;
     FMemoryReader Ar(In, /*bIsPersistent=*/true);
     int32 Version = 0; Ar << Version;
-    if (Version >= 2) PT_SerializeSky(Ar, SkySettings); // ambiente guardado con el mapa
+    if (Version >= 2) PT_SerializeSky(Ar, SkySettings, Version); // ambiente guardado con el mapa
     int32 NumAssets = 0; Ar << NumAssets;
     for (int32 a = 0; a < NumAssets; ++a)
     {
