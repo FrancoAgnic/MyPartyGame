@@ -125,7 +125,13 @@ protected:
 public:
     /** Abre/cierra el panel de ambiente. Lo llama el botón del HUD y la tecla del PlayerController. */
     void ToggleSkyPanel();
+
+    /** Muestra/oculta el cartel de ayuda del modo pivote (click=confirmar, rueda=Z, Backspace=cancelar).
+     *  Lo llama el PlayerController al entrar/salir del modo pivote al hornear un asset. */
+    void SetPivotHintVisible(bool bVisible);
 protected:
+    // Cartel de ayuda del modo pivote (opcional en el WBP). El texto lo setea el código (localizado).
+    UPROPERTY(meta=(BindWidgetOptional)) class UTextBlock* PivotHintText;
 
     // ── Iconos de estado de red (arriba a la izquierda). Se muestran SOLO cuando hay problema. Poné tus
     //    texturas 24x24 en estos Image del WBP (nombres EXACTOS); el código los prende/apaga. ──

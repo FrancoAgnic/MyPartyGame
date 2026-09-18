@@ -37,7 +37,8 @@ APTMapEnvironment::APTMapEnvironment()
 }
 
 // ── Juntar la geometría del box (base + SVO chunks + capas de detalle) en una sola malla ──
-static void PT_GatherVolumeGeometry(APTSculptVolume* Volume, FPTPropGeometry& Out)
+static void PT_GatherVolumeGeometry(APTSculptVolume* Volume, FPTPropGeometry& Out,
+                                    bool bUsePivot = false, const FVector& PivotWorld = FVector::ZeroVector)
 {
     auto AddSection = [&Out](UProceduralMeshComponent* Src)
     {
@@ -65,14 +66,22 @@ static void PT_GatherVolumeGeometry(APTSculptVolume* Volume, FPTPropGeometry& Ou
     for (UProceduralMeshComponent* DM : Volume->GetDetailMeshes()) AddSection(DM);
     AddSection(Volume->GetEyesMesh()); // ojos colocados → se hornean junto a la arcilla
 
-    // Recentrar en el centro del bounding box → el prop queda centrado en su origen (colocar/rotar/escalar
-    // intuitivo). Guardamos la geometría ya centrada.
+    // Recentrar: el ORIGEN del asset queda donde el pivot elegido (si bUsePivot) o en el centro del bbox
+    // (por defecto). Así al colocar la instancia el pivot cae exacto en el punto de colocación.
     if (Out.Verts.Num() > 0)
     {
-        FBox3f Box(ForceInit);
-        for (const FVector3f& V : Out.Verts) Box += V;
-        const FVector3f C = Box.GetCenter();
-        for (FVector3f& V : Out.Verts) V -= C;
+        FVector3f Origin;
+        if (bUsePivot)
+        {
+            Origin = (FVector3f)PivotWorld; // los verts ya están en mundo → restar el pivot en mundo
+        }
+        else
+        {
+            FBox3f Box(ForceInit);
+            for (const FVector3f& V : Out.Verts) Box += V;
+            Origin = Box.GetCenter();
+        }
+        for (FVector3f& V : Out.Verts) V -= Origin;
     }
 }
 
@@ -142,11 +151,11 @@ void APTMapEnvironment::ApplySkySettings()
     }
 }
 
-int32 APTMapEnvironment::BakeAssetFromVolume(APTSculptVolume* Volume)
+int32 APTMapEnvironment::BakeAssetFromVolume(APTSculptVolume* Volume, bool bUsePivot, const FVector& PivotWorld)
 {
     if (!Volume) return INDEX_NONE;
     FPTPropGeometry Geo;
-    PT_GatherVolumeGeometry(Volume, Geo);
+    PT_GatherVolumeGeometry(Volume, Geo, bUsePivot, PivotWorld);
     if (!Geo.IsValid()) return INDEX_NONE; // box vacío
     return AddAsset(Geo);
 }

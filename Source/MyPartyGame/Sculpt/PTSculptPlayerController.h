@@ -620,11 +620,31 @@ private:
     UPROPERTY(Transient) class UStaticMeshComponent* AssetPreview = nullptr; // preview del asset a colocar
     int32 CurrentAsset = 0;                 // índice del asset elegido en la paleta
     float AssetScale   = 1.f;               // escala del asset a colocar (rueda)
+    // Empuje extra de la "distancia de brazo" al colocar un asset, proporcional a su tamaño escalado, para
+    // que un asset grande (p.ej. una montaña) NO spawnee encima tuyo / te deje adentro del modelo. Se
+    // recalcula cada frame en TickAuthorProps según el radio del asset actual × AssetScale.
+    float PlaceArmBoost = 0.f;
     float BakeHoldTime = 0.f;               // acumulador del "mantener Enter" para hornear
     bool  bBakedThisHold = false;           // ya horneó en este mantenido (evita repetir)
     static constexpr float BakeHoldDuration = 3.0f;
     int32 AssetBeforeRadial = 0;            // asset antes de abrir el radial (para cancelar en zona muerta)
     int32 LastAssetRadialPage = 0;          // última página del radial de assets (reabrir ahí)
+
+    // ── Modo PIVOT al hornear (mantener Enter 3s → acomodar el pivote → click confirma) ──────────
+    // En vez de hornear al toque, mantener Enter 3s entra a "modo pivote": aparece un marcador que
+    // sigue al cursor sobre la escultura (rueda = subir/bajar en Z); click izq confirma y hornea con ese
+    // origen; Backspace cancela. Así el jugador elige dónde queda el "ancla" del asset al colocarlo.
+    bool    bPivotMode  = false;            // true = eligiendo el pivote (no hornea hasta confirmar)
+    FVector PivotWorld  = FVector::ZeroVector; // posición del pivote en el mundo (marcador)
+    float   PivotZOffset = 0.f;             // ajuste vertical del pivote con la rueda
+    UPROPERTY(Transient) class UStaticMeshComponent* PivotMarker = nullptr; // marcador visual del pivote
+    /** Malla/material del marcador de pivote (opcional; si es null usa la esfera básica del engine). */
+    UPROPERTY(EditAnywhere, Category="MapEnv") UStaticMesh*      PivotMarkerMesh     = nullptr;
+    UPROPERTY(EditAnywhere, Category="MapEnv") UMaterialInterface* PivotMarkerMaterial = nullptr;
+    void EnterPivotMode();                  // arranca el modo pivote (default = base de la escultura)
+    void UpdatePivotMarker();               // (tick) reubica el marcador bajo el cursor
+    void ConfirmPivotBake();                // hornea el asset con PivotWorld y sale del modo
+    void CancelPivotMode();                 // sale sin hornear
 
     // Pone/saca el overlay amarillo en el mesh de cada jugador según quién esculpe.
     void UpdateSculptorHighlights();

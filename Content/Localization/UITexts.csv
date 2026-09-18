@@ -96,6 +96,7 @@ SHAPE_CONE,Cono,Cone,Cone,Kegel,Cône,Cono
 SHAPE_HINT,Formas,Shapes,Formas,Formen,Formes,Forme
 HINT_SAVE_COLOR,Guardar color,Save Color,Salvar cor,Farbe speichern,Enregistrer la couleur,Salva colore
 HINT_COLOR,Color,Color,Cor,Farbe,Couleur,Colore
+PIVOT_HINT,Acomoda el pivote — Click: confirmar · Rueda: subir/bajar · Retroceso: cancelar,Place the pivot — Click: confirm · Wheel: up/down · Backspace: cancel,Posicione o pivô — Clique: confirmar · Roda: subir/descer · Backspace: cancelar,Pivot setzen — Klick: bestätigen · Rad: hoch/runter · Rücktaste: abbrechen,Placez le pivot — Clic : confirmer · Molette : monter/descendre · Retour arrière : annuler,Posiziona il pivot — Clic: conferma · Rotella: su/giù · Backspace: annulla
 MAP_SAVED,Escenario guardado,Map saved,Cenário salvo,Karte gespeichert,Carte enregistrée,Mappa salvata
 HINT_PLANE_VERTICAL,Plano vertical,Vertical Plane,Plano vertical,Vertikale Ebene,Plan vertical,Piano verticale
 HINT_PLANE_HORIZONTAL,Plano horizontal,Horizontal Plane,Plano horizontal,Horizontale Ebene,Plan horizontal,Piano orizzontale

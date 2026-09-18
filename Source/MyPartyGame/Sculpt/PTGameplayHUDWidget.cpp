@@ -489,6 +489,15 @@ void UPTGameplayHUDWidget::ToggleSkyPanel()
     else       SkyPanel->ShowPanel();
 }
 
+void UPTGameplayHUDWidget::SetPivotHintVisible(bool bVisible)
+{
+    if (!PivotHintText) return;
+    if (bVisible)
+        PivotHintText->SetText(PTText::Get(TEXT("PIVOT_HINT")));
+    PivotHintText->SetVisibility(bVisible ? ESlateVisibility::HitTestInvisible
+                                          : ESlateVisibility::Collapsed);
+}
+
 void UPTGameplayHUDWidget::OnSaveMapClicked()
 {
     UWorld* W = GetWorld();

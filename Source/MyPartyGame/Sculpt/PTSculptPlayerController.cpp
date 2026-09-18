@@ -281,6 +281,25 @@ void APTSculptPlayerController::BeginPlay()
         AssetPreview->SetCastShadow(false);
         AssetPreview->RegisterComponent();
         AssetPreview->SetVisibility(false);
+
+        // Marcador del pivote (esfera chica) para el modo de acomodar pivote al hornear. Vive en el
+        // mismo actor pero con transform ABSOLUTO para posicionarlo libre por el mundo (independiente
+        // del preview del asset).
+        PivotMarker = NewObject<UStaticMeshComponent>(PropPreviewActor, TEXT("PivotMarkerComp"));
+        PivotMarker->SetupAttachment(AssetPreview);
+        PivotMarker->SetUsingAbsoluteLocation(true);
+        PivotMarker->SetUsingAbsoluteRotation(true);
+        PivotMarker->SetUsingAbsoluteScale(true);
+        PivotMarker->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        PivotMarker->SetCastShadow(false);
+        UStaticMesh* MarkerMesh = PivotMarkerMesh;
+        if (!MarkerMesh)
+            MarkerMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+        if (MarkerMesh) PivotMarker->SetStaticMesh(MarkerMesh);
+        if (PivotMarkerMaterial) PivotMarker->SetMaterial(0, PivotMarkerMaterial);
+        PivotMarker->SetWorldScale3D(FVector(0.25f));
+        PivotMarker->RegisterComponent();
+        PivotMarker->SetVisibility(false);
     }
 
     // HUD de la partida: solo el jugador local lo crea. Maneja fase/reloj/chat/elección
@@ -1625,6 +1644,9 @@ void APTSculptPlayerController::UpdatePreviewVisual()
 
 void APTSculptPlayerController::OnStampPressed()
 {
+    // Modo PIVOTE: el click confirma el pivote y hornea la pieza (tiene prioridad sobre todo lo demás).
+    if (bPivotMode) { ConfirmPivotBake(); return; }
+
     // Modo COLOCAR (autoría, fuera del box): Add coloca un asset, Erase borra; Paint/Ojos no hacen nada.
     if (IsPlaceMode())
     {
@@ -1662,6 +1684,9 @@ void APTSculptPlayerController::OnStampReleased()
 
 void APTSculptPlayerController::OnClearAllPressed()
 {
+    // Modo pivote: Backspace CANCELA (no hornea, no borra la escultura).
+    if (bPivotMode) { CancelPivotMode(); return; }
+
     // Mientras escribís en el chat, BACKSPACE es para borrar texto, no la escultura.
     if (GameplayHUD && GameplayHUD->IsChatOpen()) return;
     if (!CanLocalPlayerSculpt()) return;
@@ -1854,6 +1879,9 @@ void APTSculptPlayerController::Server_SetSculptPlane_Implementation(bool bEnabl
 
 void APTSculptPlayerController::OnScrollUp()
 {
+    // Modo pivote: la rueda sube el pivote en Z.
+    if (bPivotMode) { PivotZOffset += 5.f; return; }
+
     // Modo colocar (autoría): la rueda ESCALA el asset a colocar.
     if (IsPlaceMode() && EditMode == EPTEditMode::Add && !bEyesTool)
     { AssetScale = FMath::Clamp(AssetScale * 1.1f, 0.1f, 20.f); return; }
@@ -1882,6 +1910,9 @@ void APTSculptPlayerController::OnScrollUp()
 
 void APTSculptPlayerController::OnScrollDown()
 {
+    // Modo pivote: la rueda baja el pivote en Z.
+    if (bPivotMode) { PivotZOffset -= 5.f; return; }
+
     // Modo colocar (autoría): la rueda ESCALA el asset a colocar.
     if (IsPlaceMode() && EditMode == EPTEditMode::Add && !bEyesTool)
     { AssetScale = FMath::Clamp(AssetScale / 1.1f, 0.1f, 20.f); return; }
@@ -2343,7 +2374,9 @@ FVector APTSculptPlayerController::GetPlacePoint(bool& bOutOutside) const
 {
     FVector S, D;
     if (!GetCameraRay(S, D)) { bOutOutside = false; return FVector::ZeroVector; }
-    const FVector Raw = S + D * AirDepth; // a "distancia de brazo", SIN clampear al box
+    // Al colocar un asset escalado, alejamos el punto (PlaceArmBoost) para que el objeto quede a "brazo
+    // extendido" por su BORDE y no por su centro (así un asset enorme no aparece encima del jugador).
+    const FVector Raw = S + D * (AirDepth + PlaceArmBoost); // a "distancia de brazo", SIN clampear al box
     bOutOutside = Volume && !Volume->IsInsideCanvas(Raw);
     return Raw;
 }
@@ -2359,11 +2392,55 @@ void APTSculptPlayerController::DoBakeAsset()
 {
     APTMapEnvironment* Env = GetMapEnv();
     if (!Env || !Volume) return;
-    const int32 Idx = Env->BakeAssetFromVolume(Volume);
+    // Si estamos en modo pivote, horneamos usando el pivote elegido como origen del asset.
+    const int32 Idx = Env->BakeAssetFromVolume(Volume, bPivotMode, PivotWorld);
     if (Idx == INDEX_NONE) return;          // box vacío
     CurrentAsset = Idx;                      // el nuevo asset queda seleccionado
     Volume->Multicast_ClearAll();            // limpiar el box para la próxima pieza
-    UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Asset horneado #%d (total %d)."), Idx, Env->GetNumAssets());
+    UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Asset horneado #%d (total %d)%s."), Idx, Env->GetNumAssets(),
+           bPivotMode ? TEXT(" (pivote manual)") : TEXT(""));
+}
+
+// ── Modo PIVOT: acomodar el "ancla" del asset antes de hornear ─────────────────────────────────
+void APTSculptPlayerController::EnterPivotMode()
+{
+    APTMapEnvironment* Env = GetMapEnv();
+    if (!Env || !Volume) return;
+    // No entrar si el box está vacío (nada que hornear). Usamos el bbox de la escultura como referencia:
+    // el pivote default queda en la BASE-CENTRO (lo más natural para "apoyar" la pieza en el piso).
+    FVector Origin, Extent;
+    Volume->GetActorBounds(true, Origin, Extent);
+    PivotWorld  = FVector(Origin.X, Origin.Y, Origin.Z - Extent.Z); // base-centro
+    PivotZOffset = 0.f;
+    bPivotMode  = true;
+    if (PivotMarker) PivotMarker->SetVisibility(true);
+    if (GameplayHUD) GameplayHUD->SetPivotHintVisible(true);
+    UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Modo pivote ON (click=confirmar, rueda=Z, Backspace=cancelar)."));
+}
+
+void APTSculptPlayerController::UpdatePivotMarker()
+{
+    if (!bPivotMode || !PivotMarker) return;
+    // El marcador sigue el punto de la escultura bajo el cursor (clampeado al box) + ajuste de rueda en Z.
+    FVector N; const FVector P = GetStampPoint(N);
+    PivotWorld = FVector(P.X, P.Y, P.Z + PivotZOffset);
+    PivotMarker->SetWorldLocation(PivotWorld);
+    PivotMarker->SetVisibility(true);
+}
+
+void APTSculptPlayerController::ConfirmPivotBake()
+{
+    if (!bPivotMode) return;
+    DoBakeAsset();          // usa bPivotMode/PivotWorld
+    CancelPivotMode();      // limpia el estado del modo (ya horneó)
+}
+
+void APTSculptPlayerController::CancelPivotMode()
+{
+    bPivotMode  = false;
+    PivotZOffset = 0.f;
+    if (PivotMarker) PivotMarker->SetVisibility(false);
+    if (GameplayHUD) GameplayHUD->SetPivotHintVisible(false);
 }
 
 void APTSculptPlayerController::PlaceCurrentAsset()
@@ -2444,13 +2521,41 @@ void APTSculptPlayerController::TickAuthorProps(float Dt)
         return;
     }
 
+    // Modo pivote activo: el marcador sigue al cursor; todo lo demás (preview de asset, hornear) se pausa
+    // hasta que el jugador confirme (click) o cancele (Backspace).
+    if (bPivotMode)
+    {
+        UpdatePivotMarker();
+        if (AssetPreview) AssetPreview->SetVisibility(false);
+        BakeHoldTime = 0.f; bBakedThisHold = false;
+        return;
+    }
+
+    // Recalcular el empuje de brazo según el tamaño del asset escalado (para que uno grande no te tape).
+    // Solo aplica en modo Add con un asset válido; en cualquier otro caso el punto va al brazo normal.
+    {
+        APTMapEnvironment* EnvB = GetMapEnv();
+        float NewBoost = 0.f;
+        if (EnvB && EditMode == EPTEditMode::Add && !bEyesTool)
+        {
+            if (UStaticMesh* M = EnvB->GetAssetMesh(CurrentAsset))
+            {
+                // Radio del asset ya escalado; empujamos por ese radio para que el borde quede a brazo.
+                const float Radius = M->GetBounds().SphereRadius * AssetScale;
+                NewBoost = FMath::Max(0.f, Radius - AirDepth * 0.5f);
+            }
+        }
+        PlaceArmBoost = NewBoost;
+    }
+
     bool bOut = false; const FVector P = GetPlacePoint(bOut);
 
-    // Hornear: mantener Enter 3s DENTRO del box (esculpís y horneás la pieza).
+    // Hornear: mantener Enter 3s DENTRO del box → entra a MODO PIVOTE (acomodar el ancla del asset).
+    // El horneado real ocurre cuando el jugador confirma con click (ver ConfirmPivotBake).
     if (!bOut && IsInputKeyDown(EKeys::Enter))
     {
         BakeHoldTime += Dt;
-        if (!bBakedThisHold && BakeHoldTime >= BakeHoldDuration) { DoBakeAsset(); bBakedThisHold = true; }
+        if (!bBakedThisHold && BakeHoldTime >= BakeHoldDuration) { EnterPivotMode(); bBakedThisHold = true; }
     }
     else { BakeHoldTime = 0.f; bBakedThisHold = false; }
 

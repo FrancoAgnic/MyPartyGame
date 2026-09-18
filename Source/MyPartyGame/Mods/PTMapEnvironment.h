@@ -80,8 +80,9 @@ public:
     UFUNCTION(BlueprintCallable, Category="MapEnv") void ApplySkySettings();
 
     /** Hornea toda la escultura del box (base + capas + SVO) a un asset y lo agrega a la paleta.
-     *  Devuelve el índice del asset, o INDEX_NONE si el box está vacío. Centra la geometría en su bbox. */
-    int32 BakeAssetFromVolume(APTSculptVolume* Volume);
+     *  Devuelve el índice del asset, o INDEX_NONE si el box está vacío. Por defecto centra la geometría en
+     *  su bbox; si bUsePivot, usa PivotWorld como ORIGEN del asset (el jugador lo ubica en el editor). */
+    int32 BakeAssetFromVolume(APTSculptVolume* Volume, bool bUsePivot = false, const FVector& PivotWorld = FVector::ZeroVector);
 
     /** Agrega un asset desde geometría ya horneada (para cargar un mapa guardado / replicación). */
     int32 AddAsset(const FPTPropGeometry& Geo);
