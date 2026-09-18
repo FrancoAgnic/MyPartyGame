@@ -128,4 +128,9 @@ private:
     UPROPERTY(Transient) TArray<UTextureRenderTarget2D*> Thumbnails;
 
     UStaticMesh* BuildStaticMesh(const FPTPropGeometry& Geo) const; // bake runtime (MeshDescription)
+
+    // Inyecta la dirección/color del sol del ambiente en el MID del HISM del asset. Los assets cel-shadean
+    // con el sol del mapa (no con SkyAtmosphere, que no existe en el cielo cartoon): sin esto, en build
+    // cocinada el material sale plano/gris. Se llama al hornear/cargar y desde ApplySkySettings.
+    void ApplyAssetSunParams(UHierarchicalInstancedStaticMeshComponent* HISM) const;
 };

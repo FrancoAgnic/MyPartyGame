@@ -142,13 +142,34 @@ void APTMapEnvironment::ApplySkySettings()
         MID->SetVectorParameterValue(TEXT("SkyTop"),      S.SkyTopColor);
         MID->SetVectorParameterValue(TEXT("SkyHorizon"),  S.SkyHorizonColor);
         MID->SetVectorParameterValue(TEXT("SunColor"),    S.SunColor);
-        MID->SetVectorParameterValue(TEXT("SunDirection"),
-            FLinearColor(SunDir.X, SunDir.Y, SunDir.Z, 0.f)); // dirección hacia el sol (para el disco)
+        // El parámetro del sol en M_CartoonSky se llama "SunDir". Seteamos ambos nombres por robustez
+        // (el que no exista es no-op) para que el disco del sol SIGA al sol real al cambiar hora/yaw.
+        const FLinearColor SunDirCol(SunDir.X, SunDir.Y, SunDir.Z, 0.f);
+        MID->SetVectorParameterValue(TEXT("SunDir"),       SunDirCol);
+        MID->SetVectorParameterValue(TEXT("SunDirection"), SunDirCol);
         MID->SetScalarParameterValue(TEXT("Bands"),      S.Bands);
         MID->SetScalarParameterValue(TEXT("HorizonExp"), S.HorizonExp);
         MID->SetScalarParameterValue(TEXT("SunSize"),    S.SunSize);
         MID->SetScalarParameterValue(TEXT("SunGlow"),    S.SunGlow);
     }
+
+    // ── Assets (HISM): mismo sol que el cielo, para que el cel-shading no dependa de SkyAtmosphere ──
+    for (const FPTPropAsset& A : Assets) ApplyAssetSunParams(A.HISM);
+}
+
+void APTMapEnvironment::ApplyAssetSunParams(UHierarchicalInstancedStaticMeshComponent* HISM) const
+{
+    if (!HISM || HISM->GetNumMaterials() == 0) return;
+    UMaterialInstanceDynamic* MID = Cast<UMaterialInstanceDynamic>(HISM->GetMaterial(0));
+    if (!MID) MID = HISM->CreateDynamicMaterialInstance(0);
+    if (!MID) return;
+    const float Pitch = FMath::Lerp(0.f, -180.f, FMath::Clamp(SkySettings.TimeOfDay, 0.f, 1.f));
+    const FVector SunDir = -FRotator(Pitch, SkySettings.SunYaw, 0.f).Vector(); // dirección HACIA el sol
+    const FLinearColor SunDirCol(SunDir.X, SunDir.Y, SunDir.Z, 0.f);
+    // Mismo nombre de parámetro que el cielo ("SunDir"); seteamos ambos por robustez (no-op el que falte).
+    MID->SetVectorParameterValue(TEXT("SunDir"),       SunDirCol);
+    MID->SetVectorParameterValue(TEXT("SunDirection"), SunDirCol);
+    MID->SetVectorParameterValue(TEXT("SunColor"),     SkySettings.SunColor);
 }
 
 int32 APTMapEnvironment::BakeAssetFromVolume(APTSculptVolume* Volume, bool bUsePivot, const FVector& PivotWorld)
@@ -218,6 +239,7 @@ int32 APTMapEnvironment::AddAsset(const FPTPropGeometry& Geo)
     HISM->RegisterComponent();
     HISM->SetStaticMesh(Mesh);
     if (PropMaterial) HISM->SetMaterial(0, PropMaterial);
+    ApplyAssetSunParams(HISM); // crea el MID + inyecta el sol del ambiente (cel-shading correcto en build)
     HISM->SetMobility(EComponentMobility::Movable);
     HISM->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     HISM->SetCollisionObjectType(ECC_WorldStatic);
