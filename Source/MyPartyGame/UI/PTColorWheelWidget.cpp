@@ -4,6 +4,7 @@
 #include "Components/Image.h"
 #include "Components/Slider.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Components/PanelWidget.h"
 
 void UPTColorWheelWidget::NativeConstruct()
 {
@@ -51,20 +52,25 @@ bool UPTColorWheelWidget::PickHueFromCursor(const FPointerEvent& E)
     if (Ang < 0.f) Ang += 1.f;
     Hue = Ang;
     DotRadiusFrac = Radius > 0.f ? FMath::Clamp(D.Size() / Radius, 0.1f, 1.f) : 0.8f;
-    PlaceDot(C + D); // el dot queda exactamente donde está el cursor (clampeado)
+    PlaceDot(C + D); // punto en espacio LOCAL de la rueda (clampeado al borde)
     Recompute();
     return true;
 }
 
-void UPTColorWheelWidget::PlaceDot(const FVector2D& Local)
+void UPTColorWheelWidget::PlaceDot(const FVector2D& WheelLocal)
 {
-    if (!Dot) return;
-    if (UCanvasPanelSlot* CS = Cast<UCanvasPanelSlot>(Dot->Slot))
-    {
-        CS->SetAnchors(FAnchors(0.f, 0.f));
-        CS->SetAlignment(FVector2D(0.5f, 0.5f)); // centrar el dot en la posición
-        CS->SetPosition(Local);
-    }
+    if (!Dot || !Wheel) return;
+    UCanvasPanelSlot* CS = Cast<UCanvasPanelSlot>(Dot->Slot);
+    if (!CS) return; // el Dot tiene que estar en un Canvas Panel
+    // Convertir el punto de la RUEDA a espacio del CANVAS del dot (por si no comparten origen/escala), así
+    // el CENTRO del dot cae EXACTO donde apunta el cursor (la punta de la flecha), sin corrimiento.
+    const FVector2D Abs = Wheel->GetCachedGeometry().LocalToAbsolute(WheelLocal);
+    FVector2D CanvasLocal = Abs;
+    if (UWidget* Parent = Dot->GetParent())
+        CanvasLocal = Parent->GetCachedGeometry().AbsoluteToLocal(Abs);
+    CS->SetAnchors(FAnchors(0.f, 0.f));
+    CS->SetAlignment(FVector2D(0.5f, 0.5f)); // el centro del dot en la posición
+    CS->SetPosition(CanvasLocal);
 }
 
 void UPTColorWheelWidget::UpdateDotFromHue()
