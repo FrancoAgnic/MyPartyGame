@@ -844,8 +844,12 @@ void UPTGameplayHUDWidget::OnChatLine(const FString& Name, const FString& Messag
     case EPTChatType::System:  Line = Message; break;
     default:                   Line = FString::Printf(TEXT("<name>%s</>: %s"), *ShortName, *Message); break; // Normal
     }
-    ChatLog += Line + TEXT("\n");
-    if (TxtChat)    TxtChat->SetText(FText::FromString(ChatLog));
+    // Guardar solo los últimos N mensajes (no crece infinito; el más reciente queda abajo).
+    ChatLines.Add(Line);
+    const int32 Keep = FMath::Max(1, MaxVisibleChatLines);
+    if (ChatLines.Num() > Keep) ChatLines.RemoveAt(0, ChatLines.Num() - Keep);
+    ChatLog = FString::Join(ChatLines, TEXT("\n"));
+    if (TxtChat) TxtChat->SetText(FText::FromString(ChatLog));
     // Auto-scroll robusto: "pegar" al final por unos frames (el RichText con Auto Wrap recalcula su alto
     // DESPUÉS de setear el texto; un solo ScrollToEnd queda corto y los mensajes nuevos no se ven).
     if (ChatScroll) ChatScroll->ScrollToEnd();

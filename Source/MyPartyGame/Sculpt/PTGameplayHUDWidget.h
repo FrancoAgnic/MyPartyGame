@@ -254,6 +254,8 @@ private:
     FTimerHandle RefreshTimer;
     FDelegateHandle LanguageHandle; // suscripción a PTText::OnLanguageChanged
     FString      ChatLog;
+    TArray<FString> ChatLines;             // historial; se muestran los últimos MaxVisibleChatLines
+    UPROPERTY(EditAnywhere, Category="UI") int32 MaxVisibleChatLines = 8;
     bool         bChatBound     = false;
     bool         bChatStickToEnd = false; // mantener el chat scrolleado al final unos frames tras un mensaje
     float        ChatStickElapsed = 0.f;
