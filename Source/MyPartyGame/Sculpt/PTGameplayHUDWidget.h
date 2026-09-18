@@ -255,6 +255,8 @@ private:
     FDelegateHandle LanguageHandle; // suscripción a PTText::OnLanguageChanged
     FString      ChatLog;
     bool         bChatBound     = false;
+    bool         bChatStickToEnd = false; // mantener el chat scrolleado al final unos frames tras un mensaje
+    float        ChatStickElapsed = 0.f;
     bool         bChatOpen      = false;
     bool         bInputModeInit = false;
     bool         bWantsGameOnly = false;

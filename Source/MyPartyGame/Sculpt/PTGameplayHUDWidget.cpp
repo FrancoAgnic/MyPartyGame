@@ -88,6 +88,16 @@ void UPTGameplayHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDelta
 {
     Super::NativeTick(MyGeometry, InDeltaTime);
 
+    // Auto-scroll del chat: mantener el final visible unos frames tras un mensaje nuevo (el Auto Wrap
+    // recién calcula el alto tras el prepass). Va antes del early-return del PC.
+    if (bChatStickToEnd && ChatScroll)
+    {
+        if (TxtChat) TxtChat->ForceLayoutPrepass();
+        ChatScroll->ScrollToEnd();
+        ChatStickElapsed += InDeltaTime;
+        if (ChatStickElapsed >= 0.5f) bChatStickToEnd = false;
+    }
+
     const APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(GetOwningPlayer());
     if (!PC) return;
 
@@ -836,7 +846,11 @@ void UPTGameplayHUDWidget::OnChatLine(const FString& Name, const FString& Messag
     }
     ChatLog += Line + TEXT("\n");
     if (TxtChat)    TxtChat->SetText(FText::FromString(ChatLog));
+    // Auto-scroll robusto: "pegar" al final por unos frames (el RichText con Auto Wrap recalcula su alto
+    // DESPUÉS de setear el texto; un solo ScrollToEnd queda corto y los mensajes nuevos no se ven).
     if (ChatScroll) ChatScroll->ScrollToEnd();
+    bChatStickToEnd = true;
+    ChatStickElapsed = 0.f;
 }
 
 void UPTGameplayHUDWidget::ShowCloseGuessNotice()
