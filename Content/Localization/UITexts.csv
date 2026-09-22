@@ -105,6 +105,8 @@ MODE_LEVEL_EDIT,Modo Edición de Nivel,Level Edit mode,Modo Edição de Nível,L
 MODE_CHANGING,Cambiando modo...,Switching mode...,Mudando de modo...,Modus wechselt...,Changement de mode...,Cambio modalità...
 MAP_SAVED,Escenario guardado,Map saved,Cenário salvo,Karte gespeichert,Carte enregistrée,Mappa salvata
 MODEL_SAVED,¡Modelo guardado!,Model saved!,Modelo salvo!,Modell gespeichert!,Modèle enregistré !,Modello salvato!
+MEMORY_FULL,¡Límite de memoria alcanzado!,Memory limit reached!,Limite de memória atingido!,Speicherlimit erreicht!,Limite de mémoire atteinte !,Limite di memoria raggiunto!
+MEMORY_FULL_SHORT,¡Memoria llena!,Memory full!,Memória cheia!,Speicher voll!,Mémoire pleine !,Memoria piena!
 HINT_BAKE,Cocinar,Bake,Assar,Backen,Cuire,Cuoci
 HINT_PLANE_VERTICAL,Plano vertical,Vertical Plane,Plano vertical,Vertikale Ebene,Plan vertical,Piano verticale
 HINT_PLANE_HORIZONTAL,Plano horizontal,Horizontal Plane,Plano horizontal,Horizontale Ebene,Plan horizontal,Piano orizzontale

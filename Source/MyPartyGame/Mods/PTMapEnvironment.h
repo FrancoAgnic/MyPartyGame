@@ -160,6 +160,18 @@ public:
     /** Vacía todo (assets + instancias). */
     void ClearAll();
 
+    // ── Presupuesto de memoria del mapa (barra en el Level Creator) ──────────────────────────────
+    /** Tope de memoria del mapa en MB (configurable en BP). Al llegar, se bloquea colocar más props. */
+    UPROPERTY(EditAnywhere, Category="MapEnv") float MapMemoryBudgetMB = 64.f;
+    /** Memoria estimada de los props colocados (geometría × instancias + ojos + atlas de pintura), en bytes. */
+    int64 GetEstimatedMemoryBytes() const;
+    float GetMemoryUsageMB() const { return (float)((double)GetEstimatedMemoryBytes() / (1024.0 * 1024.0)); }
+    float GetMemoryBudgetMB() const { return MapMemoryBudgetMB; }
+    /** Fracción 0..1 del presupuesto usada. */
+    float GetMemoryFraction() const { return MapMemoryBudgetMB > 0.f ? GetMemoryUsageMB() / MapMemoryBudgetMB : 0.f; }
+    /** true si ya se alcanzó/superó el tope (no se debería poder colocar más). */
+    bool  IsOverMemoryBudget() const { return GetMemoryUsageMB() >= MapMemoryBudgetMB; }
+
 private:
     struct FPTPropAsset
     {

@@ -996,6 +996,26 @@ bool APTMapEnvironment::RemoveLastInstance()
     return true;
 }
 
+int64 APTMapEnvironment::GetEstimatedMemoryBytes() const
+{
+    // La malla combinada del ProcMesh DUPLICA la geometría por instancia (no comparte vértices), así que la
+    // memoria real crece con cada prop colocado. Estimación: ~40 B/vértice (pos+normal+color+2 UV) + 4 B/índice.
+    auto GeoBytesPerInstance = [](const FPTPropGeometry& G) -> int64
+    { return (int64)G.Verts.Num() * 40 + (int64)G.Tris.Num() * 4; };
+
+    int64 Total = 0;
+    for (const FPTPropAsset& A : Assets)
+    {
+        const int64 N = A.InstXf.Num();
+        Total += GeoBytesPerInstance(A.Geo) * N;
+        if (A.EyesGeo.IsValid()) Total += GeoBytesPerInstance(A.EyesGeo) * N;
+        // Atlas de pintura: se guarda una vez por asset (page table float + atlas FColor).
+        if (A.PaintAtlas.bValid)
+            Total += (int64)A.PaintAtlas.PageBuf.Num() * 4 + (int64)A.PaintAtlas.AtlasBuf.Num() * 4;
+    }
+    return Total;
+}
+
 void APTMapEnvironment::ClearAll()
 {
     for (FPTPropAsset& A : Assets)

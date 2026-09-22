@@ -24,6 +24,7 @@
 #include "../PTNetStats.h"
 #include "../PTGameInstance.h" // modo captura dev (Player N)
 #include "../Mods/PTMapAuthorGameMode.h" // modo autoría de mapa
+#include "../Mods/PTMapEnvironment.h"    // presupuesto de memoria del mapa (barra)
 #include "../UI/PTSkySettingsWidget.h"    // panel de ambiente (sol/cielo/niebla)
 #include "PTSculptVolume.h"               // guardar el escenario (snapshot)
 #include "TimerManager.h"
@@ -511,6 +512,9 @@ void UPTGameplayHUDWidget::UpdateAuthorPanels()
     Hide(TxtChat); Hide(ChatInput); Hide(ChatScroll); Hide(ChatPanel); // + el contenedor (fondo/"Enter to chat")
     Hide(ThemePanel); // cartel de tema (mapa/banco): no aplica en el Level Creator
 
+    // Mostrar el canvas del Level Creator (contiene todo lo del editor de mapas). SelfHitTestInvisible: el
+    // canvas no intercepta clicks, los botones de adentro sí funcionan.
+    if (CanvasLevelCreator) CanvasLevelCreator->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
     // Mostrar los controles de autoría (Guardar / Salir / Ambiente).
     if (AuthorPanel)      AuthorPanel->SetVisibility(ESlateVisibility::Visible);
     if (SaveMapButton)    SaveMapButton->SetVisibility(ESlateVisibility::Visible);
@@ -522,6 +526,36 @@ void UPTGameplayHUDWidget::UpdateAuthorPanels()
     {
         SkyPanelSlot->SetSlot(IconSkyPanel, PT_ShortKeyLabel(PTInput::GetKey(TEXT("SkyPanel"))), FText::GetEmpty());
         SkyPanelSlot->SetVisibility(ESlateVisibility::HitTestInvisible);
+    }
+
+    // Barra de memoria del mapa: se llena al colocar props; roja al llegar al tope. Texto "X.X / Y MB".
+    if (MapMemoryBar || MapMemoryText)
+    {
+        APTMapEnvironment* Env = Cast<APTMapEnvironment>(
+            UGameplayStatics::GetActorOfClass(GetWorld(), APTMapEnvironment::StaticClass()));
+        const float Used = Env ? Env->GetMemoryUsageMB()  : 0.f;
+        const float Budg = Env ? Env->GetMemoryBudgetMB() : 0.f;
+        const float Frac = Env ? FMath::Clamp(Env->GetMemoryFraction(), 0.f, 1.f) : 0.f;
+        if (MapMemoryBar)
+        {
+            MapMemoryBar->SetPercent(Frac);
+            const FLinearColor Fill = (Frac >= 1.f)   ? FLinearColor(0.90f, 0.15f, 0.15f)  // rojo: lleno
+                                    : (Frac >= 0.85f) ? FLinearColor(0.95f, 0.60f, 0.10f)  // naranja: casi
+                                                      : FLinearColor(0.25f, 0.70f, 0.35f); // verde: ok
+            MapMemoryBar->SetFillColorAndOpacity(Fill);
+            MapMemoryBar->SetVisibility(ESlateVisibility::HitTestInvisible);
+        }
+        if (MapMemoryText)
+        {
+            // Lleno → parpadea alternando "X.X / Y MB" con "¡Memoria llena!" (~0.5s cada uno).
+            FText Txt;
+            const bool bFull = (Frac >= 1.f);
+            const bool bBlinkOn = GetWorld() && FMath::Fmod(GetWorld()->GetTimeSeconds(), 1.0) < 0.5;
+            if (bFull && bBlinkOn) Txt = PTText::Get(TEXT("MEMORY_FULL_SHORT"));
+            else                   Txt = FText::FromString(FString::Printf(TEXT("%.1f / %.0f MB"), Used, Budg));
+            MapMemoryText->SetText(Txt);
+            MapMemoryText->SetVisibility(ESlateVisibility::HitTestInvisible);
+        }
     }
 
     // Slot del hotbar para COCINAR (mantener Enter). Ícono + tecla; el anillo de progreso lo actualiza NativeTick.
@@ -583,8 +617,13 @@ void UPTGameplayHUDWidget::SetAuthorModeIndicator(int32 State, float Progress)
 
 void UPTGameplayHUDWidget::ShowModelSavedToast()
 {
+    ShowAuthorStatus(PTText::Get(TEXT("MODEL_SAVED")));
+}
+
+void UPTGameplayHUDWidget::ShowAuthorStatus(const FText& Msg)
+{
     if (!AuthorStatusText) return;
-    AuthorStatusText->SetText(PTText::Get(TEXT("MODEL_SAVED")));
+    AuthorStatusText->SetText(Msg);
     AuthorStatusText->SetVisibility(ESlateVisibility::HitTestInvisible);
     if (UWorld* W = GetWorld())
         W->GetTimerManager().SetTimer(ModelSavedTimer, this, &UPTGameplayHUDWidget::HideModelSavedToast, 2.0f, false);
@@ -646,6 +685,9 @@ void UPTGameplayHUDWidget::RefreshTick()
     // los deja visibles por default, si no la barra de "cambiando modo" / hints se verían en el gameplay).
     {
         auto Hide = [](UWidget* W){ if (W && W->GetVisibility() != ESlateVisibility::Collapsed) W->SetVisibility(ESlateVisibility::Collapsed); };
+        // El canvas del Level Creator oculta de una todo su contenido; los slots del hotbar (fuera del canvas)
+        // se ocultan aparte.
+        Hide(CanvasLevelCreator);
         Hide(SculptModeText); Hide(ModeChangeBar); Hide(PivotHintText); Hide(BakeSlot); Hide(SkyPanelSlot);
     }
 

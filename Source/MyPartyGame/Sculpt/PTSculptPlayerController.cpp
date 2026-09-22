@@ -2565,6 +2565,12 @@ void APTSculptPlayerController::PlaceCurrentAsset()
     APTMapEnvironment* Env = GetMapEnv();
     if (!Env || Env->GetNumAssets() == 0) return;
     if (!Env->GetAssetGeometry(CurrentAsset)) return;
+    // Límite de memoria del mapa: si ya se alcanzó el tope, no se coloca más (avisa en el HUD).
+    if (Env->IsOverMemoryBudget())
+    {
+        if (GameplayHUD) GameplayHUD->ShowAuthorStatus(PTText::Get(TEXT("MEMORY_FULL")));
+        return;
+    }
     bool bOut = false; const FVector P = GetPlacePointGrounded(bOut); // apoyar en el suelo
     if (Volume && Volume->IsInNoPlaceZone(P)) return; // zona libre alrededor del cubo: no se coloca acá
     Env->PlaceInstance(CurrentAsset, FTransform(StampRotation, P, FVector(AssetScale)));

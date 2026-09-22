@@ -107,12 +107,18 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) class UImage* OutOfBoundsIcon;
 
     // ── Modo AUTORÍA de mapa (crear mapa desde el juego) ─────────────────────
+    // Canvas que contiene TODO lo del Level Creator (paneles, barras, textos). Se muestra SOLO en autoría y se
+    // colapsa en gameplay → oculta todo su contenido de una. Meté ahí adentro los widgets del editor de mapas.
+    UPROPERTY(meta=(BindWidgetOptional)) class UWidget*    CanvasLevelCreator;
     // Contenedor que se muestra SOLO en modo autoría (crear mapa). Botones Guardar/Salir + estado.
     UPROPERTY(meta=(BindWidgetOptional)) class UWidget*    AuthorPanel;
     UPROPERTY(meta=(BindWidgetOptional)) class UButton*    SaveMapButton;   // guarda el escenario a archivo
     UPROPERTY(meta=(BindWidgetOptional)) class UButton*    ExitAuthorButton;// vuelve al menú principal
     UPROPERTY(meta=(BindWidgetOptional)) class UTextBlock* AuthorStatusText;// "Guardado", etc.
     UPROPERTY(meta=(BindWidgetOptional)) class UButton*    SkySettingsButton; // abre el panel de ambiente
+    // Presupuesto de memoria del mapa (solo autoría): barra que se llena al colocar props + texto "X / Y MB".
+    UPROPERTY(meta=(BindWidgetOptional)) class UProgressBar* MapMemoryBar;
+    UPROPERTY(meta=(BindWidgetOptional)) class UTextBlock*   MapMemoryText;
     UFUNCTION() void OnSaveMapClicked();
     UFUNCTION() void OnExitAuthorClicked();
     UFUNCTION() void OnSkySettingsClicked();
@@ -142,6 +148,8 @@ public:
 
     /** Muestra el aviso "¡Modelo guardado!" en el estado de autoría por unos segundos (al cocinar un asset). */
     void ShowModelSavedToast();
+    /** Aviso temporal genérico en el estado de autoría (p.ej. "Límite de memoria alcanzado"). */
+    void ShowAuthorStatus(const FText& Msg);
 protected:
     // Cartel de ayuda del modo pivote (opcional en el WBP). El texto lo setea el código (localizado).
     UPROPERTY(meta=(BindWidgetOptional)) class UTextBlock* PivotHintText;
