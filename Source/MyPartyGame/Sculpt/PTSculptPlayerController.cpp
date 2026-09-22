@@ -22,6 +22,7 @@
 #include "PTSculptPlane.h"
 #include "../Mods/PTMapEnvironment.h"
 #include "../Mods/PTMapModSubsystem.h"
+#include "GameFramework/Volume.h" // ignorar volúmenes (BlockingVolume) en el snap del suelo
 #include "Engine/TextureRenderTarget2D.h"
 #include "Styling/SlateBrush.h"
 #include "Misc/FileHelper.h"
@@ -442,6 +443,32 @@ void APTSculptPlayerController::PTSolo()
     {
         UE_LOG(LogTemp, Warning, TEXT("[PTSolo] Solo funciona en el host (listen server)."));
     }
+}
+
+void APTSculptPlayerController::PTLOD()
+{
+    // DEV: prende/apaga el LOD REAL de props (la reducción de triángulos), sin marcadores. En el editor el LOD
+    // está normalmente apagado (todo full); esto permite verlo/tunearlo acá. Al prender, recalcula las mallas
+    // decimadas con los % actuales del BP. En partida ya está ON (se prende al cargar el mapa).
+    APTMapEnvironment* Env = Cast<APTMapEnvironment>(
+        UGameplayStatics::GetActorOfClass(GetWorld(), APTMapEnvironment::StaticClass()));
+    if (!Env) { UE_LOG(LogTemp, Warning, TEXT("[PTLOD] No hay APTMapEnvironment en el nivel.")); return; }
+    const bool bNew = !Env->IsLODEnabled();
+    Env->SetLODEnabled(bNew);
+    if (bNew) Env->RebuildAllLODMeshes(); // aplicar los % actuales del BP
+    UE_LOG(LogTemp, Log, TEXT("[PTLOD] LOD %s."), bNew ? TEXT("ON") : TEXT("OFF"));
+}
+
+void APTSculptPlayerController::PTLODDebug()
+{
+    // DEV: togglea SOLO el overlay del LOD (cilindro del área + color por etapa + contador de triángulos). No
+    // cambia si el LOD está prendido; usá PTLOD para eso. Es LOCAL de esta máquina.
+    APTMapEnvironment* Env = Cast<APTMapEnvironment>(
+        UGameplayStatics::GetActorOfClass(GetWorld(), APTMapEnvironment::StaticClass()));
+    if (!Env) { UE_LOG(LogTemp, Warning, TEXT("[PTLODDebug] No hay APTMapEnvironment en el nivel.")); return; }
+    Env->SetLODDebug(!Env->IsLODDebug());
+    UE_LOG(LogTemp, Log, TEXT("[PTLODDebug] Overlay %s (LOD %s)."),
+        Env->IsLODDebug() ? TEXT("ON") : TEXT("OFF"), Env->IsLODEnabled() ? TEXT("ON") : TEXT("OFF"));
 }
 
 void APTSculptPlayerController::SetupInputComponent()
@@ -2398,13 +2425,22 @@ FVector APTSculptPlayerController::GetPlacePointGrounded(bool& bOutOutside) cons
     // objetos flotando o en el aire, como antes).
     if (UWorld* W = GetWorld())
     {
-        FHitResult Hit;
         FCollisionQueryParams Q(SCENE_QUERY_STAT(PTPlaceGround), /*bTraceComplex=*/false);
         if (GetPawn())        Q.AddIgnoredActor(GetPawn());
         if (PropPreviewActor) Q.AddIgnoredActor(PropPreviewActor);
         if (PreviewActor)     Q.AddIgnoredActor(PreviewActor);
-        if (W->LineTraceSingleByChannel(Hit, S, Arm, ECC_WorldStatic, Q))
-            return Hit.ImpactPoint;
+        // Multi-trace y saltear los VOLÚMENES (p.ej. el BlockingVolume del borde jugable): así el preview snapea
+        // al SUELO real y se pueden colocar props FUERA del volumen (antes el rayo chocaba la pared del volumen).
+        TArray<FHitResult> Hits;
+        if (W->LineTraceMultiByChannel(Hits, S, Arm, ECC_WorldStatic, Q))
+        {
+            for (const FHitResult& H : Hits)
+            {
+                const AActor* HA = H.GetActor();
+                if (HA && HA->IsA(AVolume::StaticClass())) continue; // ignorar volúmenes
+                return H.ImpactPoint;
+            }
+        }
     }
     return Arm; // sin superficie hasta el brazo → flota a distancia de brazo
 }

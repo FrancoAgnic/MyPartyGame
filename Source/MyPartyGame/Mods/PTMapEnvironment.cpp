@@ -20,7 +20,7 @@
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
-#include "GameFramework/Volume.h" // área jugable (BlockingVolume) para el culling de colisión (8a)
+#include "DrawDebugHelpers.h" // debug del LOD (cilindro + marcadores por etapa)
 #include "Engine/DirectionalLight.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Engine/SkyLight.h"
@@ -342,6 +342,31 @@ static FPTPropGeometry PT_DecimateGeo(const FPTPropGeometry& G, float Cell)
     return Out.IsValid() ? Out : G;
 }
 
+// Deciman hasta dejar ~KeepRatio de los triángulos originales (KeepRatio = 1 - %reducción). Como el conteo de
+// triángulos DECRECE monótonamente con el tamaño de celda, se hace una búsqueda binaria del cell que alcanza el
+// objetivo. Se corre una sola vez por asset al hornear/cargar (no por frame). Radius = radio bbox del asset.
+static FPTPropGeometry PT_DecimateToTriRatio(const FPTPropGeometry& G, float KeepRatio, float Radius)
+{
+    if (!G.IsValid()) return FPTPropGeometry();
+    KeepRatio = FMath::Clamp(KeepRatio, 0.05f, 0.99f);
+    const int32 SrcTris    = G.Tris.Num() / 3;
+    const int32 TargetTris = FMath::Max(2, FMath::RoundToInt(SrcTris * KeepRatio));
+    if (TargetTris >= SrcTris) return FPTPropGeometry(); // no hay nada que reducir
+
+    float Lo = FMath::Max(1.f, Radius * 0.01f); // celda chica → casi full
+    float Hi = FMath::Max(Lo * 2.f, Radius * 0.80f); // celda grande → muy reducido
+    FPTPropGeometry Best = PT_DecimateGeo(G, Hi);     // fallback: el más reducido
+    for (int32 It = 0; It < 7; ++It)
+    {
+        const float Mid = 0.5f * (Lo + Hi);
+        FPTPropGeometry Cand = PT_DecimateGeo(G, Mid);
+        const int32 CandTris = Cand.Tris.Num() / 3;
+        if (CandTris > TargetTris) { Lo = Mid; }              // todavía tiene de más → celda más grande
+        else                       { Hi = Mid; Best = MoveTemp(Cand); } // ya bajó del objetivo → guardar y afinar
+    }
+    return Best.IsValid() ? Best : FPTPropGeometry();
+}
+
 int32 APTMapEnvironment::AddAsset(const FPTPropGeometry& Geo, const FPTPropGeometry& EyesGeo, const FPTPaintAtlas& PaintAtlas)
 {
     if (!Geo.IsValid()) return INDEX_NONE;
@@ -363,16 +388,15 @@ int32 APTMapEnvironment::AddAsset(const FPTPropGeometry& Geo, const FPTPropGeome
     A.PMC = PMC;
     A.PaintAtlas = PaintAtlas;
     A.PaintMID = PaintAtlas.bValid ? MakePaintMID(PaintAtlas) : nullptr; // pintura nítida (atlas) si hay
-    // (8b) Malla decimada para el LOD lejano. Solo para assets SIN pintura (no re-generamos las UV del atlas).
+    // (8b) 3 mallas decimadas para el LOD por distancia. Solo assets SIN pintura (no re-generamos UVs del atlas).
     if (!A.PaintMID)
     {
         FBox3f Box(ForceInit);
         for (const FVector3f& V : Geo.Verts) Box += V;
         const float Radius = FMath::Max(1.f, Box.GetExtent().Size());
-        const float Cell   = FMath::Max(1.f, Radius * LODCellFraction);
-        A.LODGeo = PT_DecimateGeo(Geo, Cell);
-        // Si no ahorró triángulos, no vale la pena tener una copia: usar la full de lejos también.
-        if (A.LODGeo.Tris.Num() >= Geo.Tris.Num()) A.LODGeo = FPTPropGeometry();
+        const float Reduce[3] = { LODStage1Reduce, LODStage2Reduce, LODStage3Reduce };
+        for (int32 s = 0; s < 3; ++s)
+            A.LODGeo[s] = PT_DecimateToTriRatio(Geo, 1.f - Reduce[s], Radius); // vacía si no hubo ahorro
     }
     return Assets.Add(MoveTemp(A));
 }
@@ -525,131 +549,211 @@ void APTMapEnvironment::BuildMergedSection(FPTPropAsset& A, const FPTPropGeometr
     if (Mat) A.PMC->SetMaterial(Section, Mat);
 }
 
-AVolume* APTMapEnvironment::GetPlayAreaVolume()
+AActor* APTMapEnvironment::GetPlayAreaActor()
 {
-    if (PlayAreaVolume.IsValid()) return PlayAreaVolume.Get();
+    if (PlayAreaActor.IsValid()) return PlayAreaActor.Get();
     UWorld* W = GetWorld();
     if (!W || PlayAreaTag.IsNone()) return nullptr;
     TArray<AActor*> Found;
-    UGameplayStatics::GetAllActorsOfClassWithTag(W, AVolume::StaticClass(), PlayAreaTag, Found);
-    if (Found.Num() > 0) { PlayAreaVolume = Cast<AVolume>(Found[0]); return PlayAreaVolume.Get(); }
+    UGameplayStatics::GetAllActorsWithTag(W, PlayAreaTag, Found);
+    if (Found.Num() > 0) { PlayAreaActor = Found[0]; return Found[0]; }
     return nullptr;
+}
+
+bool APTMapEnvironment::GetPlayAreaCylinder(FVector& OutCenter, float& OutRadius, float& OutHalfHeight)
+{
+    AActor* A = GetPlayAreaActor();
+    if (!A) return false;
+    FVector Origin, Extent;
+    A->GetActorBounds(/*bOnlyCollidingComponents=*/false, Origin, Extent); // bounds del actor (incluye no-colisionables)
+    OutCenter     = Origin;
+    OutRadius     = FMath::Max(Extent.X, Extent.Y); // cilindro que abarca el bounds en XY
+    OutHalfHeight = Extent.Z;
+    return OutRadius > KINDA_SMALL_NUMBER && OutHalfHeight > KINDA_SMALL_NUMBER;
 }
 
 bool APTMapEnvironment::IsInPlayArea(const FVector& WorldLoc)
 {
-    AVolume* V = GetPlayAreaVolume();
-    if (!V) return true; // sin área definida → todo cuenta como "dentro" (colisión normal)
-    return V->EncompassesPoint(WorldLoc);
+    FVector C; float R, H;
+    if (!GetPlayAreaCylinder(C, R, H)) return true; // sin área definida → todo cuenta como "dentro" (colisión normal)
+    if (FMath::Abs(WorldLoc.Z - C.Z) > H) return false;             // fuera en altura
+    const float dx = WorldLoc.X - C.X, dy = WorldLoc.Y - C.Y;
+    return (dx * dx + dy * dy) <= (R * R);                          // dentro del radio (XY)
+}
+
+FVector APTMapEnvironment::GetLODOrigin()
+{
+    // Origen = centro del cilindro del área jugable si existe; si no, la ubicación del actor (origen del mapa).
+    FVector C; float R, H;
+    if (GetPlayAreaCylinder(C, R, H)) return C;
+    return GetActorLocation();
 }
 
 void APTMapEnvironment::RebuildAssetMesh(FPTPropAsset& A)
 {
-    // Reconstrucción "dura" (place/borrar/cargar): siempre reconstruye, con el LOD actual.
-    RebuildAssetMeshLOD(A, /*bForce=*/true);
-}
-
-bool APTMapEnvironment::GetLocalViewLocation(FVector& Out) const
-{
-    UWorld* W = GetWorld();
-    if (!W) return false;
-    // Player local de ESTA máquina (cada cliente decima según su propio jugador).
-    if (APlayerController* PC = W->GetFirstPlayerController())
-    {
-        if (APawn* P = PC->GetPawn())            { Out = P->GetActorLocation();      return true; }
-        FVector Loc; FRotator Rot;
-        PC->GetPlayerViewPoint(Loc, Rot);        { Out = Loc;                        return true; }
-    }
-    return false;
-}
-
-bool APTMapEnvironment::RebuildAssetMeshLOD(FPTPropAsset& A, bool bForce)
-{
-    if (!A.PMC) return false;
+    if (!A.PMC) return;
     if (A.InstXf.Num() == 0)
     {
-        A.PMC->ClearMeshSection(0); A.PMC->ClearMeshSection(1);
-        A.PMC->ClearMeshSection(2); A.PMC->ClearMeshSection(3);
-        A.InstBucket.Reset();
-        return true;
+        for (int32 s = 0; s <= 5; ++s) A.PMC->ClearMeshSection(s);
+        return;
     }
 
-    // ¿Aplicar LOD por distancia? Solo en partida (bLODEnabled), con player local, y si el asset tiene malla
-    // decimada (assets sin pintura). En autoría / sin decimado → todo "cerca" (comportamiento 8a).
-    FVector ViewLoc;
-    const bool bUseLOD = bLODEnabled && A.LODGeo.IsValid() && GetLocalViewLocation(ViewLoc);
-    const float NearR2 = FMath::Square(FarLODDistance);
-    const float FarR2  = FMath::Square(FarLODDistance + FMath::Max(0.f, FarLODHysteresis));
+    // ¿Aplicar LOD? Solo en partida (bLODEnabled) y si el asset tiene mallas decimadas (assets sin pintura).
+    // El nivel de cada instancia es FIJO: se decide una vez por su distancia al ORIGEN (no cambia con el player).
+    const bool bUseLOD = bLODEnabled && (A.LODGeo[0].IsValid() || A.LODGeo[1].IsValid() || A.LODGeo[2].IsValid());
+    const FVector Origin = GetLODOrigin();
 
-    const int32 N = A.InstXf.Num();
-    const bool bHadBuckets = (A.InstBucket.Num() == N);
-    TArray<uint8> NewBucket; NewBucket.SetNumUninitialized(N);
-    TArray<FTransform> NearInXf, NearOutXf, FarXf;
-
-    for (int32 i = 0; i < N; ++i)
+    // Repartos de instancias por etapa:
+    //   Etapa 0 (cerca)  → malla FULL. Se sub-parte por área para la colisión (8a): dentro = con colisión.
+    //   Etapas 1/2/3     → malla decimada (más reducida cuanto más lejos), sin colisión.
+    TArray<FTransform> Stage0In, Stage0Out, Stage1, Stage2, Stage3;
+    for (const FTransform& Xf : A.InstXf)
     {
-        const FVector Loc = A.InstXf[i].GetLocation();
-        uint8 Bucket;
+        const FVector Loc = Xf.GetLocation();
+        int32 Stage = 0;
         if (bUseLOD)
         {
-            const float D2 = FVector::DistSquared(Loc, ViewLoc);
-            // Histéresis: si ya estaba lejos, sigue lejos hasta bajar de NearR2; si estaba cerca, no pasa a
-            // lejos hasta superar FarR2. Sin bucket previo, umbral simple.
-            const bool bWasFar = bHadBuckets && A.InstBucket[i] == 2;
-            const bool bFar = bWasFar ? (D2 > NearR2) : (D2 > FarR2);
-            Bucket = bFar ? 2 : (IsInPlayArea(Loc) ? 0 : 1);
+            const float D = FVector::Dist(Loc, Origin);
+            if      (D >= LODStage3Dist) Stage = 3;
+            else if (D >= LODStage2Dist) Stage = 2;
+            else if (D >= LODStage1Dist) Stage = 1;
         }
-        else
+        switch (Stage)
         {
-            Bucket = IsInPlayArea(Loc) ? 0 : 1; // 8a: dentro (colisión) / fuera (sin colisión)
+            case 1:  Stage1.Add(Xf); break;
+            case 2:  Stage2.Add(Xf); break;
+            case 3:  Stage3.Add(Xf); break;
+            default: (IsInPlayArea(Loc) ? Stage0In : Stage0Out).Add(Xf); break;
         }
-        NewBucket[i] = Bucket;
-        (Bucket == 0 ? NearInXf : Bucket == 1 ? NearOutXf : FarXf).Add(A.InstXf[i]);
     }
-
-    // Si el reparto no cambió y no se fuerza, no reconstruir nada (evita hitches por frame).
-    if (!bForce && bHadBuckets && NewBucket == A.InstBucket) return false;
-    A.InstBucket = MoveTemp(NewBucket);
 
     // Arcilla: material con atlas (nítido) si el asset tiene pintura; si no, el normal.
     UMaterialInterface* ClayMat = A.PaintMID ? (UMaterialInterface*)A.PaintMID : GetOrCreatePropMID();
     if (!ClayMat) ClayMat = PropMaterial;
 
-    // Sección 0 = cerca + dentro del área (full, con colisión). Sección 2 = cerca + fuera (full, sin colisión).
-    BuildMergedSection(A, A.Geo, 0, ClayMat, NearInXf,  /*bCollision=*/true);
-    BuildMergedSection(A, A.Geo, 2, ClayMat, NearOutXf, /*bCollision=*/false);
-    // Sección 3 = LEJOS (malla decimada, sin colisión). Si no hay decimado, usa la full.
-    BuildMergedSection(A, A.LODGeo.IsValid() ? A.LODGeo : A.Geo, 3, ClayMat, FarXf, /*bCollision=*/false);
+    // Etapa 0: sección 0 = dentro del área (full, con colisión), sección 2 = fuera (full, sin colisión).
+    BuildMergedSection(A, A.Geo, 0, ClayMat, Stage0In,  /*bCollision=*/true);
+    BuildMergedSection(A, A.Geo, 2, ClayMat, Stage0Out, /*bCollision=*/false);
+    // Etapas 1/2/3: secciones 3/4/5 con la malla decimada correspondiente (o la full si esa etapa no ahorró).
+    BuildMergedSection(A, A.LODGeo[0].IsValid() ? A.LODGeo[0] : A.Geo, 3, ClayMat, Stage1, /*bCollision=*/false);
+    BuildMergedSection(A, A.LODGeo[1].IsValid() ? A.LODGeo[1] : A.Geo, 4, ClayMat, Stage2, /*bCollision=*/false);
+    BuildMergedSection(A, A.LODGeo[2].IsValid() ? A.LODGeo[2] : A.Geo, 5, ClayMat, Stage3, /*bCollision=*/false);
 
     // Sección 1 = OJOS (todas las instancias, sin colisión). Vacía si el asset no tiene ojos.
     if (A.EyesGeo.IsValid()) BuildMergedSection(A, A.EyesGeo, 1, EyeMaterial, A.InstXf, /*bCollision=*/false);
     else                     A.PMC->ClearMeshSection(1);
-    return true;
 }
 
 void APTMapEnvironment::SetLODEnabled(bool bOn)
 {
     if (bLODEnabled == bOn) return;
     bLODEnabled = bOn;
+    // El LOD es estático (se decide al reconstruir): basta reconstruir todos los assets una vez al cambiar.
+    for (FPTPropAsset& A : Assets) RebuildAssetMesh(A);
+    if (bLODDebug) DrawLODDebug(); // refrescar el overlay
+}
+
+void APTMapEnvironment::RebuildAllLODMeshes()
+{
+    const float Reduce[3] = { LODStage1Reduce, LODStage2Reduce, LODStage3Reduce };
+    for (FPTPropAsset& A : Assets)
+    {
+        if (A.PaintMID) continue; // assets con pintura: quedan full (no se decima para no romper el atlas)
+        FBox3f Box(ForceInit);
+        for (const FVector3f& V : A.Geo.Verts) Box += V;
+        const float Radius = FMath::Max(1.f, Box.GetExtent().Size());
+        for (int32 s = 0; s < 3; ++s)
+            A.LODGeo[s] = PT_DecimateToTriRatio(A.Geo, 1.f - Reduce[s], Radius);
+    }
+    for (FPTPropAsset& A : Assets) RebuildAssetMesh(A);
+}
+
+void APTMapEnvironment::SetLODDebug(bool bOn)
+{
+    if (bLODDebug == bOn) return;
+    bLODDebug = bOn;
     UWorld* W = GetWorld();
     if (!W) return;
     if (bOn)
     {
-        // Reevaluar el LOD periódicamente (barato: solo reconstruye los assets cuyo reparto cambió).
-        W->GetTimerManager().SetTimer(LODTimer, this, &APTMapEnvironment::UpdateDistanceLOD, 0.5f, true, 0.1f);
+        W->GetTimerManager().SetTimer(LODDebugTimer, this, &APTMapEnvironment::DrawLODDebug, 0.25f, true, 0.f);
     }
     else
     {
-        W->GetTimerManager().ClearTimer(LODTimer);
+        W->GetTimerManager().ClearTimer(LODDebugTimer);
+        if (GEngine) GEngine->RemoveOnScreenDebugMessage((uint64)9231);
     }
-    // Aplicar el cambio de modo ya mismo a todos los assets.
-    for (FPTPropAsset& A : Assets) RebuildAssetMeshLOD(A, /*bForce=*/true);
 }
 
-void APTMapEnvironment::UpdateDistanceLOD()
+void APTMapEnvironment::DrawLODDebug()
 {
-    if (!bLODEnabled) return;
-    for (FPTPropAsset& A : Assets) RebuildAssetMeshLOD(A, /*bForce=*/false);
+    UWorld* W = GetWorld();
+    if (!W) return;
+    const float Life = 0.30f; // un poco más que el intervalo del timer (0.25) para que no parpadee
+    const FVector Origin = GetLODOrigin();
+
+    // Cilindro del área jugable (cian).
+    FVector C; float R, H;
+    if (GetPlayAreaCylinder(C, R, H))
+        DrawDebugCylinder(W, C - FVector(0, 0, H), C + FVector(0, 0, H), R, 24, FColor::Cyan, false, Life, 0, 2.f);
+
+    static const FColor StageCol[4] = { FColor::Green, FColor::Yellow, FColor(255, 140, 0), FColor::Red };
+    int32 InstByStage[4] = { 0, 0, 0, 0 };
+    int64 TrisByStage[4] = { 0, 0, 0, 0 };
+    int32 TotalInst = 0;
+
+    for (const FPTPropAsset& A : Assets)
+    {
+        const bool bHasLOD = bLODEnabled && (A.LODGeo[0].IsValid() || A.LODGeo[1].IsValid() || A.LODGeo[2].IsValid());
+        for (const FTransform& Xf : A.InstXf)
+        {
+            const FVector L = Xf.GetLocation();
+            int32 St = 0;
+            if (bHasLOD)
+            {
+                const float D = FVector::Dist(L, Origin);
+                if      (D >= LODStage3Dist) St = 3;
+                else if (D >= LODStage2Dist) St = 2;
+                else if (D >= LODStage1Dist) St = 1;
+            }
+            ++InstByStage[St]; ++TotalInst;
+            // Poste vertical + esfera arriba, en foreground (SDPG_Foreground=1) para verlos a través de la
+            // geometría y desde lejos. Verde=full, amarillo/naranja/rojo = etapas 1/2/3.
+            DrawDebugLine(W, L, L + FVector(0, 0, 400.f), StageCol[St], false, Life, /*DepthPrio=*/1, 6.f);
+            DrawDebugSphere(W, L + FVector(0, 0, 400.f), 45.f, 8, StageCol[St], false, Life, /*DepthPrio=*/1, 4.f);
+        }
+        // Triángulos realmente dibujados por sección: 0+2 = etapa0 (full), 3/4/5 = etapas 1/2/3 (decimadas).
+        if (A.PMC)
+        {
+            auto SecTris = [&](int32 s) -> int64
+            {
+                const FProcMeshSection* Se = A.PMC->GetProcMeshSection(s);
+                return Se ? (int64)(Se->ProcIndexBuffer.Num() / 3) : 0;
+            };
+            TrisByStage[0] += SecTris(0) + SecTris(2);
+            TrisByStage[1] += SecTris(3);
+            TrisByStage[2] += SecTris(4);
+            TrisByStage[3] += SecTris(5);
+        }
+    }
+
+    const int64 TotalTris = TrisByStage[0] + TrisByStage[1] + TrisByStage[2] + TrisByStage[3];
+    if (GEngine)
+    {
+        const FString Msg = FString::Printf(
+            TEXT("[LOD %s]  Instancias: %d   Triangulos: %lld\n")
+            TEXT("  E0 full : %d inst / %lld tris\n")
+            TEXT("  E1 -%d%% : %d inst / %lld tris\n")
+            TEXT("  E2 -%d%% : %d inst / %lld tris\n")
+            TEXT("  E3 -%d%% : %d inst / %lld tris"),
+            bLODEnabled ? TEXT("ON") : TEXT("OFF (autoria)"),
+            TotalInst, TotalTris,
+            InstByStage[0], TrisByStage[0],
+            FMath::RoundToInt(LODStage1Reduce * 100.f), InstByStage[1], TrisByStage[1],
+            FMath::RoundToInt(LODStage2Reduce * 100.f), InstByStage[2], TrisByStage[2],
+            FMath::RoundToInt(LODStage3Reduce * 100.f), InstByStage[3], TrisByStage[3]);
+        GEngine->AddOnScreenDebugMessage((uint64)9231, 0.35f, FColor::White, Msg);
+    }
 }
 
 void APTMapEnvironment::PlaceInstance(int32 AssetIdx, const FTransform& WorldXf)

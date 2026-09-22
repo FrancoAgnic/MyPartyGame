@@ -159,10 +159,10 @@ private:
         // samplea con la UV horneada → idéntico a lo pintado. Vacío = sin pintura (usa solo vertex color).
         FPTPaintAtlas PaintAtlas;
         UMaterialInstanceDynamic* PaintMID = nullptr; // MID con el atlas (sección 0); rooteado en AssetMIDs
-        // (8b) LOD por distancia al player: versión DECIMADA de la arcilla para instancias LEJOS (menos
-        // triángulos). Solo para assets SIN pintura (no re-generamos UVs del atlas). Vacía = usar full.
-        FPTPropGeometry LODGeo;
-        TArray<uint8>   InstBucket; // bucket actual por instancia (0=cerca+área, 1=cerca+fuera, 2=lejos)
+        // (8b) LOD por distancia al ORIGEN (estático): 3 mallas DECIMADAS pre-calculadas (etapas 1/2/3, cada
+        // una con más reducción de triángulos). Solo para assets SIN pintura (no re-generamos UVs del atlas).
+        // Vacías = usar la full (assets con pintura, o cuando el decimado no ahorró).
+        FPTPropGeometry LODGeo[3];
     };
     TArray<FPTPropAsset> Assets;
     // Orden global de colocación (índice de asset por cada instancia colocada) → para el undo LIFO de props.
@@ -182,38 +182,52 @@ private:
     void BuildMergedSection(FPTPropAsset& A, const FPTPropGeometry& G, int32 Section, UMaterialInterface* Mat,
                             const TArray<FTransform>& Xfs, bool bCollision);
 
-    // ── Optimización (8a): área jugable = un Volume (p.ej. BlockingVolume) con el Actor Tag de abajo. Las
-    // instancias FUERA de esa área NO generan colisión (ahorra cocinado de física). Sin volumen → todo con
-    // colisión (comportamiento normal). ──
+    // ── Optimización (8a): área jugable = un ACTOR aparte (p.ej. un cilindro) con el Actor Tag de abajo. Se
+    // usa su BOUNDS como un CILINDRO (centro + radio XY + semialtura Z): las instancias DENTRO generan colisión;
+    // FUERA no (ahorra cocinado de física). No hace falta que el actor tenga colisión (es solo un marcador; se
+    // recomienda ponerle NoCollision). Sin actor → todo con colisión (comportamiento normal). ──
     UPROPERTY(EditAnywhere, Category="MapEnv") FName PlayAreaTag = TEXT("PlayArea");
-    TWeakObjectPtr<class AVolume> PlayAreaVolume;
-    class AVolume* GetPlayAreaVolume();
+    TWeakObjectPtr<AActor> PlayAreaActor;
+    AActor* GetPlayAreaActor();
+    // Cilindro del área jugable derivado del bounds del actor "PlayArea". false si no hay actor.
+    bool GetPlayAreaCylinder(FVector& OutCenter, float& OutRadius, float& OutHalfHeight);
     bool IsInPlayArea(const FVector& WorldLoc);
 
 public:
-    // ── Optimización (8b): LOD por distancia al PLAYER LOCAL. Las instancias LEJOS del jugador se dibujan
-    // con una malla DECIMADA (menos triángulos) y sin colisión; las cercanas, con la malla completa. Solo
-    // afecta assets SIN pintura (los pintados quedan full para no romper la UV del atlas). Es una optimización
-    // de PARTIDA: la prende el PlayerController al entrar a jugar; en autoría queda apagado (todo full). ──
-    /** Distancia (cm) a partir de la cual una instancia usa la malla decimada. */
-    UPROPERTY(EditAnywhere, Category="MapEnv") float FarLODDistance = 4000.f;
-    /** Banda de histéresis (cm) para no parpadear entre near/far al cruzar el umbral. */
-    UPROPERTY(EditAnywhere, Category="MapEnv") float FarLODHysteresis = 500.f;
-    /** Tamaño de celda del decimado = radio del asset × esta fracción (más grande = menos triángulos). */
-    UPROPERTY(EditAnywhere, Category="MapEnv") float LODCellFraction = 0.14f;
-    /** Prende/apaga el LOD por distancia (lo llama el PC: true al jugar, false en autoría). */
+    // ── Optimización (8b): LOD por distancia al ORIGEN del área jugable (ESTÁTICO). Al colocar/cargar, cada
+    // instancia queda FIJA con un nivel de detalle según su distancia al origen: cerca = malla completa; más
+    // lejos = malla más decimada (3 etapas). NO se actualiza con el player (no hay timer). Solo afecta assets
+    // SIN pintura (los pintados quedan full para no romper la UV del atlas). Es una optimización de PARTIDA:
+    // la prende el PlayerController al jugar; en autoría queda apagado (todo full). Distancias y porcentajes
+    // son variables para poder buscar el mejor ajuste. ──
+    /** Distancias (cm) desde el origen a las que ARRANCA cada etapa de reducción (deben ir en aumento). */
+    UPROPERTY(EditAnywhere, Category="MapEnv|LOD") float LODStage1Dist = 3000.f;
+    UPROPERTY(EditAnywhere, Category="MapEnv|LOD") float LODStage2Dist = 6000.f;
+    UPROPERTY(EditAnywhere, Category="MapEnv|LOD") float LODStage3Dist = 10000.f;
+    /** Fracción de triángulos que se ELIMINA en cada etapa (0.40 = quita 40% → deja 60%). Rango 0..0.95. */
+    UPROPERTY(EditAnywhere, Category="MapEnv|LOD") float LODStage1Reduce = 0.40f;
+    UPROPERTY(EditAnywhere, Category="MapEnv|LOD") float LODStage2Reduce = 0.60f;
+    UPROPERTY(EditAnywhere, Category="MapEnv|LOD") float LODStage3Reduce = 0.75f;
+    /** Prende/apaga el LOD (lo llama el PC: true al jugar, false en autoría). Reconstruye todo al cambiar. */
     void SetLODEnabled(bool bOn);
+    bool IsLODEnabled() const { return bLODEnabled; }
+    /** Recalcula las 3 mallas decimadas de cada asset con los % actuales del BP (para tunear en el editor). */
+    void RebuildAllLODMeshes();
+
+    // ── Debug del LOD (comando dev PTLODDebug) ──
+    /** Togglea el debug: dibuja el cilindro del área, marca cada instancia con color por etapa (verde=full,
+     *  amarillo/naranja/rojo = etapas 1/2/3) y muestra en pantalla instancias + triángulos por etapa. */
+    void SetLODDebug(bool bOn);
+    bool IsLODDebug() const { return bLODDebug; }
 
 private:
     bool bLODEnabled = false;
-    FTimerHandle LODTimer;
-    // Re-evalúa near/far por distancia al player y reconstruye los assets cuyo reparto cambió (throttled).
-    void UpdateDistanceLOD();
-    // Posición del player local (para medir distancias). ZeroVector + false si no hay pawn local.
-    bool GetLocalViewLocation(FVector& Out) const;
-    // Reconstruye A repartiendo instancias en near+área(0), near+fuera(2), lejos-decimado(3) + ojos(1).
-    // bForce = reconstruir aunque el reparto no haya cambiado (place/remove/load). Devuelve true si cambió.
-    bool RebuildAssetMeshLOD(FPTPropAsset& A, bool bForce);
+    bool bLODDebug = false;
+    FTimerHandle LODDebugTimer;
+    void DrawLODDebug();
+    // Origen para medir la distancia de cada instancia: centro del área jugable ("PlayArea") si existe,
+    // o la ubicación de este actor (origen del mapa) si no hay.
+    FVector GetLODOrigin();
 
     // Inyecta la dirección/color del sol del ambiente en el MID compartido. Se llama al hornear/cargar y
     // desde ApplySkySettings.
