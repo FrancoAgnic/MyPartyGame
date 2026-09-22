@@ -354,6 +354,7 @@ void APTSculptPlayerController::TickPropMapLoad()
     if (!Env) return;
 
     Env->DeserializeEnvironment(Blob);
+    Env->SetLODEnabled(true); // (8b) en PARTIDA: decimar props lejos del player local (autoría queda full)
     bPropMapLoaded = true;
     GetWorldTimerManager().ClearTimer(PropMapLoadTimer);
     UE_LOG(LogTemp, Log, TEXT("[SculptPC] Mapa de props cargado localmente (%d bytes, mod '%s')."), Blob.Num(), *ModId);

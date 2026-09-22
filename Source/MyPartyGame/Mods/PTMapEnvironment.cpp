@@ -20,6 +20,7 @@
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
+#include "GameFramework/Volume.h" // área jugable (BlockingVolume) para el culling de colisión (8a)
 #include "Engine/DirectionalLight.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Engine/SkyLight.h"
@@ -279,6 +280,68 @@ UMaterialInstanceDynamic* APTMapEnvironment::MakePaintMID(const FPTPaintAtlas& A
     return MID;
 }
 
+// ── (8b) Decimado por agrupación en grilla (vertex clustering): junta los vértices que caen en la misma
+// celda de tamaño Cell en un representante (posición/normal/color promediados) y remapea los triángulos,
+// descartando los degenerados. Barato, robusto (no deja huecos) y buena calidad para formas de arcilla vistas
+// de lejos. NO genera UVs (por eso solo se usa en assets sin pintura). Cell<=0 → devuelve la malla igual. ──
+static FPTPropGeometry PT_DecimateGeo(const FPTPropGeometry& G, float Cell)
+{
+    if (!G.IsValid() || Cell <= KINDA_SMALL_NUMBER) return G;
+
+    const int32 NV = G.Verts.Num();
+    TMap<FIntVector, int32> CellToNew;
+    CellToNew.Reserve(NV);
+    TArray<FVector3f> AccPos, AccNrm;
+    TArray<FVector4f> AccCol;
+    TArray<int32>     AccCnt;
+    TArray<int32>     Remap; Remap.SetNumUninitialized(NV);
+    const float Inv = 1.f / Cell;
+
+    for (int32 i = 0; i < NV; ++i)
+    {
+        const FVector3f& V = G.Verts[i];
+        const FIntVector C(FMath::FloorToInt(V.X * Inv), FMath::FloorToInt(V.Y * Inv), FMath::FloorToInt(V.Z * Inv));
+        int32 Idx;
+        if (int32* Found = CellToNew.Find(C)) { Idx = *Found; }
+        else
+        {
+            Idx = AccPos.Num();
+            CellToNew.Add(C, Idx);
+            AccPos.Add(FVector3f::ZeroVector); AccNrm.Add(FVector3f::ZeroVector);
+            AccCol.Add(FVector4f(0.f, 0.f, 0.f, 0.f)); AccCnt.Add(0);
+        }
+        AccPos[Idx] += V;
+        AccNrm[Idx] += (G.Normals.IsValidIndex(i) ? G.Normals[i] : FVector3f::ZAxisVector);
+        const FColor Cc = G.Colors.IsValidIndex(i) ? G.Colors[i] : FColor::White;
+        AccCol[Idx] += FVector4f(Cc.R, Cc.G, Cc.B, Cc.A);
+        AccCnt[Idx] += 1;
+        Remap[i] = Idx;
+    }
+
+    FPTPropGeometry Out;
+    const int32 NN = AccPos.Num();
+    Out.Verts.SetNumUninitialized(NN);
+    Out.Normals.SetNumUninitialized(NN);
+    Out.Colors.SetNumUninitialized(NN);
+    for (int32 k = 0; k < NN; ++k)
+    {
+        const float N = (float)FMath::Max(1, AccCnt[k]);
+        Out.Verts[k]   = AccPos[k] / N;
+        Out.Normals[k] = (AccNrm[k] / N).GetSafeNormal();
+        const FVector4f Col = AccCol[k] / N;
+        Out.Colors[k]  = FColor((uint8)FMath::Clamp(Col.X, 0.f, 255.f), (uint8)FMath::Clamp(Col.Y, 0.f, 255.f),
+                                (uint8)FMath::Clamp(Col.Z, 0.f, 255.f), (uint8)FMath::Clamp(Col.W, 0.f, 255.f));
+    }
+    Out.Tris.Reserve(G.Tris.Num());
+    for (int32 t = 0; t + 2 < G.Tris.Num(); t += 3)
+    {
+        const int32 A = Remap[G.Tris[t]], B = Remap[G.Tris[t + 1]], C = Remap[G.Tris[t + 2]];
+        if (A != B && B != C && A != C) { Out.Tris.Add(A); Out.Tris.Add(B); Out.Tris.Add(C); }
+    }
+    // Si el decimado no redujo nada (asset muy chico), devolver la original para no gastar una copia inútil.
+    return Out.IsValid() ? Out : G;
+}
+
 int32 APTMapEnvironment::AddAsset(const FPTPropGeometry& Geo, const FPTPropGeometry& EyesGeo, const FPTPaintAtlas& PaintAtlas)
 {
     if (!Geo.IsValid()) return INDEX_NONE;
@@ -300,6 +363,17 @@ int32 APTMapEnvironment::AddAsset(const FPTPropGeometry& Geo, const FPTPropGeome
     A.PMC = PMC;
     A.PaintAtlas = PaintAtlas;
     A.PaintMID = PaintAtlas.bValid ? MakePaintMID(PaintAtlas) : nullptr; // pintura nítida (atlas) si hay
+    // (8b) Malla decimada para el LOD lejano. Solo para assets SIN pintura (no re-generamos las UV del atlas).
+    if (!A.PaintMID)
+    {
+        FBox3f Box(ForceInit);
+        for (const FVector3f& V : Geo.Verts) Box += V;
+        const float Radius = FMath::Max(1.f, Box.GetExtent().Size());
+        const float Cell   = FMath::Max(1.f, Radius * LODCellFraction);
+        A.LODGeo = PT_DecimateGeo(Geo, Cell);
+        // Si no ahorró triángulos, no vale la pena tener una copia: usar la full de lejos también.
+        if (A.LODGeo.Tris.Num() >= Geo.Tris.Num()) A.LODGeo = FPTPropGeometry();
+    }
     return Assets.Add(MoveTemp(A));
 }
 
@@ -412,14 +486,16 @@ UTextureRenderTarget2D* APTMapEnvironment::GetAssetThumbnail(int32 AssetIdx, int
     return RT;
 }
 
-void APTMapEnvironment::BuildMergedSection(FPTPropAsset& A, const FPTPropGeometry& G, int32 Section, UMaterialInterface* Mat)
+void APTMapEnvironment::BuildMergedSection(FPTPropAsset& A, const FPTPropGeometry& G, int32 Section, UMaterialInterface* Mat,
+                                           const TArray<FTransform>& Xfs, bool bCollision)
 {
     if (!A.PMC) return;
-    if (!G.IsValid() || A.InstXf.Num() == 0) { A.PMC->ClearMeshSection(Section); return; }
+    if (!G.IsValid() || Xfs.Num() == 0) { A.PMC->ClearMeshSection(Section); return; }
 
     const int32 NVper = G.Verts.Num();
     const int32 NTper = G.Tris.Num();
-    const int32 NInst = A.InstXf.Num();
+    const int32 NInst = Xfs.Num();
+    if (NInst == 0) { A.PMC->ClearMeshSection(Section); return; }
     const bool  bHasUV = (G.UV0.Num() == NVper && G.UV1.Num() == NVper); // UV de lookup del atlas de pintura
     TArray<FVector> Verts;   Verts.Reserve(NVper * NInst);
     TArray<FVector> Normals; Normals.Reserve(NVper * NInst);
@@ -428,7 +504,7 @@ void APTMapEnvironment::BuildMergedSection(FPTPropAsset& A, const FPTPropGeometr
     TArray<FVector2D> UV0, UV1;
     if (bHasUV) { UV0.Reserve(NVper * NInst); UV1.Reserve(NVper * NInst); }
 
-    for (const FTransform& Xf : A.InstXf)
+    for (const FTransform& Xf : Xfs)
     {
         const int32 Base = Verts.Num();
         for (int32 i = 0; i < NVper; ++i)
@@ -445,23 +521,135 @@ void APTMapEnvironment::BuildMergedSection(FPTPropAsset& A, const FPTPropGeometr
     const TArray<FVector2D> NoUV;
     const TArray<FProcMeshTangent> NoTan;
     A.PMC->ClearMeshSection(Section);
-    A.PMC->CreateMeshSection(Section, Verts, Tris, Normals, UV0, UV1, NoUV, NoUV, Colors, NoTan, /*bCollision=*/true);
+    A.PMC->CreateMeshSection(Section, Verts, Tris, Normals, UV0, UV1, NoUV, NoUV, Colors, NoTan, bCollision);
     if (Mat) A.PMC->SetMaterial(Section, Mat);
+}
+
+AVolume* APTMapEnvironment::GetPlayAreaVolume()
+{
+    if (PlayAreaVolume.IsValid()) return PlayAreaVolume.Get();
+    UWorld* W = GetWorld();
+    if (!W || PlayAreaTag.IsNone()) return nullptr;
+    TArray<AActor*> Found;
+    UGameplayStatics::GetAllActorsOfClassWithTag(W, AVolume::StaticClass(), PlayAreaTag, Found);
+    if (Found.Num() > 0) { PlayAreaVolume = Cast<AVolume>(Found[0]); return PlayAreaVolume.Get(); }
+    return nullptr;
+}
+
+bool APTMapEnvironment::IsInPlayArea(const FVector& WorldLoc)
+{
+    AVolume* V = GetPlayAreaVolume();
+    if (!V) return true; // sin área definida → todo cuenta como "dentro" (colisión normal)
+    return V->EncompassesPoint(WorldLoc);
 }
 
 void APTMapEnvironment::RebuildAssetMesh(FPTPropAsset& A)
 {
-    if (!A.PMC) return;
-    if (A.InstXf.Num() == 0) { A.PMC->ClearMeshSection(0); A.PMC->ClearMeshSection(1); return; }
+    // Reconstrucción "dura" (place/borrar/cargar): siempre reconstruye, con el LOD actual.
+    RebuildAssetMeshLOD(A, /*bForce=*/true);
+}
 
-    // Sección 0: ARCILLA. Si el asset tiene pintura → material con el atlas (nítido); si no → material normal.
+bool APTMapEnvironment::GetLocalViewLocation(FVector& Out) const
+{
+    UWorld* W = GetWorld();
+    if (!W) return false;
+    // Player local de ESTA máquina (cada cliente decima según su propio jugador).
+    if (APlayerController* PC = W->GetFirstPlayerController())
+    {
+        if (APawn* P = PC->GetPawn())            { Out = P->GetActorLocation();      return true; }
+        FVector Loc; FRotator Rot;
+        PC->GetPlayerViewPoint(Loc, Rot);        { Out = Loc;                        return true; }
+    }
+    return false;
+}
+
+bool APTMapEnvironment::RebuildAssetMeshLOD(FPTPropAsset& A, bool bForce)
+{
+    if (!A.PMC) return false;
+    if (A.InstXf.Num() == 0)
+    {
+        A.PMC->ClearMeshSection(0); A.PMC->ClearMeshSection(1);
+        A.PMC->ClearMeshSection(2); A.PMC->ClearMeshSection(3);
+        A.InstBucket.Reset();
+        return true;
+    }
+
+    // ¿Aplicar LOD por distancia? Solo en partida (bLODEnabled), con player local, y si el asset tiene malla
+    // decimada (assets sin pintura). En autoría / sin decimado → todo "cerca" (comportamiento 8a).
+    FVector ViewLoc;
+    const bool bUseLOD = bLODEnabled && A.LODGeo.IsValid() && GetLocalViewLocation(ViewLoc);
+    const float NearR2 = FMath::Square(FarLODDistance);
+    const float FarR2  = FMath::Square(FarLODDistance + FMath::Max(0.f, FarLODHysteresis));
+
+    const int32 N = A.InstXf.Num();
+    const bool bHadBuckets = (A.InstBucket.Num() == N);
+    TArray<uint8> NewBucket; NewBucket.SetNumUninitialized(N);
+    TArray<FTransform> NearInXf, NearOutXf, FarXf;
+
+    for (int32 i = 0; i < N; ++i)
+    {
+        const FVector Loc = A.InstXf[i].GetLocation();
+        uint8 Bucket;
+        if (bUseLOD)
+        {
+            const float D2 = FVector::DistSquared(Loc, ViewLoc);
+            // Histéresis: si ya estaba lejos, sigue lejos hasta bajar de NearR2; si estaba cerca, no pasa a
+            // lejos hasta superar FarR2. Sin bucket previo, umbral simple.
+            const bool bWasFar = bHadBuckets && A.InstBucket[i] == 2;
+            const bool bFar = bWasFar ? (D2 > NearR2) : (D2 > FarR2);
+            Bucket = bFar ? 2 : (IsInPlayArea(Loc) ? 0 : 1);
+        }
+        else
+        {
+            Bucket = IsInPlayArea(Loc) ? 0 : 1; // 8a: dentro (colisión) / fuera (sin colisión)
+        }
+        NewBucket[i] = Bucket;
+        (Bucket == 0 ? NearInXf : Bucket == 1 ? NearOutXf : FarXf).Add(A.InstXf[i]);
+    }
+
+    // Si el reparto no cambió y no se fuerza, no reconstruir nada (evita hitches por frame).
+    if (!bForce && bHadBuckets && NewBucket == A.InstBucket) return false;
+    A.InstBucket = MoveTemp(NewBucket);
+
+    // Arcilla: material con atlas (nítido) si el asset tiene pintura; si no, el normal.
     UMaterialInterface* ClayMat = A.PaintMID ? (UMaterialInterface*)A.PaintMID : GetOrCreatePropMID();
     if (!ClayMat) ClayMat = PropMaterial;
-    BuildMergedSection(A, A.Geo, 0, ClayMat);
 
-    // Sección 1: OJOS (su propio material). Vacía si el asset no tiene ojos.
-    if (A.EyesGeo.IsValid()) BuildMergedSection(A, A.EyesGeo, 1, EyeMaterial);
+    // Sección 0 = cerca + dentro del área (full, con colisión). Sección 2 = cerca + fuera (full, sin colisión).
+    BuildMergedSection(A, A.Geo, 0, ClayMat, NearInXf,  /*bCollision=*/true);
+    BuildMergedSection(A, A.Geo, 2, ClayMat, NearOutXf, /*bCollision=*/false);
+    // Sección 3 = LEJOS (malla decimada, sin colisión). Si no hay decimado, usa la full.
+    BuildMergedSection(A, A.LODGeo.IsValid() ? A.LODGeo : A.Geo, 3, ClayMat, FarXf, /*bCollision=*/false);
+
+    // Sección 1 = OJOS (todas las instancias, sin colisión). Vacía si el asset no tiene ojos.
+    if (A.EyesGeo.IsValid()) BuildMergedSection(A, A.EyesGeo, 1, EyeMaterial, A.InstXf, /*bCollision=*/false);
     else                     A.PMC->ClearMeshSection(1);
+    return true;
+}
+
+void APTMapEnvironment::SetLODEnabled(bool bOn)
+{
+    if (bLODEnabled == bOn) return;
+    bLODEnabled = bOn;
+    UWorld* W = GetWorld();
+    if (!W) return;
+    if (bOn)
+    {
+        // Reevaluar el LOD periódicamente (barato: solo reconstruye los assets cuyo reparto cambió).
+        W->GetTimerManager().SetTimer(LODTimer, this, &APTMapEnvironment::UpdateDistanceLOD, 0.5f, true, 0.1f);
+    }
+    else
+    {
+        W->GetTimerManager().ClearTimer(LODTimer);
+    }
+    // Aplicar el cambio de modo ya mismo a todos los assets.
+    for (FPTPropAsset& A : Assets) RebuildAssetMeshLOD(A, /*bForce=*/true);
+}
+
+void APTMapEnvironment::UpdateDistanceLOD()
+{
+    if (!bLODEnabled) return;
+    for (FPTPropAsset& A : Assets) RebuildAssetMeshLOD(A, /*bForce=*/false);
 }
 
 void APTMapEnvironment::PlaceInstance(int32 AssetIdx, const FTransform& WorldXf)

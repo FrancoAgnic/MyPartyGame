@@ -159,6 +159,10 @@ private:
         // samplea con la UV horneada → idéntico a lo pintado. Vacío = sin pintura (usa solo vertex color).
         FPTPaintAtlas PaintAtlas;
         UMaterialInstanceDynamic* PaintMID = nullptr; // MID con el atlas (sección 0); rooteado en AssetMIDs
+        // (8b) LOD por distancia al player: versión DECIMADA de la arcilla para instancias LEJOS (menos
+        // triángulos). Solo para assets SIN pintura (no re-generamos UVs del atlas). Vacía = usar full.
+        FPTPropGeometry LODGeo;
+        TArray<uint8>   InstBucket; // bucket actual por instancia (0=cerca+área, 1=cerca+fuera, 2=lejos)
     };
     TArray<FPTPropAsset> Assets;
     // Orden global de colocación (índice de asset por cada instancia colocada) → para el undo LIFO de props.
@@ -173,9 +177,44 @@ private:
     UMaterialInstanceDynamic* GetOrCreatePropMID();
     // Recrea las texturas del atlas desde un snapshot y arma un MID (PaintClayMaterial) para la pintura nítida.
     UMaterialInstanceDynamic* MakePaintMID(const FPTPaintAtlas& Atlas);
-    void RebuildAssetMesh(FPTPropAsset& A); // fusiona todas las instancias en la sección 0 (arcilla) + 1 (ojos)
-    // Fusiona la geometría G de TODAS las instancias de A en una sección del PMC con el material dado.
-    void BuildMergedSection(FPTPropAsset& A, const FPTPropGeometry& G, int32 Section, UMaterialInterface* Mat);
+    void RebuildAssetMesh(FPTPropAsset& A); // fusiona instancias en secciones (arcilla dentro/fuera + ojos)
+    // Fusiona la geometría G de las instancias Xfs de A en una sección del PMC con el material dado.
+    void BuildMergedSection(FPTPropAsset& A, const FPTPropGeometry& G, int32 Section, UMaterialInterface* Mat,
+                            const TArray<FTransform>& Xfs, bool bCollision);
+
+    // ── Optimización (8a): área jugable = un Volume (p.ej. BlockingVolume) con el Actor Tag de abajo. Las
+    // instancias FUERA de esa área NO generan colisión (ahorra cocinado de física). Sin volumen → todo con
+    // colisión (comportamiento normal). ──
+    UPROPERTY(EditAnywhere, Category="MapEnv") FName PlayAreaTag = TEXT("PlayArea");
+    TWeakObjectPtr<class AVolume> PlayAreaVolume;
+    class AVolume* GetPlayAreaVolume();
+    bool IsInPlayArea(const FVector& WorldLoc);
+
+public:
+    // ── Optimización (8b): LOD por distancia al PLAYER LOCAL. Las instancias LEJOS del jugador se dibujan
+    // con una malla DECIMADA (menos triángulos) y sin colisión; las cercanas, con la malla completa. Solo
+    // afecta assets SIN pintura (los pintados quedan full para no romper la UV del atlas). Es una optimización
+    // de PARTIDA: la prende el PlayerController al entrar a jugar; en autoría queda apagado (todo full). ──
+    /** Distancia (cm) a partir de la cual una instancia usa la malla decimada. */
+    UPROPERTY(EditAnywhere, Category="MapEnv") float FarLODDistance = 4000.f;
+    /** Banda de histéresis (cm) para no parpadear entre near/far al cruzar el umbral. */
+    UPROPERTY(EditAnywhere, Category="MapEnv") float FarLODHysteresis = 500.f;
+    /** Tamaño de celda del decimado = radio del asset × esta fracción (más grande = menos triángulos). */
+    UPROPERTY(EditAnywhere, Category="MapEnv") float LODCellFraction = 0.14f;
+    /** Prende/apaga el LOD por distancia (lo llama el PC: true al jugar, false en autoría). */
+    void SetLODEnabled(bool bOn);
+
+private:
+    bool bLODEnabled = false;
+    FTimerHandle LODTimer;
+    // Re-evalúa near/far por distancia al player y reconstruye los assets cuyo reparto cambió (throttled).
+    void UpdateDistanceLOD();
+    // Posición del player local (para medir distancias). ZeroVector + false si no hay pawn local.
+    bool GetLocalViewLocation(FVector& Out) const;
+    // Reconstruye A repartiendo instancias en near+área(0), near+fuera(2), lejos-decimado(3) + ojos(1).
+    // bForce = reconstruir aunque el reparto no haya cambiado (place/remove/load). Devuelve true si cambió.
+    bool RebuildAssetMeshLOD(FPTPropAsset& A, bool bForce);
+
     // Inyecta la dirección/color del sol del ambiente en el MID compartido. Se llama al hornear/cargar y
     // desde ApplySkySettings.
     void ApplyAssetSunParams();
