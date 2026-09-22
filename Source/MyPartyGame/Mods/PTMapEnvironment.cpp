@@ -898,6 +898,103 @@ bool APTMapEnvironment::RaycastProps(const FVector& Start, const FVector& End, F
     return bFound;
 }
 
+// Samplea el atlas de pintura de un asset (snapshot FPTPaintAtlas) en la posición VOLUMEN-LOCAL LP. Réplica de
+// APTSculptVolume::SampleWorldPaintColor pero leyendo el page table del snapshot (PageBuf) en vez de BrickSlot.
+static bool PT_SampleAtlasColor(const FPTPaintAtlas& P, const FVector& LP, FLinearColor& Out)
+{
+    if (!P.bValid) return false;
+    const float CV = FMath::Max(P.ColorVoxel, 0.5f);
+    const int32 cx = FMath::FloorToInt((LP.X - P.CanvasMin.X) / CV);
+    const int32 cy = FMath::FloorToInt((LP.Y - P.CanvasMin.Y) / CV);
+    const int32 cz = FMath::FloorToInt((LP.Z - P.CanvasMin.Z) / CV);
+    for (int32 Ring = 0; Ring <= 1; ++Ring)
+    for (int32 dz = -Ring; dz <= Ring; ++dz)
+    for (int32 dy = -Ring; dy <= Ring; ++dy)
+    for (int32 dx = -Ring; dx <= Ring; ++dx)
+    {
+        if (FMath::Max3(FMath::Abs(dx), FMath::Abs(dy), FMath::Abs(dz)) != Ring) continue;
+        const int32 vx = cx + dx, vy = cy + dy, vz = cz + dz;
+        if (vx < 0 || vy < 0 || vz < 0 || vx >= P.VoxDim.X || vy >= P.VoxDim.Y || vz >= P.VoxDim.Z) continue;
+        const FIntVector BC(vx / P.CB, vy / P.CB, vz / P.CB);
+        const int32 PgIdx = BC.X + (BC.Y + BC.Z * P.BrickDim.Y) * P.BrickDim.X;
+        if (!P.PageBuf.IsValidIndex(PgIdx) || P.PageBuf[PgIdx] < 0.5f) continue; // brick sin slot
+        const int32 Slot = (int32)P.PageBuf[PgIdx] - 1;
+        const int32 TileX = Slot % P.TilesPerRow, TileY = Slot / P.TilesPerRow;
+        const int32 lx = vx - BC.X * P.CB, ly = vy - BC.Y * P.CB, lz = vz - BC.Z * P.CB;
+        const int32 AIdx = (TileX * P.CB + lx) + (TileY * (P.CB * P.CB) + lz * P.CB + ly) * P.AtlasW;
+        if (!P.AtlasBuf.IsValidIndex(AIdx) || P.AtlasBuf[AIdx].A == 0) continue;
+        const FColor C = P.AtlasBuf[AIdx];
+        Out = FLinearColor(FColor(C.R, C.G, C.B, 255));
+        return true;
+    }
+    return false;
+}
+
+bool APTMapEnvironment::EyedropAssetColor(const FVector& Start, const FVector& End, FLinearColor& OutColor) const
+{
+    bool bFound = false; double BestD2 = TNumericLimits<double>::Max();
+    for (const FPTPropAsset& A : Assets)
+    {
+        if (!A.Geo.IsValid() || A.InstXf.Num() == 0) continue;
+        FBox3f Box(ForceInit);
+        for (const FVector3f& V : A.Geo.Verts) Box += V;
+        const FVector3f Bmin = Box.Min, Bmax = Box.Max;
+        const TArray<int32>&     Tris = A.Geo.Tris;
+        const TArray<FVector3f>& Vs   = A.Geo.Verts;
+        const bool bHasUV = (A.Geo.UV0.Num() == Vs.Num() && A.Geo.UV1.Num() == Vs.Num());
+        for (const FTransform& Xf : A.InstXf)
+        {
+            const FVector Ls = Xf.InverseTransformPosition(Start);
+            const FVector Le = Xf.InverseTransformPosition(End);
+            const FVector3f Ro((FVector3f)Ls), Rd((FVector3f)(Le - Ls));
+            if (!PT_RayHitsAABB(Ro, Rd, Bmin, Bmax)) continue;
+            for (int32 t = 0; t + 2 < Tris.Num(); t += 3)
+            {
+                const int32 i0 = Tris[t], i1 = Tris[t + 1], i2 = Tris[t + 2];
+                float U;
+                if (!PT_RayHitsTri(Ro, Rd, Vs[i0], Vs[i1], Vs[i2], U)) continue;
+                const FVector WorldHit = Xf.TransformPosition(Ls + (Le - Ls) * U);
+                const double D2 = FVector::DistSquared(WorldHit, Start);
+                if (D2 >= BestD2) continue;
+                BestD2 = D2; bFound = true;
+
+                // Baricéntricas exactas del punto de impacto (para el vértice más cercano y la UV del atlas).
+                const FVector3f HitLocal((FVector3f)(Ls + (Le - Ls) * U));
+                const FVector3f P0 = Vs[i0], P1 = Vs[i1], P2 = Vs[i2];
+                const FVector3f E1 = P1 - P0, E2 = P2 - P0, PP = HitLocal - P0;
+                const float d00 = FVector3f::DotProduct(E1, E1), d01 = FVector3f::DotProduct(E1, E2);
+                const float d11 = FVector3f::DotProduct(E2, E2), d20 = FVector3f::DotProduct(PP, E1);
+                const float d21 = FVector3f::DotProduct(PP, E2);
+                const float den = d00 * d11 - d01 * d01;
+                float w1 = 0.f, w2 = 0.f;
+                if (FMath::Abs(den) > 1e-12f) { w1 = (d11 * d20 - d01 * d21) / den; w2 = (d00 * d21 - d01 * d20) / den; }
+                const float w0 = 1.f - w1 - w2;
+
+                // 1) Pintura: posición volumen-local interpolada (UV0.xy + UV1.x) → samplear el atlas.
+                bool bGotPaint = false;
+                if (A.PaintAtlas.bValid && bHasUV)
+                {
+                    const FVector2f U0 = A.Geo.UV0[i0] * w0 + A.Geo.UV0[i1] * w1 + A.Geo.UV0[i2] * w2;
+                    const float     Uz = A.Geo.UV1[i0].X * w0 + A.Geo.UV1[i1].X * w1 + A.Geo.UV1[i2].X * w2;
+                    FLinearColor PaintCol;
+                    if (PT_SampleAtlasColor(A.PaintAtlas, FVector(U0.X, U0.Y, Uz), PaintCol))
+                    { OutColor = PaintCol; OutColor.A = 1.f; bGotPaint = true; }
+                }
+                // 2) Sin pintura en ese punto → vertex color del vértice más cercano (color base). Los vértices
+                //    se hornean con ToFColor(false) = BYTE LINEAL (no sRGB), así que se reinterpreta crudo
+                //    (byte/255) SIN decodificar. Usar FLinearColor(FColor) decodifica sRGB → daría más oscuro.
+                if (!bGotPaint)
+                {
+                    const int32 iN = (w0 >= w1 && w0 >= w2) ? i0 : (w1 >= w2 ? i1 : i2);
+                    const FColor C = A.Geo.Colors.IsValidIndex(iN) ? A.Geo.Colors[iN] : FColor::White;
+                    OutColor = C.ReinterpretAsLinear(); OutColor.A = 1.f;
+                }
+            }
+        }
+    }
+    return bFound;
+}
+
 int32 APTMapEnvironment::RemoveInstancesOverlapping(const FVector& Center, float BrushRadius)
 {
     int32 Removed = 0;
@@ -1007,11 +1104,13 @@ int64 APTMapEnvironment::GetEstimatedMemoryBytes() const
     for (const FPTPropAsset& A : Assets)
     {
         const int64 N = A.InstXf.Num();
+        if (N == 0) continue; // asset horneado pero NO colocado → no ocupa memoria del nivel (solo al colocar)
+        // Costo REAL que crece al colocar: la geometría se duplica por instancia en el ProcMesh.
         Total += GeoBytesPerInstance(A.Geo) * N;
         if (A.EyesGeo.IsValid()) Total += GeoBytesPerInstance(A.EyesGeo) * N;
-        // Atlas de pintura: se guarda una vez por asset (page table float + atlas FColor).
-        if (A.PaintAtlas.bValid)
-            Total += (int64)A.PaintAtlas.PageBuf.Num() * 4 + (int64)A.PaintAtlas.AtlasBuf.Num() * 4;
+        // NOTA: el atlas de pintura NO se cuenta. Es una textura fija por asset (compartida por todas sus
+        // instancias) y su tamaño crudo es enorme (varios MB) → sumarlo llenaba el presupuesto al colocar el
+        // primer asset pintado. El presupuesto mide la densidad de geometría colocada, no el atlas.
     }
     return Total;
 }

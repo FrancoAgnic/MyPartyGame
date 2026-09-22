@@ -143,6 +143,10 @@ public:
      *  sobre cualquier asset (aunque no tenga colisión). false si no pega en ninguno. */
     bool RaycastProps(const FVector& Start, const FVector& End, FVector& OutHit) const;
 
+    /** Gotero EXACTO sobre un prop: raycast a la geometría y devuelve el color REAL (atlas de pintura si el
+     *  punto está pintado, si no el vertex color base), SIN la luz del ambiente. false si no pega en ningún prop. */
+    bool EyedropAssetColor(const FVector& Start, const FVector& End, FLinearColor& OutColor) const;
+
     /** Material del resaltado de borrado (rojo aditivo/translúcido, sobre el asset). Asignar en BP; si es null
      *  se usa una caja debug roja como fallback. */
     UPROPERTY(EditAnywhere, Category="MapEnv") UMaterialInterface* EraseHighlightMaterial = nullptr;

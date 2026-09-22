@@ -174,7 +174,12 @@ void UPTColorPickerWidget::QuickPickTick()
             if (Src->EyedropColorUnderCursor(Exact))
             {
                 EditingSeg = -1; bSwatchEdited = false;
-                SetColor(Exact);
+                SetColor(Exact);          // sincroniza rueda/slider (aprox) para la UI
+                // EXACTO: pintar con el color copiado TAL CUAL. SetColor lo re-quantiza a HSV 8-bit (+ piso de
+                // brillo), lo que lo "opacaba" un poco → dos assets con el "mismo" color no quedaban idénticos.
+                // Piso el negro puro (para el overlay X-ray) pero sin tocar el color en sí.
+                CurrentColor = Exact; CurrentColor.A = 1.f;
+                if (PreviewSwatch) PreviewSwatch->SetBrushColor(CurrentColor);
                 PushLiveColorToPC();
                 return;
             }

@@ -400,6 +400,14 @@ void UPTGameplayHUDWidget::RefreshToolbar()
     // ── Atajos contextuales: cambian según lo que tengas equipado ──
     if (!HintsBox || !ToolSlotClass) return;
 
+    // En modo COLOCAR (edición de nivel) no aplican los ejes X/Y/Z ni el detalle (Alt): ocultar los hints.
+    if (PC->IsPlaceMode())
+    {
+        HintsBox->SetVisibility(ESlateVisibility::Collapsed);
+        CachedHintSig.Reset(); // forzar rearmado al volver a escultura
+        return;
+    }
+
     const bool bPicker = PC->IsColorPickerOpen();
     // Firma del contexto: solo rearmamos los cuadritos si cambió (no cada tick).
     const FString Sig = FString::Printf(TEXT("%d|%d|%d|%d"), (int32)PC->EditMode, bEyes ? 1 : 0,
@@ -558,11 +566,14 @@ void UPTGameplayHUDWidget::UpdateAuthorPanels()
         }
     }
 
-    // Slot del hotbar para COCINAR (mantener Enter). Ícono + tecla; el anillo de progreso lo actualiza NativeTick.
+    // Slot del hotbar para COCINAR (mantener Enter). Solo en modo ESCULTURA (dentro del box); al colocar props
+    // (edición de nivel) no aplica → se oculta. El anillo de progreso lo actualiza NativeTick.
     if (BakeSlot)
     {
+        APTSculptPlayerController* PCauthor = Cast<APTSculptPlayerController>(GetOwningPlayer());
+        const bool bPlace = PCauthor && PCauthor->IsPlaceMode();
         BakeSlot->SetSlot(IconBake, PT_ShortKeyLabel(FKey(EKeys::Enter)), PTText::Get(TEXT("HINT_BAKE")));
-        BakeSlot->SetVisibility(ESlateVisibility::HitTestInvisible);
+        BakeSlot->SetVisibility(bPlace ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
     }
 }
 

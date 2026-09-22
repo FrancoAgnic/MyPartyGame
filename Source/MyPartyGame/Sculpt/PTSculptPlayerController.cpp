@@ -24,6 +24,8 @@
 #include "../Mods/PTMapModSubsystem.h"
 #include "GameFramework/Volume.h" // ignorar volúmenes (BlockingVolume) en el snap del suelo
 #include "GameFramework/PlayerStart.h" // debug de spawns en el Level Creator
+#include "Engine/StaticMeshActor.h"    // marcador de spawn (mesh + material)
+#include "Camera/PlayerCameraManager.h" // ocultar marcador cerca de la cámara
 #include "EngineUtils.h" // TActorIterator
 #include "DrawDebugHelpers.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -1275,6 +1277,13 @@ bool APTSculptPlayerController::EyedropColorUnderCursor(FLinearColor& OutColor) 
         }
         prevD = d;
     }
+
+    // No hay arcilla del box bajo el cursor → probar los PROPS colocados (gotero exacto por geometría: atlas de
+    // pintura o vertex color, SIN la luz del ambiente). Así el picker no cae al ReadPixels (color con sombras).
+    if (const APTMapEnvironment* Env = GetMapEnv())
+        if (Env->EyedropAssetColor(Start, Start + Dir * 100000.f, OutColor))
+            return true;
+
     return false;
 }
 
@@ -1830,9 +1839,9 @@ void APTSculptPlayerController::OnShapeRotateReleased()
 // Z/X/Alt son holds mutuamente excluyentes: al apretar uno se apaga el otro (la nueva tecla quema a la
 // anterior). Si dejo Alt prendido y aprieto Z, se usa SOLO el eje; y viceversa. No "vuelven" solos al
 // soltar el nuevo (hay que re-apretar el anterior), que es justo lo que evita los estados combinados.
-void APTSculptPlayerController::OnAxisVerticalPressed()   { if (bIsStamping) return; bSurfaceSnap = false; SetAxisMode(true, /*bHorizontal=*/false); }
+void APTSculptPlayerController::OnAxisVerticalPressed()   { if (bIsStamping || IsPlaceMode()) return; bSurfaceSnap = false; SetAxisMode(true, /*bHorizontal=*/false); }
 void APTSculptPlayerController::OnAxisVerticalReleased()  { if (bAxisLock && !bAxisHorizontal) SetAxisMode(false, false); }
-void APTSculptPlayerController::OnAxisHorizontalPressed() { if (bIsStamping) return; bSurfaceSnap = false; SetAxisMode(true, /*bHorizontal=*/true); }
+void APTSculptPlayerController::OnAxisHorizontalPressed() { if (bIsStamping || IsPlaceMode()) return; bSurfaceSnap = false; SetAxisMode(true, /*bHorizontal=*/true); }
 void APTSculptPlayerController::OnAxisHorizontalReleased(){ if (bAxisLock && bAxisHorizontal) SetAxisMode(false, true); }
 
 void APTSculptPlayerController::OnSurfaceSnapPressed()
@@ -1841,6 +1850,7 @@ void APTSculptPlayerController::OnSurfaceSnapPressed()
     // hacía que el sello volviera al "brazo extendido" y la arcilla escalara hacia la cámara. Solo se
     // puede cambiar con el click suelto.
     if (bIsStamping) return;
+    if (IsPlaceMode()) return; // el detalle (Alt) no aplica al colocar props (edición de nivel)
     // Alt quema el modo eje: si había un eje activo, se apaga antes de prender el snap.
     if (bAxisLock) SetAxisMode(false, bAxisHorizontal);
     bSurfaceSnap = true;
@@ -2090,6 +2100,8 @@ void APTSculptPlayerController::SetMode(EPTEditMode M)
     // No cambiar de herramienta MID-TRAZO (con el click apretado): hacerlo a mitad de un trazo bugea
     // (el sello sigue del modo viejo, cambia profundidad, etc.). Solo se cambia con el click suelto.
     if (bIsStamping) return;
+    // En modo COLOCAR (edición de nivel) solo valen Agregar/Borrar; Paint/Smooth no aplican a props.
+    if (IsPlaceMode() && M != EPTEditMode::Add && M != EPTEditMode::Erase) return;
     SetModeInternal(M, /*bResetAxis=*/true);
 }
 
@@ -2119,6 +2131,7 @@ void APTSculptPlayerController::SetModeInternal(EPTEditMode M, bool bResetAxis)
 void APTSculptPlayerController::SetModeEyes()
 {
     if (bIsStamping) return; // no cambiar a Ojos mid-trazo (ver SetMode)
+    if (IsPlaceMode()) return; // Ojos no aplica al colocar props (edición de nivel)
     if (bAxisLock) SetAxisMode(false, bAxisHorizontal); // idem: la tool de ojos no usa el plano
 
     bEyesTool = true;
@@ -2484,6 +2497,43 @@ FVector APTSculptPlayerController::GetPlacePointGrounded(bool& bOutOutside) cons
     return Arm; // sin superficie hasta el brazo → flota a distancia de brazo
 }
 
+bool APTSculptPlayerController::IsCursorOnCanvas() const
+{
+    if (!Volume) return false;
+    FVector S, D;
+    if (!GetCameraRay(S, D)) return false;
+    FTransform Xf; FVector ExtU;
+    if (!Volume->GetCanvasBox(Xf, ExtU)) return false;
+
+    const FVector H   = ExtU * Xf.GetScale3D().GetAbs(); // media-extensión en MUNDO
+    const FQuat   Rot = Xf.GetRotation();
+    const FVector Lo  = Rot.UnrotateVector(S - Xf.GetLocation()); // origen del rayo en local del box
+    const FVector Ld  = Rot.UnrotateVector(D);                    // dirección (unitaria) en local
+
+    // Origen dentro de la caja → estás sobre/dentro del box (sculpt).
+    if (FMath::Abs(Lo.X) <= H.X && FMath::Abs(Lo.Y) <= H.Y && FMath::Abs(Lo.Z) <= H.Z) return true;
+
+    // Ray-vs-AABB (slab) en local.
+    float tmin = -BIG_NUMBER, tmax = BIG_NUMBER;
+    for (int32 i = 0; i < 3; ++i)
+    {
+        if (FMath::Abs(Ld[i]) < 1e-6f) { if (Lo[i] < -H[i] || Lo[i] > H[i]) return false; }
+        else
+        {
+            const float inv = 1.f / Ld[i];
+            float t1 = (-H[i] - Lo[i]) * inv, t2 = (H[i] - Lo[i]) * inv;
+            if (t1 > t2) Swap(t1, t2);
+            tmin = FMath::Max(tmin, t1); tmax = FMath::Min(tmax, t2);
+            if (tmin > tmax) return false;
+        }
+    }
+    if (tmax < 0.f) return false; // la caja está detrás de la cámara
+    // Solo cuenta como "sobre el box" si su superficie está dentro del ALCANCE DE BRAZO real (AirDepth) — o sea,
+    // donde caería el preview. Así mirar el box de lejos NO te cambia a escultura: hay que estar lo bastante
+    // cerca como para que el preview entre al volumen. (Se ignora el arm boost del modo colocar a propósito.)
+    return tmin <= AirDepth;
+}
+
 void APTSculptPlayerController::UpdateEffectiveOutside(bool bRawOutside, float Dt)
 {
     if (!bModeInit) { bEffectiveOutside = bRawOutside; bModeInit = true; OutsideGraceElapsed = 0.f; return; }
@@ -2638,26 +2688,48 @@ void APTSculptPlayerController::OpenAssetRadial()
     bShapeRadialActive = true;
 }
 
-void APTSculptPlayerController::DrawPlayerStartsDebug()
+void APTSculptPlayerController::UpdatePlayerStartMarkers()
 {
     UWorld* W = GetWorld();
     if (!W) return;
-    // Marca cada Player Start (spawn de jugadores) para no taparlo con un asset al construir. Se redibuja
-    // cada frame (lifetime corto), en foreground para verlo a través de la geometría.
-    const float Life = 0.f; // un frame; TickAuthorProps lo vuelve a dibujar
-    const float R = 34.f, HalfH = 88.f; // tamaño aproximado del personaje
-    const FColor Col(0, 200, 255); // celeste
-    for (TActorIterator<APlayerStart> It(W); It; ++It)
+
+    // Sin mesh asignado → fallback: cápsula debug por frame (SIN texto).
+    if (!SpawnMarkerMesh)
     {
-        const FVector Loc = It->GetActorLocation();
-        const FRotator Rot = It->GetActorRotation();
-        // Cápsula del volumen que ocupa el jugador al aparecer.
-        DrawDebugCapsule(W, Loc, HalfH, R, FQuat::Identity, Col, false, Life, 0, 3.f);
-        // Flecha de orientación (hacia dónde mira el spawn) + poste para verlo desde lejos.
-        DrawDebugDirectionalArrow(W, Loc, Loc + Rot.Vector() * 120.f, 40.f, Col, false, Life, 0, 4.f);
-        DrawDebugLine(W, Loc, Loc + FVector(0, 0, 250.f), Col, false, Life, 0, 3.f);
-        DrawDebugString(W, Loc + FVector(0, 0, HalfH + 40.f), TEXT("SPAWN"), nullptr, Col, Life, true, 1.4f);
+        const float R = 34.f, HalfH = 88.f;
+        const FColor Col(0, 200, 255);
+        for (TActorIterator<APlayerStart> It(W); It; ++It)
+        {
+            const FVector Loc = It->GetActorLocation();
+            const FRotator Rot = It->GetActorRotation();
+            DrawDebugCapsule(W, Loc, HalfH, R, FQuat::Identity, Col, false, 0.f, 0, 3.f);
+            DrawDebugDirectionalArrow(W, Loc, Loc + Rot.Vector() * 120.f, 40.f, Col, false, 0.f, 0, 4.f);
+        }
+        return;
     }
+
+    // Con mesh: spawnear un marcador por Player Start UNA sola vez (mesh + material, sin colisión). El material
+    // puede tener fade por cámara para no tapar la vista al aparecer.
+    if (!bSpawnMarkersBuilt)
+    {
+        for (TActorIterator<APlayerStart> It(W); It; ++It)
+        {
+            AStaticMeshActor* M = W->SpawnActor<AStaticMeshActor>(It->GetActorLocation(), It->GetActorRotation());
+            if (!M) continue;
+            UStaticMeshComponent* MC = M->GetStaticMeshComponent();
+            if (MC)
+            {
+                MC->SetMobility(EComponentMobility::Movable);
+                MC->SetStaticMesh(SpawnMarkerMesh);
+                if (SpawnMarkerMaterial) MC->SetMaterial(0, SpawnMarkerMaterial);
+                MC->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+                MC->SetWorldScale3D(FVector(FMath::Max(0.01f, SpawnMarkerScale)));
+            }
+            SpawnMarkers.Add(M);
+        }
+        bSpawnMarkersBuilt = true;
+    }
+    // La oclusión/fade por cámara la maneja el MATERIAL (opacidad), no el código.
 }
 
 void APTSculptPlayerController::TickAuthorProps(float Dt)
@@ -2668,7 +2740,7 @@ void APTSculptPlayerController::TickAuthorProps(float Dt)
         return;
     }
 
-    DrawPlayerStartsDebug(); // mostrar los spawns mientras construís (para no taparlos con assets)
+    UpdatePlayerStartMarkers(); // mostrar los spawns mientras construís (para no taparlos con assets)
 
     // Modo pivote activo: el marcador sigue al cursor; todo lo demás (preview de asset, hornear) se pausa
     // hasta que el jugador confirme (click) o cancele (Backspace).
@@ -2714,10 +2786,24 @@ void APTSculptPlayerController::TickAuthorProps(float Dt)
         PlaceArmBoost = NewBoost;
     }
 
-    bool bRawOut = false; const FVector P = GetPlacePointGrounded(bRawOut); // snap al suelo para preview/colocación
+    bool bRawIgnored = false; const FVector P = GetPlacePointGrounded(bRawIgnored); // snap al suelo para preview
+    // El MODO se decide por si el cursor apunta a la CAJA del box (no por el punto de brazo, que se pasa por
+    // debajo del piso al esculpir bajo). Así mirar el piso del box NO te cambia a edición de nivel.
+    const bool bRawOut = !IsCursorOnCanvas();
     // Histéresis: entrar al box = escultura instantáneo; salir = con gracia (no cambia de modo al toque).
     UpdateEffectiveOutside(bRawOut, Dt);
     const bool bOut = bEffectiveOutside; // el resto del tick usa el modo DEBOUNCED
+
+    // Al ENTRAR a edición de nivel (sculpt → colocar): forzar SIEMPRE el modo Agregar (1), sin ojos/ejes/detalle
+    // → así siempre te queda un modo con preview válido (no Paint/Ojos, que no aplican a props).
+    if (bOut && !bWasPlaceMode)
+    {
+        bEyesTool    = false;
+        bSurfaceSnap = false;
+        if (bAxisLock) SetAxisMode(false, bAxisHorizontal);
+        SetModeInternal(EPTEditMode::Add, /*bResetAxis=*/true);
+    }
+    bWasPlaceMode = bOut;
 
     // Mostrar el wireframe de la NoPlaceZone SOLO en el Level Creator (una vez). En la partida real este
     // TickAuthorProps no corre → la zona queda oculta (HiddenInGame por defecto).

@@ -606,7 +606,14 @@ public:
     bool IsPlaceMode() const;
 private:
     void TickAuthorProps(float Dt);        // preview del asset + bake por Enter-3s (llamado en PlayerTick)
-    void DrawPlayerStartsDebug();          // marca los Player Start en el Level Creator (no taparlos con assets)
+    void UpdatePlayerStartMarkers();       // marca los Player Start en el Level Creator (no taparlos con assets)
+    // Mesh + material del marcador de spawn (asignables en el BP del PC). El material puede tener fade por
+    // cámara para que no tape la vista al aparecer. Si no hay mesh asignado, cae a una cápsula debug (sin texto).
+    UPROPERTY(EditAnywhere, Category="MapEnv") class UStaticMesh*       SpawnMarkerMesh     = nullptr;
+    UPROPERTY(EditAnywhere, Category="MapEnv") class UMaterialInterface* SpawnMarkerMaterial = nullptr;
+    UPROPERTY(EditAnywhere, Category="MapEnv") float SpawnMarkerScale    = 1.f;
+    UPROPERTY(Transient) TArray<AActor*> SpawnMarkers; // marcadores spawneados (uno por Player Start)
+    bool bSpawnMarkersBuilt = false;
     void PlaceCurrentAsset();              // coloca una instancia del asset actual
     void EraseAssetUnderCursor();          // borra la instancia bajo el cursor
     void OnToggleSkyPanel();               // abre/cierra el panel de ambiente (solo autoría)
@@ -619,6 +626,9 @@ private:
     // assets ya colocados) y devuelve ese punto → el asset se apoya en el piso en vez de flotar a brazo.
     // Si no hay superficie (mirando al cielo), cae al punto de brazo. bOutOutside se calcula igual (por brazo).
     FVector GetPlacePointGrounded(bool& bOutOutside) const;
+    // true si el rayo del cursor apunta a la CAJA del canvas (dentro del alcance). Se usa para decidir el modo
+    // (escultura vs edición de nivel): así al mirar el PISO del box seguís en escultura y no cambia de modo.
+    bool IsCursorOnCanvas() const;
 
     UPROPERTY(Transient) class APTMapEnvironment* MapEnvCache = nullptr;
     // Clase del entorno de props (asignar BP_MapEnvironment con el material de arcilla). Se usa para
@@ -661,6 +671,7 @@ private:
     bool  bBakedThisHold = false;           // ya horneó en este mantenido (evita repetir)
     static constexpr float BakeHoldDuration = 3.0f;
     bool  bErasePropsHeld = false;          // Erase en modo colocar: mantener el click borra assets por contacto
+    bool  bWasPlaceMode   = false;          // modo colocar del frame anterior (para forzar Add al ENTRAR)
     // Tolerancia del borrado de assets: agranda el radio efectivo de la brocha (1 = exacto al preview, >1 más
     // permisivo). Sube esto si sentís que hay que tocar demasiado justo para borrar.
     UPROPERTY(EditAnywhere, Category="MapEnv") float EraseTolerance = 1.25f;
