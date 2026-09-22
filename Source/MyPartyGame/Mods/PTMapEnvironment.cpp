@@ -602,6 +602,9 @@ void APTMapEnvironment::RebuildAssetMesh(FPTPropAsset& A)
     // El nivel de cada instancia es FIJO: se decide una vez por su distancia al ORIGEN (no cambia con el player).
     const bool bUseLOD = bLODEnabled && (A.LODGeo[0].IsValid() || A.LODGeo[1].IsValid() || A.LODGeo[2].IsValid());
     const FVector Origin = GetLODOrigin();
+    // La colisión solo se cullea por área EN PARTIDA (perf). En AUTORÍA todos los props tienen colisión, así
+    // el raycast del preview snapea a la superficie de cualquier asset (si no, no podés borrarlos).
+    const bool bCullCollision = bLODEnabled;
 
     // Repartos de instancias por etapa:
     //   Etapa 0 (cerca)  → malla FULL. Se sub-parte por área para la colisión (8a): dentro = con colisión.
@@ -623,7 +626,7 @@ void APTMapEnvironment::RebuildAssetMesh(FPTPropAsset& A)
             case 1:  Stage1.Add(Xf); break;
             case 2:  Stage2.Add(Xf); break;
             case 3:  Stage3.Add(Xf); break;
-            default: (IsInPlayArea(Loc) ? Stage0In : Stage0Out).Add(Xf); break;
+            default: ((!bCullCollision || IsInPlayArea(Loc)) ? Stage0In : Stage0Out).Add(Xf); break;
         }
     }
 
@@ -797,6 +800,190 @@ bool APTMapEnvironment::RemoveInstanceNear(const FVector& WorldPos, float Radius
         return true;
     }
     return false;
+}
+
+// ¿La brocha (esfera Center/BrushRadius en mundo) toca la MALLA de esta instancia? Test contra la geometría
+// real (no la caja): lleva el centro al espacio local del asset y busca un vértice dentro del radio (la malla
+// de clay es densa → distancia al vértice ≈ distancia a la superficie). Reject rápido por bbox para que sea
+// barato: solo recorre los vértices de las instancias que la brocha tiene realmente cerca.
+static bool PT_BrushHitsMesh(const FPTPropGeometry& Geo, const FVector& HalfLocal, const FTransform& Xf,
+                             const FVector& Center, float BrushRadius)
+{
+    const float Scale  = FMath::Max((double)KINDA_SMALL_NUMBER, Xf.GetScale3D().GetAbsMax());
+    const FVector LocalC = Xf.InverseTransformPosition(Center); // centro de la brocha en espacio local (sin escala)
+    const float LocalR = BrushRadius / Scale;                   // radio equivalente en local
+    const FVector Ext  = HalfLocal + FVector(LocalR);
+    if (FMath::Abs(LocalC.X) > Ext.X || FMath::Abs(LocalC.Y) > Ext.Y || FMath::Abs(LocalC.Z) > Ext.Z)
+        return false; // la brocha ni roza la caja → seguro no toca la malla
+    const FVector3f C((float)LocalC.X, (float)LocalC.Y, (float)LocalC.Z);
+    const float R2 = LocalR * LocalR;
+    for (const FVector3f& V : Geo.Verts)
+        if (FVector3f::DistSquared(V, C) <= R2) return true; // toca la superficie
+    return false;
+}
+
+// Ray-vs-AABB (slab) en espacio local; Ro/Rd = origen/dirección del SEGMENTO (Rd = End-Start), t en [0,1].
+static bool PT_RayHitsAABB(const FVector3f& Ro, const FVector3f& Rd, const FVector3f& Bmin, const FVector3f& Bmax)
+{
+    float tmin = 0.f, tmax = 1.f;
+    for (int32 i = 0; i < 3; ++i)
+    {
+        const float o = Ro[i], d = Rd[i];
+        if (FMath::Abs(d) < 1e-8f) { if (o < Bmin[i] || o > Bmax[i]) return false; }
+        else
+        {
+            const float inv = 1.f / d;
+            float t1 = (Bmin[i] - o) * inv, t2 = (Bmax[i] - o) * inv;
+            if (t1 > t2) Swap(t1, t2);
+            tmin = FMath::Max(tmin, t1); tmax = FMath::Min(tmax, t2);
+            if (tmin > tmax) return false;
+        }
+    }
+    return true;
+}
+
+// Ray-vs-triángulo (Möller–Trumbore). Rd = segmento completo; OutT en [0,1] si pega dentro del segmento.
+static bool PT_RayHitsTri(const FVector3f& Ro, const FVector3f& Rd, const FVector3f& A, const FVector3f& B,
+                          const FVector3f& C, float& OutT)
+{
+    const float EPS = 1e-8f;
+    const FVector3f E1 = B - A, E2 = C - A;
+    const FVector3f P = FVector3f::CrossProduct(Rd, E2);
+    const float Det = FVector3f::DotProduct(E1, P);
+    if (FMath::Abs(Det) < EPS) return false;
+    const float Inv = 1.f / Det;
+    const FVector3f T = Ro - A;
+    const float U = FVector3f::DotProduct(T, P) * Inv;
+    if (U < 0.f || U > 1.f) return false;
+    const FVector3f Q = FVector3f::CrossProduct(T, E1);
+    const float V = FVector3f::DotProduct(Rd, Q) * Inv;
+    if (V < 0.f || U + V > 1.f) return false;
+    const float t = FVector3f::DotProduct(E2, Q) * Inv;
+    if (t < 0.f || t > 1.f) return false;
+    OutT = t; return true;
+}
+
+bool APTMapEnvironment::RaycastProps(const FVector& Start, const FVector& End, FVector& OutHit) const
+{
+    bool bFound = false;
+    double BestD2 = TNumericLimits<double>::Max();
+    for (const FPTPropAsset& A : Assets)
+    {
+        if (!A.Geo.IsValid() || A.InstXf.Num() == 0) continue;
+        FBox3f Box(ForceInit);
+        for (const FVector3f& V : A.Geo.Verts) Box += V;
+        const FVector3f Bmin = Box.Min, Bmax = Box.Max;
+        const TArray<int32>&    Tris = A.Geo.Tris;
+        const TArray<FVector3f>& Vs  = A.Geo.Verts;
+        for (const FTransform& Xf : A.InstXf)
+        {
+            // Ray al espacio LOCAL de la instancia (rota/escala/traslada).
+            const FVector Ls = Xf.InverseTransformPosition(Start);
+            const FVector Le = Xf.InverseTransformPosition(End);
+            const FVector3f Ro((FVector3f)Ls);
+            const FVector3f Rd((FVector3f)(Le - Ls));
+            if (!PT_RayHitsAABB(Ro, Rd, Bmin, Bmax)) continue; // reject rápido
+            for (int32 t = 0; t + 2 < Tris.Num(); t += 3)
+            {
+                float U;
+                if (PT_RayHitsTri(Ro, Rd, Vs[Tris[t]], Vs[Tris[t + 1]], Vs[Tris[t + 2]], U))
+                {
+                    const FVector WorldHit = Xf.TransformPosition(Ls + (Le - Ls) * U);
+                    const double D2 = FVector::DistSquared(WorldHit, Start);
+                    if (D2 < BestD2) { BestD2 = D2; OutHit = WorldHit; bFound = true; }
+                }
+            }
+        }
+    }
+    return bFound;
+}
+
+int32 APTMapEnvironment::RemoveInstancesOverlapping(const FVector& Center, float BrushRadius)
+{
+    int32 Removed = 0;
+    for (int32 a = 0; a < Assets.Num(); ++a)
+    {
+        FPTPropAsset& A = Assets[a];
+        if (A.InstXf.Num() == 0) continue;
+        FBox3f Box(ForceInit);
+        for (const FVector3f& V : A.Geo.Verts) Box += V;
+        const FVector HalfLocal = (FVector)Box.GetExtent();
+        bool bChanged = false;
+        for (int32 i = A.InstXf.Num() - 1; i >= 0; --i)
+        {
+            if (PT_BrushHitsMesh(A.Geo, HalfLocal, A.InstXf[i], Center, BrushRadius))
+            {
+                A.InstXf.RemoveAt(i);
+                // sacar una ocurrencia de este asset de PlaceOrder (para que el undo siga cuadrando)
+                for (int32 k = PlaceOrder.Num() - 1; k >= 0; --k)
+                    if (PlaceOrder[k] == a) { PlaceOrder.RemoveAt(k); break; }
+                bChanged = true; ++Removed;
+            }
+        }
+        if (bChanged)
+        {
+            RebuildAssetMesh(A);
+            // El resaltado quedó obsoleto (cambiaron los índices): limpiarlo, se rehace el próximo frame.
+            if (A.PMC) A.PMC->ClearMeshSection(6);
+            A.HlInst.Reset();
+        }
+    }
+    return Removed;
+}
+
+void APTMapEnvironment::HighlightInstancesOverlapping(const FVector& Center, float BrushRadius)
+{
+    UWorld* W = GetWorld();
+    if (!W) return;
+    const bool bUseMat = (EraseHighlightMaterial != nullptr); // material rojo sobre el asset; si no, caja debug
+    for (int32 a = 0; a < Assets.Num(); ++a)
+    {
+        FPTPropAsset& A = Assets[a];
+        if (A.InstXf.Num() == 0)
+        {
+            if (A.HlInst.Num() > 0) { if (A.PMC) A.PMC->ClearMeshSection(6); A.HlInst.Reset(); }
+            continue;
+        }
+        FBox3f Box(ForceInit);
+        for (const FVector3f& V : A.Geo.Verts) Box += V;
+        const FVector HalfLocal   = (FVector)Box.GetExtent();
+        const FVector CenterLocal = (FVector)Box.GetCenter();
+
+        TArray<int32>      Hit;
+        TArray<FTransform> HitXf;
+        for (int32 i = 0; i < A.InstXf.Num(); ++i)
+            if (PT_BrushHitsMesh(A.Geo, HalfLocal, A.InstXf[i], Center, BrushRadius))
+            { Hit.Add(i); HitXf.Add(A.InstXf[i]); }
+
+        if (bUseMat)
+        {
+            // Sección 6 = copia de la geometría de las instancias tocadas, con el material rojo ENCIMA de la
+            // arcilla (que sigue dibujada en 0/2..5) → el asset se ve resaltado en rojo. Solo se reconstruye
+            // cuando cambia el conjunto tocado (no cada frame).
+            if (Hit != A.HlInst)
+            {
+                A.HlInst = Hit;
+                if (Hit.Num() > 0) BuildMergedSection(A, A.Geo, 6, EraseHighlightMaterial, HitXf, /*bCollision=*/false);
+                else if (A.PMC)    A.PMC->ClearMeshSection(6);
+            }
+        }
+        else
+        {
+            for (int32 idx : Hit)
+            {
+                const FTransform& Xf = A.InstXf[idx];
+                const float Scale = Xf.GetScale3D().GetAbsMax();
+                DrawDebugBox(W, Xf.TransformPosition(CenterLocal), HalfLocal * Scale, Xf.GetRotation(),
+                             FColor::Red, false, 0.f, /*DepthPrio=*/1, 3.f);
+            }
+        }
+    }
+}
+
+void APTMapEnvironment::ClearEraseHighlight()
+{
+    for (FPTPropAsset& A : Assets)
+        if (A.HlInst.Num() > 0) { if (A.PMC) A.PMC->ClearMeshSection(6); A.HlInst.Reset(); }
 }
 
 bool APTMapEnvironment::RemoveLastInstance()

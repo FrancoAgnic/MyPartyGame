@@ -140,10 +140,23 @@ void UPTGameplayHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDelta
             : FText::GetEmpty());
     }
 
+    // Anillo de progreso del cocinar (mantener Enter, solo en el Level Creator).
+    if (BakeSlot && IsAuthorMode())
+    {
+        const float P = PC->GetBakeHoldProgress();
+        BakeSlot->SetProgress(P, P > 0.f
+            ? FText::AsNumber(FMath::CeilToInt(PC->GetBakeHoldRemaining()))
+            : FText::GetEmpty());
+    }
+
     // Glow de "pulsado" para Undo/Borrar (ClearAll) y Formas (TAB/CycleShape): resaltan mientras se
     // mantiene la tecla, igual que el resto del hotbar (son momentáneos, no tienen estado "equipado").
     if (ClearSlot)     ClearSlot->SetSelected(PC->IsInputKeyDown(PTInput::GetKey(TEXT("ClearAll"))));
     if (ShapeHintSlot) ShapeHintSlot->SetSelected(PC->IsInputKeyDown(PTInput::GetKey(TEXT("CycleShape"))));
+    // Glow del slot de color (mientras la rueda de color está abierta) y del de ambiente (mientras el panel F
+    // está abierto), igual que el resto del hotbar.
+    if (ColorSlot)     ColorSlot->SetSelected(PC->IsColorPickerOpen());
+    if (SkyPanelSlot)  SkyPanelSlot->SetSelected(SkyPanel && SkyPanel->GetVisibility() != ESlateVisibility::Collapsed);
 
     // Ícono de "prohibido construir": apuntando fuera de la zona de modelado (cualquier tool).
     if (OutOfBoundsIcon)
@@ -249,6 +262,13 @@ void UPTGameplayHUDWidget::BuildToolbar()
         ClearSlot = CreateSlotIn(ClearBox, IconClearAll, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ClearAll"))),
                                  PTText::Get(TEXT("TOOL_CLEAR_ALL")), IconKeyBackspace);
         if (ClearSlot) ClearSlot->SetProgress(0.f, FText::GetEmpty()); // arranca sin círculo
+
+        // Slots SOLO de autoría (Level Creator), en el mismo ClearBox: Cocinar (Enter, con anillo) + Ambiente
+        // (F). Arrancan ocultos; UpdateAuthorPanels los muestra en autoría. En gameplay quedan colapsados.
+        BakeSlot = CreateSlotIn(ClearBox, IconBake, PT_ShortKeyLabel(FKey(EKeys::Enter)), PTText::Get(TEXT("HINT_BAKE")));
+        if (BakeSlot) { BakeSlot->SetProgress(0.f, FText::GetEmpty()); BakeSlot->SetVisibility(ESlateVisibility::Collapsed); }
+        SkyPanelSlot = CreateSlotIn(ClearBox, IconSkyPanel, PT_ShortKeyLabel(PTInput::GetKey(TEXT("SkyPanel"))), FText::GetEmpty());
+        if (SkyPanelSlot) SkyPanelSlot->SetVisibility(ESlateVisibility::Collapsed);
     }
 }
 
@@ -300,12 +320,14 @@ void UPTGameplayHUDWidget::BuildToolbarPreview()
         HintSlots.Add(CreateSlotIn(HintsBox, IconDetail,    PT_ShortKeyLabel(FKey(EKeys::LeftAlt)),                    PTText::Get(TEXT("TOOL_DETAIL"))));
     }
 
-    // Borrar todo (BACKSPACE) — keycap por icono.
+    // Borrar todo (BACKSPACE) — keycap por icono. + slots de autoría (Cocinar/Ambiente) para verlos al acomodar.
     if (ClearBox)
     {
         ClearBox->ClearChildren();
         ClearSlot = CreateSlotIn(ClearBox, IconClearAll, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ClearAll"))),
                                  PTText::Get(TEXT("TOOL_CLEAR_ALL")), IconKeyBackspace);
+        BakeSlot = CreateSlotIn(ClearBox, IconBake, PT_ShortKeyLabel(FKey(EKeys::Enter)), PTText::Get(TEXT("HINT_BAKE")));
+        SkyPanelSlot = CreateSlotIn(ClearBox, IconSkyPanel, PT_ShortKeyLabel(PTInput::GetKey(TEXT("SkyPanel"))), FText::GetEmpty());
     }
 }
 
@@ -501,6 +523,13 @@ void UPTGameplayHUDWidget::UpdateAuthorPanels()
         SkyPanelSlot->SetSlot(IconSkyPanel, PT_ShortKeyLabel(PTInput::GetKey(TEXT("SkyPanel"))), FText::GetEmpty());
         SkyPanelSlot->SetVisibility(ESlateVisibility::HitTestInvisible);
     }
+
+    // Slot del hotbar para COCINAR (mantener Enter). Ícono + tecla; el anillo de progreso lo actualiza NativeTick.
+    if (BakeSlot)
+    {
+        BakeSlot->SetSlot(IconBake, PT_ShortKeyLabel(FKey(EKeys::Enter)), PTText::Get(TEXT("HINT_BAKE")));
+        BakeSlot->SetVisibility(ESlateVisibility::HitTestInvisible);
+    }
 }
 
 void UPTGameplayHUDWidget::OnSkySettingsClicked() { ToggleSkyPanel(); }
@@ -552,6 +581,20 @@ void UPTGameplayHUDWidget::SetAuthorModeIndicator(int32 State, float Progress)
     LastAuthorModeState = State;
 }
 
+void UPTGameplayHUDWidget::ShowModelSavedToast()
+{
+    if (!AuthorStatusText) return;
+    AuthorStatusText->SetText(PTText::Get(TEXT("MODEL_SAVED")));
+    AuthorStatusText->SetVisibility(ESlateVisibility::HitTestInvisible);
+    if (UWorld* W = GetWorld())
+        W->GetTimerManager().SetTimer(ModelSavedTimer, this, &UPTGameplayHUDWidget::HideModelSavedToast, 2.0f, false);
+}
+
+void UPTGameplayHUDWidget::HideModelSavedToast()
+{
+    if (AuthorStatusText) AuthorStatusText->SetText(FText::GetEmpty());
+}
+
 void UPTGameplayHUDWidget::OnSaveMapClicked()
 {
     UWorld* W = GetWorld();
@@ -597,6 +640,13 @@ void UPTGameplayHUDWidget::RefreshTick()
         RefreshToolbar();
         UpdateAuthorPanels();
         return;
+    }
+
+    // EN PARTIDA (no autoría): los widgets del Level Creator no aplican. Ocultarlos explícitamente (si el WBP
+    // los deja visibles por default, si no la barra de "cambiando modo" / hints se verían en el gameplay).
+    {
+        auto Hide = [](UWidget* W){ if (W && W->GetVisibility() != ESlateVisibility::Collapsed) W->SetVisibility(ESlateVisibility::Collapsed); };
+        Hide(SculptModeText); Hide(ModeChangeBar); Hide(PivotHintText); Hide(BakeSlot); Hide(SkyPanelSlot);
     }
 
     if (!G) return;

@@ -23,6 +23,9 @@
 #include "../Mods/PTMapEnvironment.h"
 #include "../Mods/PTMapModSubsystem.h"
 #include "GameFramework/Volume.h" // ignorar volúmenes (BlockingVolume) en el snap del suelo
+#include "GameFramework/PlayerStart.h" // debug de spawns en el Level Creator
+#include "EngineUtils.h" // TActorIterator
+#include "DrawDebugHelpers.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Styling/SlateBrush.h"
 #include "Misc/FileHelper.h"
@@ -1681,7 +1684,7 @@ void APTSculptPlayerController::OnStampPressed()
     if (IsPlaceMode())
     {
         if (EditMode == EPTEditMode::Add && !bEyesTool)       PlaceCurrentAsset();
-        else if (EditMode == EPTEditMode::Erase && !bEyesTool) EraseAssetUnderCursor();
+        else if (EditMode == EPTEditMode::Erase && !bEyesTool) { bErasePropsHeld = true; EraseAssetUnderCursor(); }
         return;
     }
 
@@ -1709,6 +1712,7 @@ void APTSculptPlayerController::OnStampReleased()
     if (bIsStamping && CanLocalPlayerSculpt()) Server_EndStroke();
     bIsStamping     = false;
     bStrokeIsDetail = false;
+    bErasePropsHeld = false; // soltar el click corta el borrado continuo de assets
     AxisChosen      = -1;
 }
 
@@ -1916,6 +1920,16 @@ void APTSculptPlayerController::OnScrollUp()
     if (IsPlaceMode() && EditMode == EPTEditMode::Add && !bEyesTool)
     { AssetScale = FMath::Clamp(AssetScale * 1.1f, 0.1f, 20.f); return; }
 
+    // Modo BORRAR (autoría): la brocha crece hasta el máximo; una vez tope, la rueda la ALEJA (arm boost)
+    // para borrar assets de lejos.
+    if (IsPlaceMode() && EditMode == EPTEditMode::Erase && !bEyesTool)
+    {
+        if (StampSize < MaxSize - KINDA_SMALL_NUMBER) { StampSize += SizeStep; ClampStampSize(); }
+        else EraseArmBoost = FMath::Clamp(EraseArmBoost + EraseArmStep, 0.f, MaxEraseArmBoost);
+        bPreviewDirty = true;
+        return;
+    }
+
     // Con la rueda de color abierta (RMB) la rueda del mouse sube el brillo del color.
     if (bQuickColorActive)
     {
@@ -1946,6 +1960,15 @@ void APTSculptPlayerController::OnScrollDown()
     // Modo colocar (autoría): la rueda ESCALA el asset a colocar.
     if (IsPlaceMode() && EditMode == EPTEditMode::Add && !bEyesTool)
     { AssetScale = FMath::Clamp(AssetScale / 1.1f, 0.1f, 20.f); return; }
+
+    // Modo BORRAR (autoría): primero ACERCAR (bajar el arm boost); una vez pegada al brazo, achicar la brocha.
+    if (IsPlaceMode() && EditMode == EPTEditMode::Erase && !bEyesTool)
+    {
+        if (EraseArmBoost > KINDA_SMALL_NUMBER) EraseArmBoost = FMath::Max(0.f, EraseArmBoost - EraseArmStep);
+        else { StampSize -= SizeStep; ClampStampSize(); }
+        bPreviewDirty = true;
+        return;
+    }
 
     // Con la rueda de color abierta (RMB) la rueda del mouse baja el brillo (hacia negro).
     if (bQuickColorActive)
@@ -2425,6 +2448,8 @@ FVector APTSculptPlayerController::GetPlacePointGrounded(bool& bOutOutside) cons
     // objetos flotando o en el aire, como antes).
     if (UWorld* W = GetWorld())
     {
+        FVector Result = Arm;                    // sin superficie → flota a distancia de brazo
+        float   BestDist = (Arm - S).Size();
         FCollisionQueryParams Q(SCENE_QUERY_STAT(PTPlaceGround), /*bTraceComplex=*/false);
         if (GetPawn())        Q.AddIgnoredActor(GetPawn());
         if (PropPreviewActor) Q.AddIgnoredActor(PropPreviewActor);
@@ -2438,9 +2463,23 @@ FVector APTSculptPlayerController::GetPlacePointGrounded(bool& bOutOutside) cons
             {
                 const AActor* HA = H.GetActor();
                 if (HA && HA->IsA(AVolume::StaticClass())) continue; // ignorar volúmenes
-                return H.ImpactPoint;
+                Result = H.ImpactPoint; BestDist = (H.ImpactPoint - S).Size();
+                break;
             }
         }
+        // Borrar: además raycast contra la GEOMETRÍA de los props (sin depender de colisión) → el preview se
+        // posa sobre cualquier asset, aunque no tenga colisión (p.ej. fuera del área jugable). Elige el más cercano.
+        if (EditMode == EPTEditMode::Erase)
+            if (APTMapEnvironment* Env = GetMapEnv())
+            {
+                FVector PHit;
+                if (Env->RaycastProps(S, Arm, PHit))
+                {
+                    const float PD = (PHit - S).Size();
+                    if (PD < BestDist) { Result = PHit; BestDist = PD; }
+                }
+            }
+        return Result;
     }
     return Arm; // sin superficie hasta el brazo → flota a distancia de brazo
 }
@@ -2471,6 +2510,7 @@ void APTSculptPlayerController::DoBakeAsset()
     if (Idx == INDEX_NONE) return;          // box vacío
     CurrentAsset = Idx;                      // el nuevo asset queda seleccionado
     Volume->Multicast_ClearAll();            // limpiar el box para la próxima pieza
+    if (GameplayHUD) GameplayHUD->ShowModelSavedToast(); // aviso "¡Modelo guardado!" en el HUD
     UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Asset horneado #%d (total %d)%s."), Idx, Env->GetNumAssets(),
            bPivotMode ? TEXT(" (pivote manual)") : TEXT(""));
 }
@@ -2535,7 +2575,9 @@ void APTSculptPlayerController::EraseAssetUnderCursor()
     APTMapEnvironment* Env = GetMapEnv();
     if (!Env) return;
     bool bOut = false; const FVector P = GetPlacePointGrounded(bOut); // mismo punto que el preview (suelo)
-    Env->RemoveInstanceNear(P, FMath::Max(80.f, AssetScale * 120.f));
+    // Borra TODOS los assets que toca la brocha, con el RADIO REAL de la esfera del preview (StampSize·0.5)
+    // por un factor de tolerancia → borra lo que la brocha toca (con un pelín de margen configurable).
+    Env->RemoveInstancesOverlapping(P, FMath::Max(8.f, StampSize * 0.5f * FMath::Max(0.1f, EraseTolerance)));
 }
 
 void APTSculptPlayerController::OnToggleSkyPanel()
@@ -2590,6 +2632,28 @@ void APTSculptPlayerController::OpenAssetRadial()
     bShapeRadialActive = true;
 }
 
+void APTSculptPlayerController::DrawPlayerStartsDebug()
+{
+    UWorld* W = GetWorld();
+    if (!W) return;
+    // Marca cada Player Start (spawn de jugadores) para no taparlo con un asset al construir. Se redibuja
+    // cada frame (lifetime corto), en foreground para verlo a través de la geometría.
+    const float Life = 0.f; // un frame; TickAuthorProps lo vuelve a dibujar
+    const float R = 34.f, HalfH = 88.f; // tamaño aproximado del personaje
+    const FColor Col(0, 200, 255); // celeste
+    for (TActorIterator<APlayerStart> It(W); It; ++It)
+    {
+        const FVector Loc = It->GetActorLocation();
+        const FRotator Rot = It->GetActorRotation();
+        // Cápsula del volumen que ocupa el jugador al aparecer.
+        DrawDebugCapsule(W, Loc, HalfH, R, FQuat::Identity, Col, false, Life, 0, 3.f);
+        // Flecha de orientación (hacia dónde mira el spawn) + poste para verlo desde lejos.
+        DrawDebugDirectionalArrow(W, Loc, Loc + Rot.Vector() * 120.f, 40.f, Col, false, Life, 0, 4.f);
+        DrawDebugLine(W, Loc, Loc + FVector(0, 0, 250.f), Col, false, Life, 0, 3.f);
+        DrawDebugString(W, Loc + FVector(0, 0, HalfH + 40.f), TEXT("SPAWN"), nullptr, Col, Life, true, 1.4f);
+    }
+}
+
 void APTSculptPlayerController::TickAuthorProps(float Dt)
 {
     if (!IsMapAuthorMode())
@@ -2597,6 +2661,8 @@ void APTSculptPlayerController::TickAuthorProps(float Dt)
         if (AssetPreview) AssetPreview->SetVisibility(false);
         return;
     }
+
+    DrawPlayerStartsDebug(); // mostrar los spawns mientras construís (para no taparlos con assets)
 
     // Modo pivote activo: el marcador sigue al cursor; todo lo demás (preview de asset, hornear) se pausa
     // hasta que el jugador confirme (click) o cancele (Backspace).
@@ -2633,6 +2699,11 @@ void APTSculptPlayerController::TickAuthorProps(float Dt)
                 const float Radius = R * AssetScale;
                 NewBoost = FMath::Max(0.f, Radius - AirDepth * 0.5f);
             }
+        }
+        else if (EditMode == EPTEditMode::Erase && !bEyesTool)
+        {
+            // Borrar: el alejamiento lo controla la rueda una vez que la brocha llegó al máximo (para llegar lejos).
+            NewBoost = EraseArmBoost;
         }
         PlaceArmBoost = NewBoost;
     }
@@ -2671,6 +2742,19 @@ void APTSculptPlayerController::TickAuthorProps(float Dt)
         if (!bBakedThisHold && BakeHoldTime >= BakeHoldDuration) { EnterPivotMode(); bBakedThisHold = true; }
     }
     else { BakeHoldTime = 0.f; bBakedThisHold = false; }
+
+    // Modo Borrar (colocando): resaltar en rojo (material sobre el asset) los que la brocha toca; y si mantenés
+    // el click, borrarlos a medida que barrés. Fuera de este modo se apaga el resaltado.
+    if (APTMapEnvironment* EnvE = GetMapEnv())
+    {
+        if (IsPlaceMode() && EditMode == EPTEditMode::Erase && !bEyesTool)
+        {
+            const float Brush = FMath::Max(8.f, StampSize * 0.5f * FMath::Max(0.1f, EraseTolerance));
+            EnvE->HighlightInstancesOverlapping(P, Brush);
+            if (bErasePropsHeld) EraseAssetUnderCursor();
+        }
+        else EnvE->ClearEraseHighlight();
+    }
 
     // FUERA del box:
     //  · Add   → preview del ASSET elegido siguiendo el cursor (AssetPreview, actor aparte).

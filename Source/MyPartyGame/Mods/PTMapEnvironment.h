@@ -128,6 +128,24 @@ public:
     void PlaceInstance(int32 AssetIdx, const FTransform& WorldXf);
     /** Borra la instancia más cercana a WorldPos dentro de Radius (cualquier asset). true si borró. */
     bool RemoveInstanceNear(const FVector& WorldPos, float Radius);
+    /** Borra TODAS las instancias cuya esfera (radio del asset × escala) se solapa con la brocha de borrado
+     *  (esfera en Center de radio BrushRadius). Devuelve cuántas borró. Para el erase "por contacto". */
+    int32 RemoveInstancesOverlapping(const FVector& Center, float BrushRadius);
+    /** Resalta en ROJO (material EraseHighlightMaterial sobre el propio asset) las instancias que la brocha
+     *  (Center, BrushRadius) va a borrar. Solo resalta; no borra. Llamar cada frame en el Level Creator con la
+     *  tool Borrar. Si no hay material asignado, cae a una caja debug roja. */
+    void HighlightInstancesOverlapping(const FVector& Center, float BrushRadius);
+    /** Apaga el resaltado de borrado (limpia la sección de highlight de todos los assets). */
+    void ClearEraseHighlight();
+
+    /** Raycast contra la GEOMETRÍA de los props (triángulos de todas las instancias), sin depender de la
+     *  colisión. Devuelve el punto de impacto más cercano al Start en OutHit. Para posar el preview del erase
+     *  sobre cualquier asset (aunque no tenga colisión). false si no pega en ninguno. */
+    bool RaycastProps(const FVector& Start, const FVector& End, FVector& OutHit) const;
+
+    /** Material del resaltado de borrado (rojo aditivo/translúcido, sobre el asset). Asignar en BP; si es null
+     *  se usa una caja debug roja como fallback. */
+    UPROPERTY(EditAnywhere, Category="MapEnv") UMaterialInterface* EraseHighlightMaterial = nullptr;
     /** Deshace la última instancia colocada (undo de props). true si sacó algo. */
     bool RemoveLastInstance();
     /** Instancia más cercana a WorldPos dentro de Radius (para el preview de "qué se va a borrar").
@@ -163,6 +181,7 @@ private:
         // una con más reducción de triángulos). Solo para assets SIN pintura (no re-generamos UVs del atlas).
         // Vacías = usar la full (assets con pintura, o cuando el decimado no ahorró).
         FPTPropGeometry LODGeo[3];
+        TArray<int32>   HlInst; // instancias actualmente resaltadas (erase); para no reconstruir cada frame
     };
     TArray<FPTPropAsset> Assets;
     // Orden global de colocación (índice de asset por cada instancia colocada) → para el undo LIFO de props.

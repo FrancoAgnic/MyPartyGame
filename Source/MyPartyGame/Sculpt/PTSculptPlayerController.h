@@ -431,6 +431,16 @@ public:
     float GetClearHoldRemaining() const
     { return bClearHeld ? FMath::Max(0.f, ClearHoldDuration - ClearHoldTime) : ClearHoldDuration; }
 
+    /** Progreso 0..1 del "mantener Enter" para cocinar el asset (para la barra del hotbar del Level Creator).
+     *  0 mientras no lo estés manteniendo. */
+    UFUNCTION(BlueprintPure, Category="Sculpt")
+    float GetBakeHoldProgress() const
+    { return (BakeHoldTime > 0.f) ? FMath::Clamp(BakeHoldTime / BakeHoldDuration, 0.f, 1.f) : 0.f; }
+    /** Segundos que faltan para cocinar (cuenta regresiva del cuadrito). */
+    UFUNCTION(BlueprintPure, Category="Sculpt")
+    float GetBakeHoldRemaining() const
+    { return FMath::Max(0.f, BakeHoldDuration - BakeHoldTime); }
+
 private:
     // UPROPERTY: si no, al destruirse el SculptVolume (p.ej. seamless travel de vuelta al lobby) el
     // puntero queda COLGADO (dangling) y los chequeos "Volume ?" pasan sobre memoria liberada →
@@ -596,6 +606,7 @@ public:
     bool IsPlaceMode() const;
 private:
     void TickAuthorProps(float Dt);        // preview del asset + bake por Enter-3s (llamado en PlayerTick)
+    void DrawPlayerStartsDebug();          // marca los Player Start en el Level Creator (no taparlos con assets)
     void PlaceCurrentAsset();              // coloca una instancia del asset actual
     void EraseAssetUnderCursor();          // borra la instancia bajo el cursor
     void OnToggleSkyPanel();               // abre/cierra el panel de ambiente (solo autoría)
@@ -649,6 +660,15 @@ private:
     float BakeHoldTime = 0.f;               // acumulador del "mantener Enter" para hornear
     bool  bBakedThisHold = false;           // ya horneó en este mantenido (evita repetir)
     static constexpr float BakeHoldDuration = 3.0f;
+    bool  bErasePropsHeld = false;          // Erase en modo colocar: mantener el click borra assets por contacto
+    // Tolerancia del borrado de assets: agranda el radio efectivo de la brocha (1 = exacto al preview, >1 más
+    // permisivo). Sube esto si sentís que hay que tocar demasiado justo para borrar.
+    UPROPERTY(EditAnywhere, Category="MapEnv") float EraseTolerance = 1.25f;
+    // Erase: al escalar la brocha, primero crece hasta MaxSize; una vez tope, la rueda la ALEJA (arm boost)
+    // para borrar assets de lejos. Distancia extra actual + cuánto aleja por tick + tope.
+    float EraseArmBoost = 0.f;
+    UPROPERTY(EditAnywhere, Category="MapEnv") float EraseArmStep     = 150.f;
+    UPROPERTY(EditAnywhere, Category="MapEnv") float MaxEraseArmBoost = 6000.f;
     int32 AssetBeforeRadial = 0;            // asset antes de abrir el radial (para cancelar en zona muerta)
     int32 LastAssetRadialPage = 0;          // última página del radial de assets (reabrir ahí)
 

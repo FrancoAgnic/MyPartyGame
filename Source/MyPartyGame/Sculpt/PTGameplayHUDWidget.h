@@ -119,9 +119,15 @@ protected:
     /** WBP del panel de ambiente (deriva de UPTSkySettingsWidget). Asignar en el BP del HUD. */
     UPROPERTY(EditAnywhere, Category="MapEditor") TSubclassOf<class UPTSkySettingsWidget> SkySettingsClass;
     UPROPERTY() class UPTSkySettingsWidget* SkyPanel = nullptr;
-    // Slot del hotbar que muestra la tecla + ícono para abrir el panel de ambiente (solo en autoría).
-    UPROPERTY(meta=(BindWidgetOptional)) class UPTToolSlotWidget* SkyPanelSlot;
+    // Slot del hotbar para abrir el panel de ambiente (tecla F). Se CREA por código en ClearBox (como los
+    // demás slots); no se coloca a mano. Vos solo asignás el ícono (IconSkyPanel) en el class default.
+    UPROPERTY() class UPTToolSlotWidget* SkyPanelSlot = nullptr;
     UPROPERTY(EditAnywhere, Category="MapEditor") UTexture2D* IconSkyPanel = nullptr; // ícono del slot (asignable)
+
+    // Slot del hotbar para COCINAR el asset (mantener Enter): ícono + tecla + anillo de progreso que se llena
+    // en los 3s (igual que "borrar todo"). Se CREA por código en ClearBox; solo asignás el ícono (IconBake).
+    UPROPERTY() class UPTToolSlotWidget* BakeSlot = nullptr;
+    UPROPERTY(EditAnywhere, Category="MapEditor") UTexture2D* IconBake = nullptr; // ícono del slot (asignable)
 public:
     /** Abre/cierra el panel de ambiente. Lo llama el botón del HUD y la tecla del PlayerController. */
     void ToggleSkyPanel();
@@ -133,6 +139,9 @@ public:
     /** Indicador de modo del Level Creator: 0 = Escultura, 1 = Cambiando (con barra), 2 = Edición de Nivel.
      *  Progress (0..1) llena la barra durante el estado "Cambiando". */
     void SetAuthorModeIndicator(int32 State, float Progress);
+
+    /** Muestra el aviso "¡Modelo guardado!" en el estado de autoría por unos segundos (al cocinar un asset). */
+    void ShowModelSavedToast();
 protected:
     // Cartel de ayuda del modo pivote (opcional en el WBP). El texto lo setea el código (localizado).
     UPROPERTY(meta=(BindWidgetOptional)) class UTextBlock* PivotHintText;
@@ -141,6 +150,8 @@ protected:
     // Barra que se llena durante el cambio de modo (dura ExitGraceSeconds). Solo visible al "Cambiando".
     UPROPERTY(meta=(BindWidgetOptional)) class UProgressBar* ModeChangeBar;
     int32 LastAuthorModeState = -1; // cache para no re-setear el texto cada frame
+    FTimerHandle ModelSavedTimer;   // oculta el aviso "¡Modelo guardado!" tras unos segundos
+    void HideModelSavedToast();
 
     // ── Iconos de estado de red (arriba a la izquierda). Se muestran SOLO cuando hay problema. Poné tus
     //    texturas 24x24 en estos Image del WBP (nombres EXACTOS); el código los prende/apaga. ──
