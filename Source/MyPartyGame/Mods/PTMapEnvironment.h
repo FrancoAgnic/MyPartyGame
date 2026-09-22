@@ -9,6 +9,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "../Sculpt/PTSculptVolume.h" // FPTPaintAtlas (snapshot del atlas de pintura por asset)
 #include "PTMapEnvironment.generated.h"
 
 class UProceduralMeshComponent;
@@ -57,6 +58,11 @@ struct FPTPropGeometry
     TArray<FVector3f> Normals;
     TArray<FColor>    Colors;
     TArray<int32>     Tris;
+    // Coordenada de LOOKUP del atlas de pintura por vértice (posición VOLUMEN-LOCAL, empaquetada:
+    // UV0 = (x, y), UV1 = (z, 0)). El material del asset pintado samplea el atlas con esto → pintura nítida,
+    // independiente del transform de la instancia (así el merge sigue valiendo). Vacío = sin atlas.
+    TArray<FVector2f> UV0;
+    TArray<FVector2f> UV1;
     bool IsValid() const { return Verts.Num() > 0 && Tris.Num() >= 3; }
 };
 
@@ -85,12 +91,26 @@ public:
      *  su bbox; si bUsePivot, usa PivotWorld como ORIGEN del asset (el jugador lo ubica en el editor). */
     int32 BakeAssetFromVolume(APTSculptVolume* Volume, bool bUsePivot = false, const FVector& PivotWorld = FVector::ZeroVector);
 
-    /** Agrega un asset desde geometría ya horneada (para cargar un mapa guardado / replicación). */
-    int32 AddAsset(const FPTPropGeometry& Geo);
+    /** Agrega un asset desde geometría ya horneada (para cargar un mapa guardado / replicación). EyesGeo =
+     *  malla de ojos (sección aparte); PaintAtlas = snapshot del atlas de pintura (vacío = sin pintura). */
+    int32 AddAsset(const FPTPropGeometry& Geo, const FPTPropGeometry& EyesGeo = FPTPropGeometry(),
+                   const FPTPaintAtlas& PaintAtlas = FPTPaintAtlas());
+
+    /** Material de los OJOS horneados (asignar M_CreazyEyes en BP). Los ojos van en su propia sección. */
+    UPROPERTY(EditAnywhere, Category="MapEnv") UMaterialInterface* EyeMaterial = nullptr;
+    UMaterialInterface* GetEyeMaterial() const { return EyeMaterial; }
+
+    /** Material de arcilla que SAMPLEA el atlas de pintura por UV (duplicado de M_Clay con el sampler leyendo
+     *  UV0/UV1). Asignar en BP. Se usa en la sección 0 de los assets CON pintura (nitidez pixel-perfect). */
+    UPROPERTY(EditAnywhere, Category="MapEnv") UMaterialInterface* PaintClayMaterial = nullptr;
+    /** Material a usar para el preview/miniatura del asset actual: el de pintura (con atlas) si tiene, o el normal. */
+    UMaterialInterface* GetAssetPreviewMaterial(int32 AssetIdx);
 
     int32 GetNumAssets() const { return Assets.Num(); }
     /** Geometría horneada de un asset (para el preview que sigue al cursor). */
     const FPTPropGeometry* GetAssetGeometry(int32 AssetIdx) const;
+    /** Geometría de OJOS del asset (para el preview con su material). Null/inválida si no tiene ojos. */
+    const FPTPropGeometry* GetAssetEyesGeometry(int32 AssetIdx) const;
     /** Radio aproximado del asset (bbox), para alejar el preview al escalar. 0 si no existe. */
     float GetAssetRadius(int32 AssetIdx) const;
     /** Material de los props (con el MID del ambiente ya aplicado) para el preview del PlayerController. */
@@ -133,7 +153,12 @@ private:
         // por asset (como el HISM), y con vertex colors que sí se ven en build. Se reconstruye al
         // colocar/borrar (solo en autoría, nunca por frame).
         UProceduralMeshComponent* PMC = nullptr;
+        FPTPropGeometry EyesGeo;        // malla de ojos (sección 1 del PMC, material de ojos); vacía = sin ojos
         TArray<FTransform> InstXf;      // transform (mundo) por instancia viva
+        // Pintura NÍTIDA: snapshot del atlas del SVO (si el asset tiene Paint). El material del asset lo
+        // samplea con la UV horneada → idéntico a lo pintado. Vacío = sin pintura (usa solo vertex color).
+        FPTPaintAtlas PaintAtlas;
+        UMaterialInstanceDynamic* PaintMID = nullptr; // MID con el atlas (sección 0); rooteado en AssetMIDs
     };
     TArray<FPTPropAsset> Assets;
     // Orden global de colocación (índice de asset por cada instancia colocada) → para el undo LIFO de props.
@@ -143,8 +168,14 @@ private:
 
     // MID del material de props con el sol del ambiente inyectado (se comparte en todas las secciones/PMCs).
     UPROPERTY(Transient) UMaterialInstanceDynamic* PropMID = nullptr;
+    // Mantiene vivos (anti-GC) los MID de pintura por asset (uno por asset con Paint) + sus texturas de atlas.
+    UPROPERTY(Transient) TArray<UMaterialInstanceDynamic*> AssetMIDs;
     UMaterialInstanceDynamic* GetOrCreatePropMID();
-    void RebuildAssetMesh(FPTPropAsset& A); // fusiona todas las instancias en la sección 0 del PMC
+    // Recrea las texturas del atlas desde un snapshot y arma un MID (PaintClayMaterial) para la pintura nítida.
+    UMaterialInstanceDynamic* MakePaintMID(const FPTPaintAtlas& Atlas);
+    void RebuildAssetMesh(FPTPropAsset& A); // fusiona todas las instancias en la sección 0 (arcilla) + 1 (ojos)
+    // Fusiona la geometría G de TODAS las instancias de A en una sección del PMC con el material dado.
+    void BuildMergedSection(FPTPropAsset& A, const FPTPropGeometry& G, int32 Section, UMaterialInterface* Mat);
     // Inyecta la dirección/color del sol del ambiente en el MID compartido. Se llama al hornear/cargar y
     // desde ApplySkySettings.
     void ApplyAssetSunParams();

@@ -129,9 +129,18 @@ public:
     /** Muestra/oculta el cartel de ayuda del modo pivote (click=confirmar, rueda=Z, Backspace=cancelar).
      *  Lo llama el PlayerController al entrar/salir del modo pivote al hornear un asset. */
     void SetPivotHintVisible(bool bVisible);
+
+    /** Indicador de modo del Level Creator: 0 = Escultura, 1 = Cambiando (con barra), 2 = Edición de Nivel.
+     *  Progress (0..1) llena la barra durante el estado "Cambiando". */
+    void SetAuthorModeIndicator(int32 State, float Progress);
 protected:
     // Cartel de ayuda del modo pivote (opcional en el WBP). El texto lo setea el código (localizado).
     UPROPERTY(meta=(BindWidgetOptional)) class UTextBlock* PivotHintText;
+    // Cartel del modo actual (Escultura / Cambiando / Edición de Nivel) en el Level Creator.
+    UPROPERTY(meta=(BindWidgetOptional)) class UTextBlock* SculptModeText;
+    // Barra que se llena durante el cambio de modo (dura ExitGraceSeconds). Solo visible al "Cambiando".
+    UPROPERTY(meta=(BindWidgetOptional)) class UProgressBar* ModeChangeBar;
+    int32 LastAuthorModeState = -1; // cache para no re-setear el texto cada frame
 
     // ── Iconos de estado de red (arriba a la izquierda). Se muestran SOLO cuando hay problema. Poné tus
     //    texturas 24x24 en estos Image del WBP (nombres EXACTOS); el código los prende/apaga. ──

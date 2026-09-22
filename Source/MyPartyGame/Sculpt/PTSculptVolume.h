@@ -22,6 +22,24 @@ enum class EPTStampShape : uint8 { Sphere, Cube, Cylinder, TriPrism, Pyramid, To
 UENUM(BlueprintType)
 enum class EPTEditMode : uint8 { Add, Erase, Paint, Smooth };
 
+// Snapshot del atlas de pintura del SVO (page table + atlas de color + parámetros). Sirve para hornear un
+// asset con la pintura NÍTIDA (el material samplea este atlas por posición local, como la arcilla en vivo)
+// y para persistirla con el mapa. Vacío (bValid=false) = el asset no tiene pintura.
+struct FPTPaintAtlas
+{
+    TArray<float>  PageBuf;   // page table (R32F), PGW*PGH
+    TArray<FColor> AtlasBuf;  // atlas de color (BGRA8), AtlasW*AtlasH
+    FVector   CanvasMin = FVector::ZeroVector;
+    float     ColorVoxel = 1.f;
+    FIntVector VoxDim = FIntVector::ZeroValue;
+    FIntVector BrickDim = FIntVector::ZeroValue;
+    int32 TilesPerRow = 1;
+    int32 AtlasW = 0;
+    int32 AtlasH = 0;
+    int32 CB = 1;
+    bool  bValid = false;
+};
+
 UCLASS()
 class MYPARTYGAME_API APTSculptVolume : public AActor
 {
@@ -156,6 +174,20 @@ public:
     UProceduralMeshComponent* GetEyesMesh() const { return EyesMesh; }
     // ¿Ese punto de mundo cae dentro de la zona LIBRE (NoPlaceZone)? Ahí no se pueden colocar assets.
     bool IsInNoPlaceZone(const FVector& WorldPos) const;
+
+    // Copia el atlas de pintura actual (page table + atlas + parámetros) a Out. Devuelve true si hay pintura.
+    // Lo usa el horneado de assets del Level Creator para conservar la pintura NÍTIDA.
+    bool GetPaintAtlasSnapshot(FPTPaintAtlas& Out) const;
+
+    // Feedback visual del modo ESCULPIR (solo Level Creator): al entrar al box, tiñe el marco del cubo con
+    // un overlay (verde) para avisar que estás en modo escultura; al salir lo saca. Asignar el material en
+    // el BP (SculptModeFrameOverlay); si es null no hace nada.
+    UPROPERTY(EditAnywhere, Category="MapEditor") class UMaterialInterface* SculptModeFrameOverlay = nullptr;
+    void SetSculptModeVisual(bool bInside);
+
+    // Muestra/oculta el wireframe del NoPlaceZone. Debug SOLO para el creador del nivel (autoría): se prende
+    // en el Level Creator y queda oculto al publicar/jugar (por defecto HiddenInGame).
+    void SetNoPlaceZoneDebugVisible(bool bVisible);
 
     /** ¿Ese punto del mundo cae DENTRO del lienzo (el BoundsBox)? Para no dejar poner cosas
      *  (ej: ojos) fuera de la zona de modelado. */

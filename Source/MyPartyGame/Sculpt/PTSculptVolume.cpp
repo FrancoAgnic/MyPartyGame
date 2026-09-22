@@ -404,6 +404,26 @@ void APTSculptVolume::BeginPlay()
             SM->SetMobility(EComponentMobility::Movable);
 }
 
+void APTSculptVolume::SetSculptModeVisual(bool bInside)
+{
+    // Tiñe (overlay) el/los StaticMesh del marco del cubo cuando estás DENTRO (modo escultura). Solo tiene
+    // efecto si asignaste SculptModeFrameOverlay en el BP; si es null, no hace nada.
+    if (!SculptModeFrameOverlay) return;
+    UMaterialInterface* Ov = bInside ? SculptModeFrameOverlay : nullptr;
+    TArray<UStaticMeshComponent*> SMComps;
+    GetComponents<UStaticMeshComponent>(SMComps);
+    for (UStaticMeshComponent* SM : SMComps)
+        if (SM) SM->SetOverlayMaterial(Ov);
+}
+
+void APTSculptVolume::SetNoPlaceZoneDebugVisible(bool bVisible)
+{
+    if (!NoPlaceZone) return;
+    // El wireframe de un UShapeComponent se dibuja in-game cuando NO está HiddenInGame.
+    NoPlaceZone->SetHiddenInGame(!bVisible);
+    NoPlaceZone->SetVisibility(bVisible);
+}
+
 void APTSculptVolume::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
@@ -607,6 +627,29 @@ void APTSculptVolume::SetupClayMID()
     ClayMID->SetScalarParameterValue(TEXT("NewClayGlowSeconds"),    NewClayGlowSeconds);
     ClayMID->SetScalarParameterValue(TEXT("NewClayGlowBrightness"), NewClayGlowBrightness);
     ClayMID->SetScalarParameterValue(TEXT("NowTime"), GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f);
+}
+
+bool APTSculptVolume::GetPaintAtlasSnapshot(FPTPaintAtlas& Out) const
+{
+    Out = FPTPaintAtlas();
+    if (PageBuf.Num() == 0 || AtlasBuf.Num() == 0) return false;
+    // ¿Hay pintura? (al menos una página asignada en la page table).
+    bool bAnyPage = false;
+    for (float P : PageBuf) if (P > 0.5f) { bAnyPage = true; break; }
+    if (!bAnyPage) return false;
+
+    Out.PageBuf     = PageBuf;
+    Out.AtlasBuf    = AtlasBuf;
+    Out.CanvasMin   = CanvasMinLocal;
+    Out.ColorVoxel  = FMath::Max(ColorVoxel, 0.5f);
+    Out.VoxDim      = ColorVoxDim;
+    Out.BrickDim    = ColorBrickDim;
+    Out.TilesPerRow = AtlasTilesPerRow;
+    Out.AtlasW      = AtlasW;
+    Out.AtlasH      = AtlasH;
+    Out.CB          = CB;
+    Out.bValid      = true;
+    return true;
 }
 
 UMaterialInstanceDynamic* APTSculptVolume::CreateBakedColorMID(UObject* Outer)

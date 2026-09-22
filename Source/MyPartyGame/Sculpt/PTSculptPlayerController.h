@@ -602,6 +602,10 @@ private:
     void DoBakeAsset();                    // hornea el box → asset + limpia el box
     // Punto "de brazo" SIN clampear al box (para colocar props afuera). OutOutside=true si cae fuera del box.
     FVector GetPlacePoint(bool& bOutOutside) const;
+    // Igual que GetPlacePoint pero con SNAP AL SUELO: traza el rayo de cámara contra la superficie (suelo/
+    // assets ya colocados) y devuelve ese punto → el asset se apoya en el piso en vez de flotar a brazo.
+    // Si no hay superficie (mirando al cielo), cae al punto de brazo. bOutOutside se calcula igual (por brazo).
+    FVector GetPlacePointGrounded(bool& bOutOutside) const;
 
     UPROPERTY(Transient) class APTMapEnvironment* MapEnvCache = nullptr;
     // Clase del entorno de props (asignar BP_MapEnvironment con el material de arcilla). Se usa para
@@ -627,6 +631,19 @@ private:
     // que un asset grande (p.ej. una montaña) NO spawnee encima tuyo / te deje adentro del modelo. Se
     // recalcula cada frame en TickAuthorProps según el radio del asset actual × AssetScale.
     float PlaceArmBoost = 0.f;
+    // Modo ESCULPIR activo (cursor dentro del box) en el Level Creator → cubo verde + texto "Modo Escultura".
+    bool  bSculptModeActive = false;
+    bool  bNoPlaceDebugShown = false; // ya prendí el wireframe de NoPlaceZone (debug del creator), una vez
+
+    // ── Histéresis del modo escultura/colocar (Level Creator) ──
+    // Entrar al box = escultura INSTANTÁNEO. Salir = con GRACIA (ExitGraceSeconds): mientras dura, el sello
+    // sigue en escultura pegado a las paredes internas del box (evita cambiar de modo por sacar el cursor sin
+    // querer). Si volvés a entrar antes, se cancela. bEffectiveOutside es el modo REAL que usa todo.
+    bool  bEffectiveOutside   = false; // modo debounced (true = colocar, false = escultura)
+    bool  bModeInit           = false; // ya inicialicé el modo (primer frame sin gracia)
+    float OutsideGraceElapsed = 0.f;   // tiempo acumulado afuera desde que salí del box
+    UPROPERTY(EditAnywhere, Category="MapEnv") float ExitGraceSeconds = 2.0f; // gracia al salir del box
+    void UpdateEffectiveOutside(bool bRawOutside, float Dt);
     float BakeHoldTime = 0.f;               // acumulador del "mantener Enter" para hornear
     bool  bBakedThisHold = false;           // ya horneó en este mantenido (evita repetir)
     static constexpr float BakeHoldDuration = 3.0f;
@@ -640,6 +657,11 @@ private:
     bool    bPivotMode  = false;            // true = eligiendo el pivote (no hornea hasta confirmar)
     FVector PivotWorld  = FVector::ZeroVector; // posición del pivote en el mundo (marcador)
     UPROPERTY(Transient) class UStaticMeshComponent* PivotMarker = nullptr; // marcador visual del pivote
+    /** Overlay rojo translúcido para el preview del asset cuando cae DENTRO de la NoPlaceZone (avisa que
+     *  ahí no se puede colocar). Asignar en el BP; si es null, no tiñe (igual bloquea la colocación). */
+    UPROPERTY(EditAnywhere, Category="MapEnv") UMaterialInterface* NoPlacePreviewOverlay = nullptr;
+    bool bPreviewNoPlaceTint = false; // estado actual del tinte rojo (evita re-setear cada frame)
+
     /** Malla/material del marcador de pivote (asignar TU mesh de axis en el BP; si es null usa la esfera
      *  básica del engine). El marcador usa el mismo overlay X-ray que los previews (se ve por detrás). */
     UPROPERTY(EditAnywhere, Category="MapEnv") UStaticMesh*      PivotMarkerMesh     = nullptr;

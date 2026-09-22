@@ -37,52 +37,56 @@ APTMapEnvironment::APTMapEnvironment()
 }
 
 // ── Juntar la geometría del box (base + SVO chunks + capas de detalle) en una sola malla ──
-static void PT_GatherVolumeGeometry(APTSculptVolume* Volume, FPTPropGeometry& Out,
+static void PT_GatherVolumeGeometry(APTSculptVolume* Volume, FPTPropGeometry& Out, FPTPropGeometry& OutEyes,
                                     bool bUsePivot = false, const FVector& PivotWorld = FVector::ZeroVector)
 {
-    auto AddSection = [&Out](UProceduralMeshComponent* Src)
+    // Junta las secciones de un componente en Dst. bClay: guarda además la UV de LOOKUP del atlas de pintura
+    // (posición VOLUMEN-LOCAL = V.Position, empaquetada en UV0.xy + UV1.x) para que el material del asset
+    // pintado samplee el atlas exactamente como la arcilla en vivo → pintura NÍTIDA, sin tocar la geometría.
+    auto AddInto = [](FPTPropGeometry& Dst, UProceduralMeshComponent* Src, bool bClay)
     {
         if (!Src) return;
         const FTransform X = Src->GetComponentTransform();
-        const int32 N = Src->GetNumSections();
-        for (int32 s = 0; s < N; ++s)
+        const int32 NSec = Src->GetNumSections();
+        for (int32 s = 0; s < NSec; ++s)
         {
             const FProcMeshSection* Sec = Src->GetProcMeshSection(s);
             if (!Sec || Sec->ProcVertexBuffer.Num() == 0) continue;
-            const int32 Base = Out.Verts.Num();
+            const int32 Base = Dst.Verts.Num();
             for (const FProcMeshVertex& V : Sec->ProcVertexBuffer)
             {
-                // A espacio del ACTOR (world del componente); luego se recentra en el bbox.
-                Out.Verts.Add((FVector3f)X.TransformPosition(FVector(V.Position)));
-                Out.Normals.Add((FVector3f)X.TransformVectorNoScale(FVector(V.Normal)));
-                Out.Colors.Add(V.Color);
+                Dst.Verts.Add((FVector3f)X.TransformPosition(FVector(V.Position)));
+                Dst.Normals.Add((FVector3f)X.TransformVectorNoScale(FVector(V.Normal)));
+                Dst.Colors.Add(V.Color); // color BASE (Add); la pintura la da el atlas por UV
+                if (bClay)
+                {
+                    // Posición volumen-local (raw), para el lookup del atlas.
+                    Dst.UV0.Add(FVector2f((float)V.Position.X, (float)V.Position.Y));
+                    Dst.UV1.Add(FVector2f((float)V.Position.Z, 0.f));
+                }
             }
-            for (uint32 Idx : Sec->ProcIndexBuffer) Out.Tris.Add(Base + (int32)Idx);
+            for (uint32 Idx : Sec->ProcIndexBuffer) Dst.Tris.Add(Base + (int32)Idx);
         }
     };
 
-    AddSection(Volume->GetMeshComponent());
-    for (const auto& Pair : Volume->GetSVOChunkMeshes()) AddSection(Pair.Value);
-    for (UProceduralMeshComponent* DM : Volume->GetDetailMeshes()) AddSection(DM);
-    AddSection(Volume->GetEyesMesh()); // ojos colocados → se hornean junto a la arcilla
+    // ARCILLA (base + SVO + capas de detalle) → Out (con UV de atlas). OJOS → OutEyes (material aparte).
+    AddInto(Out, Volume->GetMeshComponent(), /*bClay=*/true);
+    for (const auto& Pair : Volume->GetSVOChunkMeshes()) AddInto(Out, Pair.Value, /*bClay=*/true);
+    for (UProceduralMeshComponent* DM : Volume->GetDetailMeshes()) AddInto(Out, DM, /*bClay=*/true);
+    AddInto(OutEyes, Volume->GetEyesMesh(), /*bClay=*/false);
 
-    // Recentrar: el ORIGEN del asset queda donde el pivot elegido (si bUsePivot) o en el centro del bbox
-    // (por defecto). Así al colocar la instancia el pivot cae exacto en el punto de colocación.
-    if (Out.Verts.Num() > 0)
+    // Recentrar arcilla Y ojos por el MISMO origen (pivot elegido, o centro del bbox de la arcilla) para que
+    // los ojos queden alineados con la arcilla al colocar la instancia.
+    FVector3f Origin(0.f);
+    if (bUsePivot) Origin = (FVector3f)PivotWorld;
+    else if (Out.Verts.Num() > 0)
     {
-        FVector3f Origin;
-        if (bUsePivot)
-        {
-            Origin = (FVector3f)PivotWorld; // los verts ya están en mundo → restar el pivot en mundo
-        }
-        else
-        {
-            FBox3f Box(ForceInit);
-            for (const FVector3f& V : Out.Verts) Box += V;
-            Origin = Box.GetCenter();
-        }
-        for (FVector3f& V : Out.Verts) V -= Origin;
+        FBox3f Box(ForceInit);
+        for (const FVector3f& V : Out.Verts) Box += V;
+        Origin = Box.GetCenter();
     }
+    for (FVector3f& V : Out.Verts)     V -= Origin;
+    for (FVector3f& V : OutEyes.Verts) V -= Origin;
 }
 
 void APTMapEnvironment::SetSkySettings(const FPTSkySettings& In)
@@ -187,10 +191,12 @@ void APTMapEnvironment::ApplyAssetSunParams()
 int32 APTMapEnvironment::BakeAssetFromVolume(APTSculptVolume* Volume, bool bUsePivot, const FVector& PivotWorld)
 {
     if (!Volume) return INDEX_NONE;
-    FPTPropGeometry Geo;
-    PT_GatherVolumeGeometry(Volume, Geo, bUsePivot, PivotWorld);
+    FPTPropGeometry Geo, EyesGeo;
+    PT_GatherVolumeGeometry(Volume, Geo, EyesGeo, bUsePivot, PivotWorld);
     if (!Geo.IsValid()) return INDEX_NONE; // box vacío
-    return AddAsset(Geo);
+    FPTPaintAtlas Atlas;
+    Volume->GetPaintAtlasSnapshot(Atlas); // pintura nítida (si hay); vacío = solo vertex color
+    return AddAsset(Geo, EyesGeo, Atlas);
 }
 
 void APTMapEnvironment::FillProcSection(UProceduralMeshComponent* PMC, int32 Section,
@@ -201,20 +207,79 @@ void APTMapEnvironment::FillProcSection(UProceduralMeshComponent* PMC, int32 Sec
     TArray<FVector> Verts;   Verts.SetNumUninitialized(NV);
     TArray<FVector> Normals; Normals.SetNumUninitialized(NV);
     TArray<FColor>  Colors;  Colors.SetNumUninitialized(NV);
+    TArray<FVector2D> UV0, UV1;
+    const bool bHasUV = (Geo.UV0.Num() == NV && Geo.UV1.Num() == NV); // UV de lookup del atlas de pintura
+    if (bHasUV) { UV0.SetNumUninitialized(NV); UV1.SetNumUninitialized(NV); }
     for (int32 i = 0; i < NV; ++i)
     {
         Verts[i]   = Xf.TransformPosition(FVector(Geo.Verts[i]));
         Normals[i] = Xf.TransformVectorNoScale(FVector(Geo.Normals.IsValidIndex(i) ? Geo.Normals[i] : FVector3f::ZAxisVector));
         Colors[i]  = Geo.Colors.IsValidIndex(i) ? Geo.Colors[i] : FColor::White;
+        if (bHasUV) { UV0[i] = FVector2D(Geo.UV0[i]); UV1[i] = FVector2D(Geo.UV1[i]); }
     }
     const TArray<FVector2D> NoUV;
     const TArray<FProcMeshTangent> NoTan;
     // ProceduralMeshComponent SÍ renderiza los vertex colors en build cocinada (a diferencia de un
-    // UStaticMesh construido en runtime), por eso los props horneados usan esto.
-    PMC->CreateMeshSection(Section, Verts, Geo.Tris, Normals, NoUV, Colors, NoTan, bCollision);
+    // UStaticMesh construido en runtime), por eso los props horneados usan esto. UV0/UV1 = lookup del atlas.
+    PMC->CreateMeshSection(Section, Verts, Geo.Tris, Normals, UV0, UV1, NoUV, NoUV, Colors, NoTan, bCollision);
 }
 
-int32 APTMapEnvironment::AddAsset(const FPTPropGeometry& Geo)
+UMaterialInstanceDynamic* APTMapEnvironment::MakePaintMID(const FPTPaintAtlas& A)
+{
+    if (!A.bValid || !PaintClayMaterial) return nullptr;
+    const int32 PGW = A.BrickDim.X;
+    const int32 PGH = A.BrickDim.Y * A.BrickDim.Z;
+    if (PGW <= 0 || PGH <= 0 || A.AtlasW <= 0 || A.AtlasH <= 0) return nullptr;
+    if (A.PageBuf.Num() < PGW * PGH || A.AtlasBuf.Num() < A.AtlasW * A.AtlasH) return nullptr;
+
+    // Recrear la page table (R32F) y el atlas (BGRA8) desde el snapshot.
+    UTexture2D* PageTex = UTexture2D::CreateTransient(PGW, PGH, PF_R32_FLOAT);
+    if (!PageTex) return nullptr;
+    PageTex->SRGB = false; PageTex->Filter = TF_Nearest; PageTex->AddressX = TA_Clamp; PageTex->AddressY = TA_Clamp;
+    {
+        FTexture2DMipMap& Mip = PageTex->GetPlatformData()->Mips[0];
+        void* D = Mip.BulkData.Lock(LOCK_READ_WRITE);
+        FMemory::Memcpy(D, A.PageBuf.GetData(), FMath::Min<int64>((int64)A.PageBuf.Num() * sizeof(float), Mip.BulkData.GetBulkDataSize()));
+        Mip.BulkData.Unlock();
+    }
+    PageTex->UpdateResource();
+
+    UTexture2D* AtlasTex = UTexture2D::CreateTransient(A.AtlasW, A.AtlasH, PF_B8G8R8A8);
+    if (!AtlasTex) return nullptr;
+    AtlasTex->SRGB = true; AtlasTex->Filter = TF_Bilinear; AtlasTex->AddressX = TA_Clamp; AtlasTex->AddressY = TA_Clamp;
+    {
+        FTexture2DMipMap& Mip = AtlasTex->GetPlatformData()->Mips[0];
+        void* D = Mip.BulkData.Lock(LOCK_READ_WRITE);
+        FMemory::Memcpy(D, A.AtlasBuf.GetData(), FMath::Min<int64>((int64)A.AtlasBuf.Num() * sizeof(FColor), Mip.BulkData.GetBulkDataSize()));
+        Mip.BulkData.Unlock();
+    }
+    AtlasTex->UpdateResource();
+
+    UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(PaintClayMaterial, this);
+    if (!MID) return nullptr;
+    MID->SetTextureParameterValue(TEXT("PageTable"), PageTex);
+    MID->SetTextureParameterValue(TEXT("Atlas"),     AtlasTex);
+    MID->SetVectorParameterValue(TEXT("CanvasMin"),  A.CanvasMin);
+    MID->SetScalarParameterValue(TEXT("ColorVoxel"), A.ColorVoxel);
+    MID->SetVectorParameterValue(TEXT("VoxDim"),     FVector(A.VoxDim));
+    MID->SetVectorParameterValue(TEXT("BrickDim"),   FVector(A.BrickDim));
+    MID->SetScalarParameterValue(TEXT("PageW"),      A.BrickDim.X);
+    MID->SetScalarParameterValue(TEXT("PageH"),      A.BrickDim.Y * A.BrickDim.Z);
+    MID->SetScalarParameterValue(TEXT("TilesPerRow"), A.TilesPerRow);
+    MID->SetScalarParameterValue(TEXT("AtlasW"),     A.AtlasW);
+    MID->SetScalarParameterValue(TEXT("AtlasH"),     A.AtlasH);
+    MID->SetScalarParameterValue(TEXT("CB"),         A.CB);
+    MID->SetScalarParameterValue(TEXT("NewClayGlowBrightness"), 0.f); // sin brillo de arcilla nueva
+    // Sol del ambiente (por si el material cel-shadea): mismo parámetro que el resto.
+    const float Pitch = FMath::Lerp(0.f, -180.f, FMath::Clamp(SkySettings.TimeOfDay, 0.f, 1.f));
+    const FVector SunDir = -FRotator(Pitch, SkySettings.SunYaw, 0.f).Vector();
+    MID->SetVectorParameterValue(TEXT("SunDir"), FLinearColor(SunDir.X, SunDir.Y, SunDir.Z, 0.f));
+
+    AssetMIDs.Add(MID); // anti-GC
+    return MID;
+}
+
+int32 APTMapEnvironment::AddAsset(const FPTPropGeometry& Geo, const FPTPropGeometry& EyesGeo, const FPTPaintAtlas& PaintAtlas)
 {
     if (!Geo.IsValid()) return INDEX_NONE;
 
@@ -223,18 +288,37 @@ int32 APTMapEnvironment::AddAsset(const FPTPropGeometry& Geo)
     PMC->RegisterComponent();
     PMC->SetMobility(EComponentMobility::Movable);
     PMC->bUseComplexAsSimpleCollision = true;
+    // Cocinar la colisión en un hilo aparte (no bloquear el game thread al cargar mapas densos: si no, la
+    // carga tarda segundos y el cliente se desconecta por ConnectionTimeout).
+    PMC->bUseAsyncCooking = true;
     PMC->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     PMC->SetCollisionObjectType(ECC_WorldStatic);
 
     FPTPropAsset A;
     A.Geo = Geo;
+    A.EyesGeo = EyesGeo;
     A.PMC = PMC;
+    A.PaintAtlas = PaintAtlas;
+    A.PaintMID = PaintAtlas.bValid ? MakePaintMID(PaintAtlas) : nullptr; // pintura nítida (atlas) si hay
     return Assets.Add(MoveTemp(A));
+}
+
+UMaterialInterface* APTMapEnvironment::GetAssetPreviewMaterial(int32 AssetIdx)
+{
+    if (Assets.IsValidIndex(AssetIdx) && Assets[AssetIdx].PaintMID) return Assets[AssetIdx].PaintMID;
+    return GetPropMaterialForPreview();
 }
 
 const FPTPropGeometry* APTMapEnvironment::GetAssetGeometry(int32 AssetIdx) const
 {
     return Assets.IsValidIndex(AssetIdx) ? &Assets[AssetIdx].Geo : nullptr;
+}
+
+const FPTPropGeometry* APTMapEnvironment::GetAssetEyesGeometry(int32 AssetIdx) const
+{
+    if (!Assets.IsValidIndex(AssetIdx)) return nullptr;
+    const FPTPropGeometry& E = Assets[AssetIdx].EyesGeo;
+    return E.IsValid() ? &E : nullptr;
 }
 
 float APTMapEnvironment::GetAssetRadius(int32 AssetIdx) const
@@ -269,7 +353,13 @@ UTextureRenderTarget2D* APTMapEnvironment::GetAssetThumbnail(int32 AssetIdx, int
     MC->RegisterComponent();
     MC->SetMobility(EComponentMobility::Movable);
     FillProcSection(MC, 0, Geo, FTransform::Identity, /*bCollision=*/false);
-    if (UMaterialInterface* Mat = GetPropMaterialForPreview()) MC->SetMaterial(0, Mat);
+    if (UMaterialInterface* Mat = GetAssetPreviewMaterial(AssetIdx)) MC->SetMaterial(0, Mat);
+    // Ojos en la miniatura (sección 1 con su material), si el asset tiene.
+    if (const FPTPropGeometry* EG = GetAssetEyesGeometry(AssetIdx))
+    {
+        FillProcSection(MC, 1, *EG, FTransform::Identity, /*bCollision=*/false);
+        if (EyeMaterial) MC->SetMaterial(1, EyeMaterial);
+    }
     MC->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     MA->SetActorLocation(Far);
 
@@ -322,18 +412,21 @@ UTextureRenderTarget2D* APTMapEnvironment::GetAssetThumbnail(int32 AssetIdx, int
     return RT;
 }
 
-void APTMapEnvironment::RebuildAssetMesh(FPTPropAsset& A)
+void APTMapEnvironment::BuildMergedSection(FPTPropAsset& A, const FPTPropGeometry& G, int32 Section, UMaterialInterface* Mat)
 {
     if (!A.PMC) return;
-    if (A.InstXf.Num() == 0) { A.PMC->ClearMeshSection(0); return; }
+    if (!G.IsValid() || A.InstXf.Num() == 0) { A.PMC->ClearMeshSection(Section); return; }
 
-    const FPTPropGeometry& G = A.Geo;
     const int32 NVper = G.Verts.Num();
     const int32 NTper = G.Tris.Num();
-    TArray<FVector> Verts;   Verts.Reserve(NVper * A.InstXf.Num());
-    TArray<FVector> Normals; Normals.Reserve(NVper * A.InstXf.Num());
-    TArray<FColor>  Colors;  Colors.Reserve(NVper * A.InstXf.Num());
-    TArray<int32>   Tris;    Tris.Reserve(NTper * A.InstXf.Num());
+    const int32 NInst = A.InstXf.Num();
+    const bool  bHasUV = (G.UV0.Num() == NVper && G.UV1.Num() == NVper); // UV de lookup del atlas de pintura
+    TArray<FVector> Verts;   Verts.Reserve(NVper * NInst);
+    TArray<FVector> Normals; Normals.Reserve(NVper * NInst);
+    TArray<FColor>  Colors;  Colors.Reserve(NVper * NInst);
+    TArray<int32>   Tris;    Tris.Reserve(NTper * NInst);
+    TArray<FVector2D> UV0, UV1;
+    if (bHasUV) { UV0.Reserve(NVper * NInst); UV1.Reserve(NVper * NInst); }
 
     for (const FTransform& Xf : A.InstXf)
     {
@@ -343,16 +436,32 @@ void APTMapEnvironment::RebuildAssetMesh(FPTPropAsset& A)
             Verts.Add(Xf.TransformPosition(FVector(G.Verts[i])));
             Normals.Add(Xf.TransformVectorNoScale(FVector(G.Normals.IsValidIndex(i) ? G.Normals[i] : FVector3f::ZAxisVector)));
             Colors.Add(G.Colors.IsValidIndex(i) ? G.Colors[i] : FColor::White);
+            // La UV del atlas es la MISMA para todas las instancias (posición volumen-local del asset).
+            if (bHasUV) { UV0.Add(FVector2D(G.UV0[i])); UV1.Add(FVector2D(G.UV1[i])); }
         }
         for (int32 t = 0; t < NTper; ++t) Tris.Add(Base + G.Tris[t]);
     }
 
     const TArray<FVector2D> NoUV;
     const TArray<FProcMeshTangent> NoTan;
-    A.PMC->ClearMeshSection(0);
-    A.PMC->CreateMeshSection(0, Verts, Tris, Normals, NoUV, Colors, NoTan, /*bCollision=*/true);
-    UMaterialInterface* Mat = GetOrCreatePropMID(); if (!Mat) Mat = PropMaterial;
-    if (Mat) A.PMC->SetMaterial(0, Mat);
+    A.PMC->ClearMeshSection(Section);
+    A.PMC->CreateMeshSection(Section, Verts, Tris, Normals, UV0, UV1, NoUV, NoUV, Colors, NoTan, /*bCollision=*/true);
+    if (Mat) A.PMC->SetMaterial(Section, Mat);
+}
+
+void APTMapEnvironment::RebuildAssetMesh(FPTPropAsset& A)
+{
+    if (!A.PMC) return;
+    if (A.InstXf.Num() == 0) { A.PMC->ClearMeshSection(0); A.PMC->ClearMeshSection(1); return; }
+
+    // Sección 0: ARCILLA. Si el asset tiene pintura → material con el atlas (nítido); si no → material normal.
+    UMaterialInterface* ClayMat = A.PaintMID ? (UMaterialInterface*)A.PaintMID : GetOrCreatePropMID();
+    if (!ClayMat) ClayMat = PropMaterial;
+    BuildMergedSection(A, A.Geo, 0, ClayMat);
+
+    // Sección 1: OJOS (su propio material). Vacía si el asset no tiene ojos.
+    if (A.EyesGeo.IsValid()) BuildMergedSection(A, A.EyesGeo, 1, EyeMaterial);
+    else                     A.PMC->ClearMeshSection(1);
 }
 
 void APTMapEnvironment::PlaceInstance(int32 AssetIdx, const FTransform& WorldXf)
@@ -415,7 +524,8 @@ void APTMapEnvironment::ClearAll()
     Assets.Reset();
     PlaceOrder.Reset();
     Thumbnails.Reset();
-    PropMID = nullptr; // se recrea en el próximo mapa/ambiente
+    PropMID = nullptr;   // se recrea en el próximo mapa/ambiente
+    AssetMIDs.Reset();   // libera los MID de pintura por asset
 }
 
 // Serializa los ajustes de ambiente (mismo orden en lectura/escritura). Version-aware para compatibilidad.
@@ -429,11 +539,22 @@ static void PT_SerializeSky(FArchive& Ar, FPTSkySettings& S, int32 Version)
     if (Version >= 3) { Ar << S.Bands; Ar << S.HorizonExp; Ar << S.SunSize; Ar << S.SunGlow; }
 }
 
+// v5: snapshot del atlas de pintura por asset (page table + atlas + parámetros).
+static void PT_SerializePaintAtlas(FArchive& Ar, FPTPaintAtlas& P)
+{
+    Ar << P.bValid;
+    if (!P.bValid) return;
+    Ar << P.PageBuf; Ar << P.AtlasBuf;
+    Ar << P.CanvasMin; Ar << P.ColorVoxel;
+    Ar << P.VoxDim; Ar << P.BrickDim;
+    Ar << P.TilesPerRow; Ar << P.AtlasW; Ar << P.AtlasH; Ar << P.CB;
+}
+
 void APTMapEnvironment::SerializeEnvironment(TArray<uint8>& Out)
 {
     Out.Reset();
     FMemoryWriter Ar(Out, /*bIsPersistent=*/true);
-    int32 Version = 3; Ar << Version; // v3: + knobs cartoon (Bands/HorizonExp/SunSize/SunGlow)
+    int32 Version = 5; Ar << Version; // v5: + UV de atlas por vértice + snapshot del atlas de pintura por asset
     PT_SerializeSky(Ar, SkySettings, Version);
     int32 NumAssets = Assets.Num(); Ar << NumAssets;
     for (FPTPropAsset& A : Assets)
@@ -442,6 +563,14 @@ void APTMapEnvironment::SerializeEnvironment(TArray<uint8>& Out)
         Ar << A.Geo.Normals;
         Ar << A.Geo.Colors;
         Ar << A.Geo.Tris;
+        Ar << A.Geo.UV0;   // v5: UV de lookup del atlas de pintura
+        Ar << A.Geo.UV1;
+        // v4: malla de OJOS (sección aparte). Se guarda siempre (puede estar vacía).
+        Ar << A.EyesGeo.Verts;
+        Ar << A.EyesGeo.Normals;
+        Ar << A.EyesGeo.Colors;
+        Ar << A.EyesGeo.Tris;
+        PT_SerializePaintAtlas(Ar, A.PaintAtlas); // v5: pintura nítida (atlas)
         // Instancias de este asset (transforms en mundo).
         int32 NInst = A.InstXf.Num();
         Ar << NInst;
@@ -463,18 +592,37 @@ void APTMapEnvironment::DeserializeEnvironment(const TArray<uint8>& In)
     int32 NumAssets = 0; Ar << NumAssets;
     for (int32 a = 0; a < NumAssets; ++a)
     {
-        FPTPropGeometry Geo;
+        FPTPropGeometry Geo, EyesGeo;
+        FPTPaintAtlas   Atlas;
         Ar << Geo.Verts;
         Ar << Geo.Normals;
         Ar << Geo.Colors;
         Ar << Geo.Tris;
-        const int32 Idx = AddAsset(Geo); // reconstruye StaticMesh + HISM
+        if (Version >= 5) { Ar << Geo.UV0; Ar << Geo.UV1; } // v5: UV de lookup del atlas
+        if (Version >= 4) // v4+: geometría de ojos (mapas viejos no la tienen → sin ojos, compatible)
+        {
+            Ar << EyesGeo.Verts;
+            Ar << EyesGeo.Normals;
+            Ar << EyesGeo.Colors;
+            Ar << EyesGeo.Tris;
+        }
+        if (Version >= 5) PT_SerializePaintAtlas(Ar, Atlas); // v5: snapshot del atlas de pintura (nítida)
+        const int32 Idx = AddAsset(Geo, EyesGeo, Atlas);
         int32 NInst = 0; Ar << NInst;
+        // Carga en BULK: acumular TODAS las instancias y reconstruir la malla combinada UNA sola vez por
+        // asset. (Antes llamaba PlaceInstance por instancia → reconstruía la malla completa N veces = O(N²)
+        // + colisión N veces → bloqueaba el game thread varios segundos y el cliente se desconectaba por
+        // ConnectionTimeout al cargar mapas densos.)
         for (int32 i = 0; i < NInst; ++i)
         {
             FTransform Xf; Ar << Xf;
-            if (Idx != INDEX_NONE) PlaceInstance(Idx, Xf);
+            if (Idx != INDEX_NONE)
+            {
+                Assets[Idx].InstXf.Add(Xf);
+                PlaceOrder.Add(Idx);
+            }
         }
+        if (Idx != INDEX_NONE) RebuildAssetMesh(Assets[Idx]); // una sola reconstrucción (O(N))
     }
     ApplySkySettings(); // aplicar el ambiente cargado (sol/cielo/niebla) en esta máquina
 }

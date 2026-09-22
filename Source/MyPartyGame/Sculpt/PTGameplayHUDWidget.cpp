@@ -5,6 +5,7 @@
 #include "../Lobby/PTLobbyCharacter.h"
 #include "Components/TextBlock.h"
 #include "Components/RichTextBlock.h"
+#include "Components/ProgressBar.h"
 #include "Components/Button.h"
 #include "Components/EditableTextBox.h"
 #include "Components/ScrollBox.h"
@@ -486,6 +487,7 @@ void UPTGameplayHUDWidget::UpdateAuthorPanels()
     Hide(WordPickPanel); Hide(ScoreboardBox); Hide(ResultsPanel);
     Hide(GuessPopup); Hide(AllGuessedPopup);
     Hide(TxtChat); Hide(ChatInput); Hide(ChatScroll); Hide(ChatPanel); // + el contenedor (fondo/"Enter to chat")
+    Hide(ThemePanel); // cartel de tema (mapa/banco): no aplica en el Level Creator
 
     // Mostrar los controles de autoría (Guardar / Salir / Ambiente).
     if (AuthorPanel)      AuthorPanel->SetVisibility(ESlateVisibility::Visible);
@@ -524,6 +526,30 @@ void UPTGameplayHUDWidget::SetPivotHintVisible(bool bVisible)
         PivotHintText->SetText(PTText::Get(TEXT("PIVOT_HINT")));
     PivotHintText->SetVisibility(bVisible ? ESlateVisibility::HitTestInvisible
                                           : ESlateVisibility::Collapsed);
+}
+
+void UPTGameplayHUDWidget::SetAuthorModeIndicator(int32 State, float Progress)
+{
+    // Texto del modo (solo se re-setea al cambiar de estado, no cada frame).
+    if (SculptModeText && State != LastAuthorModeState)
+    {
+        const TCHAR* Key = (State == 0) ? TEXT("SCULPT_MODE")
+                         : (State == 1) ? TEXT("MODE_CHANGING")
+                                        : TEXT("MODE_LEVEL_EDIT");
+        SculptModeText->SetText(PTText::Get(Key));
+        SculptModeText->SetVisibility(ESlateVisibility::HitTestInvisible);
+    }
+    // Barra: solo visible mientras "Cambiando" (State 1), llenándose con Progress.
+    if (ModeChangeBar)
+    {
+        if (State == 1)
+        {
+            ModeChangeBar->SetVisibility(ESlateVisibility::HitTestInvisible);
+            ModeChangeBar->SetPercent(FMath::Clamp(Progress, 0.f, 1.f));
+        }
+        else ModeChangeBar->SetVisibility(ESlateVisibility::Collapsed);
+    }
+    LastAuthorModeState = State;
 }
 
 void UPTGameplayHUDWidget::OnSaveMapClicked()

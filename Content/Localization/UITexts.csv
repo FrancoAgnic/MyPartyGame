@@ -100,6 +100,9 @@ PIVOT_HINT,Acomoda el pivote — Click: confirmar · Rueda: subir/bajar · Retro
 THEME_TITLE,¡A jugar!,Let's play!,Vamos jogar!,Auf geht's!,C'est parti !,Si gioca!
 THEME_MAP,Mapa: {0},Map: {0},Mapa: {0},Karte: {0},Carte : {0},Mappa: {0}
 THEME_WORDPACK,Palabras: {0},Word pack: {0},Palavras: {0},Wortpaket: {0},Mots : {0},Parole: {0}
+SCULPT_MODE,Modo Escultura,Sculpt mode,Modo Escultura,Skulptur-Modus,Mode Sculpture,Modalità Scultura
+MODE_LEVEL_EDIT,Modo Edición de Nivel,Level Edit mode,Modo Edição de Nível,Level-Bearbeitung,Mode Édition,Modifica Livello
+MODE_CHANGING,Cambiando modo...,Switching mode...,Mudando de modo...,Modus wechselt...,Changement de mode...,Cambio modalità...
 MAP_SAVED,Escenario guardado,Map saved,Cenário salvo,Karte gespeichert,Carte enregistrée,Mappa salvata
 HINT_PLANE_VERTICAL,Plano vertical,Vertical Plane,Plano vertical,Vertikale Ebene,Plan vertical,Piano verticale
 HINT_PLANE_HORIZONTAL,Plano horizontal,Horizontal Plane,Plano horizontal,Horizontale Ebene,Plan horizontal,Piano orizzontale

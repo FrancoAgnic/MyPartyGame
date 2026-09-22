@@ -2383,11 +2383,46 @@ FVector APTSculptPlayerController::GetPlacePoint(bool& bOutOutside) const
     return Raw;
 }
 
+FVector APTSculptPlayerController::GetPlacePointGrounded(bool& bOutOutside) const
+{
+    FVector S, D;
+    if (!GetCameraRay(S, D)) { bOutOutside = false; return FVector::ZeroVector; }
+    // El modo (dentro/fuera del box) se decide por el punto de BRAZO, igual que GetPlacePoint (coherente).
+    const FVector Arm = S + D * (AirDepth + PlaceArmBoost);
+    bOutOutside = Volume && !Volume->IsInsideCanvas(Arm);
+
+    // Snap al suelo SOLO si hay superficie DENTRO del alcance de brazo: se traza el rayo únicamente hasta el
+    // punto de brazo. Si hay piso/asset más cerca que el brazo → el asset se apoya ahí; si el punto de brazo
+    // queda en el aire (no hay superficie hasta esa distancia) → flota a distancia de brazo (podés colocar
+    // objetos flotando o en el aire, como antes).
+    if (UWorld* W = GetWorld())
+    {
+        FHitResult Hit;
+        FCollisionQueryParams Q(SCENE_QUERY_STAT(PTPlaceGround), /*bTraceComplex=*/false);
+        if (GetPawn())        Q.AddIgnoredActor(GetPawn());
+        if (PropPreviewActor) Q.AddIgnoredActor(PropPreviewActor);
+        if (PreviewActor)     Q.AddIgnoredActor(PreviewActor);
+        if (W->LineTraceSingleByChannel(Hit, S, Arm, ECC_WorldStatic, Q))
+            return Hit.ImpactPoint;
+    }
+    return Arm; // sin superficie hasta el brazo → flota a distancia de brazo
+}
+
+void APTSculptPlayerController::UpdateEffectiveOutside(bool bRawOutside, float Dt)
+{
+    if (!bModeInit) { bEffectiveOutside = bRawOutside; bModeInit = true; OutsideGraceElapsed = 0.f; return; }
+    if (!bRawOutside) { bEffectiveOutside = false; OutsideGraceElapsed = 0.f; return; } // entrar = instantáneo
+    if (bEffectiveOutside) return; // ya en modo colocar
+    // Salimos del box viniendo de escultura → esperar la gracia antes de cambiar a colocar (mientras tanto
+    // seguimos en escultura; el sello queda pegado a la pared interna porque GetStampPoint clampea al box).
+    OutsideGraceElapsed += Dt;
+    if (OutsideGraceElapsed >= FMath::Max(0.f, ExitGraceSeconds)) bEffectiveOutside = true;
+}
+
 bool APTSculptPlayerController::IsPlaceMode() const
 {
     if (!IsMapAuthorMode() || !Volume) return false;
-    bool bOut = false; GetPlacePoint(bOut);
-    return bOut; // fuera del box = modo colocar (la herramienta decide colocar/borrar/nada)
+    return bEffectiveOutside; // modo debounced (con gracia al salir del box)
 }
 
 void APTSculptPlayerController::DoBakeAsset()
@@ -2453,7 +2488,7 @@ void APTSculptPlayerController::PlaceCurrentAsset()
     APTMapEnvironment* Env = GetMapEnv();
     if (!Env || Env->GetNumAssets() == 0) return;
     if (!Env->GetAssetGeometry(CurrentAsset)) return;
-    bool bOut = false; const FVector P = GetPlacePoint(bOut);
+    bool bOut = false; const FVector P = GetPlacePointGrounded(bOut); // apoyar en el suelo
     if (Volume && Volume->IsInNoPlaceZone(P)) return; // zona libre alrededor del cubo: no se coloca acá
     Env->PlaceInstance(CurrentAsset, FTransform(StampRotation, P, FVector(AssetScale)));
 }
@@ -2462,7 +2497,7 @@ void APTSculptPlayerController::EraseAssetUnderCursor()
 {
     APTMapEnvironment* Env = GetMapEnv();
     if (!Env) return;
-    bool bOut = false; const FVector P = GetPlacePoint(bOut);
+    bool bOut = false; const FVector P = GetPlacePointGrounded(bOut); // mismo punto que el preview (suelo)
     Env->RemoveInstanceNear(P, FMath::Max(80.f, AssetScale * 120.f));
 }
 
@@ -2565,7 +2600,31 @@ void APTSculptPlayerController::TickAuthorProps(float Dt)
         PlaceArmBoost = NewBoost;
     }
 
-    bool bOut = false; const FVector P = GetPlacePoint(bOut);
+    bool bRawOut = false; const FVector P = GetPlacePointGrounded(bRawOut); // snap al suelo para preview/colocación
+    // Histéresis: entrar al box = escultura instantáneo; salir = con gracia (no cambia de modo al toque).
+    UpdateEffectiveOutside(bRawOut, Dt);
+    const bool bOut = bEffectiveOutside; // el resto del tick usa el modo DEBOUNCED
+
+    // Mostrar el wireframe de la NoPlaceZone SOLO en el Level Creator (una vez). En la partida real este
+    // TickAuthorProps no corre → la zona queda oculta (HiddenInGame por defecto).
+    if (!bNoPlaceDebugShown && Volume) { Volume->SetNoPlaceZoneDebugVisible(true); bNoPlaceDebugShown = true; }
+
+    // Cubo verde en modo escultura (incluye la gracia de salida); se actualiza al cambiar de estado.
+    const bool bInside = !bOut;
+    if (bInside != bSculptModeActive)
+    {
+        bSculptModeActive = bInside;
+        if (Volume) Volume->SetSculptModeVisual(bInside);
+    }
+    // Indicador de modo + barra de "cambiando" (cada frame): 0=Escultura, 1=Cambiando, 2=Edición de Nivel.
+    if (GameplayHUD)
+    {
+        int32 ModeState; float ModeProgress = 0.f;
+        if (!bRawOut)                 ModeState = 0; // dentro del box → escultura
+        else if (!bEffectiveOutside)  { ModeState = 1; ModeProgress = OutsideGraceElapsed / FMath::Max(0.01f, ExitGraceSeconds); } // saliendo
+        else                          ModeState = 2; // afuera confirmado → edición de nivel
+        GameplayHUD->SetAuthorModeIndicator(ModeState, ModeProgress);
+    }
 
     // Hornear: mantener Enter 3s DENTRO del box → entra a MODO PIVOTE (acomodar el ancla del asset).
     // El horneado real ocurre cuando el jugador confirma con click (ver ConfirmPivotBake).
@@ -2583,9 +2642,10 @@ void APTSculptPlayerController::TickAuthorProps(float Dt)
     APTMapEnvironment* Env = GetMapEnv();
     const bool bEraseOut = bOut && (EditMode == EPTEditMode::Erase) && !bEyesTool;
     bool bShowAsset = false;
-    // En la zona libre alrededor del cubo NO se puede colocar → ocultar el preview del asset ahí (feedback).
+    // En la zona libre alrededor del cubo NO se puede colocar. Antes se ocultaba el preview; ahora se MUESTRA
+    // teñido de ROJO translúcido (overlay) para avisar "acá no", y la colocación sigue bloqueada.
     const bool bInNoPlace = Volume && Volume->IsInNoPlaceZone(P);
-    if (bOut && !bEraseOut && !bInNoPlace && AssetPreview && Env && Env->GetNumAssets() > 0 && !bEyesTool
+    if (bOut && !bEraseOut && AssetPreview && Env && Env->GetNumAssets() > 0 && !bEyesTool
         && EditMode == EPTEditMode::Add)
     {
         if (const FPTPropGeometry* Geo = Env->GetAssetGeometry(CurrentAsset))
@@ -2595,11 +2655,28 @@ void APTSculptPlayerController::TickAuthorProps(float Dt)
             if (PreviewBuiltAsset != CurrentAsset)
             {
                 APTMapEnvironment::FillProcSection(AssetPreview, 0, *Geo, FTransform::Identity, /*bCollision=*/false);
-                if (UMaterialInterface* Mat = Env->GetPropMaterialForPreview()) AssetPreview->SetMaterial(0, Mat);
+                // Ojos en el preview (sección 1 con su material), si el asset tiene.
+                if (const FPTPropGeometry* EG = Env->GetAssetEyesGeometry(CurrentAsset))
+                {
+                    APTMapEnvironment::FillProcSection(AssetPreview, 1, *EG, FTransform::Identity, /*bCollision=*/false);
+                    if (UMaterialInterface* EM = Env->GetEyeMaterial()) AssetPreview->SetMaterial(1, EM);
+                }
+                else AssetPreview->ClearMeshSection(1);
                 PreviewBuiltAsset = CurrentAsset;
+                bPreviewNoPlaceTint = !bInNoPlace; // forzar (re)set del material del preview abajo
             }
             AssetPreview->SetWorldTransform(FTransform(StampRotation, P, FVector(AssetScale)));
             bShowAsset = true;
+
+            // Dentro de la NoPlaceZone → material ROJO translúcido (avisa "acá no"); afuera → material normal
+            // del prop. Se cambia solo al cruzar el borde (guard) para no re-setear cada frame.
+            if (bInNoPlace != bPreviewNoPlaceTint)
+            {
+                bPreviewNoPlaceTint = bInNoPlace;
+                UMaterialInterface* Mat = (bInNoPlace && NoPlacePreviewOverlay)
+                    ? NoPlacePreviewOverlay : Env->GetAssetPreviewMaterial(CurrentAsset);
+                if (Mat) AssetPreview->SetMaterial(0, Mat);
+            }
         }
     }
     if (AssetPreview) AssetPreview->SetVisibility(bShowAsset);
