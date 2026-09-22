@@ -1,0 +1,34 @@
+TITLE: v0.9.4 — Level Creator polish: bake hotbar, memory budget, smarter erase & exact eyedropper
+
+[h1]Level Creator update (v0.9.4)[/h1]
+[b]Building maps is smoother, cleaner and easier to control.[/b]
+
+[h2]Bake & hotbar[/h2]
+[list]
+[*][b]Bake slot with progress ring[/b] — hold Enter to cook an asset; a ring fills over the 3 seconds and shows "Model saved!" when done.
+[*][b]Environment (F) slot[/b] added to the hotbar automatically.
+[*]Color picker and Environment slots now light up while active.
+[/list]
+
+[h2]Erase, rebuilt[/h2]
+[list]
+[*][b]Erase by contact[/b] — hold and sweep to delete every prop the brush actually touches (mesh-accurate, not bounding boxes).
+[*][b]Highlight[/b] — props about to be deleted glow red.
+[*][b]Reach control[/b] — scale the brush up to its max, then keep scrolling to push it out and erase from far away.
+[*]The erase brush now lands on any asset, even ones outside the play area.
+[/list]
+
+[h2]Performance (LOD)[/h2]
+[list]
+[*][b]Distance-based detail[/b] — props far from the map's center are drawn with lighter, decimated meshes in 3 configurable stages, keeping big maps fast.
+[/list]
+
+[h2]Quality of life[/h2]
+[list]
+[*][b]Memory budget bar[/b] — see how much the map uses as you place props; it blocks placing once the limit is reached.
+[*][b]Player spawns[/b] are shown while building so you don't bury them under props.
+[*][b]Exact eyedropper[/b] — copying a color from a prop now gives the identical color, no ambient tint.
+[*]Sculpting the box floor no longer flips you out of Sculpt mode.
+[*]Level Edit mode is cleaner: only the tools that apply are shown, and it always starts on Add.
+[*]Match HUD no longer shows Level Creator-only widgets.
+[/list]
