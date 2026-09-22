@@ -2,6 +2,7 @@
 
 #include "PTUserWidget.h"
 #include "../PTGameInstance.h"
+#include "../PTTextTable.h" // auto-traducción inmediata al construir (evita el parpadeo base→idioma)
 #include "Components/Widget.h"
 #include "TimerManager.h"
 #include "Engine/World.h"
@@ -17,6 +18,10 @@ void UPTUserWidget::NativeConstruct()
     // widgets creados dinámicamente (filas de sesión, slots, etc.) también quedan cubiertos.
     if (UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance()))
         GI->ApplyUIButtonSounds(this);
+
+    // Traducir el árbol de este widget YA, antes del primer frame, para que no se vea el texto base
+    // (inglés) por medio segundo hasta el próximo barrido del PTLocalizationSubsystem. Es idempotente.
+    PTText::LocalizeWidgetTree(this);
 
     if (bAutoPopIn) PlayPopIn();
 }

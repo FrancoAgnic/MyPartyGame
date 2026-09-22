@@ -32,6 +32,10 @@ public:
     UPROPERTY(BlueprintReadOnly, Category="ColorPicker")
     FLinearColor CurrentColor = FLinearColor::White;
 
+    /** Brillo (V, 0..1) MÍNIMO que se puede elegir: evita el negro puro (con el que el overlay X-ray del
+     *  preview no se distingue detrás de la geometría). Lo más oscuro queda un gris oscuro. */
+    UPROPERTY(EditAnywhere, Category="ColorPicker") float MinPickValue = 0.18f;
+
     /** Setea el color (para swatches de la paleta) y refresca la UI. */
     UFUNCTION(BlueprintCallable, Category="ColorPicker")
     void SetColor(FLinearColor NewColor);

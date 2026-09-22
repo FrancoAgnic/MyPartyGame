@@ -258,10 +258,13 @@ void UPTColorPickerWidget::QuickAdjustValue(float Delta)
 
 void UPTColorPickerWidget::RecomputeColor()
 {
+    // Piso de brillo: el más oscuro seleccionable es un gris oscuro (no negro puro), para que el overlay
+    // X-ray del preview se distinga detrás de la geometría. Solo levanta valores muy bajos; no afecta el resto.
+    const float VUsed = FMath::Max(Val, FMath::Clamp(MinPickValue, 0.f, 1.f));
     CurrentColor = FLinearColor::MakeFromHSV8(
         (uint8)FMath::Clamp(Hue * 255.f, 0.f, 255.f),
         (uint8)FMath::Clamp(Sat * 255.f, 0.f, 255.f),
-        (uint8)FMath::Clamp(Val * 255.f, 0.f, 255.f));
+        (uint8)FMath::Clamp(VUsed * 255.f, 0.f, 255.f));
     RefreshUI();
 }
 
@@ -365,14 +368,14 @@ bool UPTColorPickerWidget::SampleScreenColorAtCursor(FLinearColor& OutColor) con
 
 void UPTColorPickerWidget::SetColor(FLinearColor NewColor)
 {
-    CurrentColor = NewColor;
     // Descomponer a HSV para que la rueda y el slider queden coherentes.
     const FLinearColor HSV = NewColor.LinearRGBToHSV();
     Hue = HSV.R / 360.f;
     Sat = HSV.G;
-    Val = HSV.B;
+    // Pisar el negro puro (gotero/swatch negro) al mínimo, para que el slider y el color queden coherentes.
+    Val = FMath::Max(HSV.B, FMath::Clamp(MinPickValue, 0.f, 1.f));
     if (ValueSlider) ValueSlider->SetValue(Val);
-    RefreshUI();
+    RecomputeColor(); // arma CurrentColor con el piso de brillo + RefreshUI
 }
 
 void UPTColorPickerWidget::Confirm()

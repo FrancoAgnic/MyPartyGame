@@ -216,6 +216,9 @@ protected:
     // Asignar los mismos del sculpt de gameplay (Add = arcilla, Erase = rojo/hueco).
     UPROPERTY(EditAnywhere, Category="Head") UMaterialInterface* HeadPreviewMatAdd   = nullptr;
     UPROPERTY(EditAnywhere, Category="Head") UMaterialInterface* HeadPreviewMatErase = nullptr;
+    // Overlay X-ray del preview (asignar M_PreviewXray): se ve MÁS OSCURO cuando el preview está detrás/
+    // dentro de la geometría, igual que en gameplay. Se aplica sobre el preview mientras posicionás.
+    UPROPERTY(EditAnywhere, Category="Head") UMaterialInterface* HeadPreviewOverlayMaterial = nullptr;
     // Preview del modo Paint: se apoya SOBRE la malla (como el gameplay). Sólo este modo lo usa.
     UPROPERTY(EditAnywhere, Category="Head") UStaticMesh*        HeadPreviewMeshPaint = nullptr;
     UPROPERTY(EditAnywhere, Category="Head") UMaterialInterface* HeadPreviewMatPaint  = nullptr;
@@ -380,6 +383,10 @@ protected:
     UPROPERTY() AActor*                   HeadPreviewActor  = nullptr;
     UPROPERTY() UProceduralMeshComponent* HeadPreviewMesh   = nullptr;
     UPROPERTY() UStaticMeshComponent*     HeadPreviewStatic = nullptr;
+    // Overlay X-ray del preview (ON = se ve por detrás/dentro de la geometría, más oscuro). Se apaga
+    // mientras estás esculpiendo en Add (igual que gameplay), para no tapar el color.
+    bool bHeadXrayOn = false;
+    void SetHeadPreviewXray(bool bOn);
     float       HeadPreviewSize = -1.f;                 // cache para reconstruir sólo si cambia
     EPTEditMode HeadPreviewMode = EPTEditMode::Smooth;  // idem (valor inicial != Add/Erase)
     EPTStampShape HeadPreviewShapeCached = EPTStampShape::TriPrism; // idem para la forma (valor != esfera)

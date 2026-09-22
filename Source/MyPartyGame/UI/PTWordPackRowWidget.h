@@ -42,6 +42,8 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UImage*     ThumbnailImage;
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* DescText;
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* TypeTagText;
+    // Miniatura por defecto para MAPAS sin preview.png propio (mapa oficial o autoreados sin imagen).
+    UPROPERTY(EditAnywhere, Category="WordPack") class UTexture2D* DefaultMapThumbnail = nullptr;
 
     UFUNCTION() void OnUseClicked();
 

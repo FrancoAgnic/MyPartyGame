@@ -21,6 +21,8 @@
 class UButton;
 class UCheckBox;
 class UTextBlock;
+class UImage;
+class UTexture2D;
 class UPTWordPackWidget;
 class UPTGameInstance;
 
@@ -59,6 +61,12 @@ protected:
     // Map = mapa custom (bloqueado por ahora → siempre "Default").
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* WordBankText; // "Word: Title Movies"
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* MapText;      // "Map: Default"
+    // Miniaturas del mapa y del banco elegidos. Si no tienen preview, se usa la textura default de abajo.
+    UPROPERTY(meta = (BindWidgetOptional)) UImage* MapThumbnail;
+    UPROPERTY(meta = (BindWidgetOptional)) UImage* WordPackThumbnail;
+    // Texturas por defecto (asignar en el WBP) cuando el mapa/banco no tiene miniatura propia.
+    UPROPERTY(EditAnywhere, Category="GameSettings") UTexture2D* DefaultMapThumbnail = nullptr;
+    UPROPERTY(EditAnywhere, Category="GameSettings") UTexture2D* DefaultWordPackThumbnail = nullptr;
     // Cerrar el panel: los dos hacen lo mismo (los ajustes se aplican en vivo). Nombres reales del WBP.
     UPROPERTY(meta = (BindWidgetOptional)) UButton*    Btn_Back;             // botón "Back"
     UPROPERTY(meta = (BindWidgetOptional)) UButton*    CloseSettingsButton;  // botón "Apply"
@@ -76,6 +84,12 @@ private:
     UPTGameInstance* GetGI() const;
     void RefreshUI();
     void RefreshPackTexts(); // actualiza "Word:" / "Map:" (también en OnSelectedWordPackChanged)
+    void RefreshThumbnails(); // miniaturas de mapa/banco (lee del GameState replicado; default si no hay)
+    void DownloadThumbnailTo(UImage* Target, const FString& URL); // preview del banco por HTTP (async)
+    // Cache para no recargar la textura cada refresh (clave = id/URL vigente). Centinela inicial para que
+    // el primer refresh siempre corra (el mapa oficial tiene Id vacío y colisionaría con "" por defecto).
+    FString CachedMapThumbKey  = TEXT("__uninit__");
+    FString CachedPackThumbKey = TEXT("__uninit__");
     // Empuja la config actual al APTGameState replicado (para que los clientes la vean). Solo el host.
     void PushSettingsToState();
 };

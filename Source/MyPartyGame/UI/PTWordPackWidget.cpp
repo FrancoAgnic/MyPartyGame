@@ -114,7 +114,11 @@ void UPTWordPackWidget::UsePack(const FString& PackId)
 
 void UPTWordPackWidget::UseMap(const FString& MapId)
 {
-    if (GI()) GI()->SelectMapMod(MapId);
+    if (GI())
+    {
+        if (MapId.IsEmpty()) GI()->SelectDefaultMap(); // fila del mapa OFICIAL
+        else                 GI()->SelectMapMod(MapId);
+    }
     Rebuild();
 }
 
@@ -196,6 +200,20 @@ void UPTWordPackWidget::Rebuild()
         if (MM && RowWidgetClass)
         {
             const FString CurMapId = GI() ? GI()->PendingMatchSettings.MapModId : FString();
+
+            // Fila del MAPA OFICIAL (default) arriba de todo: Id vacío → seleccionarlo = SelectDefaultMap.
+            {
+                FPTMapMod Official;
+                Official.Id = FString();
+                Official.Title = PTText::GetStr(TEXT("SV_MAP_OFFICIAL"));
+                if (UPTWordPackRowWidget* R = CreateWidget<UPTWordPackRowWidget>(this, RowWidgetClass))
+                {
+                    R->InitMap(Official, CurMapId.IsEmpty(), this);
+                    MapsBox->AddChild(R);
+                    ++MapCount;
+                }
+            }
+
             for (const FPTMapMod& Mod : MM->GetMods())
             {
                 UPTWordPackRowWidget* Row = CreateWidget<UPTWordPackRowWidget>(this, RowWidgetClass);

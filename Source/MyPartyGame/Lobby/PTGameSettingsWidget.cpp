@@ -5,10 +5,20 @@
 #include "../PTTextTable.h"
 #include "../Multiplayer/MultiplayerSessionsSubsystem.h"
 #include "PTLobbyGameMode.h"
+#include "PTGameState.h"
 #include "Engine/World.h"
 #include "Components/Button.h"
 #include "Components/CheckBox.h"
 #include "Components/TextBlock.h"
+#include "Components/Image.h"
+#include "../Mods/PTWordPackSubsystem.h" // FPTWordPack (miniatura del banco)
+#include "../Mods/PTMapModSubsystem.h"   // FPTMapMod (miniatura del mapa)
+#include "ImageUtils.h"                   // ImportFileAsTexture2D / ImportBufferAsTexture2D
+#include "Misc/Paths.h"
+#include "HttpModule.h"
+#include "Interfaces/IHttpRequest.h"
+#include "Interfaces/IHttpResponse.h"
+#include "Engine/Texture2D.h"
 
 bool UPTGameSettingsWidget::Initialize()
 {
@@ -95,6 +105,96 @@ void UPTGameSettingsWidget::RefreshPackTexts()
 
     // Replicar a los clientes (banco de palabras + valores numéricos, ya que RefreshUI pasa por acá).
     PushSettingsToState();
+
+    RefreshThumbnails();
+}
+
+void UPTGameSettingsWidget::RefreshThumbnails()
+{
+    // Lee del GameState replicado (host lo pushea en PushSettingsToState) → funciona igual en host y
+    // clientes (vista read-only). Si no hay preview, cae a la textura default asignada en el WBP.
+    const APTGameState* PTGS = GetWorld() ? GetWorld()->GetGameState<APTGameState>() : nullptr;
+    UGameInstance* GI = GetGameInstance();
+
+    // ── MAPA ──
+    if (MapThumbnail)
+    {
+        const FString Id = PTGS ? PTGS->MatchMapModId : FString();
+        if (CachedMapThumbKey != Id)
+        {
+            UTexture2D* Tex = nullptr;
+            if (!Id.IsEmpty())
+            {
+                FString Path;
+                if (UPTMapModSubsystem* MM = GI ? GI->GetSubsystem<UPTMapModSubsystem>() : nullptr)
+                {
+                    if (const FPTMapMod* M = MM->FindMod(Id)) Path = M->PreviewPath;
+                    if (Path.IsEmpty()) { MM->RescanMods(); if (const FPTMapMod* M2 = MM->FindMod(Id)) Path = M2->PreviewPath; }
+                }
+                if (!Path.IsEmpty() && FPaths::FileExists(Path))
+                    Tex = FImageUtils::ImportFileAsTexture2D(Path);
+            }
+            if (!Tex) Tex = DefaultMapThumbnail; // mapa oficial o sin preview → default
+            if (Tex) { MapThumbnail->SetBrushFromTexture(Tex, false); MapThumbnail->SetVisibility(ESlateVisibility::HitTestInvisible); }
+            else       MapThumbnail->SetVisibility(ESlateVisibility::Collapsed);
+            CachedMapThumbKey = Id;
+        }
+    }
+
+    // ── BANCO DE PALABRAS ──
+    if (WordPackThumbnail)
+    {
+        const FString Id  = PTGS ? PTGS->MatchWordPackId : FString();
+        const FString URL = PTGS ? PTGS->MatchWordPackPreviewURL : FString();
+        const FString Key = Id + TEXT("|") + URL;
+        if (CachedPackThumbKey != Key)
+        {
+            FString Path;
+            if (!Id.IsEmpty())
+                if (UPTWordPackSubsystem* WP = GI ? GI->GetSubsystem<UPTWordPackSubsystem>() : nullptr)
+                    if (const FPTWordPack* P = WP->FindPack(Id)) Path = P->PreviewPath;
+
+            if (!Path.IsEmpty() && FPaths::FileExists(Path))
+            {
+                if (UTexture2D* Tex = FImageUtils::ImportFileAsTexture2D(Path))
+                { WordPackThumbnail->SetBrushFromTexture(Tex, false); WordPackThumbnail->SetVisibility(ESlateVisibility::HitTestInvisible); }
+                CachedPackThumbKey = Key;
+            }
+            else if (!URL.IsEmpty())
+            {
+                DownloadThumbnailTo(WordPackThumbnail, URL); // async
+                CachedPackThumbKey = Key;
+            }
+            else // banco oficial o sin preview → default
+            {
+                if (DefaultWordPackThumbnail)
+                { WordPackThumbnail->SetBrushFromTexture(DefaultWordPackThumbnail, false); WordPackThumbnail->SetVisibility(ESlateVisibility::HitTestInvisible); }
+                else WordPackThumbnail->SetVisibility(ESlateVisibility::Collapsed);
+                CachedPackThumbKey = Key;
+            }
+        }
+    }
+}
+
+void UPTGameSettingsWidget::DownloadThumbnailTo(UImage* Target, const FString& URL)
+{
+    if (!Target || URL.IsEmpty()) return;
+    TWeakObjectPtr<UImage> W = Target;
+    UTexture2D* Fallback = DefaultWordPackThumbnail;
+    TWeakObjectPtr<UTexture2D> WFallback = Fallback;
+    TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Req = FHttpModule::Get().CreateRequest();
+    Req->SetURL(URL);
+    Req->SetVerb(TEXT("GET"));
+    Req->OnProcessRequestComplete().BindLambda(
+        [W, WFallback](FHttpRequestPtr, FHttpResponsePtr Resp, bool bOk)
+        {
+            UImage* Img = W.Get();
+            if (!Img) return;
+            UTexture2D* Tex = (bOk && Resp) ? FImageUtils::ImportBufferAsTexture2D(Resp->GetContent()) : nullptr;
+            if (!Tex) Tex = WFallback.Get(); // si falla la descarga, mostrar la default
+            if (Tex) { Img->SetBrushFromTexture(Tex, false); Img->SetVisibility(ESlateVisibility::HitTestInvisible); }
+        });
+    Req->ProcessRequest();
 }
 
 void UPTGameSettingsWidget::OnFriendsOnlyChanged(bool bIsChecked)

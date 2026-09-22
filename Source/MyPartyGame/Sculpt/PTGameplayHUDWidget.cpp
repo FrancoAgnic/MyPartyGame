@@ -98,6 +98,34 @@ void UPTGameplayHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDelta
         if (ChatStickElapsed >= 0.5f) bChatStickToEnd = false;
     }
 
+    // ── Animación del cartel de TEMA (por frame, fluida). Los estados los setea RefreshTick. ──
+    if (ThemePanel && (bThemeWasChoosing || ThemeFadeStart >= 0.f))
+    {
+        const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+        if (bThemeWasChoosing)
+        {
+            // Escala: 0→1 en 1s (pop de entrada), luego 1→0.35 en 14s (achica lento mientras elige).
+            const float T = Now - ThemeShowStart;
+            const float S = (T < 1.f)
+                ? FMath::Lerp(0.f, 1.f, FMath::Clamp(T, 0.f, 1.f))
+                : FMath::Lerp(1.f, 0.35f, FMath::Clamp((T - 1.f) / 14.f, 0.f, 1.f));
+            ThemePanel->SetRenderScale(FVector2D(S));
+            ThemePanel->SetRenderOpacity(1.f);
+        }
+        else // fade-out tras elegir la palabra (mantiene la escala en la que quedó)
+        {
+            const float A = 1.f - (Now - ThemeFadeStart) / FMath::Max(0.1f, ThemeBannerSeconds);
+            if (A <= 0.f)
+            {
+                ThemePanel->SetVisibility(ESlateVisibility::Collapsed);
+                ThemePanel->SetRenderOpacity(1.f);
+                ThemePanel->SetRenderScale(FVector2D(1.f));
+                ThemeFadeStart = -1.f;
+            }
+            else ThemePanel->SetRenderOpacity(A);
+        }
+    }
+
     const APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(GetOwningPlayer());
     if (!PC) return;
 
@@ -532,6 +560,7 @@ void UPTGameplayHUDWidget::RefreshTick()
         G->OnYouGuessed.AddDynamic(this, &UPTGameplayHUDWidget::OnYouGuessed);
         G->OnSomeoneGuessed.AddDynamic(this, &UPTGameplayHUDWidget::OnSomeoneGuessed);
         G->OnAllGuessed.AddDynamic(this, &UPTGameplayHUDWidget::OnAllGuessed);
+        if (ThemePanel) ThemePanel->SetVisibility(ESlateVisibility::Collapsed); // oculto hasta el inicio
         bChatBound = true;
     }
 
@@ -572,6 +601,28 @@ void UPTGameplayHUDWidget::RefreshTick()
     const bool bViewAsSculptor = bSculptor || bSpectatingSculptor;
     bool bRevealWord = bViewAsSculptor || bLocalGuessed;
     if (bRevealWord && FullKnownWord.IsEmpty()) bRevealWord = false; // no podés mostrar lo que no tenés
+
+    // ── Cartel de TEMA: visible para los que ADIVINAN mientras el escultor elige la palabra; el escultor
+    //    (o quien lo especta) NO lo ve. La animación (escala/opacidad) la hace NativeTick por frame. ──
+    {
+        const bool bChoosing = (G->TurnPhase == EPTTurnPhase::ChoosingWord);
+        const bool bGuesserView = !bViewAsSculptor; // el escultor ve sus palabras, no el cartel
+        if (bChoosing && bGuesserView)
+        {
+            if (!bThemeWasChoosing)
+            {
+                ShowThemeBanner();
+                bThemeWasChoosing = true;
+                ThemeFadeStart = -1.f;
+                ThemeShowStart = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+            }
+        }
+        else if (bThemeWasChoosing) // acaba de elegir (o dejé de ser adivinador): arrancar el fade-out
+        {
+            bThemeWasChoosing = false;
+            ThemeFadeStart = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.f;
+        }
+    }
 
     // El "quién esculpe" ya NO va arriba: se muestra en el marcador con el emoji 🖌️.
     // Arriba queda solo el timer + la palabra. Limpiamos TxtSculptor si sigue en el WBP.
@@ -869,6 +920,28 @@ void UPTGameplayHUDWidget::OnChatLine(const FString& Name, const FString& Messag
 void UPTGameplayHUDWidget::ShowCloseGuessNotice()
 {
     OnChatLine(FString(), FString(), EPTChatType::Close);
+}
+
+void UPTGameplayHUDWidget::ShowThemeBanner()
+{
+    APTSculptGameState* G = GetGS();
+    if (!G) return;
+    // Nombres del mapa y del banco (default localizado si están vacíos), mismas claves que el lobby.
+    const FText Map  = G->MatchMapTitle.IsEmpty()
+        ? PTText::Get(TEXT("SV_MAP_OFFICIAL")) : FText::FromString(G->MatchMapTitle);
+    const FText Pack = G->MatchWordPackTitle.IsEmpty()
+        ? PTText::Get(TEXT("GS_DEFAULT")) : FText::FromString(G->MatchWordPackTitle);
+
+    if (TxtThemeTitle) TxtThemeTitle->SetText(PTText::Get(TEXT("THEME_TITLE")));
+    if (TxtThemeMap)      { FFormatOrderedArguments A; A.Add(Map);  TxtThemeMap->SetText(PTText::Format(FName(TEXT("THEME_MAP")), A)); }
+    if (TxtThemeWordPack) { FFormatOrderedArguments A; A.Add(Pack); TxtThemeWordPack->SetText(PTText::Format(FName(TEXT("THEME_WORDPACK")), A)); }
+
+    if (ThemePanel)
+    {
+        ThemePanel->SetRenderOpacity(1.f);
+        ThemePanel->SetRenderScale(FVector2D(0.f)); // arranca en 0; NativeTick hace el pop 0→1
+        ThemePanel->SetVisibility(ESlateVisibility::HitTestInvisible);
+    }
 }
 
 void UPTGameplayHUDWidget::OnYouGuessed(const FString& Word, int32 Points)

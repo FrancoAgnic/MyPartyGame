@@ -1,0 +1,16 @@
+[h1]Sculpturillo v0.9.3 - Level Creator[/h1]
+
+[h2]Workshop & Maps[/h2]
+[list]
+[*] The Workshop browser now has a Maps section: search, subscribe to and download community maps, right next to word packs.
+[*] The official map now shows up as a selectable option in the map library.
+[*] Map and word-pack thumbnails now appear in Game Settings and in the library (with a default image when an item has no thumbnail of its own).
+[/list]
+
+[h2]Gameplay & UI[/h2]
+[list]
+[*] Before each turn, guessers now see the theme (map + word pack) while the sculptor picks the word, with a smooth pop-in and fade-out.
+[*] The darkest color you can pick is now a dark gray instead of pure black, so the sculpt/paint preview stays readable through geometry.
+[*] Head sculpting: the brush preview now shows darker when it's behind or inside the head, matching the main sculpting mode.
+[*] Menus and panels no longer briefly flash in English before switching to your language.
+[/list]

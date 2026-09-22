@@ -998,6 +998,7 @@ void APTLobbyPlayerController::UpdateHeadPreview(const FVector* At, const FVecto
         || bHeadPreviewEyesCached != bEyes || HeadPreviewShapeCached != EffectiveHeadShape())
     {
         HeadPreviewMID = nullptr;
+        bHeadXrayOn = false; // se recrea el mesh/material → forzar re-aplicar el overlay X-ray
 
         // Elegir mesh propio + material según el modo.
         UStaticMesh* ToolMesh = nullptr;
@@ -1083,6 +1084,20 @@ void APTLobbyPlayerController::UpdateHeadPreview(const FVector* At, const FVecto
         HeadPreviewMID->SetVectorParameterValue(TEXT("Color"), HeadPaintColor);
         HeadPreviewMID->SetScalarParameterValue(TEXT("Glow"),  HeadPreviewGlow);
     }
+
+    // Overlay X-ray: ON mientras posicionás (se ve más oscuro detrás/dentro de la geometría); OFF mientras
+    // estás agregando arcilla en Add (para no tapar el color), igual que en gameplay.
+    const bool bWantXray = !(bHeadStamping && !bEyes && HeadEditMode == EPTEditMode::Add);
+    SetHeadPreviewXray(bWantXray);
+}
+
+void APTLobbyPlayerController::SetHeadPreviewXray(bool bOn)
+{
+    if (bOn == bHeadXrayOn) return; // sin cambios → no re-setear (evita marcar el render state sucio)
+    bHeadXrayOn = bOn;
+    UMaterialInterface* Ov = bOn ? HeadPreviewOverlayMaterial : nullptr;
+    if (HeadPreviewStatic) HeadPreviewStatic->SetOverlayMaterial(Ov);
+    if (HeadPreviewMesh)   HeadPreviewMesh->SetOverlayMaterial(Ov);
 }
 
 void APTLobbyPlayerController::UpdateHeadCam()

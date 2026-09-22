@@ -8,6 +8,7 @@
 #include "Components/Image.h"
 #include "ImageUtils.h"                 // ImportBufferAsTexture2D (miniatura)
 #include "Engine/Texture2D.h"
+#include "Misc/Paths.h"                 // FileExists
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
@@ -114,14 +115,14 @@ void UPTWordPackRowWidget::InitMap(const FPTMapMod& InMap, bool bSelected, UPTWo
     if (DescText)      DescText->SetText(FText::GetEmpty());
     if (TypeTagText)   TypeTagText->SetText(PTText::Get(TEXT("WORKSHOP_TAG_MAP")));
 
-    if (ThumbnailImage) ThumbnailImage->SetVisibility(ESlateVisibility::Collapsed);
-    if (!InMap.PreviewPath.IsEmpty() && ThumbnailImage)
+    if (ThumbnailImage)
     {
-        if (UTexture2D* Tex = FImageUtils::ImportFileAsTexture2D(InMap.PreviewPath))
-        {
-            ThumbnailImage->SetBrushFromTexture(Tex, /*bMatchSize=*/false);
-            ThumbnailImage->SetVisibility(ESlateVisibility::Visible);
-        }
+        UTexture2D* Tex = nullptr;
+        if (!InMap.PreviewPath.IsEmpty() && FPaths::FileExists(InMap.PreviewPath))
+            Tex = FImageUtils::ImportFileAsTexture2D(InMap.PreviewPath);
+        if (!Tex) Tex = DefaultMapThumbnail; // mapa oficial / autoreado sin preview → miniatura default
+        if (Tex) { ThumbnailImage->SetBrushFromTexture(Tex, /*bMatchSize=*/false); ThumbnailImage->SetVisibility(ESlateVisibility::Visible); }
+        else       ThumbnailImage->SetVisibility(ESlateVisibility::Collapsed);
     }
 }
 

@@ -294,6 +294,19 @@ private:
     FTimerHandle AllGuessedTimer;    // oculta el aviso "todos adivinaron"
     void HideGuessPopup();
     void HideAllGuessedPopup();
+
+    // ── Cartel de TEMA (nombre del mapa + banco de palabras) ──
+    // Se muestra a los que ADIVINAN mientras el escultor elige la palabra (fase ChoosingWord); el escultor
+    // NO lo ve (ve sus palabras). Al elegir la palabra (pasa a Drawing), se desvanece 1→0 en unos segundos.
+    UPROPERTY(meta=(BindWidgetOptional)) UWidget*           ThemePanel;      // contenedor (oculto por defecto)
+    UPROPERTY(meta=(BindWidgetOptional)) class UTextBlock*  TxtThemeTitle;   // "¡A jugar!" / título
+    UPROPERTY(meta=(BindWidgetOptional)) class UTextBlock*  TxtThemeMap;     // "Mapa: <nombre>"
+    UPROPERTY(meta=(BindWidgetOptional)) class UTextBlock*  TxtThemeWordPack;// "Palabras: <nombre>"
+    UPROPERTY(EditAnywhere, Category="UI") float ThemeBannerSeconds = 5.f;   // duración del fade-out tras elegir
+    bool  bThemeWasChoosing = false; // el cartel estaba visible (yo adivino y el escultor elegía)
+    float ThemeShowStart    = -1.f;  // tiempo de mundo en que apareció (para la animación de escala)
+    float ThemeFadeStart    = -1.f;  // tiempo de mundo en que arrancó el fade (-1 = sin fade)
+    void ShowThemeBanner();          // setea textos + visible (la escala/opacidad las anima NativeTick)
     // "+N" junto al nombre: hasta cuándo mostrarlo por jugador (tiempo de mundo) + cuántos puntos.
     TMap<TWeakObjectPtr<class APTPlayerState>, float> GuessPlusUntil;
     TMap<TWeakObjectPtr<class APTPlayerState>, int32> GuessPlusPoints;
