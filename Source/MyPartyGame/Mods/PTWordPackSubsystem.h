@@ -71,6 +71,8 @@ public:
 
     /** Re-escanea packs locales + del Workshop. Al terminar dispara OnWordPacksUpdated. */
     UFUNCTION(BlueprintCallable, Category="WordPack") void RescanPacks();
+    /** Lo llama el watcher cuando una descarga TERMINÓ BIEN: la saca del guard para permitir updates futuros. */
+    void NotifyDownloadFinished(uint64 FileId) { RequestedDownloads.Remove(FileId); }
     const TArray<FPTWordPack>& GetPacks() const { return Packs; }
     /** Busca un pack por Id (para que el host lo seleccione). Devuelve nullptr si no está. */
     const FPTWordPack* FindPack(const FString& Id) const;
@@ -107,6 +109,10 @@ private:
     void FetchWorkshopDetails();
 
     UPROPERTY() TArray<FPTWordPack> Packs;
+
+    // Items del Workshop a los que YA les pedimos DownloadItem (una vez por sesión). Evita el bucle infinito:
+    // sin esto, un item que Steam no puede instalar (FileNotFound) se re-descargaba en cada rescan → parpadeo.
+    TSet<uint64> RequestedDownloads;
 
 #if PT_WITH_STEAM
     struct FPTWorkshopPublish* Publisher = nullptr; // puntero opaco (steam headers fuera de UHT)

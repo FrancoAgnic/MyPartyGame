@@ -633,20 +633,53 @@ bool APTSculptVolume::GetPaintAtlasSnapshot(FPTPaintAtlas& Out) const
 {
     Out = FPTPaintAtlas();
     if (PageBuf.Num() == 0 || AtlasBuf.Num() == 0) return false;
-    // ¿Hay pintura? (al menos una página asignada en la page table).
-    bool bAnyPage = false;
-    for (float P : PageBuf) if (P > 0.5f) { bAnyPage = true; break; }
-    if (!bAnyPage) return false;
 
-    Out.PageBuf     = PageBuf;
-    Out.AtlasBuf    = AtlasBuf;
+    // COMPACTAR el atlas: el atlas del volumen reserva capacidad para MaxColorBricks (32768) = ~67 MB, pero un
+    // asset horneado pintó solo unos pocos bricks. Serializar el atlas ENTERO hacía blobs de mapa de >1 GB
+    // (→ ConnectionTimeout al cargar en multiplayer + subida/descarga lentísima). Acá reempaquetamos a un
+    // atlas del TAMAÑO JUSTO de los bricks realmente usados, remapeando los slots.
+    TArray<float> NewPage; NewPage.Init(0.f, PageBuf.Num());
+    TArray<int32> OldSlots; // newSlot → oldSlot (orden de aparición en la page table)
+    for (int32 Pg = 0; Pg < PageBuf.Num(); ++Pg)
+    {
+        if (PageBuf[Pg] < 0.5f) continue;                 // brick sin pintura
+        OldSlots.Add((int32)PageBuf[Pg] - 1);
+        NewPage[Pg] = (float)OldSlots.Num();              // newSlot+1
+    }
+    const int32 Used = OldSlots.Num();
+    if (Used == 0) return false; // no hay pintura
+
+    const int32 NewTilesPerRow = FMath::Clamp(FMath::CeilToInt(FMath::Sqrt((float)Used)), 1, 256);
+    const int32 NewRows        = FMath::DivideAndRoundUp(Used, NewTilesPerRow);
+    const int32 NewAtlasW      = NewTilesPerRow * CB;
+    const int32 NewAtlasH      = NewRows * CB * CB;
+    TArray<FColor> NewAtlas; NewAtlas.Init(FColor(0, 0, 0, 0), NewAtlasW * NewAtlasH);
+
+    for (int32 NewSlot = 0; NewSlot < Used; ++NewSlot)
+    {
+        const int32 OldSlot = OldSlots[NewSlot];
+        const int32 oTX = OldSlot % AtlasTilesPerRow, oTY = OldSlot / AtlasTilesPerRow;
+        const int32 nTX = NewSlot % NewTilesPerRow,   nTY = NewSlot / NewTilesPerRow;
+        for (int32 lz = 0; lz < CB; ++lz)
+        for (int32 ly = 0; ly < CB; ++ly)
+        for (int32 lx = 0; lx < CB; ++lx)
+        {
+            const int32 oIdx = (oTX * CB + lx) + (oTY * (CB * CB) + lz * CB + ly) * AtlasW;
+            const int32 nIdx = (nTX * CB + lx) + (nTY * (CB * CB) + lz * CB + ly) * NewAtlasW;
+            if (AtlasBuf.IsValidIndex(oIdx) && NewAtlas.IsValidIndex(nIdx))
+                NewAtlas[nIdx] = AtlasBuf[oIdx];
+        }
+    }
+
+    Out.PageBuf     = MoveTemp(NewPage);
+    Out.AtlasBuf    = MoveTemp(NewAtlas);
     Out.CanvasMin   = CanvasMinLocal;
     Out.ColorVoxel  = FMath::Max(ColorVoxel, 0.5f);
     Out.VoxDim      = ColorVoxDim;
     Out.BrickDim    = ColorBrickDim;
-    Out.TilesPerRow = AtlasTilesPerRow;
-    Out.AtlasW      = AtlasW;
-    Out.AtlasH      = AtlasH;
+    Out.TilesPerRow = NewTilesPerRow;
+    Out.AtlasW      = NewAtlasW;
+    Out.AtlasH      = NewAtlasH;
     Out.CB          = CB;
     Out.bValid      = true;
     return true;

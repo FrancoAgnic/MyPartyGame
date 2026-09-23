@@ -1313,7 +1313,11 @@ void APTLobbyPlayerController::OnHeadScrollUp()
         if (UPTColorPickerWidget* CP = Cast<UPTColorPickerWidget>(HeadColorPicker)) CP->QuickAdjustValue(+0.05f);
         return;
     }
-    HeadBrushSize = FMath::Clamp(HeadBrushSize + 4.f, 6.f, 80.f);
+    {
+        // Paint permite una brocha más chica que esculpir (detalle fino en la cara).
+        const float MinB = (!bHeadEyesTool && HeadEditMode == EPTEditMode::Paint) ? 3.f : 6.f;
+        HeadBrushSize = FMath::Clamp(HeadBrushSize + 4.f, MinB, 80.f);
+    }
 }
 void APTLobbyPlayerController::OnHeadScrollDown()
 {
@@ -1324,7 +1328,10 @@ void APTLobbyPlayerController::OnHeadScrollDown()
         if (UPTColorPickerWidget* CP = Cast<UPTColorPickerWidget>(HeadColorPicker)) CP->QuickAdjustValue(-0.05f);
         return;
     }
-    HeadBrushSize = FMath::Clamp(HeadBrushSize - 4.f, 6.f, 80.f);
+    {
+        const float MinB = (!bHeadEyesTool && HeadEditMode == EPTEditMode::Paint) ? 3.f : 6.f;
+        HeadBrushSize = FMath::Clamp(HeadBrushSize - 4.f, MinB, 80.f);
+    }
 }
 void APTLobbyPlayerController::OnHeadToggleBodyPaint()
 {

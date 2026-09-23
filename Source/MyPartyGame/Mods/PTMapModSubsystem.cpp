@@ -32,8 +32,18 @@ struct FPTMapDownloadWatcher
     {
         if (!p) return;
         if (SteamUtils() && p->m_unAppID != SteamUtils()->GetAppID()) return;
+        const uint64 Fid = (uint64)p->m_nPublishedFileId;
+        const bool bOk = (p->m_eResult == k_EResultOK);
+        UE_LOG(LogPTMapMods, Log, TEXT("[Workshop] Descarga terminada item=%llu res=%d%s"),
+            Fid, (int32)p->m_eResult, bOk ? TEXT(" → rescan") : TEXT(" (fallo, ignorado)"));
+        // Solo re-escanear si bajó BIEN. Si falló (FileNotFound de un item sin contenido) → ignorar, para no
+        // disparar el bucle de descargas + re-broadcast.
+        if (!bOk) return;
         TWeakObjectPtr<UPTMapModSubsystem> W = Owner;
-        AsyncTask(ENamedThreads::GameThread, [W]() { if (UPTMapModSubsystem* O = W.Get()) O->RescanMods(); });
+        AsyncTask(ENamedThreads::GameThread, [W, Fid]()
+        {
+            if (UPTMapModSubsystem* O = W.Get()) { O->NotifyDownloadFinished(Fid); O->RescanMods(); }
+        });
     }
 };
 #endif
@@ -88,11 +98,16 @@ void UPTMapModSubsystem::ScanWorkshopMaps()
         const PublishedFileId_t Id = Ids[i];
         const uint32 State = SteamUGC()->GetItemState(Id);
 
-        // Suscrito pero sin instalar (o con update pendiente) → disparar descarga; al terminar, el watcher rescanea.
+        // Suscrito pero sin instalar (o con update pendiente) → disparar descarga UNA vez por item (guard, para
+        // no re-pedir en cada rescan y entrar en bucle). Al terminar bien, el watcher rescanea.
         if (!(State & k_EItemStateInstalled) || (State & k_EItemStateNeedsUpdate))
         {
-            SteamUGC()->DownloadItem(Id, /*bHighPriority=*/true);
-            ++Pending;
+            if (!RequestedDownloads.Contains((uint64)Id))
+            {
+                RequestedDownloads.Add((uint64)Id);
+                SteamUGC()->DownloadItem(Id, /*bHighPriority=*/true);
+                ++Pending;
+            }
             if (!(State & k_EItemStateInstalled)) continue; // aún sin carpeta en disco
         }
 

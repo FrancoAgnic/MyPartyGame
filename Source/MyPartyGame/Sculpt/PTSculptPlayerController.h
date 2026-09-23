@@ -39,7 +39,7 @@ public:
     float SizeStep = 20.f;
     // Mínimo de brocha: para geometría (MinSize) y para Paint (más chico). Y el máximo.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt|Brush Size", meta=(ClampMin="1")) float MinSize      = 100.f;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt|Brush Size", meta=(ClampMin="1")) float PaintMinSize = 20.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt|Brush Size", meta=(ClampMin="1")) float PaintMinSize = 8.f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sculpt|Brush Size", meta=(ClampMin="1")) float MaxSize      = 500.f;
 
     // ── Escala NO UNIFORME del sello (rueda + modo eje: Z estira Z, X estira X+Y) ─────────────
@@ -665,11 +665,11 @@ private:
     bool  bEffectiveOutside   = false; // modo debounced (true = colocar, false = escultura)
     bool  bModeInit           = false; // ya inicialicé el modo (primer frame sin gracia)
     float OutsideGraceElapsed = 0.f;   // tiempo acumulado afuera desde que salí del box
-    UPROPERTY(EditAnywhere, Category="MapEnv") float ExitGraceSeconds = 2.0f; // gracia al salir del box
+    UPROPERTY(EditAnywhere, Category="MapEnv") float ExitGraceSeconds = 0.8f; // gracia al salir del box (cambio de modo)
     void UpdateEffectiveOutside(bool bRawOutside, float Dt);
     float BakeHoldTime = 0.f;               // acumulador del "mantener Enter" para hornear
     bool  bBakedThisHold = false;           // ya horneó en este mantenido (evita repetir)
-    static constexpr float BakeHoldDuration = 3.0f;
+    static constexpr float BakeHoldDuration = 1.5f;
     bool  bErasePropsHeld = false;          // Erase en modo colocar: mantener el click borra assets por contacto
     bool  bWasPlaceMode   = false;          // modo colocar del frame anterior (para forzar Add al ENTRAR)
     // Tolerancia del borrado de assets: agranda el radio efectivo de la brocha (1 = exacto al preview, >1 más

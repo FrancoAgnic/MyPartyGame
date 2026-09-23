@@ -49,6 +49,8 @@ public:
 
     /** Re-escanea los mapas-mod locales. Al terminar dispara OnMapModsUpdated. */
     UFUNCTION(BlueprintCallable, Category="MapMod") void RescanMods();
+    /** Lo llama el watcher cuando una descarga TERMINÓ BIEN: la saca del guard para permitir updates futuros. */
+    void NotifyDownloadFinished(uint64 FileId) { RequestedDownloads.Remove(FileId); }
     const TArray<FPTMapMod>& GetMods() const { return Mods; }
     const FPTMapMod* FindMod(const FString& Id) const;
 
@@ -85,6 +87,8 @@ private:
 
     UPROPERTY() TArray<FPTMapMod> Mods;
     TSet<FString> MountedPakPaths; // paks ya montados en este proceso (para no re-montar)
+    // Items del Workshop ya pedidos con DownloadItem (una vez por sesión) → evita el bucle de re-descarga.
+    TSet<uint64> RequestedDownloads;
 
 #if PT_WITH_STEAM
     // Cuando Steam termina de bajar un item suscrito, re-escanea (suscribir NO baja el contenido solo).

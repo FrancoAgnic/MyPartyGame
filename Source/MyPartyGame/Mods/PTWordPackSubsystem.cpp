@@ -136,11 +136,18 @@ struct FPTWorkshopDownloadWatcher
     {
         if (!p) return;
         if (SteamUtils() && p->m_unAppID != SteamUtils()->GetAppID()) return; // otra app
-        UE_LOG(LogPTWordPacks, Log, TEXT("[Workshop] Descarga terminada item=%llu res=%d → rescan"),
-            (uint64)p->m_nPublishedFileId, (int32)p->m_eResult);
-        // El callback puede correr fuera del GameThread → marshalear (RescanPacks toca UPROPERTY + UI).
+        const uint64 Fid = (uint64)p->m_nPublishedFileId;
+        const bool bOk = (p->m_eResult == k_EResultOK);
+        UE_LOG(LogPTWordPacks, Log, TEXT("[Workshop] Descarga terminada item=%llu res=%d%s"),
+            Fid, (int32)p->m_eResult, bOk ? TEXT(" → rescan") : TEXT(" (fallo, ignorado)"));
+        // SOLO re-escanear si bajó BIEN. Si falló (p.ej. FileNotFound de un item sin contenido en el server),
+        // ignorar → no re-escanear ni re-descargar (así no se dispara el bucle/parpadeo).
+        if (!bOk) return;
         TWeakObjectPtr<UPTWordPackSubsystem> W = Owner;
-        AsyncTask(ENamedThreads::GameThread, [W]() { if (UPTWordPackSubsystem* O = W.Get()) O->RescanPacks(); });
+        AsyncTask(ENamedThreads::GameThread, [W, Fid]()
+        {
+            if (UPTWordPackSubsystem* O = W.Get()) { O->NotifyDownloadFinished(Fid); O->RescanPacks(); }
+        });
     }
 };
 
@@ -485,12 +492,18 @@ void UPTWordPackSubsystem::ScanWorkshopPacks()
         const PublishedFileId_t Id = Ids[i];
         const uint32 State = SteamUGC()->GetItemState(Id);
 
-        // Si está suscrito pero NO instalado (o necesita update), disparamos la descarga. Cuando
-        // termine, el DownloadItemResult_t vuelve a llamar RescanPacks y acá ya entrará como instalado.
+        // Si está suscrito pero NO instalado (o necesita update), disparamos la descarga UNA sola vez por item
+        // (guard). Sin el guard, un item que Steam no puede instalar (FileNotFound) se re-pedía en cada rescan
+        // → bucle infinito de descargas + re-broadcast (el parpadeo de la lista). Cuando termine bien, el
+        // DownloadItemResult_t re-escanea y acá ya entra como instalado.
         if (!(State & k_EItemStateInstalled) || (State & k_EItemStateNeedsUpdate))
         {
-            SteamUGC()->DownloadItem(Id, /*bHighPriority=*/true);
-            ++Pending;
+            if (!RequestedDownloads.Contains((uint64)Id))
+            {
+                RequestedDownloads.Add((uint64)Id);
+                SteamUGC()->DownloadItem(Id, /*bHighPriority=*/true);
+                ++Pending;
+            }
             if (!(State & k_EItemStateInstalled)) continue; // aún sin carpeta en disco
         }
 
