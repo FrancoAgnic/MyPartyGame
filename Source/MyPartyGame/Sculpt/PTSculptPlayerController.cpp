@@ -16,6 +16,7 @@
 #include "GameFramework/PlayerState.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "../UI/PTColorPickerWidget.h"
+#include "../UI/PTLoadingScreenWidget.h"
 #include "PTShapeRadialWidget.h"
 #include "../Lobby/PTLobbyEscapeMenuWidget.h"
 #include "../Lobby/PTLobbyCharacter.h"
@@ -323,21 +324,69 @@ void APTSculptPlayerController::BeginPlay()
 
     // P4: al jugar un mapa de props, cada máquina carga su propia copia local del sculpt.bin en su
     // entorno (el id llega replicado por el GameState). En autoría NO (ese modo carga su mapa aparte).
-    if (IsLocalController() && !IsMapAuthorMode())
-        GetWorldTimerManager().SetTimer(PropMapLoadTimer, this, &APTSculptPlayerController::TickPropMapLoad, 0.5f, true);
+    if (IsLocalController())
+    {
+        // Pantalla de carga (IN → LOOP → OUT): tapa el nivel (que arranca vacío) al entrar, sea gameplay o Level
+        // Creator. En partida se oculta cuando cargó el mapa de props (o si es oficial); en autoría, tras el
+        // mínimo. Respeta LoadingMinSeconds para que se vean IN+LOOP aunque cargue instantáneo.
+        if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
+        {
+            // Si venís de una transición (el source ya tocó el AnimIn sobre el menú/lobby), arrancá YA TAPADO
+            // (loop) para no ver el nivel destino detrás del AnimIn. Si es entrada directa, tocá el AnimIn acá.
+            const bool bStartAtLoop = GI->bTransitionCovering;
+            GI->bTransitionCovering = false;
+            LoadingScreen = GI->CreateLoadingScreen(bStartAtLoop);
+            LoadingShownAt = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+        }
+        GetWorldTimerManager().SetTimer(PropMapLoadTimer, this, &APTSculptPlayerController::TickPropMapLoad, 0.25f, true);
+    }
+}
+
+void APTSculptPlayerController::HideLoadingScreen()
+{
+    // Toca AnimOut; el widget se auto-remueve al terminar. Soltamos la referencia (sigue en el viewport).
+    if (LoadingScreen) { LoadingScreen->PlayOutro(); LoadingScreen = nullptr; }
 }
 
 void APTSculptPlayerController::TickPropMapLoad()
 {
-    if (bPropMapLoaded) { GetWorldTimerManager().ClearTimer(PropMapLoadTimer); return; }
+    const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+    const float Shown = Now - LoadingShownAt;
+
+    // Level Creator (autoría): no hay mapa de props que cargar acá → ocultar la pantalla tras el mínimo.
+    if (IsMapAuthorMode())
+    {
+        if (Shown >= LoadingMinSeconds) { HideLoadingScreen(); GetWorldTimerManager().ClearTimer(PropMapLoadTimer); }
+        return;
+    }
+
+    // Ya cargado: ocultar la pantalla de carga cuando pasó el mínimo, y recién ahí cortar el timer.
+    if (bPropMapLoaded)
+    {
+        if (!LoadingScreen || Shown >= LoadingMinSeconds)
+        {
+            HideLoadingScreen();
+            GetWorldTimerManager().ClearTimer(PropMapLoadTimer);
+        }
+        return;
+    }
 
     // Cortar tras ~15s: si a esta altura no hay mapa de props, es el mapa oficial (nada que cargar).
-    if (++PropMapLoadTries > 30) { GetWorldTimerManager().ClearTimer(PropMapLoadTimer); return; }
+    if (++PropMapLoadTries > 60) { HideLoadingScreen(); GetWorldTimerManager().ClearTimer(PropMapLoadTimer); return; }
+
+    // Esperar a que la pantalla de carga TAPE (AnimIn terminó → loop) antes de deserializar el mapa: así la
+    // carga ocurre durante el loop y NO se ve durante la transición de entrada (el paneo del AnimIn).
+    if (LoadingScreen && !LoadingScreen->IsCovering()) return;
 
     APTGameState* GS = GetWorld() ? GetWorld()->GetGameState<APTGameState>() : nullptr;
     if (!GS) return;
     const FString ModId = GS->MatchMapModId;
-    if (ModId.IsEmpty()) return; // todavía sin id (o mapa oficial): seguir esperando hasta el corte
+    if (ModId.IsEmpty())
+    {
+        // GameState presente pero SIN mapa de props → es oficial: ocultar la carga tras el mínimo y cortar.
+        if (Shown >= LoadingMinSeconds) { HideLoadingScreen(); GetWorldTimerManager().ClearTimer(PropMapLoadTimer); }
+        return;
+    }
 
     UPTMapModSubsystem* MM = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTMapModSubsystem>() : nullptr;
     if (!MM) return;
@@ -362,7 +411,7 @@ void APTSculptPlayerController::TickPropMapLoad()
     Env->DeserializeEnvironment(Blob);
     Env->SetLODEnabled(true); // (8b) en PARTIDA: decimar props lejos del player local (autoría queda full)
     bPropMapLoaded = true;
-    GetWorldTimerManager().ClearTimer(PropMapLoadTimer);
+    // NO cortar el timer acá: el próximo tick oculta la pantalla de carga respetando LoadingMinSeconds.
     UE_LOG(LogTemp, Log, TEXT("[SculptPC] Mapa de props cargado localmente (%d bytes, mod '%s')."), Blob.Num(), *ModId);
 }
 
@@ -2582,6 +2631,7 @@ void APTSculptPlayerController::EnterPivotMode()
         if (PreviewOverlayMaterial) PivotMarker->SetOverlayMaterial(PreviewOverlayMaterial);
         PivotMarker->SetVisibility(true);
     }
+    if (Volume) Volume->SetBakeScan(0.f, /*bActive=*/false); // apagar el barrido del "cargando"
     if (GameplayHUD) GameplayHUD->SetPivotHintVisible(true);
     UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Modo pivote ON (click=confirmar, Backspace=cancelar)."));
 }
@@ -2608,6 +2658,7 @@ void APTSculptPlayerController::CancelPivotMode()
     bPivotMode  = false;
     if (PivotMarker) PivotMarker->SetVisibility(false);
     if (GameplayHUD) GameplayHUD->SetPivotHintVisible(false);
+    if (Volume) Volume->SetBakeScan(0.f, /*bActive=*/false); // por si quedó el barrido del cocinado
 }
 
 void APTSculptPlayerController::PlaceCurrentAsset()
@@ -2831,9 +2882,17 @@ void APTSculptPlayerController::TickAuthorProps(float Dt)
     if (!bOut && IsInputKeyDown(EKeys::Enter))
     {
         BakeHoldTime += Dt;
+        // Feedback tipo IMPRESORA 3D: una línea de glow barre de abajo hacia arriba a medida que cargás.
+        if (Volume && !bBakedThisHold)
+            Volume->SetBakeScan(GetBakeHoldProgress(), /*bActive=*/true);
         if (!bBakedThisHold && BakeHoldTime >= BakeHoldDuration) { EnterPivotMode(); bBakedThisHold = true; }
     }
-    else { BakeHoldTime = 0.f; bBakedThisHold = false; }
+    else
+    {
+        // Soltó Enter antes de completar → apagar el barrido.
+        if (BakeHoldTime > 0.f && !bBakedThisHold && Volume) Volume->SetBakeScan(0.f, /*bActive=*/false);
+        BakeHoldTime = 0.f; bBakedThisHold = false;
+    }
 
     // Modo Borrar (colocando): resaltar en rojo (material sobre el asset) los que la brocha toca; y si mantenés
     // el click, borrarlos a medida que barrés. Fuera de este modo se apaga el resaltado.

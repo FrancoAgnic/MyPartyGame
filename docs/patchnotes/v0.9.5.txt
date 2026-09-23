@@ -1,0 +1,28 @@
+TITLE: v0.9.5 — Workshop maps fixed (no more 1GB!), smoother Level Creator & level transitions
+
+[h1]v0.9.5 — Custom maps & Level Creator polish[/h1]
+[b]Big fixes from playtesting: custom maps are now tiny and fast, plus lots of Level Creator quality-of-life.[/b]
+
+[h2]Custom maps (major fix)[/h2]
+[list]
+[*][b]Map size slashed[/b] — painted props used to bloat maps to over 1 GB (baking the full paint atlas per asset). Maps are now KB-sized. This fixes the kick/rejoin when entering a custom map and makes publishing/downloading fast. [b]Re-publish your maps to get the small size.[/b]
+[*][b]No more flicker[/b] — the Workshop list no longer blinks (an item stuck re-downloading in a loop).
+[*][b]Download won't hang[/b] — retries while Steam propagates a freshly published map, and no longer gets stuck "downloading forever".
+[*]The download prompt shows the map's real name.
+[/list]
+
+[h2]Level transitions[/h2]
+[list]
+[*][b]New loading screen[/b] with IN → LOOP → OUT animations when entering a level, starting a match, or returning to the lobby — no more raw black screen jumps.
+[/list]
+
+[h2]Level Creator[/h2]
+[list]
+[*][b]Delete your maps[/b] — a confirm popup to remove maps you created.
+[*][b]Cooking is faster[/b] (hold Enter ~1.5s) with a "3D-printer" scan glow while it bakes.
+[*][b]Smarter erase[/b] — brush lands on the actual mesh surface; scale it up to reach far assets.
+[*][b]Exact eyedropper[/b] — copying a prop's color now matches exactly.
+[*]Sculpting the box floor no longer flips you out of Sculpt mode; switching to Level Edit always starts on the Add tool with only the relevant tools shown.
+[*]Smaller minimum Paint brush size (finer detail) everywhere.
+[*]Player spawns are shown while building so you don't bury them under props.
+[/list]

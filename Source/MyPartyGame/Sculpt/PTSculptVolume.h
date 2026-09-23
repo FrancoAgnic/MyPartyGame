@@ -185,6 +185,12 @@ public:
     UPROPERTY(EditAnywhere, Category="MapEditor") class UMaterialInterface* SculptModeFrameOverlay = nullptr;
     void SetSculptModeVisual(bool bInside);
 
+    /** Feedback de cocinado tipo IMPRESORA 3D: una línea de glow que barre de ABAJO hacia ARRIBA. Setea en el
+     *  material de arcilla los escalares: "BakeScanActive" (0/1), "BakeScan" (0..1 = altura normalizada) y
+     *  "BakeScanZ" (altura del barrido en Z MUNDO). Cableá el glow en el material comparando la altura del
+     *  píxel (WorldPosition.z ≈ BakeScanZ, o height normalizada ≈ BakeScan) con una banda finita. */
+    void SetBakeScan(float Progress01, bool bActive);
+
     // Muestra/oculta el wireframe del NoPlaceZone. Debug SOLO para el creador del nivel (autoría): se prende
     // en el Level Creator y queda oculto al publicar/jugar (por defecto HiddenInGame).
     void SetNoPlaceZoneDebugVisible(bool bVisible);

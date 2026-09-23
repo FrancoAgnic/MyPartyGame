@@ -35,6 +35,12 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) UButton*                   CreateButton;
     UPROPERTY(meta=(BindWidgetOptional)) UComboBoxString*           MapSelectCombo;
     UPROPERTY(meta=(BindWidgetOptional)) UButton*                   EditButton;
+    UPROPERTY(meta=(BindWidgetOptional)) UButton*                   DeleteButton;      // abre el popup de confirmación
+    // Popup de confirmación de borrado (nombres EXACTOS en el WBP, opcionales): panel + 2 botones + texto.
+    UPROPERTY(meta=(BindWidgetOptional)) class UWidget*             DeleteConfirmPanel; // contenedor (oculto por defecto)
+    UPROPERTY(meta=(BindWidgetOptional)) UButton*                   DeleteConfirmYes;   // "Borrar"
+    UPROPERTY(meta=(BindWidgetOptional)) UButton*                   DeleteConfirmNo;    // "Cancelar"
+    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*                DeleteConfirmText;  // "¿Seguro que querés borrar «X»?"
     // Miniatura del mapa elegido en el combo (la que guardaste en el form de Save). Se autocompleta.
     UPROPERTY(meta=(BindWidgetOptional)) class UImage*              ThumbnailImage;
     UPROPERTY(meta=(BindWidgetOptional)) UButton*                   CloseButton;
@@ -42,6 +48,9 @@ protected:
 
     UFUNCTION() void OnCreateClicked();
     UFUNCTION() void OnEditClicked();
+    UFUNCTION() void OnDeleteClicked();      // abre el popup
+    UFUNCTION() void OnDeleteConfirmYes();   // borra + cierra el popup
+    UFUNCTION() void OnDeleteConfirmNo();    // cierra el popup
     UFUNCTION() void OnCloseClicked();
     UFUNCTION() void OnMapSelected(FString SelectedItem, ESelectInfo::Type Type); // autocompleta la miniatura
 
@@ -49,4 +58,5 @@ private:
     UPTGameInstance* GI() const;
     void RefreshList();
     TArray<FString> Slugs;
+    FString PendingDeleteSlug; // slug esperando confirmación (2do click de Borrar)
 };

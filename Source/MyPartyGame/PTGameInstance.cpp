@@ -3,6 +3,7 @@
 #include "PTGameInstance.h"
 #include "PTTextTable.h"
 #include "PTWordBank.h"
+#include "UI/PTLoadingScreenWidget.h"
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/FileHelper.h"
@@ -224,11 +225,30 @@ void UPTGameInstance::EditLevel(const FString& Slug)
 
 void UPTGameInstance::EnterMapAuthoring()
 {
-    // Abre el nivel plantilla del MapKit forzando el GameMode de autoría por la URL (?game=...).
-    // Es un travel local (standalone): salís de la sesión actual y entrás solo a esculpir el mapa.
     if (MapAuthorLevel.IsEmpty()) return;
     if (CurrentAuthoringSlug.IsEmpty()) // entrada directa sin pasar por Crear/Editar → arrancar uno nuevo
         CurrentAuthoringSlug = FString::Printf(TEXT("Map_%s"), *FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S")));
+
+    // Transición: reproducir el AnimIn SOBRE el menú actual y viajar recién cuando tapó la pantalla → así
+    // durante el AnimIn se ve el MENÚ (source), no el nivel destino. Fallback: si no hay loading, viaja directo.
+    if (LoadingScreenClass)
+    {
+        if (UPTLoadingScreenWidget* LS = CreateLoadingScreen(/*bStartAtLoop=*/false))
+        {
+            LS->OnCovered.AddDynamic(this, &UPTGameInstance::DoEnterMapAuthoringTravel);
+            if (UWorld* W = GetWorld())
+                W->GetTimerManager().SetTimer(TransitionSafetyTimer, this, &UPTGameInstance::DoEnterMapAuthoringTravel, 2.0f, false);
+            return;
+        }
+    }
+    DoEnterMapAuthoringTravel();
+}
+
+void UPTGameInstance::DoEnterMapAuthoringTravel()
+{
+    if (bTransitionCovering) return; // ya viajando (OnCovered + timer podrían llamar los dos)
+    bTransitionCovering = true;      // el destino (autoría) arranca YA tapado (loop) y revela con OUT
+    if (UWorld* W = GetWorld()) W->GetTimerManager().ClearTimer(TransitionSafetyTimer);
     const FString Options = FString::Printf(TEXT("game=%s"), *MapAuthorGameMode);
     UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Entrando a autoría: %s (%s) slug=%s"), *MapAuthorLevel, *Options, *CurrentAuthoringSlug);
     UGameplayStatics::OpenLevel(this, FName(*MapAuthorLevel), /*bAbsolute=*/true, Options);
@@ -335,6 +355,28 @@ void UPTGameInstance::ListAuthoredMaps(TArray<FString>& OutSlugs, TArray<FString
         OutSlugs.Add(Name);
         OutTitles.Add(Title);
     }
+}
+
+UPTLoadingScreenWidget* UPTGameInstance::CreateLoadingScreen(bool bStartAtLoop)
+{
+    if (!LoadingScreenClass) return nullptr;
+    UPTLoadingScreenWidget* LS = CreateWidget<UPTLoadingScreenWidget>(this, LoadingScreenClass);
+    if (!LS) return nullptr;
+    LS->AddToViewport(1000); // arriba de todo
+    LS->PlayIntro(bStartAtLoop);
+    return LS;
+}
+
+void UPTGameInstance::DeleteAuthoredMap(const FString& Slug)
+{
+    if (Slug.IsEmpty()) return;
+    const FString Dir = AuthoredMapDir(Slug);
+    if (Dir.IsEmpty() || !FPaths::DirectoryExists(Dir)) return;
+    // Borra toda la carpeta del mapa creado (sculpt.bin + mod.json + preview.png). Es un mapa LOCAL del jugador;
+    // no toca el Workshop (si lo publicó, eso se gestiona aparte desde Steam).
+    IFileManager::Get().DeleteDirectory(*Dir, /*RequireExists=*/false, /*Tree=*/true);
+    if (CurrentAuthoringSlug == Slug) CurrentAuthoringSlug.Reset();
+    UE_LOG(LogTemp, Log, TEXT("[MapMod] Mapa creado '%s' borrado."), *Slug);
 }
 
 // "titulos_peliculas" / "titulos-peliculas" → "Titulos Peliculas" (fallback de título si no lo escriben).

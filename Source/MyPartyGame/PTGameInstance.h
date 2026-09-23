@@ -135,6 +135,21 @@ public:
     void    SaveAuthoredMap(const TArray<uint8>& Blob);
     bool    LoadAuthoredMap(TArray<uint8>& OutBlob) const;
 
+    // ── Pantalla de carga / transición entre niveles (IN/LOOP/OUT) ──
+    /** WBP de la pantalla de carga (reparentado a UPTLoadingScreenWidget). Compartido por todas las transiciones. */
+    UPROPERTY(EditAnywhere, Category="UI") TSubclassOf<class UPTLoadingScreenWidget> LoadingScreenClass;
+    /** Se prende cuando el SOURCE ya reprodujo el AnimIn (pantalla tapada) antes del travel → el DESTINO
+     *  arranca la pantalla de carga YA TAPADA (en loop) y revela con AnimOut. Así la secuencia IN(source)→
+     *  LOOP(carga)→OUT(destino) se ve continua y NUNCA se ve el nivel destino detrás del AnimIn. */
+    bool bTransitionCovering = false;
+    /** Crea la pantalla de carga, la agrega al viewport (arriba de todo) y arranca IN (o el loop si bStartAtLoop). */
+    class UPTLoadingScreenWidget* CreateLoadingScreen(bool bStartAtLoop);
+    /** Travel real a autoría (lo llama EnterMapAuthoring cuando el AnimIn ya tapó). */
+    UFUNCTION() void DoEnterMapAuthoringTravel();
+private:
+    FTimerHandle TransitionSafetyTimer; // por si el AnimIn no avisa: viajar igual tras un tope
+public:
+
     // ── Metadatos del mapa (título / descripción / miniatura) ────────────────
     /** Guarda título+descripción en el mod.json del mapa ACTUAL; si ThumbnailSrcPath no está vacío,
      *  copia esa imagen a preview.png del mapa. Lo usa el formulario de Guardar (ESC). */
@@ -155,6 +170,8 @@ public:
 
     /** Lista los mapas autoreados (con sculpt.bin) para el selector del publish. Devuelve pares slug↔título. */
     UFUNCTION(BlueprintCallable, Category="MapMod") void ListAuthoredMaps(TArray<FString>& OutSlugs, TArray<FString>& OutTitles) const;
+    /** Borra una carpeta de mapa CREADO localmente (sculpt.bin + mod.json + preview). No toca el Workshop. */
+    UFUNCTION(BlueprintCallable, Category="MapMod") void DeleteAuthoredMap(const FString& Slug);
 
     // Ruta del nivel plantilla y del GameMode de autoría (editables por si cambian de lugar).
     UPROPERTY(EditAnywhere, Category="MapMod") FString MapAuthorLevel = TEXT("/MapKit/Mapa_Plantilla");

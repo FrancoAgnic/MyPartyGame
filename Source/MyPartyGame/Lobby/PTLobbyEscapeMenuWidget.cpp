@@ -4,6 +4,8 @@
 #include "PTSettingsWidget.h"
 #include "PTLobbyGameMode.h"
 #include "../PTGameInstance.h"
+#include "../UI/PTLoadingScreenWidget.h"
+#include "TimerManager.h"
 #include "../Mods/PTMapAuthorGameMode.h"
 #include "../Mods/PTMapEnvironment.h"
 #include "../UI/PTSaveMapWidget.h"
@@ -99,6 +101,33 @@ void UPTLobbyEscapeMenuWidget::OnLeaveGameClicked()
 
 void UPTLobbyEscapeMenuWidget::DoLeaveGame()
 {
+    if (bLeaving) return;
+
+    // Transición: mostrar la pantalla de carga (AnimIn) y hacer la salida REAL recién cuando ya tapó la
+    // pantalla → así se ve AnimIn ANTES del cambio de nivel (no una pantalla negra de golpe). Con fallback:
+    // si no hay clase de loading, sale directo como antes.
+    UPTGameInstance* GI = GetGameInstance<UPTGameInstance>();
+    if (GI && GI->LoadingScreenClass)
+    {
+        if (UPTLoadingScreenWidget* LS = GI->CreateLoadingScreen(/*bStartAtLoop=*/false))
+        {
+            GI->bTransitionCovering = true; // el MainMenu arranca tapado y revela con OUT al llegar
+            LS->OnCovered.AddDynamic(this, &UPTLobbyEscapeMenuWidget::DoLeaveGameNow);
+            // Seguridad: si el AnimIn no avisa (anim faltante), salir igual tras 2s.
+            if (UWorld* W = GetWorld())
+                W->GetTimerManager().SetTimer(LeaveSafetyTimer, this, &UPTLobbyEscapeMenuWidget::DoLeaveGameNow, 2.0f, false);
+            return;
+        }
+    }
+    DoLeaveGameNow();
+}
+
+void UPTLobbyEscapeMenuWidget::DoLeaveGameNow()
+{
+    if (bLeaving) return; // OnCovered + el timer de seguridad podrían llamar los dos
+    bLeaving = true;
+    if (UWorld* W = GetWorld()) W->GetTimerManager().ClearTimer(LeaveSafetyTimer);
+
     UWorld* World = GetWorld();
 
     // Si el que se va es el ANFITRIÓN, no se puede cerrar el mundo de una: eso deja a los clientes

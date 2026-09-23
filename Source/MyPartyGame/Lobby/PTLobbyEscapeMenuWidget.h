@@ -55,5 +55,8 @@ protected:
 
 private:
     bool IsMapAuthorMode() const; // el GameMode actual es APTMapAuthorGameMode
-    void DoLeaveGame();           // la salida real (host-leave o OpenLevel MainMenu)
+    void DoLeaveGame();           // muestra la transición (AnimIn) y al taparse hace la salida real
+    UFUNCTION() void DoLeaveGameNow(); // la salida real (host-leave o OpenLevel MainMenu)
+    bool bLeaving = false;             // guard: no salir dos veces (OnCovered + timer de seguridad)
+    FTimerHandle LeaveSafetyTimer;
 };

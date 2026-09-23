@@ -197,6 +197,14 @@ public:
     UPROPERTY(EditAnywhere, Category="UI")
     TSubclassOf<class UPTGameplayHUDWidget> GameplayHUDClass;
 
+    // ── Pantalla de carga (al entrar a un mapa de props: tapa el nivel vacío mientras carga) ──
+    /** Tiempo MÍNIMO que se muestra la pantalla de carga (para que se vean IN+LOOP aunque cargue instantáneo).
+     *  La CLASE del widget se asigna en el GameInstance (LoadingScreenClass), un solo lugar para todas las transiciones. */
+    UPROPERTY(EditAnywhere, Category="UI") float LoadingMinSeconds = 2.0f;
+    UPROPERTY() class UPTLoadingScreenWidget* LoadingScreen = nullptr;
+    float LoadingShownAt = 0.f;
+    void HideLoadingScreen(); // toca AnimOut y el widget se auto-remueve
+
     // ── Color picker ────────────────────────────────────────────────────────
     UPROPERTY(EditAnywhere, Category="UI")
     TSubclassOf<UUserWidget> ColorPickerClass;

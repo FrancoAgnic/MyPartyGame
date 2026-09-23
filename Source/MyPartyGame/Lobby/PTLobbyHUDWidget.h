@@ -160,6 +160,9 @@ protected:
 private:
     FTimerHandle RefreshTimerHandle;
     FString CachedRoomCode;
+    // Transición de entrada a la partida: pantalla de carga (AnimIn) que se muestra sobre el LOBBY en los
+    // últimos segundos del countdown, antes del server travel. Muere en el travel; el destino sigue en loop.
+    UPROPERTY(Transient) class UPTLoadingScreenWidget* PendingMatchLoading = nullptr;
     TArray<FString> ChatLines;   // historial (se muestran los últimos MaxVisibleChatLines)
     bool    bChatBound = false;
     // Cuántos mensajes recientes mostrar en la caja del chat (los más viejos se van "subiendo" y salen).

@@ -9,6 +9,7 @@
 #include "PTLobbyGameMode.h"
 #include "../Mods/PTMapModSubsystem.h" // DEV PTMapMod: montar/viajar a un mapa de mod (M1)
 #include "../UI/PTMapDownloadPromptWidget.h" // P4: popup "Descargar mapa" (Steam)
+#include "../UI/PTLoadingScreenWidget.h"      // transición IN/LOOP/OUT al salir/entrar
 #include "PTMainMenuWidget.h"
 #include "PTLobbyHUDWidget.h"
 #include "EnhancedInputSubsystems.h"
@@ -136,6 +137,24 @@ void APTLobbyPlayerController::BeginPlay()
                 &APTLobbyPlayerController::SetupDioramaView, 0.2f, true);
 
         ShowLobbyOverlay();
+
+        // Transición de LLEGADA: si venimos de salir de un nivel, mostrar la pantalla de carga ya TAPANDO
+        // (empieza en el loop) y revelar el lobby con el AnimOut → la secuencia IN(en el nivel)→...→OUT(acá)
+        // se ve continua. Solo cuando bTransitionCovering (no en el arranque normal del juego).
+        if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
+        {
+            if (GI->bTransitionCovering && GI->LoadingScreenClass)
+            {
+                GI->bTransitionCovering = false;
+                if (UPTLoadingScreenWidget* LS = GI->CreateLoadingScreen(/*bStartAtLoop=*/true))
+                {
+                    // Revelar tras un instante (deja ver el loop un toque y evita revelar antes de que cargue el lobby).
+                    FTimerHandle H;
+                    FTimerDelegate D; D.BindLambda([LS]() { if (LS) LS->PlayOutro(); });
+                    GetWorldTimerManager().SetTimer(H, D, 1.0f, false);
+                }
+            }
+        }
 
         // Cámara espectador (dev-only): se maneja por comandos de consola.
         Spectator = NewObject<UPTSpectatorComponent>(this, TEXT("SpectatorCam"));
@@ -352,9 +371,12 @@ void APTLobbyPlayerController::EnsureSelectedMapAvailable(const FString& ModId)
     {
         PendingDownloadModId = ModId;
         GetWorldTimerManager().ClearTimer(MapDownloadPoll);
-        FString Title = ModId;
+        // Título REAL del mapa (replicado). Si aún no llegó (timing) o el id es numérico, mostrar un texto
+        // amigable en vez del id crudo de Steam.
+        FString Title;
         if (const APTGameState* GS = GetWorld() ? GetWorld()->GetGameState<APTGameState>() : nullptr)
             if (!GS->MatchMapTitle.IsEmpty()) Title = GS->MatchMapTitle;
+        if (Title.IsEmpty()) Title = PTText::GetStr(TEXT("MAP_CUSTOM"));
         ShowMapDownloadPrompt(Title);
     }
 }
@@ -405,16 +427,28 @@ void APTLobbyPlayerController::TryMapDownloadStep()
     {
         const FString Id = PendingDownloadModId;
         PendingDownloadModId.Reset();
+        MapDownloadTries = 0;
         GetWorldTimerManager().ClearTimer(MapDownloadPoll);
         Server_ReportHasMap(Id);
         UE_LOG(LogTemp, Log, TEXT("[MapMod] Mapa '%s' descargado y listo."), *Id);
         return;
     }
-    // ~2 min de reintentos (Steam puede tardar). Al primer intento ya disparó la descarga; después solo pollea.
-    if (++MapDownloadTries >= 60)
+    ++MapDownloadTries;
+    // RE-disparar la descarga cada ~16s: si el item se acaba de publicar, Steam puede tardar en propagarlo
+    // (FileNotFound) y el primer DownloadItem falla; reintentar hasta que el server lo tenga disponible.
+    if (MapDownloadTries % 8 == 0)
+        MM->RequestWorkshopDownload(PendingDownloadModId);
+    // ~2 min de reintentos. Si no llegó, NO dejar la UI colgada: resetear y re-mostrar el prompt para reintentar.
+    if (MapDownloadTries >= 60)
     {
+        const FString Id = PendingDownloadModId;
+        PendingDownloadModId.Reset();
+        MapDownloadTries = 0;
         GetWorldTimerManager().ClearTimer(MapDownloadPoll);
-        UE_LOG(LogTemp, Warning, TEXT("[MapMod] La descarga del mapa '%s' no termino a tiempo."), *PendingDownloadModId);
+        UE_LOG(LogTemp, Warning, TEXT("[MapMod] La descarga del mapa '%s' no terminó a tiempo → reintentar."), *Id);
+        // Volver a ofrecer la descarga (el jugador puede reintentar) si el host sigue en ese mapa.
+        if (const APTGameState* GS = GetWorld() ? GetWorld()->GetGameState<APTGameState>() : nullptr)
+            if (GS->MatchMapModId == Id) EnsureSelectedMapAvailable(Id);
     }
 }
 

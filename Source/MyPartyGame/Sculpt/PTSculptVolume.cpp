@@ -1,5 +1,6 @@
 #include "PTSculptVolume.h"
 #include "Async/Async.h"
+#include "Engine/Engine.h" // GEngine->AddOnScreenDebugMessage (debug temporal del BakeScan)
 #include "Engine/Texture2D.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "TextureResource.h"
@@ -414,6 +415,26 @@ void APTSculptVolume::SetSculptModeVisual(bool bInside)
     GetComponents<UStaticMeshComponent>(SMComps);
     for (UStaticMeshComponent* SM : SMComps)
         if (SM) SM->SetOverlayMaterial(Ov);
+}
+
+void APTSculptVolume::SetBakeScan(float Progress01, bool bActive)
+{
+    if (!ClayMID) return;
+    Progress01 = FMath::Clamp(Progress01, 0.f, 1.f);
+    // Rango vertical de la escultura en Z MUNDO (canvas local → mundo; asume el box sin inclinar).
+    const FTransform Xf = GetActorTransform();
+    const float LocMinZ = CanvasMinLocal.Z;
+    const float LocMaxZ = CanvasMinLocal.Z + CanvasSizeLocal.Z;
+    const float WMinZ   = Xf.TransformPosition(FVector(0.f, 0.f, LocMinZ)).Z;
+    const float WMaxZ   = Xf.TransformPosition(FVector(0.f, 0.f, LocMaxZ)).Z;
+    const float ScanZ   = FMath::Lerp(WMinZ, WMaxZ, Progress01);
+
+    // El barrido es un patrón por TIEMPO en el material (franjas infinitas que suben); acá solo prendemos/
+    // apagamos el efecto. BakeScan/BakeScanZ quedan por si querés un barrido por altura, pero el paneo
+    // constante solo necesita BakeScanActive.
+    ClayMID->SetScalarParameterValue(TEXT("BakeScanActive"), bActive ? 1.f : 0.f);
+    ClayMID->SetScalarParameterValue(TEXT("BakeScan"),  Progress01);
+    ClayMID->SetScalarParameterValue(TEXT("BakeScanZ"), ScanZ);
 }
 
 void APTSculptVolume::SetNoPlaceZoneDebugVisible(bool bVisible)

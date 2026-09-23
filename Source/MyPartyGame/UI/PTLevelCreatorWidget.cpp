@@ -23,8 +23,12 @@ void UPTLevelCreatorWidget::NativeConstruct()
     Super::NativeConstruct();
     if (CreateButton) CreateButton->OnClicked.AddDynamic(this, &UPTLevelCreatorWidget::OnCreateClicked);
     if (EditButton)   EditButton->OnClicked.AddDynamic(this, &UPTLevelCreatorWidget::OnEditClicked);
+    if (DeleteButton)     DeleteButton->OnClicked.AddDynamic(this, &UPTLevelCreatorWidget::OnDeleteClicked);
+    if (DeleteConfirmYes) DeleteConfirmYes->OnClicked.AddDynamic(this, &UPTLevelCreatorWidget::OnDeleteConfirmYes);
+    if (DeleteConfirmNo)  DeleteConfirmNo->OnClicked.AddDynamic(this, &UPTLevelCreatorWidget::OnDeleteConfirmNo);
     if (CloseButton)  CloseButton->OnClicked.AddDynamic(this, &UPTLevelCreatorWidget::OnCloseClicked);
     if (MapSelectCombo) MapSelectCombo->OnSelectionChanged.AddDynamic(this, &UPTLevelCreatorWidget::OnMapSelected);
+    if (DeleteConfirmPanel) DeleteConfirmPanel->SetVisibility(ESlateVisibility::Collapsed);
     SetVisibility(ESlateVisibility::Collapsed);
 }
 
@@ -62,6 +66,8 @@ void UPTLevelCreatorWidget::RefreshList()
 
 void UPTLevelCreatorWidget::OnMapSelected(FString SelectedItem, ESelectInfo::Type Type)
 {
+    PendingDeleteSlug.Reset(); // cambiar de mapa cancela una confirmación de borrado pendiente
+    if (StatusText) StatusText->SetVisibility(ESlateVisibility::Collapsed);
     if (!ThumbnailImage) return;
     UPTGameInstance* G = GI();
     const int32 Idx = MapSelectCombo ? MapSelectCombo->GetSelectedIndex() : INDEX_NONE;
@@ -103,7 +109,48 @@ void UPTLevelCreatorWidget::OnEditClicked()
         G->EditLevel(Slugs[Idx]); // entra a autoría cargando ese mapa
 }
 
+void UPTLevelCreatorWidget::OnDeleteClicked()
+{
+    const int32 Idx = MapSelectCombo ? MapSelectCombo->GetSelectedIndex() : INDEX_NONE;
+    if (!Slugs.IsValidIndex(Idx)) return;
+    PendingDeleteSlug = Slugs[Idx];
+    const FString Title = MapSelectCombo ? MapSelectCombo->GetSelectedOption() : PendingDeleteSlug;
+
+    // Abrir el popup de confirmación.
+    if (DeleteConfirmText)
+    {
+        FFormatOrderedArguments A; A.Add(FText::FromString(Title));
+        DeleteConfirmText->SetText(PTText::Format(TEXT("MAP_DELETE_CONFIRM"), A));
+    }
+    if (DeleteConfirmPanel) DeleteConfirmPanel->SetVisibility(ESlateVisibility::Visible);
+}
+
+void UPTLevelCreatorWidget::OnDeleteConfirmYes()
+{
+    if (DeleteConfirmPanel) DeleteConfirmPanel->SetVisibility(ESlateVisibility::Collapsed);
+    UPTGameInstance* G = GI();
+    if (G && !PendingDeleteSlug.IsEmpty())
+    {
+        G->DeleteAuthoredMap(PendingDeleteSlug);
+        if (StatusText)
+        {
+            StatusText->SetText(PTText::Get(TEXT("MAP_DELETED")));
+            StatusText->SetVisibility(ESlateVisibility::Visible);
+        }
+        RefreshList();
+    }
+    PendingDeleteSlug.Reset();
+}
+
+void UPTLevelCreatorWidget::OnDeleteConfirmNo()
+{
+    if (DeleteConfirmPanel) DeleteConfirmPanel->SetVisibility(ESlateVisibility::Collapsed);
+    PendingDeleteSlug.Reset();
+}
+
 void UPTLevelCreatorWidget::OnCloseClicked()
 {
+    if (DeleteConfirmPanel) DeleteConfirmPanel->SetVisibility(ESlateVisibility::Collapsed);
+    PendingDeleteSlug.Reset();
     SetVisibility(ESlateVisibility::Collapsed);
 }

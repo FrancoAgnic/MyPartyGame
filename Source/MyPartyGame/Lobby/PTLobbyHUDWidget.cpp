@@ -22,7 +22,7 @@
 #include "../PTNetStats.h"
 #include "Components/Image.h"
 #include "../PTGameInstance.h" // modo captura dev (Player N)
-#include "../PTGameInstance.h"
+#include "../UI/PTLoadingScreenWidget.h" // transición de entrada a la partida
 #include "../PTWordBank.h"
 #include "../Multiplayer/MultiplayerSessionsSubsystem.h"
 #include "../UI/PTFriendsWidget.h"
@@ -213,6 +213,23 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
         // muestra "Empezando en X...". Si alguien saca el listo, CountdownSecondsRemaining vuelve a -1 y
         // el texto vuelve solo al de esperando.
         const int32 Seconds = PTGS->CountdownSecondsRemaining;
+        // Transición a la partida: cuando falta poco, tocar el AnimIn SOBRE el lobby (para no ver una pantalla
+        // negra ni el nivel destino durante el travel). El server viaja en 0; el widget muere en el travel y el
+        // destino arranca ya tapado (bTransitionCovering) → OUT revela. Si se cancela el countdown, se saca.
+        if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
+        {
+            if (Seconds >= 0 && Seconds <= 2 && !PendingMatchLoading && GI->LoadingScreenClass)
+            {
+                PendingMatchLoading = GI->CreateLoadingScreen(/*bStartAtLoop=*/false);
+                GI->bTransitionCovering = true;
+            }
+            else if (Seconds < 0 && PendingMatchLoading)
+            {
+                PendingMatchLoading->RemoveFromParent();
+                PendingMatchLoading = nullptr;
+                GI->bTransitionCovering = false;
+            }
+        }
         if (Seconds >= 0)
         {
             FFormatOrderedArguments Args; Args.Add(FText::AsNumber(Seconds));
