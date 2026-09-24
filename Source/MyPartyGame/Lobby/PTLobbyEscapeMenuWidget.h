@@ -31,6 +31,10 @@ protected:
     virtual bool Initialize() override;
 
     UPROPERTY(meta = (BindWidget))         UButton* LeaveGameButton;
+    // OPCIONAL: el TextBlock DENTRO del botón de salir. Si lo bindeás (nómbralo así en el WBP), en el
+    // main menu el botón dice "Exit Game" y cierra el juego; en partida dice "Leave Game". Sin bindear,
+    // igual cambia la ACCIÓN (cerrar juego en el menú), pero el texto queda como esté en el WBP.
+    UPROPERTY(meta = (BindWidgetOptional)) class UTextBlock* LeaveGameLabel;
     UPROPERTY(meta = (BindWidgetOptional)) UButton* SettingsButton;
     UPROPERTY(meta = (BindWidgetOptional)) UButton* ResumeButton;
     // Solo en modo AUTORÍA de mapa: guarda el escenario esculpido. Se muestra únicamente en ese modo.
@@ -55,6 +59,7 @@ protected:
 
 private:
     bool IsMapAuthorMode() const; // el GameMode actual es APTMapAuthorGameMode
+    bool IsMainMenuLevel() const; // el nivel actual es el Main Menu (no hay partida que abandonar)
     void DoLeaveGame();           // muestra la transición (AnimIn) y al taparse hace la salida real
     UFUNCTION() void DoLeaveGameNow(); // la salida real (host-leave o OpenLevel MainMenu)
     bool bLeaving = false;             // guard: no salir dos veces (OnCovered + timer de seguridad)

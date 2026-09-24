@@ -488,6 +488,24 @@ void APTSculptVolume::Tick(float DeltaTime)
         if (L.IsValid() && L->HasDirty()) { bAnyDirty = true; break; }
 
     if (!bAnyDirty || bRebuildInProgress) return;
+
+    if (bUseSVO)
+    {
+        // Debounce del remallado del MODELO COMPLETO (ver PTSculptVolume.h): en vez de re-mallar 20x/s
+        // durante el arrastre (satura el render thread en niveles cargados), se re-malla a un ritmo
+        // espaciado para feedback y una vez más al asentarse el trazo. El resultado final es el mismo
+        // MC watertight; solo cambia CADA CUÁNTO se dispara.
+        const float Now       = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+        const bool  bSettled  = (Now - LastSVOStampTime)  >= SVOSettleDelay;   // el trazo se detuvo
+        const bool  bLiveTick = (Now - LastSVORemeshTime) >= SVOLiveInterval;  // toca feedback en arrastre
+        if (!bSVOMeshing && (bSettled || bLiveTick))
+        {
+            LastSVORemeshTime = Now;
+            RebuildDirty();
+        }
+        return;
+    }
+
     TimeSinceRebuild += DeltaTime;
     if (TimeSinceRebuild >= RebuildInterval)
     {
@@ -1180,10 +1198,7 @@ bool APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Si
 {
     // Modo SVO (experimental, detrás de flag): la geometría va por el octree adaptativo.
     if (bUseSVO)
-    {
-        ApplyStampSVO(WorldPos, Shape, Size, Mode, PaintColor, StampRot, StampScale);
-        return true;
-    }
+        return ApplyStampSVO(WorldPos, Shape, Size, Mode, PaintColor, StampRot, StampScale);
 
     // Escala no-uniforme: se deforma el punto de muestreo local dividiéndolo por la escala (así una
     // escala 2 en Z estira la forma al doble en Z). Se clampea para no dividir por ~0.
@@ -1634,12 +1649,12 @@ void APTSculptVolume::InitSVO()
     MarkAllSVODirty();
 }
 
-void APTSculptVolume::ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float Size, EPTEditMode Mode,
+bool APTSculptVolume::ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float Size, EPTEditMode Mode,
                                     FLinearColor PaintColor, FRotator StampRot, FVector StampScale)
 {
     if (!bSVOInit) InitSVO();
     // Smooth no se usa en modo SVO (se ignora). Paint recolorea la superficie sin tocar geometría.
-    if (Mode == EPTEditMode::Smooth) return;
+    if (Mode == EPTEditMode::Smooth) return false;
 
     // Mapeo de forma clásica → forma del octree.
     EPTSVOShape S;
@@ -1670,7 +1685,27 @@ void APTSculptVolume::ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float
     if (Mode == EPTEditMode::Paint)
     {
         WritePaintStamp(WorldPos, Shape, Size, PaintColor, /*bFull=*/false, SafeScale);
-        return;
+        return true;
+    }
+
+    // BORRAR: antes de sacar la arcilla, mirar si HAY sólido bajo la brocha → las partículas SOLO salen si
+    // realmente borrás arcilla, y con el COLOR de esa arcilla (no blanco). Se muestrea una GRILLA 3×3×3 que
+    // cubre TODA la brocha (no solo el centro): al cavar/arrastrar, la arcilla nueva queda en el BORDE de la
+    // brocha, así que muestrear solo el core (que se borra en el 1er frame) hacía que dejara de spawnear.
+    bool bRemovedSolid = false;
+    if (Mode == EPTEditMode::Erase)
+    {
+        const FVector H = HalfExtent * 0.85f; // casi hasta el borde de la brocha
+        float BestD = -BIG_NUMBER; FVector BestP = LocalPos;
+        for (int32 ix = -1; ix <= 1; ++ix)
+        for (int32 iy = -1; iy <= 1; ++iy)
+        for (int32 iz = -1; iz <= 1; ++iz)
+        {
+            const FVector P = LocalPos + FVector(ix * H.X, iy * H.Y, iz * H.Z);
+            const float d = F.Sample(P); // >0 dentro de la arcilla
+            if (d > BestD) { BestD = d; BestP = P; }
+        }
+        if (BestD > 0.f) { bRemovedSolid = true; LastErasedColor = F.SampleColorLinear(BestP); }
     }
 
     F.EditShape(Xf, S, HalfExtent, /*bAdd=*/Mode == EPTEditMode::Add, Col);
@@ -1698,6 +1733,9 @@ void APTSculptVolume::ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float
         for (int32 i = 0; i < SVODetailFields.Num(); ++i)
             if (SVODetailFields[i].Get() == &F) { DirtySVODetailLayers.Add(i); break; }
     }
+
+    // Borrar → partículas solo si había sólido; resto → true (Add no usa partículas; Paint las tira igual).
+    return (Mode == EPTEditMode::Erase) ? bRemovedSolid : true;
 }
 
 void APTSculptVolume::RebuildSVOInto(FPTVoxelOctree& F, UProceduralMeshComponent* M)
@@ -1746,6 +1784,9 @@ void APTSculptVolume::MarkSVODirtyLocalBounds(const FVector& LMin, const FVector
     for (int32 x = x0; x <= x1; ++x)
         DirtySVOChunks.Add(x + y * SVOChunkDim + z * SVOChunkDim * SVOChunkDim);
     bSVODirty = true;
+    // Marca de tiempo para el debounce del remallado (ver Tick): mientras lleguen sellos, el trazo
+    // sigue "activo" y se re-malla a ritmo espaciado; al dejar de llegar, se asienta y remalla final.
+    LastSVOStampTime = GetWorld() ? GetWorld()->GetTimeSeconds() : LastSVOStampTime;
 }
 
 void APTSculptVolume::RebuildSVOChunk(int32 ChunkIndex)

@@ -376,7 +376,9 @@ private:
     FPTVoxelOctree* ActiveSVO = &SVOField; // dónde caen los sellos (base o última capa)
     void InitSVO();               // arma el octree BASE cubriendo el BoundsBox
     void InitSVOOctree(FPTVoxelOctree& F) const; // inicializa un octree cualquiera sobre el BoundsBox
-    void ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float Size, EPTEditMode Mode,
+    // Devuelve (para las partículas): Borrar → true si había arcilla sólida bajo la brocha (y deja su color en
+    // LastErasedColor); resto → true. Así el erase solo tira partículas cuando realmente saca arcilla.
+    bool ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float Size, EPTEditMode Mode,
                        FLinearColor PaintColor, FRotator StampRot, FVector StampScale);
     void RebuildSVOMesh();        // remalla base (por chunks) + capas
     void RebuildSVOInto(FPTVoxelOctree& F, UProceduralMeshComponent* M); // remalla un octree entero a un mesh (capas)
@@ -397,6 +399,17 @@ private:
                            const TArray<FVector>& N, const TArray<FColor>& C);
     bool bSVOMeshing = false;                              // hay un mallado async de chunks en vuelo
     uint32 SVOMeshGen = 0;                                 // generación: descarta resultados async viejos tras clear/load
+
+    // ── Debounce del remallado SVO ──
+    // El mallado SVO es del MODELO COMPLETO (Marching Cubes uniforme = watertight). Re-mallarlo a
+    // RebuildInterval (20x/s) durante un trazo continuo recrea el scene proxy 20 veces por segundo y
+    // satura el render thread en niveles cargados (baja FPS al esculpir). Se espacia: feedback cada
+    // SVOLiveInterval durante el arrastre y un remallado final al ASENTARSE el trazo (SVOSettleDelay
+    // tras el último sello). NO cambia el mallado en sí → sigue watertight. Solo aplica en bUseSVO.
+    float LastSVOStampTime  = 0.f;   // tiempo (s) del último sello que ensució el octree
+    float LastSVORemeshTime = 0.f;   // tiempo (s) del último remallado disparado
+    static constexpr float SVOLiveInterval = 0.10f; // ritmo de feedback durante un trazo continuo
+    static constexpr float SVOSettleDelay  = 0.12f; // sin sellos por este lapso → remallado final
 
     // ── Glow de arcilla nueva en modo SVO ──
     // El octree no guarda "tiempo de agregado" por vóxel (a diferencia del campo clásico). Para que la

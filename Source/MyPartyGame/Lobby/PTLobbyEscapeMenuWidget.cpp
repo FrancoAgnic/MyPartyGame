@@ -11,7 +11,10 @@
 #include "../UI/PTSaveMapWidget.h"
 #include "Engine/World.h"
 #include "Components/Button.h"
+#include "Components/TextBlock.h"
 #include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetSystemLibrary.h"
+#include "../PTTextTable.h"
 
 bool UPTLobbyEscapeMenuWidget::Initialize()
 {
@@ -42,6 +45,18 @@ void UPTLobbyEscapeMenuWidget::ToggleMenu()
     // "Guardar mapa" solo tiene sentido en el modo autoría de mapa.
     if (SaveMapButton)
         SaveMapButton->SetVisibility(IsMapAuthorMode() ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+
+    // En el MAIN MENU no hay partida que abandonar → el botón dice "Exit Game"/"Cerrar juego" (cierra el
+    // juego). En partida/lobby/autoría dice "Leave Game". El label se toma de LeaveGameLabel si lo bindeaste;
+    // si no, se busca el primer TextBlock DENTRO del botón (así funciona sin tocar el WBP).
+    if (bOpen)
+    {
+        UTextBlock* Label = LeaveGameLabel;
+        if (!Label && LeaveGameButton && LeaveGameButton->GetChildrenCount() > 0)
+            Label = Cast<UTextBlock>(LeaveGameButton->GetChildAt(0));
+        if (Label)
+            Label->SetText(PTText::Get(IsMainMenuLevel() ? FName("UI_EXIT_GAME") : FName("UI_LEAVE_GAME")));
+    }
 
     if (APlayerController* PC = GetOwningPlayer())
     {
@@ -90,6 +105,13 @@ void UPTLobbyEscapeMenuWidget::HandleEscape()
 
 void UPTLobbyEscapeMenuWidget::OnLeaveGameClicked()
 {
+    // En el MAIN MENU no hay partida que abandonar: el botón funciona como "Exit Game" → cerrar el juego.
+    if (IsMainMenuLevel())
+    {
+        UKismetSystemLibrary::QuitGame(this, GetOwningPlayer(), EQuitPreference::Quit, /*bIgnorePlatformRestrictions=*/false);
+        return;
+    }
+
     // En modo AUTORÍA de mapa: preguntar antes de salir (podés perder cambios sin guardar).
     if (IsMapAuthorMode() && DiscardPopup)
     {
@@ -173,6 +195,16 @@ void UPTLobbyEscapeMenuWidget::OnResumeClicked()
 bool UPTLobbyEscapeMenuWidget::IsMapAuthorMode() const
 {
     return GetWorld() && Cast<APTMapAuthorGameMode>(GetWorld()->GetAuthGameMode()) != nullptr;
+}
+
+bool UPTLobbyEscapeMenuWidget::IsMainMenuLevel() const
+{
+    UWorld* W = GetWorld();
+    if (!W) return false;
+    // GetMapName trae el nombre corto; en PIE lleva el prefijo (UEDPIE_0_) → sacarlo antes de comparar.
+    FString Map = W->GetMapName();
+    Map.RemoveFromStart(W->StreamingLevelsPrefix);
+    return Map.Equals(TEXT("MainMenu"), ESearchCase::IgnoreCase);
 }
 
 void UPTLobbyEscapeMenuWidget::OnSaveMapClicked()

@@ -262,6 +262,7 @@ WORDPACK_DESC_DEFAULT,El banco de palabras oficial del juego.,The game's officia
 UI_ENTER_TO_CHAT,Enter para chatear,Enter to Chat,Enter para conversar,Enter zum Chatten,Entrée pour discuter,Invio per chattare
 UI_RETURN_TO_GAME,Volver al juego,Return to Game,Voltar ao jogo,Zurück zum Spiel,Retour au jeu,Torna al gioco
 UI_LEAVE_GAME,Salir de la partida,Leave Game,Sair do jogo,Spiel verlassen,Quitter la partie,Esci dalla partita
+UI_EXIT_GAME,Cerrar juego,Exit Game,Fechar o jogo,Spiel beenden,Quitter le jeu,Esci dal gioco
 UI_SAVE_MAP_BTN,Guardar mapa,Save Map,Salvar mapa,Karte speichern,Enregistrer la carte,Salva mappa
 UI_SAVE_YOUR_MAP,Guardá tu mapa,Save your Map,Salve seu mapa,Speichere deine Karte,Enregistre ta carte,Salva la tua mappa
 UI_SAVE_AND_EXIT,Guardar y salir,Save and Exit,Salvar e sair,Speichern und beenden,Enregistrer et quitter,Salva ed esci

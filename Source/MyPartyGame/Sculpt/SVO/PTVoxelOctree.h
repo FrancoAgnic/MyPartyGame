@@ -194,8 +194,10 @@ private:
     // OutColor = color interpolado en los cruces.
     static bool LeafVertex(const FPTOctreeNode& Leaf, const FVector& Min, float Size, FVector& OutLocal, FColor& OutColor);
     FVector FieldNormal(const FVector& P) const; // normal = -grad(SDF)
+public:
     FLinearColor SampleColorLinear(const FVector& P) const; // color interpolado del campo (para MC)
     FColor SampleSolidColor(const FVector& P) const;        // color SÓLIDO del material (por vértice, = picker)
+private:
 
     static int32 CountLeavesRec(const FPTOctreeNode* N);
     static int32 CountNodesRec(const FPTOctreeNode* N);

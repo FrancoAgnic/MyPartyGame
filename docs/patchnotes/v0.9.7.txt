@@ -1,0 +1,15 @@
+TITLE: v0.9.7 — Smoother sculpting in busy maps & menu fixes
+
+[h1]v0.9.7[/h1]
+[b]Sculpting stays smooth in prop-heavy maps, plus a couple of menu fixes.[/b]
+
+[h2]Performance[/h2]
+[list]
+[*][b]No more FPS drops when sculpting[/b] in maps with lots of painted geometry. The clay mesh now rebuilds at a steady, throttled pace during a stroke (and once more when you finish it) instead of many times per second — the final result is identical, it just stops flooding the GPU while you draw.
+[/list]
+
+[h2]Menu & UI[/h2]
+[list]
+[*]The download popup now shows the [b]correct map name[/b] instead of a placeholder.
+[*]In the main menu, the escape menu button is now [b]"Exit Game"[/b] and closes the game, instead of a "Leave Game" button that just reloaded the menu.
+[/list]
