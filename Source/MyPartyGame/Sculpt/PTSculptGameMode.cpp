@@ -663,6 +663,11 @@ void APTSculptGameMode::HandlePlayerGuessedCorrectly(APTPlayerState* Guesser)
     // Aviso a TODOS (mini-popup junto a su nombre). Sin la palabra: anti-spoiler.
     G->Multicast_SomeoneGuessed(Guesser, Pts);
 
+    // Los BOTS de trailer son decoración: suman puntos y salen en verde, pero NO cuentan para terminar
+    // la ronda. Solo un jugador REAL que adivina puede cerrar el turno (si no, un bot solo terminaba la
+    // ronda —sobre todo en pruebas con pocos jugadores reales—).
+    if (Guesser->bIsBot) return;
+
     // ¿Adivinaron todos los que no esculpen? → cerrar el turno antes de tiempo.
     bool bAllGuessed = true;
     for (APTPlayerState* PT : GetActivePlayers())

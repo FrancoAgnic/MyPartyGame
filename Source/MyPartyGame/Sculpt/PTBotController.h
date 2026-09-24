@@ -26,6 +26,10 @@ private:
     FVector Center       = FVector::ZeroVector;
     float   MinRadius    = 350.f;
     float   MaxRadius    = 850.f;
+    // Piso duro: los bots nunca bajan de esta Z de mundo (si no, atraviesan el suelo del nivel y se
+    // van para abajo). Margen para que no queden clavados justo en el plano del piso.
+    float   FloorZ       = 0.f;
+    static constexpr float FloorMargin = 60.f;
     FVector CurrentTarget = FVector::ZeroVector;
     float   RepathAccum  = 0.f;   // tiempo desde el último re-target
     float   RepathEvery  = 0.f;   // cada cuánto forzar nuevo destino (random por tramo)

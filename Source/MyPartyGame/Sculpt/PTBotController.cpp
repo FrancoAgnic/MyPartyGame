@@ -30,6 +30,8 @@ void APTBotController::PickNewTarget()
                       FMath::Sin(Theta) * FMath::Cos(Phi),
                       FMath::Sin(Phi));
     CurrentTarget = Center + Dir * R;
+    // Nunca apuntar por debajo del piso (si no, vuelan hacia abajo y atraviesan el suelo).
+    CurrentTarget.Z = FMath::Max(CurrentTarget.Z, FloorZ + FloorMargin);
     RepathAccum   = 0.f;
     RepathEvery   = FMath::FRandRange(2.5f, 5.0f); // cambia de rumbo cada tanto aunque no llegue
     bHasTarget    = true;
@@ -42,6 +44,16 @@ void APTBotController::Tick(float DeltaSeconds)
     APawn* P = GetPawn();
     if (!P) return;
     if (!bHasTarget) PickNewTarget();
+
+    // Piso duro: si por inercia el bot bajó del piso, subirlo de vuelta (nunca por debajo de FloorZ).
+    {
+        FVector L = P->GetActorLocation();
+        if (L.Z < FloorZ + FloorMargin)
+        {
+            L.Z = FloorZ + FloorMargin;
+            P->SetActorLocation(L, /*bSweep=*/false);
+        }
+    }
 
     const FVector Loc = P->GetActorLocation();
     FVector ToTarget  = CurrentTarget - Loc;
