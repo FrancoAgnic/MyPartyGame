@@ -499,6 +499,21 @@ void APTSculptPlayerController::PTSolo()
     }
 }
 
+void APTSculptPlayerController::PTBots(int32 N)
+{
+    // TRAILER: spawnea N bots de decoración en la partida en curso (con las skins de MI casillero).
+    // El GameMode vive en el server; se enruta por RPC (el host los crea con su casillero local).
+    if (N <= 0) N = 4;
+    Server_SpawnBots(N);
+    UE_LOG(LogTemp, Log, TEXT("[PTBots] Pedido de %d bots de trailer."), N);
+}
+
+void APTSculptPlayerController::Server_SpawnBots_Implementation(int32 N)
+{
+    if (APTSculptGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<APTSculptGameMode>() : nullptr)
+        GM->SpawnBots(N);
+}
+
 void APTSculptPlayerController::PTLOD()
 {
     // DEV: prende/apaga el LOD REAL de props (la reducción de triángulos), sin marcadores. En el editor el LOD

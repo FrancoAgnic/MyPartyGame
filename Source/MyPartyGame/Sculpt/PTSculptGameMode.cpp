@@ -12,6 +12,9 @@
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 #include "Engine/World.h"
+// Bots de trailer (rama trailer-bots)
+#include "PTBotController.h"
+#include "../Lobby/PTLockerSubsystem.h"
 
 APTSculptGameMode::APTSculptGameMode()
 {
@@ -57,8 +60,8 @@ TArray<APTPlayerState*> APTSculptGameMode::GetActivePlayers() const
         {
             if (APTPlayerState* PT = Cast<APTPlayerState>(PS))
             {
-                if (!PT->IsInactive() && !PT->IsOnlyASpectator() && !PT->bIsDevSpectator)
-                    Out.Add(PT);
+                if (!PT->IsInactive() && !PT->IsOnlyASpectator() && !PT->bIsDevSpectator && !PT->bIsBot)
+                    Out.Add(PT); // los bots de trailer NO cuentan como jugadores (nunca esculpen ni hacen quórum)
             }
         }
     }
@@ -271,6 +274,10 @@ void APTSculptGameMode::StartChoosingPhase()
 
     // Resetear "adivinó" de todos al empezar el turno.
     for (APTPlayerState* PT : Players) PT->bHasGuessedThisTurn = false;
+    // Los bots de trailer están fuera de GetActivePlayers → resetearlos aparte, si no adivinan una vez
+    // y quedan "adivinado" para siempre.
+    for (const TWeakObjectPtr<APTPlayerState>& B : BotStates)
+        if (APTPlayerState* BP = B.Get()) BP->bHasGuessedThisTurn = false;
     if (APTSculptGameState* G0 = GS()) G0->bTurnEndedAllGuessed = false; // razón de fin del turno anterior
 
     // Lienzo en blanco para el nuevo turno (en todos los clientes).
@@ -514,6 +521,130 @@ void APTSculptGameMode::RequestReturnToLobby(APTPlayerState* Requester)
     const FString URL = LobbyMapPath + TEXT("?listen");
     UE_LOG(LogTemp, Log, TEXT("[SculptGM] Back to Lobby (seamless) → %s"), *URL);
     GetWorld()->ServerTravel(URL, /*bAbsolute=*/true);
+}
+
+// ── BOTS DE TRAILER (rama trailer-bots) ─────────────────────────────────────────────────────────
+
+void APTSculptGameMode::SpawnBots(int32 N)
+{
+    UWorld* W = GetWorld();
+    if (!W || !HasAuthority()) return;
+    N = FMath::Clamp(N, 1, 8);
+
+    // Centro del deambular = el cubo de esculpido (si no está, el origen).
+    FVector Center(0.f);
+    if (APTSculptVolume* Vol = Cast<APTSculptVolume>(
+            UGameplayStatics::GetActorOfClass(W, APTSculptVolume::StaticClass())))
+        Center = Vol->GetActorLocation();
+
+    // Skins del casillero del HOST (en listen server, el server ES el host → su casillero local).
+    UPTLockerSubsystem* Locker = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLockerSubsystem>() : nullptr;
+    TArray<int32> UsedHeads, UsedBodies;
+    if (Locker)
+    {
+        for (int32 i = 0; i < Locker->NumHeadSlots(); ++i) if (Locker->IsHeadSlotUsed(i)) UsedHeads.Add(i);
+        for (int32 i = 0; i < Locker->NumBodySlots(); ++i) if (Locker->IsBodySlotUsed(i)) UsedBodies.Add(i);
+    }
+
+    // Nombres hardcodeados (estilo jugadores). Se reparten en orden.
+    static const FString Names[] = {
+        TEXT("Mike"), TEXT("Zoe"), TEXT("Alex"), TEXT("Pixel"),
+        TEXT("Luna"), TEXT("Max"), TEXT("Nova"), TEXT("Finn") };
+    const int32 NumNames = UE_ARRAY_COUNT(Names);
+
+    UClass* PawnClass = DefaultPawnClass;
+    if (!PawnClass) { UE_LOG(LogTemp, Warning, TEXT("[Bots] Sin DefaultPawnClass, no se spawnea.")); return; }
+
+    for (int32 i = 0; i < N; ++i)
+    {
+        const float Ang = (2.f * PI) * ((float)i / (float)N);
+        const FVector Spawn = Center
+            + FVector(FMath::Cos(Ang), FMath::Sin(Ang), 0.f) * 600.f
+            + FVector(0.f, 0.f, FMath::FRandRange(-150.f, 150.f));
+
+        FActorSpawnParameters SP;
+        SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+        APawn* Pawn = W->SpawnActor<APawn>(PawnClass, Spawn, FRotator::ZeroRotator, SP);
+        if (!Pawn) continue;
+
+        APTBotController* BC = W->SpawnActor<APTBotController>(APTBotController::StaticClass(), Spawn, FRotator::ZeroRotator, SP);
+        if (!BC) { Pawn->Destroy(); continue; }
+        BC->Possess(Pawn);
+
+        if (APTPlayerState* PS = Cast<APTPlayerState>(BC->PlayerState))
+        {
+            const FString Nm = Names[i % NumNames];
+            PS->bIsBot = true;
+            PS->SetPlayerName(Nm);         // el chat usa GetPlayerName()
+            PS->Server_SetDisplayName(Nm); // el scoreboard usa GetDisplayNameSafe()
+            BotStates.Add(PS);
+
+            // Skin del casillero: cabeza y cuerpo rotando entre los slots usados → variedad.
+            if (Locker && UsedHeads.Num() > 0)
+            {
+                const TArray<uint8>& HeadBaked = Locker->GetHeadBaked(UsedHeads[i % UsedHeads.Num()]);
+                TArray<uint8> BodyPNG;
+                if (UsedBodies.Num() > 0) BodyPNG = Locker->GetBodyPNG(UsedBodies[i % UsedBodies.Num()]);
+                if (HeadBaked.Num() > 0)
+                {
+                    if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(Pawn))
+                    {
+                        TArray<uint8> Combined;
+                        Char->AssembleReplicatedBlob(HeadBaked, BodyPNG, Combined);
+                        if (Combined.Num() > 0)
+                        {
+                            PS->HeadBlob    = Combined;
+                            PS->HeadVersion = ++BotSkinCounter;
+                            Char->ApplyReplicatedHead(); // aplica en la copia del host
+                            PS->BroadcastHeadToAll();    // replica al resto (mi amigo)
+                        }
+                    }
+                }
+            }
+        }
+
+        if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(Pawn))
+            Char->ApplyGameplayMovementMode(); // vuelo obligatorio (igual que los jugadores en Lvl-01)
+        BC->InitWander(Center, 380.f, 850.f);
+    }
+
+    if (BotStates.Num() > 0 && !GetWorldTimerManager().IsTimerActive(BotChatTimer))
+        GetWorldTimerManager().SetTimer(BotChatTimer, this, &APTSculptGameMode::TickBotChat, 3.0f, true);
+
+    UE_LOG(LogTemp, Log, TEXT("[Bots] Spawneados %d bots de trailer (skins usadas: %d cabezas / %d cuerpos)."),
+           N, UsedHeads.Num(), UsedBodies.Num());
+}
+
+void APTSculptGameMode::TickBotChat()
+{
+    BotStates.RemoveAll([](const TWeakObjectPtr<APTPlayerState>& P){ return !P.IsValid(); });
+    if (BotStates.Num() == 0) { GetWorldTimerManager().ClearTimer(BotChatTimer); return; }
+
+    APTSculptGameState* G = GS();
+    if (!G) return;
+
+    // Relleno de chat: palabras/expresiones random en inglés (fallan el acierto).
+    static const FString RandomWords[] = {
+        TEXT("house"), TEXT("dog"), TEXT("apple"), TEXT("robot"), TEXT("banana"),
+        TEXT("tree"), TEXT("guitar"), TEXT("rocket"), TEXT("pizza"), TEXT("dragon"),
+        TEXT("car"), TEXT("flower"), TEXT("ghost"), TEXT("sword"), TEXT("crown"),
+        TEXT("hmm"), TEXT("is it a bird?"), TEXT("no idea lol"), TEXT("wait what"), TEXT("nice one") };
+    const int32 NumRandom = UE_ARRAY_COUNT(RandomWords);
+
+    APTPlayerState* Bot = BotStates[FMath::RandRange(0, BotStates.Num() - 1)].Get();
+    if (!Bot) return;
+
+    // Dibujando y el bot no adivinó todavía → con cierta probabilidad "acierta" (manda la palabra EN).
+    if (G->TurnPhase == EPTTurnPhase::Drawing && CurrentWord.IsValidEntry()
+        && !Bot->bHasGuessedThisTurn && FMath::FRand() < 0.28f)
+    {
+        const int32 EnIdx = PTText::GetLanguageIndex(TEXT("en"));
+        const FString EnWord = CurrentWord.ForLang(EnIdx >= 0 ? EnIdx : 1);
+        if (!EnWord.IsEmpty()) { HandleChat(Bot, EnWord); return; }
+    }
+
+    // Si no, palabra random en inglés (relleno de chat).
+    HandleChat(Bot, RandomWords[FMath::RandRange(0, NumRandom - 1)]);
 }
 
 void APTSculptGameMode::HandlePlayerGuessedCorrectly(APTPlayerState* Guesser)

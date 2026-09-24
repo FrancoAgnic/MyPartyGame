@@ -90,6 +90,12 @@ public:
     void RequestPlayAgain(APTPlayerState* Requester);
     void RequestReturnToLobby(APTPlayerState* Requester);
 
+    // ── BOTS DE TRAILER (rama trailer-bots) ─────────────────────────────────
+    // [server] Spawnea N bots de decoración: pawns con skin del casillero del host, que deambulan
+    // alrededor del cubo, escriben palabras random en inglés en el chat y a veces "adivinan". Nunca
+    // esculpen (excluidos de GetActivePlayers). Lo llama el comando dev PTBots N del controller.
+    void SpawnBots(int32 N);
+
 public:
     /** [server] Manda la palabra secreta actual a TODOS los dev-espectadores (para verla al espectar
      *  al escultor). Word vacío = limpiar. */
@@ -151,6 +157,12 @@ private:
     // (que no caiga mientras replica). El bFlying local para el input lo activa el cliente en
     // APTSculptPlayerController::AcknowledgePossession. Solo pasa acá; el lobby camina.
     void StartPawnFlying(AController* C) const;
+
+    // ── BOTS DE TRAILER (rama trailer-bots) ──
+    TArray<TWeakObjectPtr<APTPlayerState>> BotStates; // PlayerStates de los bots vivos
+    FTimerHandle BotChatTimer;                        // dispara el chateo/adivinar de los bots
+    void TickBotChat();                               // elige un bot y lo hace chatear o adivinar
+    int32 BotSkinCounter = 0;                         // para versionar las cabezas de los bots
 
     void CheckStart();          // arranca si hay suficientes jugadores
     void StartGame();           // resetea puntajes/rondas y arranca el primer turno

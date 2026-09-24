@@ -377,6 +377,8 @@ public:
     UFUNCTION(Exec) void PTSpecSpeed(float N);  // multiplica la velocidad de la cámara
     UFUNCTION(Exec) void PTSpecSmooth(float N); // suavizado/lag de la cámara (bajo = más suave)
     UFUNCTION(Exec) void PTSolo();              // DEV: jugar solo (1 jugador) → arranca el turno ya
+    UFUNCTION(Exec) void PTBots(int32 N);       // TRAILER: spawnea N bots de decoración (skins del casillero)
+    UFUNCTION(Server, Reliable) void Server_SpawnBots(int32 N);
     UFUNCTION(Exec) void PTLOD();               // DEV: prende/apaga el LOD real de props (para verlo en el editor)
     UFUNCTION(Exec) void PTLODDebug();          // DEV: overlay del LOD (cilindro + color por etapa + tris)
 

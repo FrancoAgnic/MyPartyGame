@@ -31,6 +31,7 @@ void APTPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     DOREPLIFETIME(APTPlayerState, HeadVersion);
     DOREPLIFETIME(APTPlayerState, Language);
     DOREPLIFETIME(APTPlayerState, bIsDevSpectator);
+    DOREPLIFETIME(APTPlayerState, bIsBot);
 }
 
 void APTPlayerState::CopyProperties(APlayerState* NewPlayerState)

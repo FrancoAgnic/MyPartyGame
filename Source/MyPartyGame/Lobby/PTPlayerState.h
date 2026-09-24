@@ -28,6 +28,13 @@ public:
     bool bIsDevSpectator = false;
     UFUNCTION() void OnRep_DevSpectator();
 
+    // BOT de trailer (decoración): NO es un jugador real. Participa del scoreboard, del chat y del
+    // puntaje (adivina palabras al azar), pero el server lo EXCLUYE de la rotación de escultor (nunca
+    // esculpe) y del conteo/quórum de la partida. Solo existe en la rama trailer-bots. Se replica para
+    // que su nombre/skin/puntaje se vean en todas las máquinas.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
+    bool bIsBot = false;
+
     // Listo para arrancar (toggle en el HUD del lobby). El GameMode revisa esto en
     // APTLobbyGameMode::CheckReadyState para el countdown automatico.
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Lobby")
