@@ -20,6 +20,9 @@ UPTGameInstance* UPTSaveMapWidget::GI() const { return Cast<UPTGameInstance>(Get
 void UPTSaveMapWidget::NativeConstruct()
 {
     Super::NativeConstruct();
+    // Placeholder (hint) de los cuadros de título/descripción, por código → traducción correcta (con acentos).
+    if (TitleBox) TitleBox->SetHintText(PTText::Get(TEXT("UI_HINT_TITLE")));
+    if (DescBox)  DescBox->SetHintText(PTText::Get(TEXT("UI_HINT_DESC")));
     if (ThumbnailButton) ThumbnailButton->OnClicked.AddDynamic(this, &UPTSaveMapWidget::OnThumbnailClicked);
     if (ConfirmButton)     ConfirmButton->OnClicked.AddDynamic(this, &UPTSaveMapWidget::OnConfirmClicked);
     if (SaveAndExitButton) SaveAndExitButton->OnClicked.AddDynamic(this, &UPTSaveMapWidget::OnSaveAndExitClicked);

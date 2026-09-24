@@ -31,6 +31,10 @@ void UPTPublishWidget::NativeConstruct()
 {
     Super::NativeConstruct();
 
+    // Placeholder (hint) de los cuadros de título/descripción, por código → traducción correcta (con acentos).
+    if (TitleBox) TitleBox->SetHintText(PTText::Get(TEXT("UI_HINT_TITLE")));
+    if (DescBox)  DescBox->SetHintText(PTText::Get(TEXT("UI_HINT_DESC")));
+
     if (BankTabButton)   BankTabButton->OnClicked.AddDynamic(this, &UPTPublishWidget::OnBankTabClicked);
     if (MapTabButton)    MapTabButton->OnClicked.AddDynamic(this, &UPTPublishWidget::OnMapTabClicked);
     if (UploadCsvButton) UploadCsvButton->OnClicked.AddDynamic(this, &UPTPublishWidget::OnUploadCsvClicked);

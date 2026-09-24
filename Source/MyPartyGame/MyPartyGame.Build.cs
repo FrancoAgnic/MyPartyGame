@@ -28,6 +28,7 @@ public class MyPartyGame : ModuleRules
 			"UMG",
 			"Slate",
 			"SlateCore",
+			"MoviePlayer", // pantalla de carga del engine (tapa el negro durante el LoadMap del travel)
 			"Niagara",
 			"AudioMixer", // análisis espectral de la música (banda aguda → baile del personaje)
 			"PakFile",          // M1 mapas: montar .pak de mods de mapa en runtime (FCoreDelegates::MountPak)

@@ -259,3 +259,24 @@ WORDPACK_DESC_VERBOS,"200 verbos para actuar y esculpir.","200 verbs to act out 
 WORDPACK_DESC_VARIADO,"200 palabras variadas: objetos, animales, comidas y acciones.","200 varied words: objects, animals, food and actions.","200 palavras variadas: objetos, animais, comidas e ações.","200 gemischte Wörter: Gegenstände, Tiere, Essen und Aktionen.","200 mots variés : objets, animaux, nourriture et actions.","200 parole varie: oggetti, animali, cibi e azioni."
 WORDPACK_DESC_PELICULAS,"200 títulos de películas famosas para adivinar.","200 famous movie titles to guess.","200 títulos de filmes famosos para adivinhar.","200 berühmte Filmtitel zum Erraten.","200 titres de films célèbres à deviner.","200 titoli di film famosi da indovinare."
 WORDPACK_DESC_DEFAULT,El banco de palabras oficial del juego.,The game's official word bank.,O banco de palavras oficial do jogo.,Die offizielle Wortbank des Spiels.,La banque de mots officielle du jeu.,La banca di parole ufficiale del gioco.
+UI_ENTER_TO_CHAT,Enter para chatear,Enter to Chat,Enter para conversar,Enter zum Chatten,Entrée pour discuter,Invio per chattare
+UI_RETURN_TO_GAME,Volver al juego,Return to Game,Voltar ao jogo,Zurück zum Spiel,Retour au jeu,Torna al gioco
+UI_LEAVE_GAME,Salir de la partida,Leave Game,Sair do jogo,Spiel verlassen,Quitter la partie,Esci dalla partita
+UI_SAVE_MAP_BTN,Guardar mapa,Save Map,Salvar mapa,Karte speichern,Enregistrer la carte,Salva mappa
+UI_SAVE_YOUR_MAP,Guardá tu mapa,Save your Map,Salve seu mapa,Speichere deine Karte,Enregistre ta carte,Salva la tua mappa
+UI_SAVE_AND_EXIT,Guardar y salir,Save and Exit,Salvar e sair,Speichern und beenden,Enregistrer et quitter,Salva ed esci
+UI_CREATE_NEW_MAP,Crear mapa nuevo,Create New Map,Criar novo mapa,Neue Karte erstellen,Créer une carte,Crea nuova mappa
+UI_EDIT_MAP,Editar mapa,Edit Map,Editar mapa,Karte bearbeiten,Modifier la carte,Modifica mappa
+UI_LEVEL_CREATOR,Creador de niveles,Level Creator,Criador de níveis,Level-Editor,Créateur de niveaux,Creatore di livelli
+UI_PUBLISH_BTN,Publicar,Publish,Publicar,Veröffentlichen,Publier,Pubblica
+UI_TAB_BANKS,Bancos,Banks,Bancos,Bänke,Banques,Banche
+UI_TAB_WORDBANKS,Bancos de palabras,Word Banks,Bancos de palavras,Wortbänke,Banques de mots,Banche di parole
+UI_TAB_WORDBANKS2,Bancos de palabras,WordBanks,Bancos de palavras,Wortbänke,Banques de mots,Banche di parole
+UI_NAME,Nombre,Name,Nome,Name,Nom,Nome
+WORKSHOP_LIBRARY,Biblioteca del Workshop,Workshop Library,Biblioteca do Workshop,Workshop-Bibliothek,Bibliothèque du Workshop,Libreria del Workshop
+UI_HINT_TITLE,Título,Title,Título,Titel,Titre,Titolo
+UI_HINT_DESC,Descripción,Description,Descrição,Beschreibung,Description,Descrizione
+UI_COL_TITLE,Título,Tittle,Título,Titel,Titre,Titolo
+UI_COL_IMAGE,Imagen,Image,Imagem,Bild,Image,Immagine
+UI_COL_TYPE,Tipo,Type,Tipo,Typ,Type,Tipo
+UI_COL_SUBSCRIPTION,Suscripción,Subscription,Inscrição,Abonnement,Abonnement,Iscrizione

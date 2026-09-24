@@ -146,8 +146,14 @@ public:
     class UPTLoadingScreenWidget* CreateLoadingScreen(bool bStartAtLoop);
     /** Travel real a autoría (lo llama EnterMapAuthoring cuando el AnimIn ya tapó). */
     UFUNCTION() void DoEnterMapAuthoringTravel();
+
+    /** Imagen que tapa la pantalla DURANTE el LoadMap del travel (Movie Player del engine) → misma que tu loop
+     *  de carga, así no se ve el negro del motor. Asignar en BP_GameInstance (T_LoadingScreen). */
+    UPROPERTY(EditAnywhere, Category="UI") class UTexture2D* LoadingCoverImage = nullptr;
 private:
     FTimerHandle TransitionSafetyTimer; // por si el AnimIn no avisa: viajar igual tras un tope
+    void OnPreLoadMap(const FString& MapName); // registra la pantalla de carga del engine antes de cada LoadMap
+    TSharedPtr<struct FSlateBrush> LoadingCoverBrush; // brush del Movie Player (mantener vivo)
 public:
 
     // ── Metadatos del mapa (título / descripción / miniatura) ────────────────

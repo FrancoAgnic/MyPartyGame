@@ -1,0 +1,15 @@
+TITLE: v0.9.6 — Seamless level transitions & translation fixes
+
+[h1]v0.9.6[/h1]
+[b]Polished level transitions and a batch of missing translations.[/b]
+
+[h2]Transitions[/h2]
+[list]
+[*][b]No black screen[/b] on level loads — an engine loading image now covers the actual level load, so entering a match, the Level Creator, or returning to the lobby stays smooth (loading image instead of a black frame).
+[/list]
+
+[h2]Localization[/h2]
+[list]
+[*]Fixed many UI texts that weren't translating: Leave Game, Return to Game, "Enter to Chat", Create New Map, Edit Map, Level Creator, Save Map / Save your Map / Save and Exit, Publish, the Workshop Browser column headers, and the Title/Description field placeholders in the publish and save-map forms.
+[*]The Workshop library popup is now titled "Workshop Library".
+[/list]

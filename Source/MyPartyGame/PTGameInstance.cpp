@@ -4,6 +4,10 @@
 #include "PTTextTable.h"
 #include "PTWordBank.h"
 #include "UI/PTLoadingScreenWidget.h"
+#include "MoviePlayer.h"                 // pantalla de carga del engine (tapa el negro del LoadMap)
+#include "Widgets/Images/SImage.h"
+#include "Widgets/Layout/SScaleBox.h"
+#include "Engine/Texture2D.h"
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/FileHelper.h"
@@ -357,6 +361,32 @@ void UPTGameInstance::ListAuthoredMaps(TArray<FString>& OutSlugs, TArray<FString
     }
 }
 
+void UPTGameInstance::OnPreLoadMap(const FString& MapName)
+{
+    // Solo tapar el LoadMap cuando estamos en una transición NUESTRA (source-side ya tocó el AnimIn). Si no hay
+    // transición o no hay imagen asignada, no hacemos nada (carga normal del engine).
+    if (!bTransitionCovering || !LoadingCoverImage) return;
+    if (!GetMoviePlayer()) return;
+
+    // Brush a pantalla completa con la imagen de carga (se mantiene vivo en LoadingCoverBrush).
+    LoadingCoverBrush = MakeShared<FSlateBrush>();
+    LoadingCoverBrush->SetResourceObject(LoadingCoverImage);
+    LoadingCoverBrush->ImageSize = FVector2D(LoadingCoverImage->GetSizeX(), LoadingCoverImage->GetSizeY());
+    LoadingCoverBrush->DrawAs = ESlateBrushDrawType::Image;
+    LoadingCoverBrush->Tiling = ESlateBrushTileType::NoTile;
+
+    TSharedRef<SWidget> Cover =
+        SNew(SScaleBox).Stretch(EStretch::ScaleToFill)
+        [ SNew(SImage).Image(LoadingCoverBrush.Get()) ];
+
+    FLoadingScreenAttributes Attr;
+    Attr.bAutoCompleteWhenLoadingCompletes = true; // se saca solo al terminar el LoadMap
+    Attr.bMoviesAreSkippable = false;
+    Attr.MinimumLoadingScreenDisplayTime = 0.f;
+    Attr.WidgetLoadingScreen = Cover;
+    GetMoviePlayer()->SetupLoadingScreen(Attr);
+}
+
 UPTLoadingScreenWidget* UPTGameInstance::CreateLoadingScreen(bool bStartAtLoop)
 {
     if (!LoadingScreenClass) return nullptr;
@@ -524,6 +554,10 @@ void UPTGameInstance::Init()
     // Re-aplicar el mix de audio (Música/Efectos) al cargar cada nivel: el SetSoundMixClassOverride se
     // pierde entre mundos, así que lo reponemos en cada mapa.
     FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(this, &UPTGameInstance::OnPostLoadMap);
+
+    // Pantalla de carga del engine (Movie Player): tapa el NEGRO durante el LoadMap del travel con la imagen
+    // de carga (misma que el loop UMG) → transición sin negro. Solo se arma en NUESTRAS transiciones.
+    FCoreUObjectDelegates::PreLoadMap.AddUObject(this, &UPTGameInstance::OnPreLoadMap);
 
     // Heartbeat: reconcilia la música con el mapa actual aunque el delegate de arriba no dispare (p. ej.
     // tras un seamless travel al Lvl-01). Vive por sobre los worlds (FTSTicker global).

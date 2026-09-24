@@ -32,7 +32,7 @@ void UPTWordPackWidget::NativeConstruct()
     if (MapsTabButton)  MapsTabButton->OnClicked.AddDynamic(this, &UPTWordPackWidget::OnMapsTabClicked);
     if (WorkshopButton) WorkshopButton->OnClicked.AddDynamic(this, &UPTWordPackWidget::OnWorkshopClicked);
 
-    if (TitleText)      TitleText->SetText(PTText::Get(TEXT("WORDPACK_TITLE")));
+    if (TitleText)      TitleText->SetText(PTText::Get(TEXT("WORKSHOP_LIBRARY"))); // #6: "Biblioteca del Workshop"
     if (MapsLockedText) MapsLockedText->SetText(PTText::Get(TEXT("MAPS_SOON")));
     if (MapsBox)        MapsBox->ClearChildren(); // mapas bloqueados: lista vacía por ahora
 
