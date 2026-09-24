@@ -207,29 +207,34 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
             FString::Printf(TEXT("%d/%d"), NumActive, PTGS->MaxPlayers)));
     }
 
-    if (LobbyStatusText)
+    // Transición a la partida (corre SIEMPRE, no depende de que exista LobbyStatusText): cuando falta poco en
+    // el countdown, tocar el AnimIn SOBRE el lobby para no ver negro/nivel destino durante el server travel.
+    // El server viaja en 0; el widget muere en el travel y el destino arranca ya tapado (bTransitionCovering)
+    // → revela con OUT. Si se cancela el countdown, se saca la pantalla.
     {
-        // UN solo texto: normalmente "Esperando jugadores..."; durante la cuenta regresiva (todos listos)
-        // muestra "Empezando en X...". Si alguien saca el listo, CountdownSecondsRemaining vuelve a -1 y
-        // el texto vuelve solo al de esperando.
-        const int32 Seconds = PTGS->CountdownSecondsRemaining;
-        // Transición a la partida: cuando falta poco, tocar el AnimIn SOBRE el lobby (para no ver una pantalla
-        // negra ni el nivel destino durante el travel). El server viaja en 0; el widget muere en el travel y el
-        // destino arranca ya tapado (bTransitionCovering) → OUT revela. Si se cancela el countdown, se saca.
+        const int32 Cd = PTGS->CountdownSecondsRemaining;
         if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
         {
-            if (Seconds >= 0 && Seconds <= 2 && !PendingMatchLoading && GI->LoadingScreenClass)
+            if (Cd >= 0 && Cd <= 2 && !PendingMatchLoading && GI->LoadingScreenClass)
             {
                 PendingMatchLoading = GI->CreateLoadingScreen(/*bStartAtLoop=*/false);
                 GI->bTransitionCovering = true;
             }
-            else if (Seconds < 0 && PendingMatchLoading)
+            else if (Cd < 0 && PendingMatchLoading)
             {
                 PendingMatchLoading->RemoveFromParent();
                 PendingMatchLoading = nullptr;
                 GI->bTransitionCovering = false;
             }
         }
+    }
+
+    if (LobbyStatusText)
+    {
+        // UN solo texto: normalmente "Esperando jugadores..."; durante la cuenta regresiva (todos listos)
+        // muestra "Empezando en X...". Si alguien saca el listo, CountdownSecondsRemaining vuelve a -1 y
+        // el texto vuelve solo al de esperando.
+        const int32 Seconds = PTGS->CountdownSecondsRemaining;
         if (Seconds >= 0)
         {
             FFormatOrderedArguments Args; Args.Add(FText::AsNumber(Seconds));
