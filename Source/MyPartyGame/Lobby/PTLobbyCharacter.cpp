@@ -756,13 +756,19 @@ bool APTLobbyCharacter::ParseHeadBlob(const TArray<uint8>& Blob, TArray<FPTHeadS
     if (Magic != PT_HEADBLOB_MAGIC)
         return BlobToSections(Blob, OutSecs); // blob viejo = solo geometría
 
+    // Defensa: un tamaño de sección jamás puede superar el total del blob. Si viene fuera de rango (blob
+    // corrupto p.ej. por un reensamblado dañado) se rechaza en vez de hacer SetNumUninitialized con un
+    // número gigante → evita el crash "Trying to resize TArray to an invalid size".
+    const int32 Total = Blob.Num();
+    auto BadLen = [Total](int32 N){ return N < 0 || N > Total; };
+
     FMemoryReader Ar(Blob);
     uint32 M = 0; Ar << M;
-    int32 GN = 0; Ar << GN;
+    int32 GN = 0; Ar << GN; if (BadLen(GN)) return false;
     TArray<uint8> Geo; Geo.SetNumUninitialized(GN); if (GN) Ar.Serialize(Geo.GetData(), GN);
     Ar << OutCenter;
-    int32 HN = 0; Ar << HN; OutHeadPNG.SetNumUninitialized(HN); if (HN) Ar.Serialize(OutHeadPNG.GetData(), HN);
-    int32 BN = 0; Ar << BN; OutBodyPNG.SetNumUninitialized(BN); if (BN) Ar.Serialize(OutBodyPNG.GetData(), BN);
+    int32 HN = 0; Ar << HN; if (BadLen(HN)) return false; OutHeadPNG.SetNumUninitialized(HN); if (HN) Ar.Serialize(OutHeadPNG.GetData(), HN);
+    int32 BN = 0; Ar << BN; if (BadLen(BN)) return false; OutBodyPNG.SetNumUninitialized(BN); if (BN) Ar.Serialize(OutBodyPNG.GetData(), BN);
     return BlobToSections(Geo, OutSecs);
 }
 

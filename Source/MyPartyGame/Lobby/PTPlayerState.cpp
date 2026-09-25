@@ -201,6 +201,7 @@ void APTPlayerState::Server_UploadHeadChunk_Implementation(int32 Version, int32 
 void APTPlayerState::SendHeadTo(APTPlayerState* Target)
 {
     if (!Target || Target == this || HeadBlob.Num() == 0) return;
+    if (Target->bIsBot) return; // los bots (trailer) nunca reciben cabezas: son server-side y ya están pintados
     // Encolar en la cola del RECEPTOR (Target), marcando que la cabeza es MÍA (Source=this). Así todas
     // las cabezas que van a ese cliente salen SERIAL por su canal y no desbordan el buffer confiable.
     Target->EnqueueHeadJob(/*Source=*/this, MakeShared<TArray<uint8>>(HeadBlob), HeadVersion, /*bToServer=*/false);
@@ -217,7 +218,9 @@ void APTPlayerState::BroadcastHeadToAll()
     TSharedPtr<TArray<uint8>> Shared = MakeShared<TArray<uint8>>(HeadBlob);
     for (APlayerState* PS : GS->PlayerArray)
         if (APTPlayerState* PT = Cast<APTPlayerState>(PS))
-            if (PT != this)
+            if (PT != this && !PT->bIsBot) // los bots (trailer) NUNCA son receptores → si no, varios
+                                           // receptores locales escriben el mismo Source->PendingBlob a
+                                           // la vez y lo corrompen (crash "invalid TArray size" al parsear).
                 PT->EnqueueHeadJob(/*Source=*/this, Shared, HeadVersion, /*bToServer=*/false);
 }
 
