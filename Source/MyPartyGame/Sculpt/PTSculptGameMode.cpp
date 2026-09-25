@@ -559,8 +559,8 @@ void APTSculptGameMode::SpawnBots(int32 N)
     {
         const float Ang = (2.f * PI) * ((float)i / (float)N);
         const FVector Spawn = Center
-            + FVector(FMath::Cos(Ang), FMath::Sin(Ang), 0.f) * 600.f
-            + FVector(0.f, 0.f, FMath::FRandRange(-150.f, 150.f));
+            + FVector(FMath::Cos(Ang), FMath::Sin(Ang), 0.f) * 1100.f
+            + FVector(0.f, 0.f, FMath::FRandRange(-250.f, 250.f));
 
         FActorSpawnParameters SP;
         SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -605,7 +605,9 @@ void APTSculptGameMode::SpawnBots(int32 N)
 
         if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(Pawn))
             Char->ApplyGameplayMovementMode(); // vuelo obligatorio (igual que los jugadores en Lvl-01)
-        BC->InitWander(Center, 380.f, 850.f);
+        // Área GRANDE y lejos del cubo: así no quedan pegados a las paredes del Sculp Volume ni chocan
+        // entre ellos al rotar (cáscara ancha 700-1600 uu alrededor del cubo).
+        BC->InitWander(Center, 700.f, 1600.f);
     }
 
     // Timer de chat NO repetido: TickBotChat se re-arma solo con un intervalo aleatorio (3-10s).

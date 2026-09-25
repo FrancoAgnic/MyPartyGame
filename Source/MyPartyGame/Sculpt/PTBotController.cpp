@@ -33,12 +33,12 @@ void APTBotController::PickNewTarget()
     // Nunca apuntar por debajo del piso (si no, vuelan hacia abajo y atraviesan el suelo).
     CurrentTarget.Z = FMath::Max(CurrentTarget.Z, FloorZ + FloorMargin);
     RepathAccum   = 0.f;
-    RepathEvery   = FMath::FRandRange(2.5f, 5.0f); // cambia de rumbo cada tanto aunque no llegue
+    RepathEvery   = FMath::FRandRange(1.5f, 3.0f); // tramos de movimiento CORTOS
     bHasTarget    = true;
 
-    // A veces se quedan quietos un rato entre tramos (para no verse como bots que nunca paran).
-    if (FMath::FRand() < 0.35f)
-        PauseFor(FMath::FRandRange(1.5f, 3.5f));
+    // Pasan la MAYOR parte del tiempo quietos (~70%): entre cada tramo corto de movimiento se quedan
+    // en idle un rato largo. Idle ~3.5-7s vs movimiento ~1.5-3s → ~70% quietos / 30% moviéndose.
+    PauseFor(FMath::FRandRange(3.5f, 7.0f));
 }
 
 void APTBotController::PauseFor(float Seconds)
@@ -65,9 +65,17 @@ void APTBotController::Tick(float DeltaSeconds)
     }
 
     // Estado "quieto" (idle o "escribiendo"): no empuja, deja que frene y flote en el lugar.
+    // Mientras está quieto, mira hacia el cubo (Sculp Volume).
     if (PauseRemaining > 0.f)
     {
         PauseRemaining -= DeltaSeconds;
+        const FVector PL = P->GetActorLocation();
+        const FVector ToCube(Center.X - PL.X, Center.Y - PL.Y, 0.f); // plano (no cabecea)
+        if (!ToCube.IsNearlyZero())
+        {
+            const FRotator Face = FRotationMatrix::MakeFromX(ToCube).Rotator();
+            P->SetActorRotation(FMath::RInterpTo(P->GetActorRotation(), Face, DeltaSeconds, 5.f));
+        }
         return;
     }
 
