@@ -19,6 +19,9 @@ public:
     /** Configura el deambular alrededor de un centro (el cubo). Radios en unidades de mundo. */
     void InitWander(const FVector& InCenter, float InMinRadius, float InMaxRadius);
 
+    /** Frena el movimiento por N segundos (estado "quieto"/"escribiendo"). Acumula al mayor. */
+    void PauseFor(float Seconds);
+
 protected:
     virtual void Tick(float DeltaSeconds) override;
 
@@ -34,6 +37,7 @@ private:
     float   RepathAccum  = 0.f;   // tiempo desde el último re-target
     float   RepathEvery  = 0.f;   // cada cuánto forzar nuevo destino (random por tramo)
     bool    bHasTarget   = false;
+    float   PauseRemaining = 0.f; // >0 = quieto (idle o "escribiendo"): no se mueve
 
     void PickNewTarget();
 };

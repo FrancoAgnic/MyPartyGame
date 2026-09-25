@@ -162,6 +162,7 @@ private:
     TArray<TWeakObjectPtr<APTPlayerState>> BotStates; // PlayerStates de los bots vivos
     FTimerHandle BotChatTimer;                        // dispara el chateo/adivinar de los bots
     void TickBotChat();                               // elige un bot y lo hace chatear o adivinar
+    FString PickBotChatWord(int32 EnIndex) const;     // palabra de relleno (lista fija + banco del server)
     int32 BotSkinCounter = 0;                         // para versionar las cabezas de los bots
 
     void CheckStart();          // arranca si hay suficientes jugadores

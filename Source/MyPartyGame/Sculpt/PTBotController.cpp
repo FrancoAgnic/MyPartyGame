@@ -35,6 +35,15 @@ void APTBotController::PickNewTarget()
     RepathAccum   = 0.f;
     RepathEvery   = FMath::FRandRange(2.5f, 5.0f); // cambia de rumbo cada tanto aunque no llegue
     bHasTarget    = true;
+
+    // A veces se quedan quietos un rato entre tramos (para no verse como bots que nunca paran).
+    if (FMath::FRand() < 0.35f)
+        PauseFor(FMath::FRandRange(1.5f, 3.5f));
+}
+
+void APTBotController::PauseFor(float Seconds)
+{
+    PauseRemaining = FMath::Max(PauseRemaining, Seconds);
 }
 
 void APTBotController::Tick(float DeltaSeconds)
@@ -53,6 +62,13 @@ void APTBotController::Tick(float DeltaSeconds)
             L.Z = FloorZ + FloorMargin;
             P->SetActorLocation(L, /*bSweep=*/false);
         }
+    }
+
+    // Estado "quieto" (idle o "escribiendo"): no empuja, deja que frene y flote en el lugar.
+    if (PauseRemaining > 0.f)
+    {
+        PauseRemaining -= DeltaSeconds;
+        return;
     }
 
     const FVector Loc = P->GetActorLocation();

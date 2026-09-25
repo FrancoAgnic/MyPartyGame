@@ -608,8 +608,10 @@ void APTSculptGameMode::SpawnBots(int32 N)
         BC->InitWander(Center, 380.f, 850.f);
     }
 
+    // Timer de chat NO repetido: TickBotChat se re-arma solo con un intervalo aleatorio (3-10s).
     if (BotStates.Num() > 0 && !GetWorldTimerManager().IsTimerActive(BotChatTimer))
-        GetWorldTimerManager().SetTimer(BotChatTimer, this, &APTSculptGameMode::TickBotChat, 3.0f, true);
+        GetWorldTimerManager().SetTimer(BotChatTimer, this, &APTSculptGameMode::TickBotChat,
+                                        FMath::FRandRange(3.0f, 10.0f), false);
 
     UE_LOG(LogTemp, Log, TEXT("[Bots] Spawneados %d bots de trailer (skins usadas: %d cabezas / %d cuerpos)."),
            N, UsedHeads.Num(), UsedBodies.Num());
@@ -620,31 +622,78 @@ void APTSculptGameMode::TickBotChat()
     BotStates.RemoveAll([](const TWeakObjectPtr<APTPlayerState>& P){ return !P.IsValid(); });
     if (BotStates.Num() == 0) { GetWorldTimerManager().ClearTimer(BotChatTimer); return; }
 
+    // Re-armar con intervalo ALEATORIO (3-10s) → escriben menos y de forma menos robótica que cada 3s.
+    GetWorldTimerManager().SetTimer(BotChatTimer, this, &APTSculptGameMode::TickBotChat,
+                                    FMath::FRandRange(3.0f, 10.0f), false);
+
     APTSculptGameState* G = GS();
     if (!G) return;
 
-    // Relleno de chat: palabras/expresiones random en inglés (fallan el acierto).
-    static const FString RandomWords[] = {
-        TEXT("house"), TEXT("dog"), TEXT("apple"), TEXT("robot"), TEXT("banana"),
-        TEXT("tree"), TEXT("guitar"), TEXT("rocket"), TEXT("pizza"), TEXT("dragon"),
-        TEXT("car"), TEXT("flower"), TEXT("ghost"), TEXT("sword"), TEXT("crown"),
-        TEXT("hmm"), TEXT("is it a bird?"), TEXT("no idea lol"), TEXT("wait what"), TEXT("nice one") };
-    const int32 NumRandom = UE_ARRAY_COUNT(RandomWords);
+    const int32 EnIdx = PTText::GetLanguageIndex(TEXT("en"));
+    const int32 En = (EnIdx >= 0) ? EnIdx : 1;
 
     APTPlayerState* Bot = BotStates[FMath::RandRange(0, BotStates.Num() - 1)].Get();
     if (!Bot) return;
 
-    // Dibujando y el bot no adivinó todavía → con cierta probabilidad "acierta" (manda la palabra EN).
+    // ── Decidir el mensaje AHORA ──
+    // Dibujando y el bot no adivinó → con cierta probabilidad "acierta" (manda la palabra EN secreta).
+    bool bGuess = false;
+    FString Msg;
     if (G->TurnPhase == EPTTurnPhase::Drawing && CurrentWord.IsValidEntry()
         && !Bot->bHasGuessedThisTurn && FMath::FRand() < 0.28f)
     {
-        const int32 EnIdx = PTText::GetLanguageIndex(TEXT("en"));
-        const FString EnWord = CurrentWord.ForLang(EnIdx >= 0 ? EnIdx : 1);
-        if (!EnWord.IsEmpty()) { HandleChat(Bot, EnWord); return; }
+        Msg    = CurrentWord.ForLang(En);
+        bGuess = !Msg.IsEmpty();
     }
+    if (!bGuess) Msg = PickBotChatWord(En); // relleno: lista fija en inglés + palabras del banco
+    if (Msg.IsEmpty()) return;
 
-    // Si no, palabra random en inglés (relleno de chat).
-    HandleChat(Bot, RandomWords[FMath::RandRange(0, NumRandom - 1)]);
+    // ── Estado "escribiendo": el bot se FRENA, "tipea" un rato, manda, y queda ~2s quieto ──
+    const float TypingDelay = FMath::FRandRange(1.2f, 2.2f);
+    if (APTBotController* BC = Cast<APTBotController>(Bot->GetOwningController()))
+        BC->PauseFor(TypingDelay + 2.0f); // tipeo + 2s post-envío quieto
+
+    TWeakObjectPtr<APTSculptGameMode> WeakThis(this);
+    TWeakObjectPtr<APTPlayerState>    WeakBot(Bot);
+    FTimerHandle Tmp; // one-shot: el TimerManager lo mantiene vivo hasta que dispara
+    GetWorldTimerManager().SetTimer(Tmp, [WeakThis, WeakBot, Msg, bGuess]()
+    {
+        APTSculptGameMode* Self = WeakThis.Get();
+        APTPlayerState*    B    = WeakBot.Get();
+        if (!Self || !B) return;
+        // Si era un ACIERTO pero ya no se está dibujando (o el bot ya adivinó), NO mandar la palabra
+        // secreta: la spoilearía en el chat.
+        if (bGuess)
+        {
+            const APTSculptGameState* G2 = Self->GS();
+            if (!G2 || G2->TurnPhase != EPTTurnPhase::Drawing || B->bHasGuessedThisTurn) return;
+        }
+        Self->HandleChat(B, Msg);
+    }, TypingDelay, false);
+}
+
+FString APTSculptGameMode::PickBotChatWord(int32 EnIndex) const
+{
+    // Lista fija de relleno (expresiones + palabras) en inglés.
+    static const FString Fun[] = {
+        TEXT("house"), TEXT("dog"), TEXT("apple"), TEXT("robot"), TEXT("banana"),
+        TEXT("tree"), TEXT("guitar"), TEXT("rocket"), TEXT("pizza"), TEXT("dragon"),
+        TEXT("car"), TEXT("flower"), TEXT("ghost"), TEXT("sword"), TEXT("crown"),
+        TEXT("castle"), TEXT("boat"), TEXT("snake"), TEXT("clock"), TEXT("chair"),
+        TEXT("shark"), TEXT("cactus"), TEXT("umbrella"), TEXT("volcano"), TEXT("bridge"),
+        TEXT("hmm"), TEXT("is it a bird?"), TEXT("no idea lol"), TEXT("wait what"),
+        TEXT("nice one"), TEXT("hahaha"), TEXT("is that a dog?"), TEXT("cool!"),
+        TEXT("i think i know"), TEXT("almost got it"), TEXT("what is that"), TEXT("oh!"),
+        TEXT("gg"), TEXT("nope"), TEXT("looks weird lol") };
+    const int32 NumFun = UE_ARRAY_COUNT(Fun);
+
+    // 45%: una palabra del BANCO del server (en inglés) → mucha más variedad, cero listas nuevas.
+    if (WordBank.Num() > 0 && FMath::FRand() < 0.45f)
+    {
+        const FString W = WordBank[FMath::RandRange(0, WordBank.Num() - 1)].ForLang(EnIndex);
+        if (!W.IsEmpty()) return W.ToLower();
+    }
+    return Fun[FMath::RandRange(0, NumFun - 1)];
 }
 
 void APTSculptGameMode::HandlePlayerGuessedCorrectly(APTPlayerState* Guesser)
