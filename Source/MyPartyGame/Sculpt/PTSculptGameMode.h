@@ -160,9 +160,18 @@ private:
 
     // ── BOTS DE TRAILER (rama trailer-bots) ──
     TArray<TWeakObjectPtr<APTPlayerState>> BotStates; // PlayerStates de los bots vivos
-    FTimerHandle BotChatTimer;                        // dispara el chateo/adivinar de los bots
-    void TickBotChat();                               // elige un bot y lo hace chatear o adivinar
+    FTimerHandle BotChatTimer;                        // dispara el chateo (relleno) de los bots
+    void TickBotChat();                               // elige un bot y lo hace chatear relleno
     FString PickBotChatWord(int32 EnIndex) const;     // palabra de relleno (lista fija + banco del server)
+    // Manda un mensaje de bot con "tipeo": frena el bot, tipea un rato, envía y queda ~2s quieto.
+    // bGuess=true → es la palabra secreta (acierto), con guard anti-spoiler al enviar.
+    void SendBotMessage(APTPlayerState* Bot, const FString& Msg, bool bGuess);
+
+    // Aciertos de los bots POR TURNO (perfil aleatorio): al empezar a dibujar se sortea cuántos bots
+    // adivinan (0 / ¼ / ½ / ¾ / todos) y CUÁNDO (temprano / repartido / sobre la hora) → cada ronda
+    // se siente distinta. Cada acierto se agenda con su propio timer.
+    TArray<FTimerHandle> BotGuessTimers;
+    void ScheduleBotGuessesForTurn();
     int32 BotSkinCounter = 0;                         // para versionar las cabezas de los bots
 
     void CheckStart();          // arranca si hay suficientes jugadores

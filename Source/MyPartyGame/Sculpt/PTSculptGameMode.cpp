@@ -278,6 +278,9 @@ void APTSculptGameMode::StartChoosingPhase()
     // y quedan "adivinado" para siempre.
     for (const TWeakObjectPtr<APTPlayerState>& B : BotStates)
         if (APTPlayerState* BP = B.Get()) BP->bHasGuessedThisTurn = false;
+    // Cancelar los aciertos agendados del turno anterior (el nuevo perfil se sortea en BeginDrawing).
+    for (FTimerHandle& H : BotGuessTimers) GetWorldTimerManager().ClearTimer(H);
+    BotGuessTimers.Reset();
     if (APTSculptGameState* G0 = GS()) G0->bTurnEndedAllGuessed = false; // razón de fin del turno anterior
 
     // Lienzo en blanco para el nuevo turno (en todos los clientes).
@@ -378,6 +381,9 @@ void APTSculptGameMode::BeginDrawing(int32 ChoiceIndex)
     GetWorldTimerManager().ClearTimer(PhaseTimer);
     GetWorldTimerManager().SetTimer(PhaseTimer, this, &APTSculptGameMode::EndTurn,
                                     TurnDuration, false);
+
+    // Sortear el perfil de aciertos de los bots para ESTE turno (cuántos y cuándo).
+    ScheduleBotGuessesForTurn();
 }
 
 void APTSculptGameMode::SendSpectateWordToSpectators(const FString& Word)
@@ -634,26 +640,22 @@ void APTSculptGameMode::TickBotChat()
     const int32 EnIdx = PTText::GetLanguageIndex(TEXT("en"));
     const int32 En = (EnIdx >= 0) ? EnIdx : 1;
 
+    // Solo RELLENO: los aciertos ya NO salen de acá (los agenda ScheduleBotGuessesForTurn por turno).
     APTPlayerState* Bot = BotStates[FMath::RandRange(0, BotStates.Num() - 1)].Get();
     if (!Bot) return;
+    if (Bot->bHasGuessedThisTurn) return; // si ya adivinó, que no siga chateando el turno
 
-    // ── Decidir el mensaje AHORA ──
-    // Dibujando y el bot no adivinó → con cierta probabilidad "acierta" (manda la palabra EN secreta).
-    bool bGuess = false;
-    FString Msg;
-    if (G->TurnPhase == EPTTurnPhase::Drawing && CurrentWord.IsValidEntry()
-        && !Bot->bHasGuessedThisTurn && FMath::FRand() < 0.28f)
-    {
-        Msg    = CurrentWord.ForLang(En);
-        bGuess = !Msg.IsEmpty();
-    }
-    if (!bGuess) Msg = PickBotChatWord(En); // relleno: lista fija en inglés + palabras del banco
-    if (Msg.IsEmpty()) return;
+    SendBotMessage(Bot, PickBotChatWord(En), /*bGuess=*/false);
+}
 
-    // ── Estado "escribiendo": el bot se FRENA, "tipea" un rato, manda, y queda ~2s quieto ──
+void APTSculptGameMode::SendBotMessage(APTPlayerState* Bot, const FString& Msg, bool bGuess)
+{
+    if (!Bot || Msg.IsEmpty()) return;
+
+    // Estado "escribiendo": el bot se FRENA, "tipea" un rato, manda, y queda ~2s quieto.
     const float TypingDelay = FMath::FRandRange(1.2f, 2.2f);
     if (APTBotController* BC = Cast<APTBotController>(Bot->GetOwningController()))
-        BC->PauseFor(TypingDelay + 2.0f); // tipeo + 2s post-envío quieto
+        BC->PauseFor(TypingDelay + 2.0f);
 
     TWeakObjectPtr<APTSculptGameMode> WeakThis(this);
     TWeakObjectPtr<APTPlayerState>    WeakBot(Bot);
@@ -672,6 +674,68 @@ void APTSculptGameMode::TickBotChat()
         }
         Self->HandleChat(B, Msg);
     }, TypingDelay, false);
+}
+
+void APTSculptGameMode::ScheduleBotGuessesForTurn()
+{
+    // Limpiar los aciertos agendados del turno anterior.
+    for (FTimerHandle& H : BotGuessTimers) GetWorldTimerManager().ClearTimer(H);
+    BotGuessTimers.Reset();
+
+    // Bots vivos.
+    TArray<APTPlayerState*> Bots;
+    for (const TWeakObjectPtr<APTPlayerState>& B : BotStates)
+        if (APTPlayerState* BP = B.Get()) Bots.Add(BP);
+    if (Bots.Num() == 0) return;
+
+    const int32 EnIdx = PTText::GetLanguageIndex(TEXT("en"));
+    const int32 En = (EnIdx >= 0) ? EnIdx : 1;
+    if (!CurrentWord.IsValidEntry()) return;
+    const FString EnWord = CurrentWord.ForLang(En);
+    if (EnWord.IsEmpty()) return;
+
+    // ── Perfil de ronda ALEATORIO ──
+    // Cuántos bots adivinan: 0 / ¼ / ½ / ¾ / todos (elegido al azar cada turno).
+    static const float Fractions[] = { 0.f, 0.25f, 0.5f, 0.75f, 1.f };
+    const float Fraction = Fractions[FMath::RandRange(0, UE_ARRAY_COUNT(Fractions) - 1)];
+    int32 NumToGuess = FMath::RoundToInt(Fraction * Bots.Num());
+    if (NumToGuess <= 0) { UE_LOG(LogTemp, Log, TEXT("[Bots] Ronda: no adivina nadie.")); return; }
+
+    // Cuándo adivinan: temprano / repartido / sobre la hora (ventana dentro del turno).
+    const int32 Timing = FMath::RandRange(0, 2);
+    float LoFrac = 0.05f, HiFrac = 0.95f;
+    switch (Timing)
+    {
+        case 0: LoFrac = 0.05f; HiFrac = 0.35f; break; // temprano (adivinan rápido)
+        case 1: LoFrac = 0.05f; HiFrac = 0.95f; break; // repartido a lo largo del turno
+        case 2: LoFrac = 0.60f; HiFrac = 0.95f; break; // sobre la hora (justo al final)
+    }
+
+    // Elegir al azar QUÉ bots adivinan (mezclar y tomar los primeros N).
+    for (int32 i = Bots.Num() - 1; i > 0; --i) { const int32 j = FMath::RandRange(0, i); Bots.Swap(i, j); }
+    NumToGuess = FMath::Min(NumToGuess, Bots.Num());
+
+    for (int32 i = 0; i < NumToGuess; ++i)
+    {
+        APTPlayerState* Bot = Bots[i];
+        const float When = FMath::FRandRange(LoFrac, HiFrac) * TurnDuration;
+
+        TWeakObjectPtr<APTSculptGameMode> WeakThis(this);
+        TWeakObjectPtr<APTPlayerState>    WeakBot(Bot);
+        FTimerHandle H;
+        GetWorldTimerManager().SetTimer(H, [WeakThis, WeakBot, EnWord]()
+        {
+            APTSculptGameMode* Self = WeakThis.Get();
+            APTPlayerState*    B    = WeakBot.Get();
+            if (!Self || !B) return;
+            const APTSculptGameState* G2 = Self->GS();
+            if (!G2 || G2->TurnPhase != EPTTurnPhase::Drawing || B->bHasGuessedThisTurn) return;
+            Self->SendBotMessage(B, EnWord, /*bGuess=*/true);
+        }, FMath::Max(0.5f, When), false);
+        BotGuessTimers.Add(H);
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("[Bots] Ronda: %d/%d bots adivinan (timing %d)."), NumToGuess, Bots.Num(), Timing);
 }
 
 FString APTSculptGameMode::PickBotChatWord(int32 EnIndex) const
