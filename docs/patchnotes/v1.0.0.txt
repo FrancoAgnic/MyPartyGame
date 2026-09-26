@@ -1,0 +1,11 @@
+TITLE: v1.0.0 — Launch build
+
+[h1]v1.0.0[/h1]
+[b]The stable launch build.[/b]
+
+[h2]Fixes[/h2]
+[list]
+[*][b]Escape menu:[/b] "Exit Game" now only appears in the main menu. In the lobby the button reads "Back to Menu" and takes you back to the main menu instead of closing the game.
+[*][b]Head sculpt undo:[/b] fixed undo sometimes skipping a change or removing an earlier one — each undo now reverts exactly one real change.
+[*][b]Level Creator:[/b] the Paint tool has been temporarily disabled (painting props was overloading levels). Placing and erasing work as before.
+[/list]
