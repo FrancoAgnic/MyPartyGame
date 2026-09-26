@@ -55,7 +55,14 @@ void UPTLobbyEscapeMenuWidget::ToggleMenu()
         if (!Label && LeaveGameButton && LeaveGameButton->GetChildrenCount() > 0)
             Label = Cast<UTextBlock>(LeaveGameButton->GetChildAt(0));
         if (Label)
-            Label->SetText(PTText::Get(IsMainMenuLevel() ? FName("UI_EXIT_GAME") : FName("UI_LEAVE_GAME")));
+        {
+            // 3 contextos: menú standalone = "Cerrar juego"; lobby (mismo mapa, en red) = "Salir al
+            // menú"; partida = "Salir de la partida".
+            FName Key = FName("UI_LEAVE_GAME");
+            if (IsStandaloneMainMenu())   Key = FName("UI_EXIT_GAME");
+            else if (IsMainMenuLevel())   Key = FName("UI_LEAVE_LOBBY");
+            Label->SetText(PTText::Get(Key));
+        }
     }
 
     if (APlayerController* PC = GetOwningPlayer())
@@ -105,8 +112,9 @@ void UPTLobbyEscapeMenuWidget::HandleEscape()
 
 void UPTLobbyEscapeMenuWidget::OnLeaveGameClicked()
 {
-    // En el MAIN MENU no hay partida que abandonar: el botón funciona como "Exit Game" → cerrar el juego.
-    if (IsMainMenuLevel())
+    // SOLO en el menú principal STANDALONE se cierra el juego. En el lobby (mismo mapa pero en red) NO:
+    // ahí "salir" te lleva al menú principal (DoLeaveGame → host-leave / OpenLevel MainMenu).
+    if (IsStandaloneMainMenu())
     {
         UKismetSystemLibrary::QuitGame(this, GetOwningPlayer(), EQuitPreference::Quit, /*bIgnorePlatformRestrictions=*/false);
         return;
@@ -205,6 +213,14 @@ bool UPTLobbyEscapeMenuWidget::IsMainMenuLevel() const
     FString Map = W->GetMapName();
     Map.RemoveFromStart(W->StreamingLevelsPrefix);
     return Map.Equals(TEXT("MainMenu"), ESearchCase::IgnoreCase);
+}
+
+bool UPTLobbyEscapeMenuWidget::IsStandaloneMainMenu() const
+{
+    // Menú principal de verdad = mapa MainMenu Y sin red (standalone). El lobby es el mismo mapa pero
+    // como listen server (host) o cliente → NetMode != Standalone.
+    UWorld* W = GetWorld();
+    return W && IsMainMenuLevel() && W->GetNetMode() == NM_Standalone;
 }
 
 void UPTLobbyEscapeMenuWidget::OnSaveMapClicked()

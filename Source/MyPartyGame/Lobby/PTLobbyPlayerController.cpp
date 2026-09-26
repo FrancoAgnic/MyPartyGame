@@ -1309,12 +1309,20 @@ void APTLobbyPlayerController::OnHeadClearReleased()
         }
         else if (HeadUndoKinds.Num() > 0)
         {
-            const uint8 Kind = HeadUndoKinds.Last();
+            // El stack de "tipos" puede desincronizarse con las pilas reales (trazos que no generaron
+            // entrada, ojos restaurados por un undo de geometría, topes distintos) → antes eso hacía que
+            // un Backspace "saltee" un cambio o borre uno anterior. Ahora cada undo REPORTA si deshizo
+            // algo y se descartan los tipos sin respaldo, reintentando hacia abajo hasta deshacer UN
+            // cambio real (un Backspace = un cambio real, sin saltear ni borrar de más).
             bool bDone = false;
-            if      (Kind == 0 && HeadVolume) { HeadVolume->Multicast_Undo_Implementation(); bDone = true; }
-            else if (Kind == 1 && Char)       { bDone = Char->UndoHeadPaint(); }
-            else if (Kind == 3)               { if (HeadEyes.Num() > 0) { HeadEyes.Pop(); RebuildEyesLiveMesh(); } bDone = true; }
-            if (bDone) HeadUndoKinds.Pop();
+            while (!bDone && HeadUndoKinds.Num() > 0)
+            {
+                const uint8 Kind = HeadUndoKinds.Last();
+                if      (Kind == 0 && HeadVolume) bDone = HeadVolume->UndoOnce();
+                else if (Kind == 1 && Char)       bDone = Char->UndoHeadPaint();
+                else if (Kind == 3)               { if (HeadEyes.Num() > 0) { HeadEyes.Pop(); RebuildEyesLiveMesh(); bDone = true; } }
+                HeadUndoKinds.Pop(); // consumir el tipo (si estaba stale, seguir con el siguiente)
+            }
         }
         if (SculptSounds) // sonido de undo simple (toque corto de Backspace)
             SculptSounds->PlayUndoSimple(HeadVolume ? HeadVolume->GetActorLocation()

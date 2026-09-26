@@ -59,7 +59,10 @@ protected:
 
 private:
     bool IsMapAuthorMode() const; // el GameMode actual es APTMapAuthorGameMode
-    bool IsMainMenuLevel() const; // el nivel actual es el Main Menu (no hay partida que abandonar)
+    bool IsMainMenuLevel() const; // el nivel actual es el mapa MainMenu (menú O lobby: mismo mapa)
+    // El MainMenu STANDALONE (no en red): el menú principal de verdad, sin sesión. El lobby usa el
+    // mismo mapa pero como listen server/cliente → ahí NO se cierra el juego, se sale al menú.
+    bool IsStandaloneMainMenu() const;
     void DoLeaveGame();           // muestra la transición (AnimIn) y al taparse hace la salida real
     UFUNCTION() void DoLeaveGameNow(); // la salida real (host-leave o OpenLevel MainMenu)
     bool bLeaving = false;             // guard: no salir dos veces (OnCovered + timer de seguridad)

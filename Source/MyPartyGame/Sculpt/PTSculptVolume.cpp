@@ -2576,6 +2576,11 @@ void APTSculptVolume::RestoreLastDetailPaint()
 
 void APTSculptVolume::Multicast_Undo_Implementation()
 {
+    UndoOnce(); // el RPC no necesita el resultado; el undo de cabeza usa UndoOnce() directo
+}
+
+bool APTSculptVolume::UndoOnce()
+{
     // Modo SVO: LIFO igual que el clásico — última capa entera, o último trazo de la base (snapshot).
     if (bUseSVO)
     {
@@ -2590,15 +2595,17 @@ void APTSculptVolume::Multicast_Undo_Implementation()
             }
             RestoreLastDetailPaint(); // + restaurar el COLOR de esa capa (si no, queda color fantasma)
             bSVODirty = true; TimeSinceRebuild = RebuildInterval;
-            return;
+            return true;
         }
         if (UndoOrder.Num() > 0 && UndoOrder.Last() == 0) UndoOrder.Pop();
         const bool bGeoUndone = SVOField.Undo(); // geometría
+        bool bDidUndo = bGeoUndone;
 
         // PINTURA (atlas) + ojos: restaurar como el clásico → los voxeles pintados vuelven a su estado
         // previo (vacío) para que la geometría nueva en ese lugar no herede el color viejo.
         if (VolumeUndoStack.Num() > 0)
         {
+            bDidUndo = true;
             const FPTVolumeUndo U = MoveTemp(VolumeUndoStack.Last());
             VolumeUndoStack.Pop();
             for (const auto& It : U.AtlasOld)
@@ -2613,7 +2620,7 @@ void APTSculptVolume::Multicast_Undo_Implementation()
         }
 
         if (bGeoUndone) { MarkAllSVODirty(); TimeSinceRebuild = RebuildInterval; }
-        return;
+        return bDidUndo;
     }
 
     // El undo es LIFO sobre TODAS las operaciones: si lo último fue una CAPA de detalle, se saca la
@@ -2628,11 +2635,11 @@ void APTSculptVolume::Multicast_Undo_Implementation()
             DetailMeshes.Pop();
         }
         RestoreLastDetailPaint(); // + restaurar el COLOR de esa capa (si no, queda color fantasma)
-        return;
+        return true;
     }
     if (UndoOrder.Num() > 0 && UndoOrder.Last() == 0) UndoOrder.Pop();
 
-    if (VolumeUndoStack.Num() == 0) return;
+    if (VolumeUndoStack.Num() == 0) return false; // nada real que deshacer
 
     // 1) Geometría: el campo restaura los bricks del último trazo y los marca dirty (se remallan).
     Field.UndoStroke();
@@ -2661,6 +2668,7 @@ void APTSculptVolume::Multicast_Undo_Implementation()
     }
 
     TimeSinceRebuild = RebuildInterval; // forzar el remallado en el próximo tick
+    return true;
 }
 
 bool APTSculptVolume::IsInsideCanvas(FVector WorldPos) const

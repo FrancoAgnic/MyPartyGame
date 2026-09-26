@@ -292,6 +292,9 @@ public:
     UFUNCTION(NetMulticast, Reliable) void Multicast_BeginStroke();
     UFUNCTION(NetMulticast, Reliable) void Multicast_EndStroke();
     UFUNCTION(NetMulticast, Reliable) void Multicast_Undo();
+    // Igual que Multicast_Undo pero DEVUELVE si deshizo algo (para el undo de cabeza, que combina varias
+    // pilas y necesita saber si este paso hizo efecto o hay que reintentar el siguiente). Local.
+    bool UndoOnce();
 
     // ── Capas de DETALLE (ALT) ──────────────────────────────────────────────
     // Cada período de Alt = una capa aparte: su propio campo SDF + su propio ProceduralMesh. Fusiona

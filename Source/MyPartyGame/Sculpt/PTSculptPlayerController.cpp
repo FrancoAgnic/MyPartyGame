@@ -2149,6 +2149,9 @@ void APTSculptPlayerController::SetMode(EPTEditMode M)
     // No cambiar de herramienta MID-TRAZO (con el click apretado): hacerlo a mitad de un trazo bugea
     // (el sello sigue del modo viejo, cambia profundidad, etc.). Solo se cambia con el click suelto.
     if (bIsStamping) return;
+    // Level Creator: la herramienta Paint está DESHABILITADA (pintar props sobrecarga los niveles).
+    // No se puede equipar en modo autoría (ni por tecla ni por el hotbar). En el juego normal sí.
+    if (IsMapAuthorMode() && M == EPTEditMode::Paint) return;
     // En modo COLOCAR (edición de nivel) solo valen Agregar/Borrar; Paint/Smooth no aplican a props.
     if (IsPlaceMode() && M != EPTEditMode::Add && M != EPTEditMode::Erase) return;
     SetModeInternal(M, /*bResetAxis=*/true);
@@ -2261,7 +2264,8 @@ void APTSculptPlayerController::OnColorConfirmed(FLinearColor NewColor)
 
     // Al elegir color NO se fuerza Paint: si estabas en Erase pasás a Paint; si estabas
     // en Add te quedás en Add (esculpís directamente con el color); en Paint queda igual.
-    if (EditMode == EPTEditMode::Erase || EditMode == EPTEditMode::Smooth)
+    // En el Level Creator (autoría) Paint está deshabilitado → nunca cambiar a Paint ahí.
+    if ((EditMode == EPTEditMode::Erase || EditMode == EPTEditMode::Smooth) && !IsMapAuthorMode())
         EditMode = EPTEditMode::Paint;
     ApplyPreviewMaterial();
 
