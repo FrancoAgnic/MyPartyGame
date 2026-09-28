@@ -227,6 +227,7 @@ void APTSculptGameMode::StartGame()
 
     // Puntajes en cero y rondas desde el principio.
     for (APTPlayerState* PT : Players) PT->GameScore = 0;
+    UsedWordKeys.Reset(); // nueva partida: ninguna palabra usada todavía
     G->CurrentSculptor  = nullptr;       // el primer turno elige escultor al azar
     G->CurrentRound     = 1;
     G->TotalRounds      = NumRounds;
@@ -344,6 +345,7 @@ void APTSculptGameMode::BeginDrawing(int32 ChoiceIndex)
 
     ChoiceIndex = FMath::Clamp(ChoiceIndex, 0, CurrentChoices.Num() - 1);
     CurrentWord = CurrentChoices[ChoiceIndex];
+    UsedWordKeys.Add(CurrentWord.Primary()); // ya se esculpió: no vuelve a ofrecerse esta partida
 
     RevealedPos.Reset();
     RevealedPos.SetNum(FMath::Max(1, PTText::GetAvailableLanguages().Num()));
@@ -578,10 +580,14 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
             return;
         }
 
-        // CERCA (plural / typo / tilde): avisar SOLO al que escribió ("¡casi!") y no mostrar el mensaje a
-        // nadie (así no spoilea una palabra casi igual a la secreta). Antes esto pasaba "sin feedback".
+        // CERCA (plural / typo / tilde): mostrar el mensaje a TODOS (como chat normal + globo) y ADEMÁS
+        // avisarle SOLO al que escribió que está "¡casi!". Antes el mensaje se ocultaba y parecía que no
+        // se enviaba nada.
         if (bEligibleGuesser && IsCloseGuess(Text))
         {
+            G->Multicast_ChatLine(Name, Text, EPTChatType::Normal);
+            if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(Sender->GetPawn()))
+                Char->Multicast_ShowChatBubble(Text, false);
             if (APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(Sender->GetOwningController()))
                 PC->Client_ShowCloseGuess();
             return;
@@ -811,6 +817,17 @@ TArray<FPTWordEntry> APTSculptGameMode::BuildEligibleWordPool() const
     TArray<FPTWordEntry> Pool; // se lleva la entry entera (con todas las traducciones)
     for (const FPTWordEntry& E : Source)
         if (E.IsValidEntry()) Pool.Add(E);
+
+    // Sacar las palabras ya ESCULPIDAS en esta partida (no se repiten). Si al sacarlas el pool queda
+    // vacío (banco chico / partida larga), se ignora el filtro y se permite repetir (para no quedarse
+    // sin palabras y romper el turno).
+    if (UsedWordKeys.Num() > 0)
+    {
+        TArray<FPTWordEntry> Fresh;
+        for (const FPTWordEntry& E : Pool)
+            if (!UsedWordKeys.Contains(E.Primary())) Fresh.Add(E);
+        if (Fresh.Num() > 0) return Fresh;
+    }
 
     return Pool;
 }

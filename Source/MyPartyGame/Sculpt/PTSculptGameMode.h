@@ -120,6 +120,11 @@ private:
     TArray<FPTWordEntry>   CurrentChoices; // las 3 opciones, cada una con todas sus traducciones
     int32                  TurnsLeftThisRound = 0; // turnos que faltan para cerrar la ronda
 
+    // Palabras ya ESCULPIDAS en esta partida (la que se eligió de las 3, por su texto primario). No
+    // vuelven a ofrecerse en ninguna ronda → cada palabra se modela una sola vez por partida. Las
+    // opciones NO elegidas sí pueden reaparecer. Se limpia al empezar cada partida (StartGame).
+    TSet<FString>          UsedWordKeys;
+
     // #3 — Puntaje guardado por SteamID: al irse un jugador (Logout) se guarda su GameScore, y si
     // RECONECTA (PostLogin) se le restaura, para que no pierda los puntos por una desconexión.
     TMap<FString, int32> SavedScores;
