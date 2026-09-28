@@ -1,0 +1,18 @@
+TITLE: v1.0.1 — Stability pass
+
+[h1]v1.0.1[/h1]
+[b]Bug fixes and polish ahead of playtesting.[/b]
+
+[h2]Fixes[/h2]
+[list]
+[*][b]Bodies not showing:[/b] other players sometimes appeared with a default white body in a match even though they had it painted — bodies now apply reliably.
+[*][b]Chat "close" guesses:[/b] when you're close to the word, your message now shows in chat for everyone and you still get the "almost!" hint.
+[*][b]Stuck downloading:[/b] after a match, returning to the lobby no longer leaves you stuck "downloading" a map you already have — you can ready up right away.
+[*][b]No repeated words:[/b] a word that gets sculpted won't be offered again for the rest of the match.
+[/list]
+
+[h2]Workshop & performance[/h2]
+[list]
+[*][b]Download progress:[/b] your own map download now shows a percentage next to the hourglass.
+[*][b]Smoother sculpting[/b] in busy Workshop levels (the clay no longer casts a dynamic shadow, which was costly in prop-heavy maps).
+[/list]

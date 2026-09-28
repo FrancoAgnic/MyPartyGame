@@ -327,8 +327,12 @@ APTSculptVolume::APTSculptVolume()
     SetRootComponent(Mesh);
     Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     Mesh->SetMobility(EComponentMobility::Movable);
-    Mesh->SetCastShadow(true);
-    Mesh->bCastDynamicShadow = true;
+    // La arcilla NO proyecta sombra dinámica: en niveles Workshop pesados, la malla grande (que se
+    // recrea en cada remallado) haciendo pasada de sombras sobre una escena llena de props bajaba
+    // mucho los FPS al esculpir. Sin sombra de la arcilla, el costo cae fuerte y el cambio visual es
+    // menor (la escultura no tira sombra). Las sub-mallas (chunks/capas) heredan esto (CreateDetailLayerMesh).
+    Mesh->SetCastShadow(false);
+    Mesh->bCastDynamicShadow = false;
     Mesh->bUseAsyncCooking = true; // cocinar colisión fuera del hilo del juego (barato)
 
     // Caja que define el lienzo de esculpido. Visible en editor, oculta en juego.
@@ -2037,6 +2041,7 @@ UProceduralMeshComponent* APTSculptVolume::CreateDetailLayerMesh()
     // del actor) se aplicaría DOBLE y el detalle saldría desplazado en Z / fuera del área.
     M->SetRelativeTransform(FTransform::Identity);
     M->SetCollisionEnabled(ECollisionEnabled::NoCollision); // igual que la arcilla base
+    M->SetCastShadow(Mesh ? Mesh->CastShadow : false);      // heredar la sombra del Mesh base (off)
     return M;
 }
 
