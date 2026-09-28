@@ -789,8 +789,25 @@ void APTLobbyCharacter::ApplyBodyPaintFromPNG(const TArray<uint8>& PNG)
 {
     InitCharacterPaint(); // asegura PaintTex + CharPaintMID
     TArray<FColor> Px; int32 N = 0;
-    if (PNG.Num() == 0 || !PT_DecodePNG_BGRA(PNG, Px, N) || N <= 0 || !PaintTex) return;
-    if (N != PaintTexN || Px.Num() != PaintPixels.Num()) return; // tamaños deben coincidir (1024)
+    if (PNG.Num() == 0 || !PT_DecodePNG_BGRA(PNG, Px, N) || N <= 0) return;
+
+    // Si el PNG entrante NO coincide con el tamaño de la textura actual (p.ej. otro jugador pintó a otra
+    // resolución de textura), ANTES se descartaba la pintura → el cuerpo quedaba BLANCO (y, como la
+    // cabeza contaba como "recibida", el heartbeat no reintentaba → blanco pegado toda la partida).
+    // Ahora se re-crea la textura de pintura a ESE tamaño y se aplica igual (en pawns remotos es solo
+    // visual; el pawn local siempre coincide con su propia resolución, así que no entra acá).
+    if (!PaintTex || N != PaintTexN || Px.Num() != N * N)
+    {
+        PaintTexN = N;
+        PaintTex = UTexture2D::CreateTransient(N, N, PF_B8G8R8A8);
+        if (!PaintTex) return;
+        PaintTex->SRGB = true;
+        PaintTex->CompressionSettings = TC_VectorDisplacementmap;
+        PaintTex->Filter = TF_Bilinear;
+        PaintTex->AddToRoot();
+        if (CharPaintMID) CharPaintMID->SetTextureParameterValue(PaintTexParam, PaintTex);
+        PaintPixels.SetNumUninitialized(N * N);
+    }
     PaintPixels = MoveTemp(Px);
     FTexture2DMipMap& Mip = PaintTex->GetPlatformData()->Mips[0];
     void* D = Mip.BulkData.Lock(LOCK_READ_WRITE);

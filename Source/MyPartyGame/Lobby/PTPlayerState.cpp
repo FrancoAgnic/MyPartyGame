@@ -44,6 +44,10 @@ void APTPlayerState::CopyProperties(APlayerState* NewPlayerState)
         PT->HeadVersion = HeadVersion; // ...y su versión, para que el pawn nuevo la aplique
         PT->Language    = Language;    // el idioma también viaja (palabra por idioma en el juego)
         PT->bIsDevSpectator = bIsDevSpectator; // si esculp/espectás en el lobby, seguís igual en el juego
+        // El mapa custom que este cliente confirmó tener DEBE sobrevivir al seamless travel de vuelta al
+        // lobby: si no, el server se olvida y lo deja "descargando" para siempre un mapa que ya tiene
+        // (no puede poner listo hasta salir y volver). Con esto RecomputeHasMapFlags lo marca como listo.
+        PT->ConfirmedMapId = ConfirmedMapId;
         // bHasGuessedThisTurn NO se copia: es estado por-turno, arranca en false en el juego.
     }
 }
