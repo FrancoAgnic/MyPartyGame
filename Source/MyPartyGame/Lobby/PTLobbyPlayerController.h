@@ -96,6 +96,10 @@ public:
     /** (Cliente→Servidor) Confirma que ya tiene el mapa 'ModId' localmente (para el gate del lobby). */
     UFUNCTION(Server, Reliable) void Server_ReportHasMap(const FString& ModId);
 
+    /** (Cliente) % de descarga del mapa que ESTE cliente está bajando ahora (0..100), o -1 si no está
+     *  bajando nada. Lo usa el HUD para mostrar el % al lado del reloj de arena en tu propia fila. */
+    int32 GetLocalMapDownloadPercent() const;
+
     // ── Estado del modo cabeza (lo lee la hotbar del modo G para resaltar la herramienta) ──
     bool          IsHeadSculptMode()      const { return bHeadSculptMode; }
     EPTEditMode   GetHeadEditMode()       const { return HeadEditMode; }

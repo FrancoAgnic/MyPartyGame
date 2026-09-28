@@ -321,3 +321,22 @@ void UPTMapModSubsystem::RequestWorkshopDownload(const FString& WorkshopIdStr)
     UE_LOG(LogPTMapMods, Log, TEXT("[MapMod] Suscribiendo+descargando item %llu (el cliente no lo tenía)."), Id64);
 #endif
 }
+
+bool UPTMapModSubsystem::GetWorkshopDownloadProgress(const FString& WorkshopIdStr, float& OutProgress01) const
+{
+    OutProgress01 = 0.f;
+#if PT_WITH_STEAM
+    if (!SteamUGC() || WorkshopIdStr.StartsWith(TEXT("local:"))) return false;
+    uint64 Id64 = 0;
+    if (!LexTryParseString(Id64, *WorkshopIdStr) || Id64 == 0) return false;
+    const PublishedFileId_t Id = (PublishedFileId_t)Id64;
+    uint64 Downloaded = 0, Total = 0;
+    // Solo devuelve datos mientras el item se está descargando activamente.
+    if (SteamUGC()->GetItemDownloadInfo(Id, &Downloaded, &Total) && Total > 0)
+    {
+        OutProgress01 = FMath::Clamp((float)((double)Downloaded / (double)Total), 0.f, 1.f);
+        return true;
+    }
+#endif
+    return false;
+}

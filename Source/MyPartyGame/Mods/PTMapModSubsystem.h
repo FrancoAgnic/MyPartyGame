@@ -68,6 +68,10 @@ public:
      *  mapa que el host eligió pero que él no tenía. No-op para mods locales o sin Steam. */
     UFUNCTION(BlueprintCallable, Category="MapMod") void RequestWorkshopDownload(const FString& WorkshopIdStr);
 
+    /** (Cliente) Progreso de descarga del item de Workshop (0..1) mientras se está bajando. Devuelve
+     *  false si no hay descarga activa / no es workshop / sin Steam. Para mostrar el % en la UI. */
+    bool GetWorkshopDownloadProgress(const FString& WorkshopIdStr, float& OutProgress01) const;
+
     /** ¿Este mod está disponible localmente para jugar (pak o sculpt.bin presente)? Para el gate del lobby. */
     UFUNCTION(BlueprintCallable, Category="MapMod") bool HasModContent(const FString& Id) const;
 

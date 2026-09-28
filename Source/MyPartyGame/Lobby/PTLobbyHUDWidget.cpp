@@ -176,8 +176,14 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
                     const bool bCanKick = bLocalIsHost && !PTPS->bIsHost;
                     // Descargando el mapa custom = todavía no lo tiene (bHasSelectedMap replicado).
                     const bool bDownloadingMap = !PTPS->bHasSelectedMap;
+                    // % de descarga: SOLO se conoce para TU propia descarga (Steam local) → solo tu fila.
+                    int32 DownloadPct = -1;
+                    if (bDownloadingMap)
+                        if (APTLobbyPlayerController* LPC = Cast<APTLobbyPlayerController>(GetOwningPlayer()))
+                            if (PTPS == LPC->PlayerState)
+                                DownloadPct = LPC->GetLocalMapDownloadPercent();
                     Row->SetRow(NameFor(PTPS), PTPS->bIsHost, PTPS->bIsReady,
-                                ReadyColor, NotReadyColor, MaxNameChars, PTPS, bCanKick, bDownloadingMap);
+                                ReadyColor, NotReadyColor, MaxNameChars, PTPS, bCanKick, bDownloadingMap, DownloadPct);
                     PlayersBox->AddChildToVerticalBox(Row);
                 }
             }

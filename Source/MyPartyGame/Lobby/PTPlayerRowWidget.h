@@ -27,7 +27,8 @@ public:
      *  bDownloadingMap = este jugador todavía está descargando el mapa custom elegido por el host. */
     void SetRow(const FString& Name, bool bHost, bool bReady,
                 const FLinearColor& ReadyColor, const FLinearColor& NotReadyColor, int32 MaxChars,
-                APTPlayerState* Target = nullptr, bool bCanKick = false, bool bDownloadingMap = false);
+                APTPlayerState* Target = nullptr, bool bCanKick = false, bool bDownloadingMap = false,
+                int32 DownloadPct = -1);
 
     /** El WBP implementa esto para prender/apagar la animación del logo "descargando mapa". Se llama
      *  cada refresh con el estado actual (true = mostrar/animar; false = ocultar). */
@@ -48,6 +49,9 @@ protected:
     // "MapDownloadIcon" en el WBP. El código lo muestra/oculta; la animación la hacés vos en el WBP
     // (por ejemplo con OnDownloadingMapChanged para arrancar/parar una animación de widget).
     UPROPERTY(meta = (BindWidgetOptional)) UImage*     MapDownloadIcon;
+    // % de descarga AL LADO del reloj de arena (solo tu propia fila, mientras VOS bajás el mapa). Nombralo
+    // EXACTO "MapDownloadPercentText" en el WBP (TextBlock). Opcional: sin él, solo se ve el reloj.
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* MapDownloadPercentText;
 
     // Texturas del check (asignar en el WBP de la fila): con tilde = listo; vacía/aspa = no listo.
     UPROPERTY(EditAnywhere, Category = "Row") UTexture2D* ReadyTex    = nullptr;

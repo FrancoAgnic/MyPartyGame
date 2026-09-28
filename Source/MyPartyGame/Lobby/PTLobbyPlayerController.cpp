@@ -409,6 +409,18 @@ void APTLobbyPlayerController::ConfirmMapDownload()
     UE_LOG(LogTemp, Log, TEXT("[MapMod] Descargando por Steam el mapa '%s'..."), *PendingDownloadModId);
 }
 
+int32 APTLobbyPlayerController::GetLocalMapDownloadPercent() const
+{
+    if (PendingDownloadModId.IsEmpty()) return -1; // no estoy bajando nada
+    if (const UPTMapModSubsystem* MM = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTMapModSubsystem>() : nullptr)
+    {
+        float P = 0.f;
+        if (MM->GetWorkshopDownloadProgress(PendingDownloadModId, P))
+            return FMath::Clamp(FMath::RoundToInt(P * 100.f), 0, 100);
+    }
+    return 0; // bajando pero Steam aún no reporta progreso (recién arrancó) → 0%
+}
+
 void APTLobbyPlayerController::DeclineMapDownload()
 {
     // (Cliente) Rechazó: cancela la descarga. Queda sin el mapa (no puede marcar listo) hasta que el host

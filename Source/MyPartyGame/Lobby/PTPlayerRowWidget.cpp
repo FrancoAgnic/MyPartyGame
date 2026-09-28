@@ -17,7 +17,7 @@ bool UPTPlayerRowWidget::Initialize()
 
 void UPTPlayerRowWidget::SetRow(const FString& Name, bool bHost, bool bReady,
                                 const FLinearColor& ReadyColor, const FLinearColor& NotReadyColor, int32 MaxChars,
-                                APTPlayerState* Target, bool bCanKick, bool bDownloadingMap)
+                                APTPlayerState* Target, bool bCanKick, bool bDownloadingMap, int32 DownloadPct)
 {
     TargetPS = Target;
 
@@ -25,6 +25,20 @@ void UPTPlayerRowWidget::SetRow(const FString& Name, bool bHost, bool bReady,
     if (MapDownloadIcon)
         MapDownloadIcon->SetVisibility(bDownloadingMap ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
     OnDownloadingMapChanged(bDownloadingMap); // el WBP arranca/para su animación
+
+    // % de descarga al lado del reloj (solo tu propia fila, con progreso conocido de Steam).
+    if (MapDownloadPercentText)
+    {
+        if (bDownloadingMap && DownloadPct >= 0)
+        {
+            MapDownloadPercentText->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::Clamp(DownloadPct, 0, 100))));
+            MapDownloadPercentText->SetVisibility(ESlateVisibility::HitTestInvisible);
+        }
+        else
+        {
+            MapDownloadPercentText->SetVisibility(ESlateVisibility::Collapsed);
+        }
+    }
 
     if (NameText)
     {
