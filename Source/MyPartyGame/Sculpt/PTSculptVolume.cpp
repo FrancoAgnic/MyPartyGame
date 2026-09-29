@@ -1685,7 +1685,7 @@ bool APTSculptVolume::ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float
     const FColor Col = PaintColor.ToFColor(false); // color por vértice (respaldo); byte lineal = picker
 
     // PINTAR: usa el MISMO sistema de color del clásico (atlas 3D por voxel), que el material samplea
-    // por posición → crisp, con resolución/dureza propias, idéntico a antes. No toca geometría.
+    // por posición → crisp, con resolución/dureza propias. No toca geometría.
     if (Mode == EPTEditMode::Paint)
     {
         WritePaintStamp(WorldPos, Shape, Size, PaintColor, /*bFull=*/false, SafeScale);

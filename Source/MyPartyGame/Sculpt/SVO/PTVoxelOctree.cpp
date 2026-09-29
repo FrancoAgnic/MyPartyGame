@@ -663,8 +663,18 @@ void FPTVoxelOctree::BuildMeshMC(TArray<FVector>& OutVerts, TArray<int32>& OutTr
 
     // Recolorear cada vértice con el color SÓLIDO del material (evita el lavado/manchas de la
     // interpolación de la grilla y hace que el color coincida EXACTO con el del picker).
+    // Se muestrea un poco HACIA ADENTRO (hacia el sólido) en vez de justo en la superficie: en la
+    // superficie el punto es ambiguo y en algunas caras (típico la cara SUPERIOR de una forma achatada)
+    // caía en una hoja del lado del AIRE → devolvía el color base ("blanco default") en vez del tinte.
+    // En este punto las normales de MC apuntan HACIA ADENTRO (se invierten recién más abajo), así que
+    // sumar la normal * media celda entra al sólido. Bug reportado: piso achatado verde salía sin color arriba.
     if (OutColors.Num() != OutVerts.Num()) OutColors.SetNumUninitialized(OutVerts.Num());
-    for (int32 i = 0; i < OutVerts.Num(); ++i) OutColors[i] = SampleSolidColor(OutVerts[i]);
+    const float ColorInset = Cell * 0.5f;
+    for (int32 i = 0; i < OutVerts.Num(); ++i)
+    {
+        const FVector In = OutNormals.IsValidIndex(i) ? OutNormals[i] : FVector::ZeroVector;
+        OutColors[i] = SampleSolidColor(OutVerts[i] + In * ColorInset);
+    }
 
     // Las normales de RunMarchingCubes salen apuntando hacia ADENTRO (iluminación invertida: oscuro del
     // lado del sol). Se invierten SOLO las normales (el winding queda igual → no se ve por dentro).

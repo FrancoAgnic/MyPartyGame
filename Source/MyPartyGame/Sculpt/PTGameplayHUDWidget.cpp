@@ -384,8 +384,8 @@ void UPTGameplayHUDWidget::RefreshToolbar()
     {
         const bool bPlace = PC->IsPlaceMode();
         auto SlotVis = [](UWidget* W, bool bShow){ if (W) W->SetVisibility(bShow ? ESlateVisibility::Visible : ESlateVisibility::Collapsed); };
-        // Paint: en el Level Creator (autoría) se OCULTA siempre (pintar props sobrecarga los niveles).
-        // En gameplay normal se ve salvo al colocar assets. Ojos: igual que antes (oculto al colocar).
+        // Paint: en el Level Creator (autoría) se OCULTA (pintar props sobrecarga los niveles con el atlas).
+        // En gameplay normal se ve salvo al colocar assets. Ojos: igual (oculto al colocar).
         if (ToolSlots.IsValidIndex(2)) SlotVis(ToolSlots[2], !bPlace && !IsAuthorMode()); // Paint
         if (ToolSlots.IsValidIndex(3)) SlotVis(ToolSlots[3], !bPlace); // Ojos
         SlotVis(ColorSlot, !bPlace);                                   // RMB → color picker

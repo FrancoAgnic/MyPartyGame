@@ -1,0 +1,12 @@
+TITLE: v1.0.2 — Smoother sculpting
+
+[h1]v1.0.2[/h1]
+[b]A big pass on how sculpting feels.[/b]
+
+[h2]Sculpting[/h2]
+[list]
+[*][b]Straight strokes made easy:[/b] while you hold still, strokes now snap to a straight vertical guide (great for legs, pillars, columns) instead of curving with the camera. Move and it goes free again; stop and it's straight again.
+[*][b]Draw on the surface by default:[/b] the brush now sits on the existing clay so you sculpt right on the mesh. Hold ALT to add at arm's length instead. Everything merges into one solid.
+[*][b]Preview sits on the geometry:[/b] the brush preview lands on the mesh you're pointing at, so you can see exactly where you'll sculpt.
+[*]Tuning options for the straight-guide feel are exposed on the sculpt setup for fine-tuning.
+[/list]

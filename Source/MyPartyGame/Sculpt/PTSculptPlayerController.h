@@ -577,6 +577,36 @@ private:
     FVector         AxisU      = FVector::RightVector;
     FVector         AxisV      = FVector::UpVector;
     mutable int32   AxisChosen = -1; // -1 sin definir, 0=U, 1=V
+
+    // ── Auto-recto (trazo recto sin arco) ──
+    // Al empezar un trazo con Agregar (sin eje explícito Z/X, sin ALT, sin ojos), se congela un plano
+    // VERTICAL a la posición/ángulo actual de cámara (igual que el modo eje Z): el rayo del cursor se
+    // proyecta sobre ese plano → el trazo sale RECTO en vez de curvarse por el brazo de la cámara.
+    // DINÁMICO dentro del mismo trazo: mientras estás QUIETO dibuja recto; si te MOVÉS (volás) se suelta
+    // y el trazo queda libre; si te volvés a quedar QUIETO se re-congela un plano vertical fresco y vuelve
+    // a recto. Se decide por la VELOCIDAD del pawn (rotar la cámara NO cuenta: rotar es lo que usás para
+    // dibujar el trazo). Se resetea al soltar el click.
+    bool            bAutoAxisActive = false;
+    // Umbral de "quieto" del auto-recto (uu/s): por debajo de esta velocidad del pawn se considera que
+    // estás quieto → trazo recto. Editable en BP_SculptPlayerController (defaults) para tunear el punto.
+    UPROPERTY(EditAnywhere, Category="Sculpt|AutoRecto", meta=(AllowPrivateAccess="true"))
+    float           AutoAxisStillSpeed = 40.f;
+    // El auto-recto SOLO usa el plano VERTICAL (Z). Si mirás demasiado para ABAJO/arriba (|Dir.Z| por
+    // encima de este umbral) el plano vertical no sirve → se DESACTIVA el auto-recto y esculpís LIBRE
+    // (a distancia de brazo). Editable en BP_SculptPlayerController. (0 = casi horizontal, 1 = derecho abajo.)
+    UPROPERTY(EditAnywhere, Category="Sculpt|AutoRecto", meta=(AllowPrivateAccess="true", ClampMin="0.1", ClampMax="0.95"))
+    float           AutoAxisDownThreshold = 0.6f;
+    // ALT (esculpir sobre la superficie): última distancia a lo largo del rayo donde la superficie fue
+    // tocada en este trazo. -1 = todavía no se tocó superficie en este trazo.
+    mutable float   AltHeldDist = -1.f;
+
+    // Congela el plano VERTICAL del auto-recto a la cámara actual. Para el modo superficie lo ancla a la
+    // SUPERFICIE bajo el cursor (o a la última altura); si no, a AirDepth. Lo llama el Tick / OnStampPressed.
+    void FreezeAutoAxisPlane();
+    // Raymarch a la superficie de la BASE bajo el rayo dado. true + punto + normal + distancia (a lo largo
+    // del rayo) si pega. bExcludeActive = excluir la capa de detalle activa (durante el trazo ALT).
+    bool TraceBaseSurface(const FVector& Start, const FVector& Dir, bool bExcludeActive,
+                          FVector& OutSurf, FVector& OutNormal, float& OutDist) const;
     // Ejes = HOLD: mantener la tecla activa el plano; soltarla vuelve a Add. (Z = vertical, X = horizontal)
     void OnAxisVerticalPressed();
     void OnAxisVerticalReleased();
@@ -723,15 +753,14 @@ private:
     void OnScrollUp();
     void OnScrollDown();
 
-    // ── ALT: pegar el sello a la superficie de la arcilla (solo Add) para detallar de cerca ──
-    // Con Alt mantenido, en Add el sello deja de ir al "brazo extendido" y se pega a la superficie de
-    // la malla existente (raymarch), como Paint/Smooth. Sirve para agregar detalle fino sobre la arcilla.
-    bool bSurfaceSnap = false;
-    // Z (eje vertical), X (eje horizontal) y Alt (snap a superficie) son 3 holds MUTUAMENTE EXCLUYENTES:
-    // la última tecla apretada "quema" a la anterior (usarlas juntas causaba bugs raros, p.ej. la arcilla
-    // escalando hacia la cámara). Ver OnSurfaceSnapPressed / OnAxis*Pressed.
+    // ── Posicionamiento del sello (Add): SOBRE LA MALLA por defecto; ALT = distancia de brazo ──
+    // INVERTIDO respecto a antes: por defecto el sello se PEGA A LA SUPERFICIE de la arcilla (raymarch)
+    // → esculpís directo sobre la malla. Manteniendo ALT, el sello va al "brazo extendido" (distancia de
+    // cámara). En AMBOS casos el trazo FUSIONA con la base (un solo sólido; ya no hay capas de detalle).
+    bool bSurfaceSnap = true;
+    // ALT y los ejes explícitos Z/X: la última tecla apretada "quema" a la anterior.
     void OnSurfaceSnapPressed();
-    void OnSurfaceSnapReleased() { bSurfaceSnap = false; }
+    void OnSurfaceSnapReleased() { bSurfaceSnap = true; } // soltar ALT → vuelve a "sobre la malla"
     // Latcheado al iniciar el trazo (= Add + Alt en ese momento): mientras dura el trazo, sus sellos
     // van a la capa de detalle y usan el plano congelado, aunque sueltes Alt a mitad de camino.
     bool bStrokeIsDetail = false;

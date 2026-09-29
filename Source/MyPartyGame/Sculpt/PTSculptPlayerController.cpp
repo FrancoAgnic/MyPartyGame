@@ -845,6 +845,32 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         }
     }
 
+    // Auto-recto DINÁMICO — corre SIEMPRE (también en hover, no solo esculpiendo): si te MOVÉS (velocidad
+    // del pawn) → libre; si estás QUIETO → recto (congela un plano vertical fresco al frenar y lo mantiene
+    // mientras sigas quieto). Así el PREVIEW ya se mueve como modo eje Z al estar quieto, y el trazo arranca
+    // en ese mismo plano. Rotar la cámara no cuenta (velocidad de traslación ~0). Con Agregar (incluye ALT),
+    // sin eje explícito ni ojos.
+    if (EditMode == EPTEditMode::Add && !bAxisLock && !bEyesTool && !IsPlaceMode())
+    {
+        const APawn* P = GetPawn();
+        const bool bMovingNow = P && P->GetVelocity().SizeSquared() > (AutoAxisStillSpeed * AutoAxisStillSpeed);
+        FVector Start, Dir;
+        const bool bHaveRay  = GetCameraRay(Start, Dir);
+        const bool bTooSteep = bHaveRay && (FMath::Abs(Dir.Z) > AutoAxisDownThreshold);
+
+        // Auto-recto SOLO vertical (Z). Se engancha únicamente si estás QUIETO y NO mirás muy para abajo.
+        // Si te movés (volás) o mirás muy abajo → LIBRE (a distancia de brazo). Una vez enganchado, el
+        // plano se MANTIENE mientras sigas quieto y de frente → trazos coplanares (no se re-congela).
+        if (bMovingNow || bTooSteep)
+            bAutoAxisActive = false;
+        else if (!bAutoAxisActive)
+            FreezeAutoAxisPlane();
+    }
+    else
+    {
+        bAutoAxisActive = false;            // fuera de Agregar / con eje explícito / ojos: sin auto-recto
+    }
+
     FVector Normal;
     FVector StampPos = GetStampPoint(Normal);
 
@@ -1336,6 +1362,69 @@ bool APTSculptPlayerController::EyedropColorUnderCursor(FLinearColor& OutColor) 
     return false;
 }
 
+bool APTSculptPlayerController::TraceBaseSurface(const FVector& Start, const FVector& Dir, bool bExcludeActive,
+                                                 FVector& OutSurf, FVector& OutNormal, float& OutDist) const
+{
+    if (!Volume) return false;
+    auto SampleD = [this, bExcludeActive](const FVector& P) -> float
+    { return bExcludeActive ? Volume->SampleWorldDensityExceptActiveDetail(P) : Volume->SampleWorldDensity(P); };
+
+    static constexpr float StepSize = 8.f;  // ~1 voxel: preciso
+    static constexpr int32 MaxSteps = 700;
+    float prevD = SampleD(Start);
+    for (int32 i = 1; i <= MaxSteps; ++i)
+    {
+        const FVector P = Start + Dir * (StepSize * i);
+        const float   d = SampleD(P);
+        if (prevD <= 0.f && d > 0.f)
+        {
+            FVector lo = P - Dir * StepSize, hi = P;
+            for (int32 j = 0; j < 5; ++j) { const FVector mid = (lo + hi) * 0.5f; (SampleD(mid) > 0.f ? hi : lo) = mid; }
+            const FVector Surf = (lo + hi) * 0.5f;
+            const float E = Volume->VoxelSize * 0.5f;
+            FVector N(SampleD(Surf + FVector(E,0,0)) - SampleD(Surf - FVector(E,0,0)),
+                      SampleD(Surf + FVector(0,E,0)) - SampleD(Surf - FVector(0,E,0)),
+                      SampleD(Surf + FVector(0,0,E)) - SampleD(Surf - FVector(0,0,E)));
+            N = (-N).GetSafeNormal();
+            OutNormal = N.IsNearlyZero() ? -Dir : N;
+            OutSurf   = Surf;
+            OutDist   = FVector::DotProduct(Surf - Start, Dir); // distancia a lo largo del rayo
+            return true;
+        }
+        prevD = d;
+    }
+    return false;
+}
+
+void APTSculptPlayerController::FreezeAutoAxisPlane()
+{
+    FVector Start, Dir;
+    if (!GetCameraRay(Start, Dir)) { bAutoAxisActive = false; return; }
+
+    // Profundidad del plano: modo superficie → la superficie bajo el cursor (o la última altura); si no,
+    // AirDepth (brazo). Congelado al punto/ángulo actual.
+    FVector Origin = Start + Dir * AirDepth;
+    if (bSurfaceSnap)
+    {
+        FVector Surf, Nrm; float Dist = 0.f;
+        if (TraceBaseSurface(Start, Dir, /*bExcludeActive=*/bStrokeActive, Surf, Nrm, Dist))
+        {
+            Origin = Surf;
+            AltHeldDist = Dist;
+        }
+        else if (AltHeldDist > 0.f)
+        {
+            Origin = Start + Dir * AltHeldDist;
+        }
+    }
+
+    AxisOrigin = Origin;
+    FVector N(Dir.X, Dir.Y, 0.f);                // normal horizontal → plano VERTICAL (Z)
+    AxisPlaneN = N.GetSafeNormal();
+    if (AxisPlaneN.IsNearlyZero()) AxisPlaneN = FVector(1.f, 0.f, 0.f);
+    bAutoAxisActive = true;
+}
+
 FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
 {
     FVector Start, Dir;
@@ -1345,10 +1434,50 @@ FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
         return Start + Dir * AirDepth;
     }
 
+    // ── ALT (Add + surface snap) ── Auto-recto anclado a la superficie + mantener altura al salir del borde.
+    // QUIETO (auto-recto activo): trazo recto sobre el plano vertical congelado (a la altura de la superficie).
+    // MOVIÉNDOTE: pegado a la superficie; si te salís del borde, se mantiene a la última altura tocada
+    // (Start + Dir*AltHeldDist) en vez de saltar al arco del brazo.
+    if (EditMode == EPTEditMode::Add && bSurfaceSnap && !bEyesTool && !bAxisLock && Volume)
+    {
+        // PRIORIDAD en HOVER: el preview se POSA sobre la geometría. Si el rayo pega a la malla, snap a la
+        // superficie (así ves exactamente dónde vas a esculpir sobre la malla, por encima del plano recto).
+        // Durante el TRAZO usamos el plano congelado (recto, y sin trepar sobre lo que vas agregando).
+        if (!bIsStamping)
+        {
+            FVector Surf, Nrm; float Dist = 0.f;
+            if (TraceBaseSurface(Start, Dir, /*bExcludeActive=*/false, Surf, Nrm, Dist))
+            {
+                AltHeldDist = Dist;
+                OutNormal   = Nrm;
+                return Surf;
+            }
+        }
+
+        // QUIETO y de frente (auto-recto activo): trazo recto sobre el plano vertical congelado.
+        if (bAutoAxisActive)
+        {
+            const float denom = FVector::DotProduct(Dir, AxisPlaneN);
+            FVector Pf = AxisOrigin;
+            if (FMath::Abs(denom) > 1e-4f)
+            {
+                const float t = FVector::DotProduct(AxisOrigin - Start, AxisPlaneN) / denom;
+                if (t > 0.f) Pf = Start + Dir * t;
+            }
+            OutNormal = AxisPlaneN;
+            return Volume->ClampInsideCanvas(Pf, 0.f);
+        }
+
+        // MOVIÉNDOTE (o mirando muy abajo): esculpís LIBRE a distancia de brazo, igual que el modo normal.
+        // (Antes acá se pegaba a la superficie y la arcilla "trepaba/escalaba hacia la cámara" — bug.)
+        OutNormal = -Dir;
+        return Volume->ClampInsideCanvas(Start + Dir * AirDepth, 0.f);
+    }
+
     // ── Modo eje: trazo recto sobre el plano CONGELADO (fijado al activar Z/X) ───
     // Solo con la herramienta de esculpir (Add) y fuera de la tool de ojos. El rayo del cursor
     // se interseca con el plano fijo → trazos rectos; soltar/re-presionar mantiene el mismo plano.
-    if (bAxisLock && EditMode == EPTEditMode::Add && !bEyesTool && !bSurfaceSnap)
+    if ((bAxisLock || bAutoAxisActive) && EditMode == EPTEditMode::Add && !bEyesTool && !bSurfaceSnap)
     {
         const float denom = FVector::DotProduct(Dir, AxisPlaneN);
         FVector Pf = AxisOrigin;
@@ -1750,17 +1879,30 @@ void APTSculptPlayerController::OnStampPressed()
     if (bEyesTool) { PlaceEyeAtCursor(); return; }
 
     bIsStamping = true;
-    // ¿Este trazo es de DETALLE? (Add + Alt al apretar). Se latchea para todo el trazo.
-    bStrokeIsDetail = (EditMode == EPTEditMode::Add && bSurfaceSnap);
+    // Ya NO hay capas de detalle: TODO trazo fusiona con la base (un solo sólido). El ALT ahora solo
+    // cambia el POSICIONAMIENTO (brazo vs superficie), no si fusiona.
+    bStrokeIsDetail = false;
     if (CanLocalPlayerSculpt())
     {
-        if (bStrokeIsDetail)
-            Server_BeginDetailLayer(); // nueva capa aparte (no fusiona con la base ni otras capas)
-        else
-            Server_BeginStroke();      // trazo normal sobre la base (undo por trazo)
+        Server_BeginStroke();      // trazo normal sobre la base (undo por trazo)
     }
-    // NOTA: el plano del modo eje NO se recalcula al apretar (se fijó al activar el modo con
-    // Z/X). Así soltar y re-presionar el esculpido sigue en el MISMO plano.
+    // NOTA: el plano del modo eje EXPLÍCITO (Z/X) NO se recalcula al apretar (se fijó al activar el modo).
+    // Así soltar y re-presionar el esculpido sigue en el MISMO plano.
+    // El auto-recto NO se congela acá EN GENERAL: lo maneja el Tick (engancha al estar quieto, también en
+    // hover), así el trazo arranca en el mismo plano que veías en el preview.
+    // EXCEPCIÓN: si arrancás SOBRE geometría (surface mode), re-anclar el plano a ese punto de la
+    // superficie → el trazo empieza donde muestra el preview (sobre la malla). En AIRE no se re-ancla,
+    // así se mantiene el plano persistente (trazos coplanares al construir en el vacío).
+    if (bAutoAxisActive && bSurfaceSnap && !bAxisLock && !bEyesTool && !IsPlaceMode() && Volume)
+    {
+        FVector S, D;
+        if (GetCameraRay(S, D))
+        {
+            FVector Surf, Nrm; float Dist = 0.f;
+            if (TraceBaseSurface(S, D, /*bExcludeActive=*/false, Surf, Nrm, Dist))
+                FreezeAutoAxisPlane(); // re-ancla el plano vertical a la superficie actual (quieto + de frente)
+        }
+    }
 }
 
 void APTSculptPlayerController::OnStampReleased()
@@ -1771,6 +1913,10 @@ void APTSculptPlayerController::OnStampReleased()
     bIsStamping     = false;
     bStrokeIsDetail = false;
     bErasePropsHeld = false; // soltar el click corta el borrado continuo de assets
+    // NO reseteamos bAutoAxisActive: mientras sigas QUIETO, el plano congelado se MANTIENE entre trazos
+    // (todos los trazos cortos quedan coplanares → dibujás como sobre un papel 2D). El Tick lo suelta solo
+    // si te trasladás, y re-congela uno nuevo al frenar. AltHeldDist tampoco hace falta resetearlo acá:
+    // mientras el auto-recto esté activo se usa el plano, no la altura de superficie.
     AxisChosen      = -1;
 }
 
@@ -1889,9 +2035,9 @@ void APTSculptPlayerController::OnShapeRotateReleased()
 // anterior). Si dejo Alt prendido y aprieto Z, se usa SOLO el eje; y viceversa. No "vuelven" solos al
 // soltar el nuevo (hay que re-apretar el anterior), que es justo lo que evita los estados combinados.
 void APTSculptPlayerController::OnAxisVerticalPressed()   { if (bIsStamping || IsPlaceMode()) return; bSurfaceSnap = false; SetAxisMode(true, /*bHorizontal=*/false); }
-void APTSculptPlayerController::OnAxisVerticalReleased()  { if (bAxisLock && !bAxisHorizontal) SetAxisMode(false, false); }
+void APTSculptPlayerController::OnAxisVerticalReleased()  { if (bAxisLock && !bAxisHorizontal) SetAxisMode(false, false); bSurfaceSnap = true; }
 void APTSculptPlayerController::OnAxisHorizontalPressed() { if (bIsStamping || IsPlaceMode()) return; bSurfaceSnap = false; SetAxisMode(true, /*bHorizontal=*/true); }
-void APTSculptPlayerController::OnAxisHorizontalReleased(){ if (bAxisLock && bAxisHorizontal) SetAxisMode(false, true); }
+void APTSculptPlayerController::OnAxisHorizontalReleased(){ if (bAxisLock && bAxisHorizontal) SetAxisMode(false, true); bSurfaceSnap = true; }
 
 void APTSculptPlayerController::OnSurfaceSnapPressed()
 {
@@ -1899,10 +2045,10 @@ void APTSculptPlayerController::OnSurfaceSnapPressed()
     // hacía que el sello volviera al "brazo extendido" y la arcilla escalara hacia la cámara. Solo se
     // puede cambiar con el click suelto.
     if (bIsStamping) return;
-    if (IsPlaceMode()) return; // el detalle (Alt) no aplica al colocar props (edición de nivel)
-    // Alt quema el modo eje: si había un eje activo, se apaga antes de prender el snap.
+    if (IsPlaceMode()) return; // no aplica al colocar props (edición de nivel)
+    // ALT quema el modo eje explícito: si había un eje activo, se apaga.
     if (bAxisLock) SetAxisMode(false, bAxisHorizontal);
-    bSurfaceSnap = true;
+    bSurfaceSnap = false; // ALT mantenido → sello a distancia de brazo (deja de pegarse a la superficie)
 }
 
 void APTSculptPlayerController::SetAxisMode(bool bEnable, bool bHorizontal)
@@ -2149,8 +2295,8 @@ void APTSculptPlayerController::SetMode(EPTEditMode M)
     // No cambiar de herramienta MID-TRAZO (con el click apretado): hacerlo a mitad de un trazo bugea
     // (el sello sigue del modo viejo, cambia profundidad, etc.). Solo se cambia con el click suelto.
     if (bIsStamping) return;
-    // Level Creator: la herramienta Paint está DESHABILITADA (pintar props sobrecarga los niveles).
-    // No se puede equipar en modo autoría (ni por tecla ni por el hotbar). En el juego normal sí.
+    // Level Creator: la herramienta Paint está DESHABILITADA (pintar props sobrecarga los niveles con el
+    // atlas). No se puede equipar en modo autoría (ni por tecla ni por el hotbar). En el juego normal sí.
     if (IsMapAuthorMode() && M == EPTEditMode::Paint) return;
     // En modo COLOCAR (edición de nivel) solo valen Agregar/Borrar; Paint/Smooth no aplican a props.
     if (IsPlaceMode() && M != EPTEditMode::Add && M != EPTEditMode::Erase) return;
@@ -2854,7 +3000,7 @@ void APTSculptPlayerController::TickAuthorProps(float Dt)
     if (bOut && !bWasPlaceMode)
     {
         bEyesTool    = false;
-        bSurfaceSnap = false;
+        bSurfaceSnap = true; // volver al default "sobre la malla" al salir de colocar props
         if (bAxisLock) SetAxisMode(false, bAxisHorizontal);
         SetModeInternal(EPTEditMode::Add, /*bResetAxis=*/true);
     }
