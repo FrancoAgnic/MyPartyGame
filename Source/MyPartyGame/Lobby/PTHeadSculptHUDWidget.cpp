@@ -63,11 +63,11 @@ void UPTHeadSculptHUDWidget::BuildOnce()
     }
 
     // ── Slots contextuales fijos (color / salir) y cruz WASD ──
-    if (ColorSlot) ColorSlot->SetSlot(IconColor, FText::FromString(TEXT("RMB")), PTText::Get(TEXT("KEY_COLOR_PICK")));
+    if (ColorSlot) ColorSlot->SetSlot(IconColor, FText::FromString(TEXT("RMB")), PTText::Get(TEXT("KEY_COLOR_PICK")), IconKeyRMB);
     if (ExitSlot)  ExitSlot->SetSlot(IconExit,   FText::FromString(TEXT("G")),   PTText::Get(TEXT("HEAD_APPLY")));
     if (PaintBodySlot) PaintBodySlot->SetSlot(IconPaintBody, FText::FromString(TEXT("Shift")), PTText::Get(TEXT("HEAD_PAINT_BODY")));
     if (DetailSlot)    DetailSlot->SetSlot(IconDetail, FText::FromString(TEXT("Alt")), PTText::Get(TEXT("TOOL_DETAIL")));
-    if (ClearSlot)     ClearSlot->SetSlot(IconClear, FText::FromString(TEXT("Backspace")), PTText::Get(TEXT("SCULPT_CLEAR")));
+    if (ClearSlot)     ClearSlot->SetSlot(IconClear, FText::FromString(TEXT("Backspace")), PTText::Get(TEXT("SCULPT_CLEAR")), IconKeyBackspace);
 
     // La cruz WASD: cada tecla en su lugar (W arriba, S abajo, A izq, D der). El "glow" es el
     // resaltado (SetSelected) que se prende mientras la tecla está apretada.
@@ -236,11 +236,11 @@ void UPTHeadSculptHUDWidget::Refresh(APTLobbyPlayerController* PC)
         ClearSlot->SetSelected(PC->IsHeadUndoFlashing());
     }
 
-    // ── Cruz WASD: brillan mientras se mantiene la tecla ──
-    if (WasdUp)    WasdUp->SetSelected(PC->IsInputKeyDown(EKeys::W));
-    if (WasdDown)  WasdDown->SetSelected(PC->IsInputKeyDown(EKeys::S));
-    if (WasdLeft)  WasdLeft->SetSelected(PC->IsInputKeyDown(EKeys::A));
-    if (WasdRight) WasdRight->SetSelected(PC->IsInputKeyDown(EKeys::D));
+    // ── Cruz WASD: se "aprietan" (animación OnPressed en el WBP) mientras se mantiene la tecla ──
+    if (WasdUp)    WasdUp->SetPressed(PC->IsInputKeyDown(EKeys::W));
+    if (WasdDown)  WasdDown->SetPressed(PC->IsInputKeyDown(EKeys::S));
+    if (WasdLeft)  WasdLeft->SetPressed(PC->IsInputKeyDown(EKeys::A));
+    if (WasdRight) WasdRight->SetPressed(PC->IsInputKeyDown(EKeys::D));
 
     // ── 🚫 fuera del área de esculpido, o SIN PINTURA (para que se note el límite) ──
     if (OutOfBoundsIcon)

@@ -34,6 +34,14 @@ public:
     UFUNCTION(BlueprintCallable, Category="UI")
     void SetSelected(bool bInSelected);
 
+    /** Marca la tecla como APRETADA/soltada (dispara OnPressed). Para slots "solo tecla" (ej: WASD de
+     *  la cámara): la animás en el WBP con el evento OnPressed. Solo cambia en las transiciones. */
+    UFUNCTION(BlueprintCallable, Category="UI")
+    void SetPressed(bool bInPressed);
+
+    UFUNCTION(BlueprintPure, Category="UI")
+    bool IsPressed() const { return bPressed; }
+
     UFUNCTION(BlueprintPure, Category="UI")
     bool IsSelected() const { return bSelected; }
 
@@ -70,8 +78,14 @@ protected:
     UFUNCTION(BlueprintImplementableEvent, Category="UI")
     void OnSelectedChanged(bool bInSelected);
 
+    /** Para animar el "apretar" la tecla desde Blueprint (slots solo-tecla tipo WASD). true al mantener
+     *  la tecla, false al soltar → animá el keycap presionándose/soltándose. */
+    UFUNCTION(BlueprintImplementableEvent, Category="UI")
+    void OnPressed(bool bInPressed);
+
 private:
     bool bSelected = false;
+    bool bPressed  = false;
 
     // MID del material del ProgressRing (se crea la primera vez que se usa el progreso).
     UPROPERTY() class UMaterialInstanceDynamic* ProgressMID = nullptr;

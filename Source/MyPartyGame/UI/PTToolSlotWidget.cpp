@@ -48,6 +48,13 @@ void UPTToolSlotWidget::SetSelected(bool bInSelected)
     OnSelectedChanged(bSelected);
 }
 
+void UPTToolSlotWidget::SetPressed(bool bInPressed)
+{
+    if (bPressed == bInPressed) return; // solo en las transiciones (no re-disparar cada tick)
+    bPressed = bInPressed;
+    OnPressed(bPressed);
+}
+
 void UPTToolSlotWidget::SetProgress(float Alpha01, const FText& CenterText)
 {
     Alpha01 = FMath::Clamp(Alpha01, 0.f, 1.f);

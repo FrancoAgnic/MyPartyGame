@@ -46,6 +46,15 @@ void UPTLockerSubsystem::EnsureLoaded()
     SaveToDisk();
 }
 
+void UPTLockerSubsystem::RefreshSlotCount()
+{
+    EnsureLoaded();
+    if (!Save) return;
+    const int32 Before = Save->HeadSlots.Num();
+    Save->EnsureSized();
+    if (Save->HeadSlots.Num() != Before) SaveToDisk();
+}
+
 bool UPTLockerSubsystem::IsHeadSlotUsed(int32 Idx) const
 {
     return Save && Save->HeadSlots.IsValidIndex(Idx) && Save->HeadSlots[Idx].bUsed;

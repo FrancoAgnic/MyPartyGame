@@ -12,6 +12,7 @@ public class MyPartyGame : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+			"DeveloperSettings", // UPTLockerSettings → Project Settings (máximo de slots del casillero, editable)
 			"InputCore",
 			"EnhancedInput",
 			"ProceduralMeshComponent",

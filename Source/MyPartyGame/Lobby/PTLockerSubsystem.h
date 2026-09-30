@@ -16,8 +16,13 @@ class MYPARTYGAME_API UPTLockerSubsystem : public UGameInstanceSubsystem
 public:
     virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 
-    int32 NumHeadSlots() const { return UPTLockerSaveGame::NumHeadSlots; }
-    int32 NumBodySlots() const { return UPTLockerSaveGame::NumBodySlots; }
+    // Cantidad de slots (según Project Settings → Game → Locker, mismo valor cabeza/cuerpo).
+    int32 NumHeadSlots() const { return Save ? Save->HeadSlots.Num() : UPTLockerSaveGame::DefaultSlots; }
+    int32 NumBodySlots() const { return Save ? Save->BodySlots.Num() : UPTLockerSaveGame::DefaultSlots; }
+
+    // Relee la variable de máximo de slots y reajusta el save (crece/achica). Llamar al abrir el Locker
+    // para que un cambio en Project Settings tenga efecto sin reiniciar el juego.
+    void RefreshSlotCount();
 
     // ── Consulta de slots ──
     bool  IsHeadSlotUsed(int32 Idx) const;

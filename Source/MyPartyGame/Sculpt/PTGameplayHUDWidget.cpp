@@ -1028,8 +1028,18 @@ void UPTGameplayHUDWidget::OnChatLine(const FString& Name, const FString& Messag
     FString Line;
     switch (Type)
     {
-    case EPTChatType::Correct: Line = FString::Printf(TEXT("<name>%s</> <correct>%s</>"), *ShortName,
-                                                      *PTText::GetStr(TEXT("CHAT_GUESSED_IT"))); break;
+    case EPTChatType::Correct:
+    {
+        // Message trae el CÓDIGO de idioma en que adivinó (ej "es"/"en"). Se muestra la BANDERA con un
+        // decorator de imagen del RichTextBlock: <img id="ES"/> (el id = nombre de fila del DataTable de
+        // imágenes, mapeado a la textura Flag_XX). Va FUERA del tag <correct> (los decorators de imagen no
+        // van dentro de un style de texto).
+        FString FlagTag;
+        if (!Message.IsEmpty()) FlagTag = FString::Printf(TEXT(" <img id=\"%s\"/>"), *Message.ToUpper());
+        Line = FString::Printf(TEXT("<name>%s</> <correct>%s</>%s"), *ShortName,
+                               *PTText::GetStr(TEXT("CHAT_GUESSED_IT")), *FlagTag);
+        break;
+    }
     case EPTChatType::Close:   Line = FString::Printf(TEXT("<close>%s</>"),
                                                       *PTText::GetStr(TEXT("CHAT_CLOSE_GUESS"))); break;
     case EPTChatType::System:  Line = Message; break;

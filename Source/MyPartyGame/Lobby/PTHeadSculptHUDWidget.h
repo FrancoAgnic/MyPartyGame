@@ -96,6 +96,9 @@ protected:
     // Iconos de las teclas (asignar en Details): Enter para confirmar/Sí, Esc para back/No.
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconEnter = nullptr;
     UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconEsc   = nullptr;
+    // Keycaps CUSTOM (mismos que el gameplay): en vez del texto "RMB"/"Backspace" se muestra el icono.
+    UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconKeyRMB       = nullptr; // click derecho
+    UPROPERTY(EditAnywhere, Category = "HeadHUD") UTexture2D* IconKeyBackspace = nullptr; // borrar
 
     /** WBP del cuadrito (el mismo WBP_ToolSlot del gameplay). */
     UPROPERTY(EditAnywhere, Category = "HeadHUD") TSubclassOf<UPTToolSlotWidget> ToolSlotClass;

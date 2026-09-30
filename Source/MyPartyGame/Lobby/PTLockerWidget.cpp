@@ -49,6 +49,10 @@ void UPTLockerWidget::BuildSlots()
 {
     if (bBuilt || !SlotWidgetClass) return;
     bBuilt = true;
+    UPTLockerSubsystem* L = Locker();
+    if (L) L->RefreshSlotCount(); // releer el máximo de slots (Project Settings) antes de armar la grilla
+    const int32 NHead = L ? L->NumHeadSlots() : UPTLockerSaveGame::DefaultSlots;
+    const int32 NBody = L ? L->NumBodySlots() : UPTLockerSaveGame::DefaultSlots;
     auto Make = [this](UPanelWidget* Box, int32 Count, bool bHead, TArray<UPTLockerSlotWidget*>& Out)
     {
         if (!Box) return;
@@ -69,8 +73,8 @@ void UPTLockerWidget::BuildSlots()
                 Out.Add(S);
             }
     };
-    Make(HeadSlotsBox, UPTLockerSaveGame::NumHeadSlots, true,  HeadSlotWidgets);
-    Make(BodySlotsBox, UPTLockerSaveGame::NumBodySlots, false, BodySlotWidgets);
+    Make(HeadSlotsBox, NHead, true,  HeadSlotWidgets);
+    Make(BodySlotsBox, NBody, false, BodySlotWidgets);
 }
 
 void UPTLockerWidget::RefreshSlots()
@@ -258,6 +262,7 @@ void UPTLockerWidget::OnBackClicked()
     if (APTLobbyPlayerController* PC = LobbyPC()) PC->CloseLocker();
     else RemoveFromParent();
 }
+
 
 // ── Teclado ──
 FReply UPTLockerWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)

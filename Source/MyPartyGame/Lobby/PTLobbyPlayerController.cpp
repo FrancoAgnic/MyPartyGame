@@ -772,8 +772,9 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
     const float dPitch = bHeadShapeRadialActive ? 0.f : (IsInputKeyDown(EKeys::W) ? 1.f : 0.f) - (IsInputKeyDown(EKeys::S) ? 1.f : 0.f);
     if (dYaw != 0.f || dPitch != 0.f)
     {
-        HeadOrbitYaw   += dYaw   * HeadOrbitSpeed * DeltaTime;
-        HeadOrbitPitch  = FMath::Clamp(HeadOrbitPitch + dPitch * HeadOrbitSpeed * DeltaTime, -85.f, 85.f);
+        // Ejes INVERTIDOS (los dos): D → derecha, A → izquierda, W → arriba, S → abajo.
+        HeadOrbitYaw   -= dYaw   * HeadOrbitSpeed * DeltaTime;
+        HeadOrbitPitch  = FMath::Clamp(HeadOrbitPitch - dPitch * HeadOrbitSpeed * DeltaTime, -85.f, 85.f);
         UpdateHeadCam();
     }
 

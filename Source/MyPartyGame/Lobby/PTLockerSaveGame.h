@@ -9,6 +9,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/SaveGame.h"
+#include "PTLockerSettings.h"   // máximo de slots editable (Project Settings → Game → Locker)
 #include "PTLockerSaveGame.generated.h"
 
 USTRUCT()
@@ -35,8 +36,9 @@ class MYPARTYGAME_API UPTLockerSaveGame : public USaveGame
 {
     GENERATED_BODY()
 public:
-    static constexpr int32 NumHeadSlots = 6;
-    static constexpr int32 NumBodySlots = 6;
+    // Cantidad de slots (cabezas = cuerpos). El máximo se edita en Project Settings → Game → Locker
+    // (UPTLockerSettings::MaxSkinSlots). Este constexpr es solo un fallback si el settings no cargó.
+    static constexpr int32 DefaultSlots = 22;
 
     UPROPERTY() TArray<FPTLockerHeadSlot> HeadSlots;
     UPROPERTY() TArray<FPTLockerBodySlot> BodySlots;
@@ -45,10 +47,17 @@ public:
     UPROPERTY() int32 EquippedHead = -1;
     UPROPERTY() int32 EquippedBody = -1;
 
-    // Asegura que los arrays tengan el tamaño fijo (por si el save es viejo o recién creado).
+    // Ajusta la cantidad de slots al valor configurado (Project Settings → Game → Locker), cabeza y
+    // cuerpo con la MISMA cantidad. Crece o achica hasta ese máximo, PERO nunca por debajo del último
+    // slot que tenga una skin guardada (así bajar el máximo no borra skins).
     void EnsureSized()
     {
-        if (HeadSlots.Num() != NumHeadSlots) HeadSlots.SetNum(NumHeadSlots);
-        if (BodySlots.Num() != NumBodySlots) BodySlots.SetNum(NumBodySlots);
+        const int32 Desired = UPTLockerSettings::GetMaxSkinSlots();
+        int32 MinKeep = 1; // el slot 0 (Default) siempre existe
+        for (int32 i = 0; i < HeadSlots.Num(); ++i) if (HeadSlots[i].bUsed) MinKeep = FMath::Max(MinKeep, i + 1);
+        for (int32 i = 0; i < BodySlots.Num(); ++i) if (BodySlots[i].bUsed) MinKeep = FMath::Max(MinKeep, i + 1);
+        const int32 N = FMath::Max(Desired, MinKeep);
+        if (HeadSlots.Num() != N) HeadSlots.SetNum(N);
+        if (BodySlots.Num() != N) BodySlots.SetNum(N);
     }
 };

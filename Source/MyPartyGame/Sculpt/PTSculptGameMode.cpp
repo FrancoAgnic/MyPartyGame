@@ -570,8 +570,10 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
 
         if (bEligibleGuesser && DoesGuessMatch(Text))
         {
-            // Acierto: anunciar SIN el texto, luego marcar (puede cerrar el turno).
-            G->Multicast_ChatLine(Name, FString(), EPTChatType::Correct);
+            // Acierto: anunciar SIN la palabra (anti-spoiler), pero SÍ con el IDIOMA en que adivinó
+            // (el código va en el campo Message; el HUD lo muestra como "[ES]" al lado). La palabra se
+            // revela recién al final del turno.
+            G->Multicast_ChatLine(Name, Sender->Language, EPTChatType::Correct);
             // Globo VERDE "adivinó la palabra" (nunca la palabra) + confetti sobre su cabeza.
             if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(Sender->GetPawn()))
                 // Texto vacío a propósito: con bGuess=true cada cliente pone el suyo traducido.

@@ -753,14 +753,14 @@ private:
     void OnScrollUp();
     void OnScrollDown();
 
-    // ── Posicionamiento del sello (Add): SOBRE LA MALLA por defecto; ALT = distancia de brazo ──
-    // INVERTIDO respecto a antes: por defecto el sello se PEGA A LA SUPERFICIE de la arcilla (raymarch)
-    // → esculpís directo sobre la malla. Manteniendo ALT, el sello va al "brazo extendido" (distancia de
-    // cámara). En AMBOS casos el trazo FUSIONA con la base (un solo sólido; ya no hay capas de detalle).
-    bool bSurfaceSnap = true;
+    // ── ALT: pegar el sello a la superficie de la arcilla (solo Add) y esculpir en CAPA de DETALLE ──
+    // Por defecto (sin ALT) el sello va al "brazo extendido" (auto-recto). Con ALT mantenido, en Add el
+    // sello se PEGA a la superficie de la malla existente (raymarch) y el trazo va a una CAPA SEPARADA que
+    // NO se fusiona con la base (para lentes/bigote/detalle apoyado encima).
+    bool bSurfaceSnap = false;
     // ALT y los ejes explícitos Z/X: la última tecla apretada "quema" a la anterior.
     void OnSurfaceSnapPressed();
-    void OnSurfaceSnapReleased() { bSurfaceSnap = true; } // soltar ALT → vuelve a "sobre la malla"
+    void OnSurfaceSnapReleased() { bSurfaceSnap = false; }
     // Latcheado al iniciar el trazo (= Add + Alt en ese momento): mientras dura el trazo, sus sellos
     // van a la capa de detalle y usan el plano congelado, aunque sueltes Alt a mitad de camino.
     bool bStrokeIsDetail = false;

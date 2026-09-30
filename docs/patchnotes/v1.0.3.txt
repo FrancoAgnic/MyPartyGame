@@ -1,0 +1,27 @@
+TITLE: v1.0.3 - Head Sculpt controls, guess flags & bigger Locker
+
+[h2]Sculpturillo v1.0.3[/h2]
+
+[h3]Head Sculpt[/h3]
+[list]
+[*]Added on-screen [b]WASD[/b] buttons to rotate the camera while sculpting your head, with press feedback.
+[*]Camera rotation direction fixed (W/A/S/D now match up/left/down/right).
+[*]The hotbar now shows the [b]right-click[/b] and [b]Backspace[/b] icons, matching the in-game toolbar.
+[/list]
+
+[h3]Guessing[/h3]
+[list]
+[*]When someone guesses the word, the chat now shows the [b]language flag[/b] and in which language they got it.
+[/list]
+
+[h3]Locker[/h3]
+[list]
+[*]More skin slots (now [b]22[/b] heads + 22 bodies).
+[*]The maximum number of slots is now configurable.
+[/list]
+
+[h3]Fixes & polish[/h3]
+[list]
+[*]Disabled the debug overlay in matches.
+[*]Various sculpting and UI polish.
+[/list]
