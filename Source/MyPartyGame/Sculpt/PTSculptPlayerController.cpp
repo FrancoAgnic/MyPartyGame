@@ -339,7 +339,34 @@ void APTSculptPlayerController::BeginPlay()
             LoadingShownAt = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
         }
         GetWorldTimerManager().SetTimer(PropMapLoadTimer, this, &APTSculptPlayerController::TickPropMapLoad, 0.25f, true);
+
+        // Pre-cargar el color picker OCULTO ahora (bajo la pantalla de carga) para que la 1ra apertura real
+        // no frizee ~1s (carga del WBP + assets + shaders). Ver PrewarmColorPicker().
+        PrewarmColorPicker();
     }
+}
+
+void APTSculptPlayerController::PrewarmColorPicker()
+{
+    // El color picker se crea recién la 1ª vez que abrís (clic der.): cargar su WBP + assets (rueda,
+    // cursores, anillo de swatches, fuentes) y compilar sus shaders EN ESE momento produce un freeze de
+    // ~1s (parece que crashea). Para evitarlo, al iniciar la partida creamos UNA instancia OCULTA (render
+    // opacity 0, no hit-testeable) y la mostramos unos frames bajo la pantalla de carga: eso carga todo y
+    // compila los shaders sin que se note. Después la sacamos de pantalla pero la dejamos CACHEADA
+    // (ColorPickerWarm) para que sus texturas NO se liberen por GC. El flujo normal de abrir/cerrar
+    // (OnColorPickPressed/OnColorConfirmed) queda intacto: sigue creando su propia instancia, pero ahora
+    // la clase y los assets ya están en memoria y los shaders compilados → la 1ra apertura es instantánea.
+    if (!ColorPickerClass || ColorPickerWarm || !IsLocalController()) return;
+    ColorPickerWarm = CreateWidget<UUserWidget>(this, ColorPickerClass);
+    if (!ColorPickerWarm) return;
+    ColorPickerWarm->SetRenderOpacity(0.f);                              // invisible pero SE DIBUJA (compila shaders)
+    ColorPickerWarm->SetVisibility(ESlateVisibility::HitTestInvisible);  // que no capture clicks mientras precalienta
+    ColorPickerWarm->AddToViewport(-100);                               // z-order muy bajo: detrás de todo
+    GetWorldTimerManager().SetTimer(ColorPickerWarmTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
+    {
+        // Sacarlo de pantalla, PERO mantener el objeto vivo (sigue referenciado) → texturas no se liberan.
+        if (ColorPickerWarm) ColorPickerWarm->RemoveFromParent();
+    }), 0.6f, false);
 }
 
 void APTSculptPlayerController::HideLoadingScreen()
@@ -451,6 +478,17 @@ void APTSculptPlayerController::PTHideNames()
 {
     if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
         GI->SetHideNames(!GI->AreNamesHidden());
+}
+
+void APTSculptPlayerController::PTGuessPreview()
+{
+    // DEV/TikTok "¿adivinás la palabra?": togglea que el ESCULTOR local vea SU propia palabra con el mismo
+    // filtro que un adivinador (máscara "_ _ N _ E" + letras que se van revelando con el tiempo), en vez de
+    // la palabra completa. Es SOLO visual y local (no toca la partida, ni la red, ni a los demás): seguís
+    // esculpiendo normal. Ideal para grabar clips donde el espectador intenta adivinar lo que modelás.
+    bDevGuessPreview = !bDevGuessPreview;
+    UE_LOG(LogTemp, Log, TEXT("[Dev] GuessPreview (palabra con filtro para el escultor): %s"),
+           bDevGuessPreview ? TEXT("ON") : TEXT("OFF"));
 }
 
 void APTSculptPlayerController::PTCaptureNames()

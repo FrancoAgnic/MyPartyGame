@@ -1,0 +1,8 @@
+TITLE: v1.0.4 - Color picker no longer stutters on first open
+
+[h2]Sculpturillo v1.0.4[/h2]
+
+[h3]Fixes[/h3]
+[list]
+[*]Fixed a ~1 second freeze the first time you opened the [b]color picker[/b] in a new match (it now pre-loads during the loading screen, so the first open is instant).
+[/list]

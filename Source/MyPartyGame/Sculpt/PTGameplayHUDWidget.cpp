@@ -733,6 +733,12 @@ void UPTGameplayHUDWidget::RefreshTick()
     bool bRevealWord = bViewAsSculptor || bLocalGuessed;
     if (bRevealWord && FullKnownWord.IsEmpty()) bRevealWord = false; // no podés mostrar lo que no tenés
 
+    // DEV/TikTok (PTGuessPreview): durante el DIBUJO, mostrarle al ESCULTOR su propia palabra CON FILTRO
+    // (máscara + reveal progresivo), como la vería un adivinador. Solo visual/local. En fase de ELECCIÓN no
+    // aplica (necesita ver las 3 palabras para elegir).
+    const bool bGuessPreview = PC && PC->IsDevGuessPreview() && bSculptor;
+    if (bGuessPreview && G->TurnPhase == EPTTurnPhase::Drawing) bRevealWord = false;
+
     // ── Cartel de TEMA: visible para los que ADIVINAN mientras el escultor elige la palabra; el escultor
     //    (o quien lo especta) NO lo ve. La animación (escala/opacidad) la hace NativeTick por frame. ──
     {
@@ -904,6 +910,19 @@ void UPTGameplayHUDWidget::RefreshTick()
     // solo en ese caso; el resto del tiempo queda interactivo para leer/scrollear el historial.
     if (ChatScroll)
         ChatScroll->SetVisibility(bColorPicker ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Visible);
+
+    // ── DEV/TikTok (PTGuessPreview): dejar en pantalla SOLO palabra + timer + ronda; ocultar el resto
+    //    (chat, hotbar, lista de players). Se aplica AL FINAL, después de RefreshToolbar/RebuildScoreboard,
+    //    para que el refresh normal no lo vuelva a mostrar. Al apagar el flag, esos widgets vuelven solos
+    //    (el refresh normal los controla; acá solo forzamos el ocultado mientras está ON). ──
+    if (PC && PC->IsDevGuessPreview())
+    {
+        auto GP_Hide = [](UWidget* W){ if (W) W->SetVisibility(ESlateVisibility::Collapsed); };
+        GP_Hide(ChatPanel);   GP_Hide(ChatScroll);  GP_Hide(ChatInput);                     // chat
+        GP_Hide(ControlsBox); GP_Hide(ToolsBox);    GP_Hide(ShapesBox);
+        GP_Hide(HintsBox);    GP_Hide(ClearBox);                                            // hotbar
+        GP_Hide(ScoreboardBox);                                                             // lista de players
+    }
 
     // ── Estado de red: iconos arriba a la izquierda, SOLO cuando hay problema (sin texto de debug). ──
     UpdateNetIcons();
@@ -1242,7 +1261,11 @@ void UPTGameplayHUDWidget::UpdateGameplaySounds(APTSculptGameState* G)
     PrevMaskedForReveal = Cur;
 
     // Visual con RETARDO, solo para los que adivinan (no escultor, no quien ya adivinó).
-    const bool bGuesser = !G->IsLocalPlayerSculptor() && !bLocalGuessed;
+    // DEV/TikTok (PTGuessPreview): tratar también al escultor-preview como adivinador, para que vea la
+    // misma animación de letras cayendo que un jugador que intenta adivinar.
+    APTSculptPlayerController* PCg = GetSculptPC();
+    const bool bGuessPreview = PCg && PCg->IsDevGuessPreview() && G->IsLocalPlayerSculptor();
+    const bool bGuesser = (!G->IsLocalPlayerSculptor() || bGuessPreview) && !bLocalGuessed;
     if (bGuesser && UseDelayedReveal())
     {
         // Inicializar la máscara mostrada al entrar. IMPORTANTE: arrancar TODO oculto (mismo largo,

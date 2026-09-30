@@ -379,6 +379,12 @@ public:
     UFUNCTION(Exec) void PTSolo();              // DEV: jugar solo (1 jugador) → arranca el turno ya
     UFUNCTION(Exec) void PTLOD();               // DEV: prende/apaga el LOD real de props (para verlo en el editor)
     UFUNCTION(Exec) void PTLODDebug();          // DEV: overlay del LOD (cilindro + color por etapa + tris)
+    UFUNCTION(Exec) void PTGuessPreview();      // DEV/TikTok "¿adivinás?": el escultor ve SU palabra CON FILTRO
+                                                //   (máscara + letras revelándose), como un adivinador, mientras esculpe
+
+    /** DEV/TikTok: true = al escultor local se le muestra su palabra con el filtro de adivinador (no revelada).
+     *  Local, no afecta la partida ni a los demás. Lo togglea el comando PTGuessPreview. */
+    bool IsDevGuessPreview() const { return bDevGuessPreview; }
 
     // El cliente le avisa al server que entra/sale de espectador (para sacarlo de la partida).
     UFUNCTION(Server, Reliable) void Server_SetSpectator(bool bInSpectator);
@@ -514,11 +520,18 @@ private:
     // Paint a Ojos con el mismo mesh el MID tintado quedaba puesto y el ojo salía del color de Paint.
     bool CachedRingTint = false;
     UPROPERTY() UUserWidget*              ColorPicker       = nullptr;
+    // Instancia OCULTA del color picker pre-cargada al iniciar la partida: evita el freeze de ~1s la 1ra
+    // vez que se abre (carga del WBP + assets + compilación de shaders). Se mantiene cacheada para que sus
+    // texturas no se liberen (GC). No participa del flujo normal de abrir/cerrar. Ver PrewarmColorPicker().
+    UPROPERTY() UUserWidget*              ColorPickerWarm   = nullptr;
+    FTimerHandle ColorPickerWarmTimer;
+    void PrewarmColorPicker();
     UPROPERTY() class UPTShapeRadialWidget* ShapeRadial     = nullptr;
     UPROPERTY() class UPTGameplayHUDWidget* GameplayHUD     = nullptr;
     UPROPERTY() class UPTSpectatorComponent* Spectator      = nullptr;
     uint8 LastReportedTool = 255; // última herramienta enviada al pawn (para replicar al espectador)
     bool bHudHidden = false;
+    bool bDevGuessPreview = false; // DEV/TikTok: mostrarle al escultor su palabra con filtro (ver PTGuessPreview)
     // Al llegar a Lvl-01 desde el lobby, si venías de espectador (bIsDevSpectator persiste por CopyProperties)
     // re-activamos el free-cam automáticamente. One-shot con ventana para esperar la replicación del flag.
     bool  bAutoSpectateApplied = false;
