@@ -107,12 +107,12 @@
 
   <!-- INTRO -->
   <div class="card">
-    <p class="es">En Sculpturillo podés crear tu propio contenido y compartirlo por el <b>Steam Workshop</b>: otros se suscriben, lo descargan y lo usan en sus partidas. Hoy podés crear <b>bancos de palabras</b>; los <b>mapas</b> llegarán pronto.</p>
-    <p class="en">In Sculpturillo you can create your own content and share it through the <b>Steam Workshop</b>: others subscribe, download it, and use it in their games. Today you can make <b>word banks</b>; <b>maps</b> are coming soon.</p>
-    <p class="pt">No Sculpturillo você pode criar seu próprio conteúdo e compartilhá-lo pela <b>Steam Workshop</b>: outros se inscrevem, baixam e usam nas partidas. Hoje você pode criar <b>bancos de palavras</b>; os <b>mapas</b> chegam em breve.</p>
-    <p class="de">In Sculpturillo kannst du eigene Inhalte erstellen und über den <b>Steam Workshop</b> teilen: andere abonnieren sie, laden sie herunter und nutzen sie in ihren Spielen. Heute kannst du <b>Wortbänke</b> erstellen; <b>Karten</b> folgen bald.</p>
-    <p class="fr">Dans Sculpturillo, tu peux créer ton propre contenu et le partager via le <b>Steam Workshop</b> : d'autres s'y abonnent, le téléchargent et l'utilisent dans leurs parties. Aujourd'hui tu peux créer des <b>banques de mots</b> ; les <b>cartes</b> arrivent bientôt.</p>
-    <p class="it">In Sculpturillo puoi creare i tuoi contenuti e condividerli tramite lo <b>Steam Workshop</b>: altri si iscrivono, li scaricano e li usano nelle partite. Oggi puoi creare <b>banche di parole</b>; le <b>mappe</b> arriveranno presto.</p>
+    <p class="es">En Sculpturillo podés crear tu propio contenido y compartirlo por el <b>Steam Workshop</b>: otros se suscriben, lo descargan y lo usan en sus partidas. Hoy podés crear <b>bancos de palabras</b> y <b>mapas</b> con su propio escenario.</p>
+    <p class="en">In Sculpturillo you can create your own content and share it through the <b>Steam Workshop</b>: others subscribe, download it, and use it in their games. Today you can make <b>word banks</b> and <b>maps</b> with their own scenery.</p>
+    <p class="pt">No Sculpturillo você pode criar seu próprio conteúdo e compartilhá-lo pela <b>Steam Workshop</b>: outros se inscrevem, baixam e usam nas partidas. Hoje você pode criar <b>bancos de palavras</b> e <b>mapas</b> com cenário próprio.</p>
+    <p class="de">In Sculpturillo kannst du eigene Inhalte erstellen und über den <b>Steam Workshop</b> teilen: andere abonnieren sie, laden sie herunter und nutzen sie in ihren Spielen. Heute kannst du <b>Wortbänke</b> und <b>Karten</b> mit eigener Szenerie erstellen.</p>
+    <p class="fr">Dans Sculpturillo, tu peux créer ton propre contenu et le partager via le <b>Steam Workshop</b> : d'autres s'y abonnent, le téléchargent et l'utilisent dans leurs parties. Aujourd'hui tu peux créer des <b>banques de mots</b> et des <b>cartes</b> avec leur propre décor.</p>
+    <p class="it">In Sculpturillo puoi creare i tuoi contenuti e condividerli tramite lo <b>Steam Workshop</b>: altri si iscrivono, li scaricano e li usano nelle partite. Oggi puoi creare <b>banche di parole</b> e <b>mappe</b> con scenario proprio.</p>
   </div>
 
   <!-- WORD BANKS -->
@@ -287,13 +287,167 @@ Sun</pre>
 
   <!-- MAPS -->
   <div class="card">
-    <h2><span class="es">Mapas</span><span class="en">Maps</span><span class="pt">Mapas</span><span class="de">Karten</span><span class="fr">Cartes</span><span class="it">Mappe</span> <span class="pill soon"><span class="es">Próximamente</span><span class="en">Coming soon</span><span class="pt">Em breve</span><span class="de">Demnächst</span><span class="fr">Bientôt</span><span class="it">Prossimamente</span></span> <span class="pill">tag: Map</span></h2>
-    <p class="es">Los mapas custom (con su propio escenario) van a necesitar Unreal Engine y un kit de modding. Estamos trabajando en eso — cuando esté, actualizamos esta guía.</p>
-    <p class="en">Custom maps (with their own scenery) will need Unreal Engine and a modding kit. We're working on it — this guide will be updated when it's ready.</p>
-    <p class="pt">Os mapas personalizados (com cenário próprio) vão precisar da Unreal Engine e de um kit de modding. Estamos trabalhando nisso — quando estiver pronto, atualizamos este guia.</p>
-    <p class="de">Eigene Karten (mit eigener Szenerie) benötigen die Unreal Engine und ein Modding-Kit. Wir arbeiten daran — sobald es fertig ist, aktualisieren wir diese Anleitung.</p>
-    <p class="fr">Les cartes personnalisées (avec leur propre décor) nécessiteront Unreal Engine et un kit de modding. On y travaille — ce guide sera mis à jour quand ce sera prêt.</p>
-    <p class="it">Le mappe personalizzate (con scenario proprio) richiederanno Unreal Engine e un kit di modding. Ci stiamo lavorando — quando sarà pronto aggiorneremo questa guida.</p>
+    <h2><span class="es">Mapas</span><span class="en">Maps</span><span class="pt">Mapas</span><span class="de">Karten</span><span class="fr">Cartes</span><span class="it">Mappe</span> <span class="pill">tag: Map</span></h2>
+
+    <p class="es">Los mapas te dejan construir tu propio <b>escenario</b> y compartirlo por el Workshop. Se hacen <b>dentro del juego</b> con el <b>Level Creator</b> (la misma mecánica de arcilla), sin programas externos ni Unreal.</p>
+    <p class="en">Maps let you build your own <b>scenery</b> and share it through the Workshop. You make them <b>inside the game</b> with the <b>Level Creator</b> (the same clay mechanic) — no external tools or Unreal needed.</p>
+    <p class="pt">Os mapas permitem construir seu próprio <b>cenário</b> e compartilhá-lo pela Workshop. Você os faz <b>dentro do jogo</b> com o <b>Level Creator</b> (a mesma mecânica de argila), sem programas externos nem Unreal.</p>
+    <p class="de">Mit Karten baust du deine eigene <b>Szenerie</b> und teilst sie über den Workshop. Du erstellst sie <b>im Spiel</b> mit dem <b>Level Creator</b> (dieselbe Ton-Mechanik) — ohne externe Programme oder Unreal.</p>
+    <p class="fr">Les cartes te permettent de construire ton propre <b>décor</b> et de le partager via le Workshop. Tu les crées <b>dans le jeu</b> avec le <b>Level Creator</b> (la même mécanique d'argile), sans logiciel externe ni Unreal.</p>
+    <p class="it">Le mappe ti permettono di costruire il tuo <b>scenario</b> e condividerlo tramite la Workshop. Le crei <b>dentro il gioco</b> con il <b>Level Creator</b> (la stessa meccanica di argilla), senza programmi esterni né Unreal.</p>
+
+    <h3 class="es">Los dos modos</h3>
+    <h3 class="en">The two modes</h3>
+    <h3 class="pt">Os dois modos</h3>
+    <h3 class="de">Die zwei Modi</h3>
+    <h3 class="fr">Les deux modes</h3>
+    <h3 class="it">Le due modalità</h3>
+    <p class="es">El editor tiene un <b>cubo</b> en el centro. El modo cambia solo según dónde apuntes: <b>dentro del cubo</b> modelás una pieza; <b>fuera del cubo</b> editás el nivel (colocás piezas en el escenario).</p>
+    <p class="en">The editor has a <b>box</b> in the middle. The mode switches automatically depending on where you aim: <b>inside the box</b> you model a piece; <b>outside the box</b> you edit the level (place pieces in the scenery).</p>
+    <p class="pt">O editor tem um <b>cubo</b> no centro. O modo muda sozinho conforme para onde você aponta: <b>dentro do cubo</b> você modela uma peça; <b>fora do cubo</b> você edita o nível (coloca peças no cenário).</p>
+    <p class="de">Der Editor hat in der Mitte einen <b>Würfel</b>. Der Modus wechselt automatisch je nachdem, wohin du zielst: <b>im Würfel</b> modellierst du ein Teil; <b>außerhalb des Würfels</b> bearbeitest du das Level (platzierst Teile in der Szenerie).</p>
+    <p class="fr">L'éditeur a un <b>cube</b> au centre. Le mode change tout seul selon où tu vises : <b>dans le cube</b> tu modèles une pièce ; <b>hors du cube</b> tu édites le niveau (tu places des pièces dans le décor).</p>
+    <p class="it">L'editor ha un <b>cubo</b> al centro. La modalità cambia da sola in base a dove punti: <b>dentro il cubo</b> modelli un pezzo; <b>fuori dal cubo</b> modifichi il livello (posizioni i pezzi nello scenario).</p>
+    <ul>
+      <li class="es"><b>Modo Escultura</b> (dentro del cubo, se tiñe de verde): modelás una pieza con la arcilla — <code>1</code> Agregar, <code>2</code> Borrar, <code>Tab</code> formas, <code>clic der.</code> color, <code>4</code> ojos, <code>Z/X</code> trazos rectos, <code>rueda</code> tamaño de brocha.</li>
+      <li class="en"><b>Sculpt mode</b> (inside the box, it glows green): you model a piece with the clay — <code>1</code> Add, <code>2</code> Erase, <code>Tab</code> shapes, <code>right-click</code> color, <code>4</code> eyes, <code>Z/X</code> straight strokes, <code>wheel</code> brush size.</li>
+      <li class="pt"><b>Modo Escultura</b> (dentro do cubo, fica verde): você modela uma peça com a argila — <code>1</code> Adicionar, <code>2</code> Apagar, <code>Tab</code> formas, <code>botão dir.</code> cor, <code>4</code> olhos, <code>Z/X</code> traços retos, <code>roda</code> tamanho do pincel.</li>
+      <li class="de"><b>Skulptur-Modus</b> (im Würfel, leuchtet grün): Du modellierst ein Teil mit dem Ton — <code>1</code> Hinzufügen, <code>2</code> Löschen, <code>Tab</code> Formen, <code>Rechtsklick</code> Farbe, <code>4</code> Augen, <code>Z/X</code> gerade Striche, <code>Rad</code> Pinselgröße.</li>
+      <li class="fr"><b>Mode Sculpture</b> (dans le cube, il devient vert) : tu modèles une pièce avec l'argile — <code>1</code> Ajouter, <code>2</code> Effacer, <code>Tab</code> formes, <code>clic droit</code> couleur, <code>4</code> yeux, <code>Z/X</code> traits droits, <code>molette</code> taille du pinceau.</li>
+      <li class="it"><b>Modalità Scultura</b> (dentro il cubo, diventa verde): modelli un pezzo con l'argilla — <code>1</code> Aggiungi, <code>2</code> Cancella, <code>Tab</code> forme, <code>tasto dx</code> colore, <code>4</code> occhi, <code>Z/X</code> tratti dritti, <code>rotella</code> dimensione del pennello.</li>
+      <li class="es"><b>Modo Edición de Nivel</b> (fuera del cubo): colocás tus piezas ya cocinadas como props del escenario — <code>1</code> colocar, <code>2</code> borrar, <code>Tab</code> elegir pieza, <code>rueda</code> escala, <code>F</code> panel de ambiente (cielo/luz).</li>
+      <li class="en"><b>Level Editor mode</b> (outside the box): you place your cooked pieces as props in the scenery — <code>1</code> place, <code>2</code> remove, <code>Tab</code> pick a piece, <code>wheel</code> scale, <code>F</code> ambient panel (sky/light).</li>
+      <li class="pt"><b>Modo Editor de Nível</b> (fora do cubo): você coloca suas peças já cozidas como props do cenário — <code>1</code> colocar, <code>2</code> remover, <code>Tab</code> escolher peça, <code>roda</code> escala, <code>F</code> painel de ambiente (céu/luz).</li>
+      <li class="de"><b>Level-Editor-Modus</b> (außerhalb des Würfels): Du platzierst deine gebackenen Teile als Props in der Szenerie — <code>1</code> platzieren, <code>2</code> entfernen, <code>Tab</code> Teil wählen, <code>Rad</code> Skalierung, <code>F</code> Umgebungspanel (Himmel/Licht).</li>
+      <li class="fr"><b>Mode Éditeur de niveau</b> (hors du cube) : tu places tes pièces cuites comme décors — <code>1</code> placer, <code>2</code> retirer, <code>Tab</code> choisir une pièce, <code>molette</code> échelle, <code>F</code> panneau d'ambiance (ciel/lumière).</li>
+      <li class="it"><b>Modalità Editor di Livello</b> (fuori dal cubo): posizioni i tuoi pezzi già cotti come prop dello scenario — <code>1</code> posiziona, <code>2</code> rimuovi, <code>Tab</code> scegli un pezzo, <code>rotella</code> scala, <code>F</code> pannello ambiente (cielo/luce).</li>
+    </ul>
+
+    <h3 class="es">Modelar y cocinar una pieza</h3>
+    <h3 class="en">Model &amp; cook a piece</h3>
+    <h3 class="pt">Modelar e cozinhar uma peça</h3>
+    <h3 class="de">Ein Teil modellieren &amp; backen</h3>
+    <h3 class="fr">Modéliser &amp; cuire une pièce</h3>
+    <h3 class="it">Modellare e cuocere un pezzo</h3>
+    <ol>
+      <li class="es">Poné el cursor <b>dentro del cubo</b> (modo Escultura) y modelá tu objeto con la arcilla, igual que en el juego.</li>
+      <li class="en">Put the cursor <b>inside the box</b> (Sculpt mode) and model your object with the clay, just like in the game.</li>
+      <li class="pt">Coloque o cursor <b>dentro do cubo</b> (modo Escultura) e modele seu objeto com a argila, como no jogo.</li>
+      <li class="de">Setze den Cursor <b>in den Würfel</b> (Skulptur-Modus) und modelliere dein Objekt mit dem Ton, wie im Spiel.</li>
+      <li class="fr">Place le curseur <b>dans le cube</b> (mode Sculpture) et modèle ton objet avec l'argile, comme en jeu.</li>
+      <li class="it">Metti il cursore <b>dentro il cubo</b> (modalità Scultura) e modella il tuo oggetto con l'argilla, come nel gioco.</li>
+      <li class="es">Cuando esté listo, <b>mantené <code>Enter</code></b> (dentro del cubo). Una línea de luz barre de abajo hacia arriba (como una impresora 3D) mientras se carga.</li>
+      <li class="en">When it's ready, <b>hold <code>Enter</code></b> (inside the box). A line of light sweeps from bottom to top (like a 3D printer) as it charges up.</li>
+      <li class="pt">Quando estiver pronto, <b>segure <code>Enter</code></b> (dentro do cubo). Uma linha de luz varre de baixo para cima (como uma impressora 3D) enquanto carrega.</li>
+      <li class="de">Wenn es fertig ist, <b>halte <code>Enter</code></b> (im Würfel). Eine Lichtlinie wandert von unten nach oben (wie ein 3D-Drucker), während es auflädt.</li>
+      <li class="fr">Quand c'est prêt, <b>maintiens <code>Entrée</code></b> (dans le cube). Une ligne de lumière balaie de bas en haut (comme une imprimante 3D) pendant le chargement.</li>
+      <li class="it">Quando è pronto, <b>tieni premuto <code>Invio</code></b> (dentro il cubo). Una linea di luce scorre dal basso verso l'alto (come una stampante 3D) mentre si carica.</li>
+      <li class="es">Al llenarse, entrás al <b>modo Pivote</b> para elegir el ancla de la pieza (ver abajo).</li>
+      <li class="en">Once it fills, you enter <b>Pivot mode</b> to choose the piece's anchor (see below).</li>
+      <li class="pt">Ao encher, você entra no <b>modo Pivô</b> para escolher a âncora da peça (veja abaixo).</li>
+      <li class="de">Sobald sie voll ist, gelangst du in den <b>Pivot-Modus</b>, um den Ankerpunkt des Teils zu wählen (siehe unten).</li>
+      <li class="fr">Une fois remplie, tu passes en <b>mode Pivot</b> pour choisir l'ancrage de la pièce (voir ci-dessous).</li>
+      <li class="it">Quando si riempie, entri in <b>modalità Pivot</b> per scegliere l'ancora del pezzo (vedi sotto).</li>
+    </ol>
+
+    <h3 class="es">Qué es el Pivote</h3>
+    <h3 class="en">What is the Pivot</h3>
+    <h3 class="pt">O que é o Pivô</h3>
+    <h3 class="de">Was ist der Pivot</h3>
+    <h3 class="fr">Qu'est-ce que le Pivot</h3>
+    <h3 class="it">Cos'è il Pivot</h3>
+    <p class="es">El <b>pivote</b> es el <b>punto de anclaje</b> (origen) de la pieza: es el punto que se apoya donde la colocás (en el piso, bajo el cursor) y alrededor del cual escala y rota. Un buen pivote hace que la pieza quede derecha y donde esperás.</p>
+    <p class="en">The <b>pivot</b> is the piece's <b>anchor point</b> (origin): it's the point that rests where you place it (on the ground, under the cursor) and the point it scales and rotates around. A good pivot makes the piece sit straight and where you expect.</p>
+    <p class="pt">O <b>pivô</b> é o <b>ponto de âncora</b> (origem) da peça: é o ponto que se apoia onde você a coloca (no chão, sob o cursor) e ao redor do qual ela escala e gira. Um bom pivô faz a peça ficar reta e onde você espera.</p>
+    <p class="de">Der <b>Pivot</b> ist der <b>Ankerpunkt</b> (Ursprung) des Teils: der Punkt, der dort aufliegt, wo du es platzierst (auf dem Boden, unter dem Cursor), und um den es skaliert und rotiert. Ein guter Pivot lässt das Teil gerade und dort sitzen, wo du es erwartest.</p>
+    <p class="fr">Le <b>pivot</b> est le <b>point d'ancrage</b> (origine) de la pièce : c'est le point qui se pose là où tu la places (au sol, sous le curseur) et autour duquel elle s'échelonne et tourne. Un bon pivot fait que la pièce se pose droite et là où tu l'attends.</p>
+    <p class="it">Il <b>pivot</b> è il <b>punto di ancoraggio</b> (origine) del pezzo: è il punto che si appoggia dove lo posizioni (a terra, sotto il cursore) e attorno al quale scala e ruota. Un buon pivot fa sì che il pezzo stia dritto e dove te lo aspetti.</p>
+    <ul>
+      <li class="es">En modo Pivote aparece un <b>marcador</b> que sigue al cursor sobre tu modelo. Movelo a donde quieras el ancla (normalmente la <b>base</b> de la pieza).</li>
+      <li class="en">In Pivot mode a <b>marker</b> follows the cursor over your model. Move it to where you want the anchor (usually the <b>base</b> of the piece).</li>
+      <li class="pt">No modo Pivô aparece um <b>marcador</b> que segue o cursor sobre seu modelo. Mova-o para onde quiser a âncora (normalmente a <b>base</b> da peça).</li>
+      <li class="de">Im Pivot-Modus folgt ein <b>Marker</b> dem Cursor über deinem Modell. Bewege ihn dorthin, wo du den Anker willst (meist die <b>Basis</b> des Teils).</li>
+      <li class="fr">En mode Pivot, un <b>marqueur</b> suit le curseur sur ton modèle. Déplace-le où tu veux l'ancrage (généralement la <b>base</b> de la pièce).</li>
+      <li class="it">In modalità Pivot un <b>marcatore</b> segue il cursore sul tuo modello. Spostalo dove vuoi l'ancora (di solito la <b>base</b> del pezzo).</li>
+      <li class="es"><b>Clic izquierdo</b> confirma el pivote y <b>cocina</b> la pieza. <code>Backspace</code> cancela.</li>
+      <li class="en"><b>Left-click</b> confirms the pivot and <b>cooks</b> the piece. <code>Backspace</code> cancels.</li>
+      <li class="pt"><b>Clique esquerdo</b> confirma o pivô e <b>cozinha</b> a peça. <code>Backspace</code> cancela.</li>
+      <li class="de"><b>Linksklick</b> bestätigt den Pivot und <b>backt</b> das Teil. <code>Rücktaste</code> bricht ab.</li>
+      <li class="fr"><b>Clic gauche</b> confirme le pivot et <b>cuit</b> la pièce. <code>Retour arrière</code> annule.</li>
+      <li class="it"><b>Clic sinistro</b> conferma il pivot e <b>cuoce</b> il pezzo. <code>Backspace</code> annulla.</li>
+      <li class="es">Al cocinar, el cubo se limpia y la pieza queda <b>guardada en tu paleta</b> para colocarla en el escenario.</li>
+      <li class="en">After cooking, the box clears and the piece is <b>saved to your palette</b> to place in the scenery.</li>
+      <li class="pt">Após cozinhar, o cubo se limpa e a peça fica <b>salva na sua paleta</b> para colocar no cenário.</li>
+      <li class="de">Nach dem Backen leert sich der Würfel und das Teil wird <b>in deiner Palette gespeichert</b>, um es in der Szenerie zu platzieren.</li>
+      <li class="fr">Après la cuisson, le cube se vide et la pièce est <b>enregistrée dans ta palette</b> pour la placer dans le décor.</li>
+      <li class="it">Dopo la cottura, il cubo si svuota e il pezzo viene <b>salvato nella tua palette</b> per posizionarlo nello scenario.</li>
+    </ul>
+
+    <h3 class="es">Colocarla en el escenario</h3>
+    <h3 class="en">Place it in the scenery</h3>
+    <h3 class="pt">Colocar no cenário</h3>
+    <h3 class="de">In der Szenerie platzieren</h3>
+    <h3 class="fr">La placer dans le décor</h3>
+    <h3 class="it">Posizionarla nello scenario</h3>
+    <ol>
+      <li class="es">Alejá el cursor <b>fuera del cubo</b> → pasás a <b>Edición de Nivel</b>.</li>
+      <li class="en">Move the cursor <b>outside the box</b> → you switch to <b>Level Editor</b>.</li>
+      <li class="pt">Afaste o cursor <b>para fora do cubo</b> → você passa para <b>Editor de Nível</b>.</li>
+      <li class="de">Bewege den Cursor <b>aus dem Würfel heraus</b> → du wechselst zum <b>Level-Editor</b>.</li>
+      <li class="fr">Éloigne le curseur <b>hors du cube</b> → tu passes en <b>Éditeur de niveau</b>.</li>
+      <li class="it">Allontana il cursore <b>fuori dal cubo</b> → passi all'<b>Editor di Livello</b>.</li>
+      <li class="es"><code>Tab</code> abre la <b>paleta</b>: elegí la pieza que cocinaste (o piezas base incluidas).</li>
+      <li class="en"><code>Tab</code> opens the <b>palette</b>: pick the piece you cooked (or the built-in base pieces).</li>
+      <li class="pt"><code>Tab</code> abre a <b>paleta</b>: escolha a peça que você cozinhou (ou as peças base incluídas).</li>
+      <li class="de"><code>Tab</code> öffnet die <b>Palette</b>: Wähle das gebackene Teil (oder die enthaltenen Basisteile).</li>
+      <li class="fr"><code>Tab</code> ouvre la <b>palette</b> : choisis la pièce que tu as cuite (ou les pièces de base incluses).</li>
+      <li class="it"><code>Tab</code> apre la <b>palette</b>: scegli il pezzo che hai cotto (o i pezzi base inclusi).</li>
+      <li class="es"><code>Rueda</code> para escalar, <b>clic izquierdo</b> para <b>colocar</b> una instancia, <code>2</code> (Borrar) para sacar las que toques.</li>
+      <li class="en"><code>Wheel</code> to scale, <b>left-click</b> to <b>place</b> an instance, <code>2</code> (Erase) to remove the ones you touch.</li>
+      <li class="pt"><code>Roda</code> para escalar, <b>clique esquerdo</b> para <b>colocar</b> uma instância, <code>2</code> (Apagar) para remover as que tocar.</li>
+      <li class="de"><code>Rad</code> zum Skalieren, <b>Linksklick</b> zum <b>Platzieren</b> einer Instanz, <code>2</code> (Löschen) entfernt die berührten.</li>
+      <li class="fr"><code>Molette</code> pour l'échelle, <b>clic gauche</b> pour <b>placer</b> une instance, <code>2</code> (Effacer) pour retirer celles que tu touches.</li>
+      <li class="it"><code>Rotella</code> per scalare, <b>clic sinistro</b> per <b>posizionare</b> un'istanza, <code>2</code> (Cancella) per rimuovere quelle che tocchi.</li>
+      <li class="es"><code>F</code> abre el panel de <b>ambiente</b> (cielo/luz). Los <b>marcadores de spawn</b> de los jugadores se muestran para que no los tapes.</li>
+      <li class="en"><code>F</code> opens the <b>ambient</b> panel (sky/light). Player <b>spawn markers</b> are shown so you don't cover them.</li>
+      <li class="pt"><code>F</code> abre o painel de <b>ambiente</b> (céu/luz). Os <b>marcadores de spawn</b> dos jogadores são mostrados para você não cobri-los.</li>
+      <li class="de"><code>F</code> öffnet das <b>Umgebungspanel</b> (Himmel/Licht). Die <b>Spawn-Marker</b> der Spieler werden angezeigt, damit du sie nicht verdeckst.</li>
+      <li class="fr"><code>F</code> ouvre le panneau d'<b>ambiance</b> (ciel/lumière). Les <b>marqueurs de spawn</b> des joueurs sont affichés pour ne pas les couvrir.</li>
+      <li class="it"><code>F</code> apre il pannello <b>ambiente</b> (cielo/luce). I <b>marcatori di spawn</b> dei giocatori sono mostrati così non li copri.</li>
+    </ol>
+
+    <h3 class="es">Guardar y publicar</h3>
+    <h3 class="en">Save &amp; publish</h3>
+    <h3 class="pt">Salvar e publicar</h3>
+    <h3 class="de">Speichern &amp; veröffentlichen</h3>
+    <h3 class="fr">Enregistrer &amp; publier</h3>
+    <h3 class="it">Salvare e pubblicare</h3>
+    <ol>
+      <li class="es">Abrí el juego → <b>Workshop</b> → pestaña <b>Mapas</b> → <b>Crear mapa</b> (poné título y descripción) → entrás al Level Creator.</li>
+      <li class="en">Open the game → <b>Workshop</b> → <b>Maps</b> tab → <b>Create map</b> (set title and description) → you enter the Level Creator.</li>
+      <li class="pt">Abra o jogo → <b>Workshop</b> → aba <b>Mapas</b> → <b>Criar mapa</b> (coloque título e descrição) → você entra no Level Creator.</li>
+      <li class="de">Öffne das Spiel → <b>Workshop</b> → Reiter <b>Karten</b> → <b>Karte erstellen</b> (Titel und Beschreibung eingeben) → du gelangst in den Level Creator.</li>
+      <li class="fr">Ouvre le jeu → <b>Workshop</b> → onglet <b>Cartes</b> → <b>Créer une carte</b> (mets un titre et une description) → tu entres dans le Level Creator.</li>
+      <li class="it">Apri il gioco → <b>Workshop</b> → scheda <b>Mappe</b> → <b>Crea mappa</b> (metti titolo e descrizione) → entri nel Level Creator.</li>
+      <li class="es">Cuando termines, <b>Guardar y salir</b>.</li>
+      <li class="en">When you're done, <b>Save and exit</b>.</li>
+      <li class="pt">Quando terminar, <b>Salvar e sair</b>.</li>
+      <li class="de">Wenn du fertig bist, <b>Speichern und beenden</b>.</li>
+      <li class="fr">Quand tu as fini, <b>Enregistrer et quitter</b>.</li>
+      <li class="it">Quando hai finito, <b>Salva ed esci</b>.</li>
+      <li class="es">Publicá desde <b>Workshop → Mapas → Publicar</b>. Tu mapa lleva la etiqueta <code>Map</code>. La primera vez, Steam te pide aceptar el acuerdo del Workshop.</li>
+      <li class="en">Publish from <b>Workshop → Maps → Publish</b>. Your map gets the <code>Map</code> tag. The first time, Steam asks you to accept the Workshop agreement.</li>
+      <li class="pt">Publique em <b>Workshop → Mapas → Publicar</b>. Seu mapa recebe a etiqueta <code>Map</code>. Na primeira vez, a Steam pede para aceitar o acordo do Workshop.</li>
+      <li class="de">Veröffentliche über <b>Workshop → Karten → Veröffentlichen</b>. Deine Karte erhält den Tag <code>Map</code>. Beim ersten Mal bittet dich Steam, die Workshop-Vereinbarung zu akzeptieren.</li>
+      <li class="fr">Publie depuis <b>Workshop → Cartes → Publier</b>. Ta carte reçoit l'étiquette <code>Map</code>. La première fois, Steam te demande d'accepter l'accord du Workshop.</li>
+      <li class="it">Pubblica da <b>Workshop → Mappe → Pubblica</b>. La tua mappa riceve l'etichetta <code>Map</code>. La prima volta, Steam ti chiede di accettare l'accordo del Workshop.</li>
+      <li class="es">Para usarlo: suscribite al mapa y elegilo en <b>Game Settings → Biblioteca → Mapas</b> al crear una partida.</li>
+      <li class="en">To use it: subscribe to the map and pick it in <b>Game Settings → Library → Maps</b> when hosting a game.</li>
+      <li class="pt">Para usar: inscreva-se no mapa e escolha-o em <b>Game Settings → Biblioteca → Mapas</b> ao criar uma partida.</li>
+      <li class="de">Zum Nutzen: Abonniere die Karte und wähle sie in <b>Game Settings → Bibliothek → Karten</b> beim Erstellen eines Spiels.</li>
+      <li class="fr">Pour l'utiliser : abonne-toi à la carte et choisis-la dans <b>Game Settings → Bibliothèque → Cartes</b> en créant une partie.</li>
+      <li class="it">Per usarla: iscriviti alla mappa e sceglila in <b>Game Settings → Libreria → Mappe</b> quando crei una partita.</li>
+    </ol>
   </div>
 
   <div class="madeby">
