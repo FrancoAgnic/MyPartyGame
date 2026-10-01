@@ -21,6 +21,9 @@
 #include "IDesktopPlatform.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Blueprint/UserWidget.h"
+#if WITH_GAMEPLAY_DEBUGGER
+#include "GameplayDebuggerConfig.h" // para desbindear la tecla del GameplayDebugger a prueba de todo
+#endif
 #include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
 #include "Sound/SoundBase.h"
@@ -544,6 +547,17 @@ void UPTGameInstance::ApplyUIButtonSounds(UUserWidget* Root) const
 void UPTGameInstance::Init()
 {
     Super::Init();
+
+#if WITH_GAMEPLAY_DEBUGGER
+    // Blindar el GameplayDebugger (tecla ' ): si se activa, TOMA el input y rompe el gameplay (no se puede
+    // jugar). Ya está desbindeado por config (DefaultEngine.ini → ActivationKey Key=None), pero además lo
+    // forzamos acá en runtime, ANTES de que exista cualquier PlayerController (que es cuando se bindea la
+    // tecla), para que NO se pueda abrir bajo NINGUNA circunstancia — ni aunque alguien edite su Engine.ini
+    // local. Es un módulo del engine (no se puede compilar afuera con el engine del launcher): esta es la
+    // forma definitiva. (Corre también en PIE/standalone; en el viewport del editor sin PIE no aplica.)
+    if (UGameplayDebuggerConfig* Cfg = GetMutableDefault<UGameplayDebuggerConfig>())
+        Cfg->ActivationKey = FKey(); // None → ninguna tecla lo activa
+#endif
 
     if (GEngine)
     {

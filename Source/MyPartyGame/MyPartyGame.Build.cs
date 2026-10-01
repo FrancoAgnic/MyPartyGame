@@ -48,6 +48,11 @@ public class MyPartyGame : ModuleRules
 		// Shipping habría que incluirlo aparte. Solo escritorio.
 		PrivateDependencyModuleNames.AddRange(new string[] { "DesktopPlatform" });
 
+		// GameplayDebugger: SOLO para blindar su desactivación en runtime (forzar ActivationKey=None en el
+		// GameInstance). Es un módulo del engine (no se puede compilar afuera con el engine del launcher),
+		// así que lo referenciamos para desbindearle la tecla a prueba de todo. Ver UPTGameInstance::Init.
+		PrivateDependencyModuleNames.Add("GameplayDebugger");
+
 		// Steamworks SDK directo — para FPTSteamWorldwideSearch/FPTSteamDirectJoin que llaman
 		// a RequestLobbyList con k_ELobbyDistanceFilterWorldwide, bypasseando el filtro regional
 		// hardcodeado en OnlineSessionAsyncLobbySteam.cpp del engine.

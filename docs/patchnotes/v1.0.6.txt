@@ -1,0 +1,8 @@
+TITLE: v1.0.6 - Gameplay debugger fully locked out
+
+[h2]Sculpturillo v1.0.6[/h2]
+
+[h3]Fixes[/h3]
+[list]
+[*]Hard-disabled the engine's gameplay debugger so it can no longer be triggered in-game (it could take over input and break a match). It's now forced off at startup, no matter what.
+[/list]
