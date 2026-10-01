@@ -1,0 +1,8 @@
+TITLE: v1.0.5 - Locked the developer console
+
+[h2]Sculpturillo v1.0.5[/h2]
+
+[h3]Changes[/h3]
+[list]
+[*]Disabled the in-game developer console for players (no more opening it with [b]~[/b] or [b]|[/b]), to keep matches fair.
+[/list]
