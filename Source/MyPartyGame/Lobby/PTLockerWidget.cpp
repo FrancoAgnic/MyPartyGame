@@ -6,6 +6,7 @@
 #include "PTLobbyPlayerController.h"
 #include "PTLobbyCharacter.h"
 #include "../PTTextTable.h"
+#include "../UI/PTSkinWorkshopWidget.h"
 #include "Components/PanelWidget.h"
 #include "Components/PanelSlot.h"
 #include "Components/UniformGridPanel.h"
@@ -22,10 +23,22 @@ void UPTLockerWidget::NativeConstruct()
     if (AssignButton)     AssignButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnAssignClicked);
     if (EditActionButton) EditActionButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnEditClicked);
     if (BackButton)       BackButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnBackClicked);
+    if (SkinWorkshopButton)
+    {
+        SkinWorkshopButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnSkinWorkshopClicked);
+        if (!SkinWorkshopClass) SkinWorkshopButton->SetVisibility(ESlateVisibility::Collapsed); // sin WBP asignado
+    }
     // Equipar = click en slot lleno; Crear = click en slot vacío. Ya no hay botón "Asignar/Crear".
     if (AssignButton)     AssignButton->SetVisibility(ESlateVisibility::Collapsed);
     BuildSlots();
     SwitchTab(0);
+}
+
+void UPTLockerWidget::NativeDestruct()
+{
+    // El popup vive en el viewport aparte: si el Locker se cierra, que no quede flotando.
+    if (SkinWorkshop) { SkinWorkshop->RemoveFromParent(); SkinWorkshop = nullptr; }
+    Super::NativeDestruct();
 }
 
 UPTLockerSubsystem* UPTLockerWidget::Locker() const
@@ -257,6 +270,29 @@ void UPTLockerWidget::OnHeadTabClicked() { SwitchTab(0); }
 void UPTLockerWidget::OnBodyTabClicked() { SwitchTab(1); }
 void UPTLockerWidget::OnAssignClicked()  { ActivateSelected(); }
 void UPTLockerWidget::OnEditClicked()    { EditEquipped(); }
+void UPTLockerWidget::OnSkinWorkshopClicked()
+{
+    if (!SkinWorkshopClass) return;
+    if (bPreviewingHover) EndHoverPreview(); // que el personaje muestre lo equipado
+    if (!SkinWorkshop)
+    {
+        SkinWorkshop = CreateWidget<UPTSkinWorkshopWidget>(GetOwningPlayer(), SkinWorkshopClass);
+        if (!SkinWorkshop) return;
+        SkinWorkshop->AddToViewport(60); // por encima del Locker (50)
+    }
+    SkinWorkshop->ShowPanel(this);
+}
+
+bool UPTLockerWidget::IsSkinWorkshopOpen() const
+{
+    return SkinWorkshop && SkinWorkshop->IsInViewport() && SkinWorkshop->IsVisible();
+}
+
+void UPTLockerWidget::CloseSkinWorkshop()
+{
+    if (SkinWorkshop) SkinWorkshop->ClosePanel();
+}
+
 void UPTLockerWidget::OnBackClicked()
 {
     if (APTLobbyPlayerController* PC = LobbyPC()) PC->CloseLocker();
@@ -276,6 +312,12 @@ FReply UPTLockerWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyE
         return FReply::Unhandled();
 
     const FKey Key = InKeyEvent.GetKey();
+    // Con el Skin Workshop abierto, el Locker de fondo no navega: Esc cierra el popup (no el Locker).
+    if (IsSkinWorkshopOpen())
+    {
+        if (Key == EKeys::Escape || Key == EKeys::BackSpace) { CloseSkinWorkshop(); return FReply::Handled(); }
+        return FReply::Unhandled();
+    }
     if (Key == EKeys::Tab)   { SwitchTab(ActiveTab == 0 ? 1 : 0); return FReply::Handled(); }
     if (Key == EKeys::Right) { MoveSelection(+1, 0); return FReply::Handled(); }
     if (Key == EKeys::Left)  { MoveSelection(-1, 0); return FReply::Handled(); }

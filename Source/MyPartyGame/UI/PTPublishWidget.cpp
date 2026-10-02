@@ -271,6 +271,8 @@ void UPTPublishWidget::TickUploadingText()
 
 void UPTPublishWidget::OnPublished(bool bOk, const FString& Info)
 {
+    // El delegate es compartido (el Skin Workshop del Locker también publica): solo si la subida es nuestra.
+    if (!bUploading) return;
     bUploading = false;
     if (UWorld* W = GetWorld()) W->GetTimerManager().ClearTimer(UploadAnimTimer);
     if (ApplyButton) ApplyButton->SetIsEnabled(true);

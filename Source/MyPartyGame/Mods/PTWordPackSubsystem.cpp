@@ -2,6 +2,7 @@
 
 #include "PTWordPackSubsystem.h"
 #include "../PTWordBank.h" // detectar idiomas del CSV para taggear el banco
+#include "Lobby/PTLockerSubsystem.h" // exportar una skin del Locker para publicarla
 #include "Misc/Paths.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
@@ -31,9 +32,9 @@ struct FPTWorkshopPublish
 {
     TFunction<void(bool, FString)> Cb;
     FString ContentFolder, PreviewPath, Title, Desc, Diag;
-    FString BaseTag = TEXT("WordBank"); // tag principal del item: "WordBank" o "Map"
+    FString BaseTag = TEXT("WordBank"); // tag principal del item: "WordBank", "Map" o "Skin"
     FString ChangeNote = TEXT("Banco de palabras"); // nota de cambio del SubmitItemUpdate
-    TArray<FString> LangTags; // idiomas del banco ("ES","EN"...) → tags de Steam además del BaseTag
+    TArray<FString> LangTags; // tags extra además del BaseTag: idiomas del banco ("ES","EN"...) o "Head"/"Body" de una skin
     PublishedFileId_t ItemId = 0;
     CCallResult<FPTWorkshopPublish, CreateItemResult_t>       CreateCR;
     CCallResult<FPTWorkshopPublish, SubmitItemUpdateResult_t> SubmitCR;
@@ -322,6 +323,35 @@ void UPTWordPackSubsystem::SubscribeItem(const FString& Id)
         // termina, el DownloadItemResult_t re-escanea y el banco aparece en la pestaña de suscritos.
         SteamUGC()->DownloadItem(FileId, /*bHighPriority=*/true);
     }
+#endif
+}
+
+bool UPTWordPackSubsystem::GetInstalledItemFolder(const FString& Id, FString& OutFolder) const
+{
+    OutFolder.Reset();
+#if PT_WITH_STEAM
+    if (!SteamUGC()) return false;
+    const uint64 FileId = FCString::Strtoui64(*Id, nullptr, 10);
+    if (FileId == 0) return false;
+    if (!(SteamUGC()->GetItemState(FileId) & k_EItemStateInstalled)) return false;
+    uint64 SizeOnDisk = 0; uint32 Timestamp = 0;
+    char FolderBuf[2048] = { 0 };
+    if (!SteamUGC()->GetItemInstallInfo(FileId, &SizeOnDisk, FolderBuf, sizeof(FolderBuf), &Timestamp)) return false;
+    OutFolder = UTF8_TO_TCHAR(FolderBuf);
+    return !OutFolder.IsEmpty();
+#else
+    return false;
+#endif
+}
+
+bool UPTWordPackSubsystem::IsItemSubscribed(const FString& Id) const
+{
+#if PT_WITH_STEAM
+    if (!SteamUGC()) return false;
+    const uint64 FileId = FCString::Strtoui64(*Id, nullptr, 10);
+    return FileId != 0 && (SteamUGC()->GetItemState(FileId) & k_EItemStateSubscribed) != 0;
+#else
+    return false;
 #endif
 }
 
@@ -811,6 +841,86 @@ void UPTWordPackSubsystem::PublishMap(const FString& MapFolder, const FString& T
         [this](bool bOk, FString Info)
         {
             UE_LOG(LogPTWordPacks, Log, TEXT("PublishMap: %s (%s)"), bOk ? TEXT("OK") : TEXT("FALLÓ"), *Info);
+            OnWordPackPublished.Broadcast(bOk, Info);
+        });
+#else
+    OnWordPackPublished.Broadcast(false, TEXT("Steamworks no disponible en esta plataforma"));
+#endif
+}
+
+void UPTWordPackSubsystem::PublishSkin(bool bHead, int32 SlotIdx, const FString& Title,
+                                       const FString& Description, const FString& PreviewPath)
+{
+#if PT_WITH_STEAM
+    if (!SteamUGC() || !SteamUtils())
+    {
+        OnWordPackPublished.Broadcast(false, TEXT("Steam no disponible"));
+        return;
+    }
+    UPTLockerSubsystem* Locker = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLockerSubsystem>() : nullptr;
+    if (!Locker || !Locker->IsSlotPublishable(bHead, SlotIdx))
+    {
+        OnWordPackPublished.Broadcast(false, TEXT("Ese slot no tiene una skin"));
+        return;
+    }
+
+    // Staging en %TEMP% (siempre escribible), mismo esquema que bancos/mapas:
+    //   <base>/content/    → skin.json + head.bin/head_raw.bin (o body.png) + thumb.png → SetItemContent
+    //   <base>/preview.png → miniatura del Workshop FUERA de content.
+    FString Base = FPaths::Combine(FString(FPlatformProcess::UserTempDir()),
+                                   TEXT("SculpturilloWorkshop"),
+                                   FGuid::NewGuid().ToString(EGuidFormats::Short));
+    Base = FPaths::ConvertRelativePathToFull(Base);
+    FPaths::MakePlatformFilename(Base);
+    FString Content = FPaths::Combine(Base, TEXT("content"));
+    FPaths::MakePlatformFilename(Content);
+
+    FString SlotThumb;
+    if (!Locker->ExportSkinToFolder(bHead, SlotIdx, Content, SlotThumb))
+    {
+        OnWordPackPublished.Broadcast(false, FString::Printf(TEXT("No se pudo armar el staging: %s"), *Content));
+        return;
+    }
+
+    // Preview: la imagen que eligió el jugador; si no, la miniatura del slot (la foto del Locker).
+    // Achicada a ≤512 y re-encodada (Steam exige < 1 MB). Último recurso: PNG sólido.
+    FString UsePreview;
+    for (const FString& Candidate : { PreviewPath, SlotThumb })
+    {
+        if (Candidate.IsEmpty()) continue;
+        FString Processed;
+        if (PT_ProcessPreviewImage(Candidate, Base, Processed)) { UsePreview = Processed; break; }
+    }
+    if (UsePreview.IsEmpty())
+    {
+        const int32 Sz = 256;
+        TArray<FColor> Pixels; Pixels.Init(FColor(200, 120, 90, 255), Sz * Sz);
+        IImageWrapperModule& IW = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
+        TSharedPtr<IImageWrapper> Wrapper = IW.CreateImageWrapper(EImageFormat::PNG);
+        if (Wrapper.IsValid() &&
+            Wrapper->SetRaw(Pixels.GetData(), Pixels.Num() * sizeof(FColor), Sz, Sz, ERGBFormat::BGRA, 8))
+        {
+            const TArray64<uint8>& Png = Wrapper->GetCompressed(100);
+            const FString PrevFile = FPaths::Combine(Base, TEXT("preview.png"));
+            if (FFileHelper::SaveArrayToFile(TArray<uint8>(Png), *PrevFile)) UsePreview = PrevFile;
+        }
+    }
+    if (!UsePreview.IsEmpty()) FPaths::MakePlatformFilename(UsePreview);
+
+    FString EffTitle = Title; EffTitle.TrimStartAndEndInline();
+    if (EffTitle.IsEmpty()) EffTitle = bHead ? TEXT("Head skin") : TEXT("Body skin");
+
+    UE_LOG(LogPTWordPacks, Warning, TEXT("[PublishSkin] %s slot=%d Content='%s' preview='%s'"),
+        bHead ? TEXT("Head") : TEXT("Body"), SlotIdx, *Content, *UsePreview);
+
+    delete Publisher;
+    Publisher = new FPTWorkshopPublish();
+    Publisher->BaseTag    = TEXT("Skin");  // filtra en el Skin Workshop del Locker
+    Publisher->ChangeNote = TEXT("Skin");
+    Publisher->Start(Content, UsePreview, EffTitle, Description, TArray<FString>{ FString(bHead ? TEXT("Head") : TEXT("Body")) },
+        [this](bool bOk, FString Info)
+        {
+            UE_LOG(LogPTWordPacks, Log, TEXT("PublishSkin: %s (%s)"), bOk ? TEXT("OK") : TEXT("FALLÓ"), *Info);
             OnWordPackPublished.Broadcast(bOk, Info);
         });
 #else

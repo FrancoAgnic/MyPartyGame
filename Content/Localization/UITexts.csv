@@ -282,3 +282,16 @@ UI_COL_TITLE,Título,Tittle,Título,Titel,Titre,Titolo
 UI_COL_IMAGE,Imagen,Image,Imagem,Bild,Image,Immagine
 UI_COL_TYPE,Tipo,Type,Tipo,Typ,Type,Tipo
 UI_COL_SUBSCRIPTION,Suscripción,Subscription,Inscrição,Abonnement,Abonnement,Iscrizione
+SKINWS_TITLE,Skin Workshop,Skin Workshop,Skin Workshop,Skin-Workshop,Skin Workshop,Skin Workshop
+SKINWS_PUBLISH,Publicar skin,Publish skin,Publicar skin,Skin veröffentlichen,Publier un skin,Pubblica skin
+SKINWS_ALL,Todas,All,Todas,Alle,Tous,Tutte
+SKINWS_HEADS,Cabezas,Heads,Cabeças,Köpfe,Têtes,Teste
+SKINWS_BODIES,Cuerpos,Bodies,Corpos,Körper,Corps,Corpi
+SKINWS_DOWNLOAD,Descargar,Download,Baixar,Herunterladen,Télécharger,Scarica
+SKINWS_DOWNLOADING,Descargando {0}%,Downloading {0}%,Baixando {0}%,Lädt {0}%,Téléchargement {0}%,Download {0}%
+SKINWS_EQUIPPED,Equipada,Equipped,Equipada,Ausgerüstet,Équipé,Equipaggiata
+SKINWS_ADDED_TO_LOCKER,¡Skin descargada! Ya está en tu Locker.,Skin downloaded! It's in your Locker now.,Skin baixada! Já está no seu Locker.,Skin heruntergeladen! Sie ist jetzt in deinem Spind.,Skin téléchargé ! Il est dans ton casier.,Skin scaricata! Ora è nel tuo armadietto.
+SKINWS_LOCKER_FULL,Tu Locker está lleno: liberá un slot para descargar más skins.,Your Locker is full: free a slot to download more skins.,Seu Locker está cheio: libere um slot para baixar mais skins.,Dein Spind ist voll: Mach einen Platz frei für weitere Skins.,Ton casier est plein : libère un emplacement pour d'autres skins.,Il tuo armadietto è pieno: libera uno slot per altre skin.
+SKINWS_INVALID,Esta skin está dañada o no es compatible.,This skin is damaged or not compatible.,Esta skin está danificada ou não é compatível.,Dieser Skin ist beschädigt oder nicht kompatibel.,Ce skin est endommagé ou incompatible.,Questa skin è danneggiata o non compatibile.
+SKINWS_F_SKIN,skin,skin,skin,Skin,skin,skin
+SKINWS_PUB_OK,¡Skin publicada al Workshop!,Skin published to Workshop!,Skin publicada no Workshop!,Skin im Workshop veröffentlicht!,Skin publié sur le Workshop !,Skin pubblicata nel Workshop!

@@ -88,6 +88,16 @@ public:
     UFUNCTION(BlueprintCallable, Category="WordPack")
     void PublishMap(const FString& MapFolder, const FString& Title, const FString& Description, const FString& PreviewPath);
 
+    /** Publica una SKIN del Locker (slot de cabeza o de cuerpo) al Workshop, tag "Skin" + "Head"/"Body".
+     *  Sube head.bin + head_raw.bin (o body.png) + thumb.png + skin.json. PreviewPath vacío = usa la
+     *  miniatura del slot. Async → OnWordPackPublished. Requiere Steam + Workshop habilitado. */
+    void PublishSkin(bool bHead, int32 SlotIdx, const FString& Title, const FString& Description, const FString& PreviewPath);
+
+    /** Carpeta de instalación de un item del Workshop si ya está descargado (false si no / sin Steam). */
+    bool GetInstalledItemFolder(const FString& Id, FString& OutFolder) const;
+    /** ¿El usuario está suscrito a este item? (lo esté o no descargado). */
+    bool IsItemSubscribed(const FString& Id) const;
+
     /** Busca en el CATÁLOGO del Workshop (todos los items publicados) por texto, filtrando por Tag
      *  ("WordBank" para bancos, "Map" para mapas). Async → OnWorkshopSearchComplete. */
     void SearchWorkshop(const FString& SearchText, const FString& Tag);

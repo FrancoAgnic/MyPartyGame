@@ -1,0 +1,10 @@
+TITLE: v1.0.8 - Skin Workshop: share your skins
+
+[h2]Sculpturillo v1.0.8[/h2]
+
+[h3]New[/h3]
+[list]
+[*][b]Skin Workshop[/b] in the Locker: a new button opens a browser with skins made by the community. Search, filter by heads or bodies, and hit [b]Download[/b] — the skin goes straight into a free Locker slot.
+[*]Downloaded skins work like your own: [b]equip[/b] them in one click, or [b]edit[/b] them to make them yours.
+[*][b]Publish skin[/b]: pick any head or body from your Locker, give it a title and description, and share it on the Steam Workshop. The Locker thumbnail is used as the preview (or load your own image).
+[/list]

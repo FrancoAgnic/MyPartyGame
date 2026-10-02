@@ -20,6 +20,7 @@ struct FPTLockerHeadSlot
     UPROPERTY() TArray<uint8> BakedBlob;  // cocinado (equipar/replicar)
     UPROPERTY() TArray<uint8> RawState;   // crudo (re-editar) — Fase 2
     UPROPERTY() TArray<uint8> ThumbPNG;   // miniatura renderizada (para el tile del Locker)
+    UPROPERTY() FString       WorkshopId; // id del item del Workshop si se descargó de ahí (vacío = creación propia)
 };
 
 USTRUCT()
@@ -29,6 +30,7 @@ struct FPTLockerBodySlot
     UPROPERTY() bool          bUsed = false;
     UPROPERTY() TArray<uint8> BodyPNG;    // textura de pintura del cuerpo
     UPROPERTY() TArray<uint8> ThumbPNG;   // miniatura renderizada
+    UPROPERTY() FString       WorkshopId; // id del item del Workshop si se descargó de ahí (vacío = creación propia)
 };
 
 UCLASS()

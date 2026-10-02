@@ -9,7 +9,9 @@
 //   HeadTabButton / BodyTabButton (Button)  → pestañas (click cambia de ventana)
 //   AssignButton / EditActionButton / BackButton (Button) → barra de acciones (abajo a la derecha)
 //   AssignLabel (TextBlock)                 → texto del botón Asignar ("Asignar" / "Crear")
-// En Details (categoría Locker) asignar SlotWidgetClass = WBP del slot (deriva de PTLockerSlotWidget).
+//   SkinWorkshopButton (Button)             → abre el popup del Skin Workshop (descargar/publicar skins)
+// En Details (categoría Locker) asignar SlotWidgetClass = WBP del slot (deriva de PTLockerSlotWidget) y
+// SkinWorkshopClass = WBP del popup (deriva de PTSkinWorkshopWidget).
 
 #pragma once
 #include "CoreMinimal.h"
@@ -23,6 +25,7 @@ class UTextBlock;
 class UPTLockerSlotWidget;
 class UPTLockerSubsystem;
 class APTLobbyPlayerController;
+class UPTSkinWorkshopWidget;
 
 UCLASS()
 class MYPARTYGAME_API UPTLockerWidget : public UPTUserWidget
@@ -45,6 +48,7 @@ public:
 
 protected:
     virtual void NativeConstruct() override;
+    virtual void NativeDestruct() override;
     virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
     virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
     virtual bool NativeSupportsKeyboardFocus() const override { return true; }
@@ -57,8 +61,11 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      EditActionButton;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      BackButton;
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   AssignLabel;
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*      SkinWorkshopButton;
 
     UPROPERTY(EditAnywhere, Category = "Locker") TSubclassOf<UPTLockerSlotWidget> SlotWidgetClass;
+    // Popup del Skin Workshop (WBP derivado de PTSkinWorkshopWidget). Sin asignar, el botón no hace nada.
+    UPROPERTY(EditAnywhere, Category = "Locker") TSubclassOf<UPTSkinWorkshopWidget> SkinWorkshopClass;
     // Columnas por fila cuando el contenedor es un Uniform Grid Panel (para acomodar los 6 slots en grilla).
     UPROPERTY(EditAnywhere, Category = "Locker") int32 SlotsPerRow = 3;
     // Color de la pestaña ACTIVA vs. inactiva (se aplica al fondo del botón de la pestaña).
@@ -70,6 +77,7 @@ protected:
     UFUNCTION() void OnAssignClicked();
     UFUNCTION() void OnEditClicked();
     UFUNCTION() void OnBackClicked();
+    UFUNCTION() void OnSkinWorkshopClicked();
 
 private:
     void BuildSlots();
@@ -86,6 +94,10 @@ private:
     TArray<UPTLockerSlotWidget*>& ActiveList();
     int32 ActiveCount() const;
 
+    bool IsSkinWorkshopOpen() const;
+    void CloseSkinWorkshop();
+
+    UPROPERTY() UPTSkinWorkshopWidget* SkinWorkshop = nullptr; // creado al abrirlo por primera vez y reusado
     UPROPERTY() TArray<UPTLockerSlotWidget*> HeadSlotWidgets;
     UPROPERTY() TArray<UPTLockerSlotWidget*> BodySlotWidgets;
     int32 ActiveTab     = 0; // 0 cabeza, 1 cuerpo

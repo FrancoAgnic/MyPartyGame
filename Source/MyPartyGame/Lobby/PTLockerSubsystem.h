@@ -55,6 +55,26 @@ public:
     void ClearHeadSlot(int32 Idx);
     void ClearBodySlot(int32 Idx);
 
+    // ── Skins del Workshop ──
+    // Una skin publicada = carpeta con skin.json + (cabeza) head.bin/head_raw.bin o (cuerpo) body.png + thumb.png.
+    // Al descargarla se IMPORTA a un slot libre del Locker → queda como cualquier otra skin (equipar/editar).
+
+    /** ¿Se puede publicar este slot? (lleno y no es el "Default" reservado). */
+    bool IsSlotPublishable(bool bHead, int32 Idx) const;
+    /** Id del Workshop del que vino el slot (vacío = creación propia). */
+    FString GetSlotWorkshopId(bool bHead, int32 Idx) const;
+    /** Slot que ya tiene importado ese item del Workshop (-1 si no está). */
+    int32 FindSlotByWorkshopId(bool bHead, const FString& WorkshopId) const;
+    /** Primer slot vacío (nunca el 0, que es el Default). -1 si el Locker está lleno. */
+    int32 FindFreeSlot(bool bHead) const;
+    /** Escribe la skin del slot en Folder (formato de publicación). OutThumbPath = thumb.png escrito (o vacío). */
+    bool ExportSkinToFolder(bool bHead, int32 Idx, const FString& Folder, FString& OutThumbPath) const;
+    /** Lee el tipo de una skin descargada (skin.json). false si la carpeta no es una skin válida. */
+    static bool ReadSkinType(const FString& Folder, bool& bOutHead);
+    /** Importa la skin de Folder a un slot. Si ese item ya estaba importado, reusa su slot (no pisa
+     *  ediciones locales). Devuelve el índice del slot o -1 (OutError: "full" / "invalid"). */
+    int32 ImportSkinFromFolder(const FString& Folder, const FString& WorkshopId, bool& bOutHead, FString& OutError);
+
     void SaveToDisk();
 
 private:

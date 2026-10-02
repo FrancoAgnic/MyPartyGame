@@ -417,6 +417,9 @@ void UPTWorkshopBrowserWidget::TickUploadingText()
 
 void UPTWorkshopBrowserWidget::OnPublished(bool bOk, const FString& Info)
 {
+    // El delegate es compartido (el Skin Workshop del Locker también publica): si el browser está cerrado
+    // y no subió nada él mismo, no es para nosotros. (Visible → incluye lo que publica su WBP_Publish.)
+    if (!bUploading && !IsVisible()) return;
     // Terminó la subida: cortar el texto animado y reactivar Aplicar.
     bUploading = false;
     if (UWorld* W = GetWorld()) W->GetTimerManager().ClearTimer(UploadAnimTimer);
