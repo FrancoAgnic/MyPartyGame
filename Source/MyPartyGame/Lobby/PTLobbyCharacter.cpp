@@ -1053,11 +1053,26 @@ void APTLobbyCharacter::Multicast_ShowChatBubble_Implementation(const FString& T
         if (UPTChatShoutWidget* W = Cast<UPTChatShoutWidget>(ChatShout->GetUserWidgetObject()))
             Dur = W->ShowShout(Msg, bGuess);
         ChatBubbleUntil = GetWorld() ? GetWorld()->GetTimeSeconds() + Dur : 0.f;
+        // Guardar texto/flag para el indicador off-screen del HUD (mismo mensaje anti-spoiler).
+        ChatBubbleText    = Msg;
+        bChatBubbleGuess  = bGuess;
     }
 
     // Confetti al adivinar, desde la posición del jugador.
     if (bGuess && ConfettiFX)
         UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ConfettiFX, GetActorLocation());
+}
+
+bool APTLobbyCharacter::HasActiveChatBubble(float ExtraSeconds) const
+{
+    return GetWorld() && GetWorld()->GetTimeSeconds() < ChatBubbleUntil + ExtraSeconds && !ChatBubbleText.IsEmpty();
+}
+
+FVector APTLobbyCharacter::GetChatBubbleWorldLocation() const
+{
+    // El globo vive en el componente ChatShout (sobre la cabeza). Si no está, caer a la cabeza/actor + alto.
+    if (ChatShout) return ChatShout->GetComponentLocation();
+    return GetActorLocation() + FVector(0, 0, 110.f);
 }
 
 void APTLobbyCharacter::Move(const FInputActionValue& Value)

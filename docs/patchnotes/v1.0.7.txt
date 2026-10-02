@@ -1,0 +1,8 @@
+TITLE: v1.0.7 - See what off-screen players are saying
+
+[h2]Sculpturillo v1.0.7[/h2]
+
+[h3]New[/h3]
+[list]
+[*]Chat from players you're [b]not looking at[/b] (off-screen or behind you) now pops up as a little bubble at the edge of the screen, pointing in their direction — so you never miss what someone said. If you can see the player, it still shows above their head as before.
+[/list]

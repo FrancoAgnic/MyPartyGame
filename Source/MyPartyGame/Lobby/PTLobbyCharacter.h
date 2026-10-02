@@ -74,6 +74,16 @@ public:
     // el GameMode (servidor). El mensaje NO es la palabra (anti-spoiler).
     UFUNCTION(NetMulticast, Reliable) void Multicast_ShowChatBubble(const FString& Text, bool bGuess);
 
+    // ── Estado del globo de chat (para el indicador off-screen del HUD de gameplay) ──
+    // true mientras el globo sigue visible (no expiró). El HUD lo consulta por frame. ExtraSeconds extiende
+    // la ventana (el indicador off-screen dura un poco más que el globo sobre la cabeza).
+    bool HasActiveChatBubble(float ExtraSeconds = 0.f) const;
+    // Texto YA mostrado (traducido si fue acierto; anti-spoiler). Vacío si no hay globo activo.
+    const FString& GetChatBubbleText() const { return ChatBubbleText; }
+    bool IsChatBubbleGuess() const { return bChatBubbleGuess; }
+    // Posición MUNDIAL del globo (el componente ChatShout, sobre la cabeza) para proyectar a pantalla.
+    FVector GetChatBubbleWorldLocation() const;
+
     // Sistema de partículas de confetti al adivinar. Asignar en el BP.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="FX")
     UNiagaraSystem* ConfettiFX = nullptr;
@@ -361,6 +371,8 @@ private:
     void  UpdateNameTag();
     float NameTagAccum = 0.f;
     float ChatBubbleUntil = 0.f; // tiempo (world) hasta el que se muestra el globo de chat
+    FString ChatBubbleText;      // texto mostrado (para el indicador off-screen del HUD)
+    bool    bChatBubbleGuess = false; // el globo actual es de "adivinó"
     bool  bSpectatorHiddenApplied = false; // último estado de ocultamiento por espectador dev aplicado
 
 public:

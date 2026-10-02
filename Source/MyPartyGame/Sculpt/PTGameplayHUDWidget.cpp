@@ -11,6 +11,11 @@
 #include "Components/ScrollBox.h"
 #include "Components/PanelWidget.h"
 #include "Components/Image.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
+#include "Blueprint/WidgetLayoutLibrary.h" // DPI scale para posicionar en el canvas
+#include "../UI/PTOffscreenChatWidget.h"
+#include "GameFramework/GameStateBase.h"
 #include "../PTInputBindings.h"
 #include "../PTTextTable.h"
 #include "../PTGameUserSettings.h"
@@ -127,6 +132,10 @@ void UPTGameplayHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDelta
             else ThemePanel->SetRenderOpacity(A);
         }
     }
+
+    // Chat off-screen: globitos de borde. Se actualiza por FRAME (no en el timer) para que el seguimiento
+    // sea suave y con lag al girar la cámara. Tiene sus propias guardas (canvas/clase/PC/world).
+    UpdateOffscreenChat(InDeltaTime);
 
     const APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(GetOwningPlayer());
     if (!PC) return;
@@ -924,8 +933,123 @@ void UPTGameplayHUDWidget::RefreshTick()
         GP_Hide(ScoreboardBox);                                                             // lista de players
     }
 
+    // (El chat off-screen se actualiza por FRAME en NativeTick, para que el globito interpole suave.)
+
     // ── Estado de red: iconos arriba a la izquierda, SOLO cuando hay problema (sin texto de debug). ──
     UpdateNetIcons();
+}
+
+void UPTGameplayHUDWidget::UpdateOffscreenChat(float Dt)
+{
+    // Sin contenedor o sin clase de globito → feature apagada (el WBP la activa asignando ambos).
+    if (!OffscreenChatCanvas || !OffscreenChatBubbleClass) return;
+    APlayerController* PC = GetOwningPlayer();
+    UWorld* W = GetWorld();
+    if (!PC || !W) return;
+
+    // Trabajamos en unidades SLATE (viewport / DPI), que es el espacio del CanvasPanel.
+    const float DPI = FMath::Max(0.01f, UWidgetLayoutLibrary::GetViewportScale(this));
+    const FVector2D ViewSize = UWidgetLayoutLibrary::GetViewportSize(W) / DPI;
+    if (ViewSize.X <= 1.f || ViewSize.Y <= 1.f) return;
+    const FVector2D Center = ViewSize * 0.5f;
+
+    FVector CamLoc; FRotator CamRot;
+    PC->GetPlayerViewPoint(CamLoc, CamRot);
+    const FVector Fwd   = CamRot.Vector();
+    const FVector Right = FRotationMatrix(CamRot).GetUnitAxis(EAxis::Y);
+    const FVector Up    = FRotationMatrix(CamRot).GetUnitAxis(EAxis::Z);
+    const APawn*  LocalPawn = PC->GetPawn();
+
+    // ── Pass 1: juntar los jugadores que necesitan globito de borde (off-screen) + su objetivo. ──
+    struct FNeed { APTLobbyCharacter* LC; FVector2D Target; FString Text; bool bGuess; };
+    TArray<FNeed> Needs;
+    if (AGameStateBase* GS = W->GetGameState())
+    {
+        for (APlayerState* PS : GS->PlayerArray)
+        {
+            APTLobbyCharacter* LC = PS ? Cast<APTLobbyCharacter>(PS->GetPawn()) : nullptr;
+            if (!LC || LC == LocalPawn) continue;                      // solo LOS DEMÁS
+            if (!LC->HasActiveChatBubble(OffscreenExtraSeconds)) continue; // activo (+1s extra)
+
+            const FVector WorldPos = LC->GetChatBubbleWorldLocation();
+            const FVector Dir = WorldPos - CamLoc;
+            const float   fz  = FVector::DotProduct(Dir, Fwd); // >0 = delante de la cámara
+
+            // ¿En pantalla? (delante + dentro del viewport) → el globo sobre la cabeza ya lo muestra.
+            FVector2D Screen;
+            const bool bProj = PC->ProjectWorldLocationToScreen(WorldPos, Screen, false);
+            if (bProj) Screen /= DPI;
+            const bool bOnScreen = (fz > 0.f) && bProj
+                && Screen.X >= 0.f && Screen.X <= ViewSize.X && Screen.Y >= 0.f && Screen.Y <= ViewSize.Y;
+            if (bOnScreen) continue;
+
+            // Dirección en espacio de cámara → punto en el borde de la pantalla.
+            FVector2D d(FVector::DotProduct(Dir, Right), -FVector::DotProduct(Dir, Up)); // Y pantalla hacia abajo
+            if (d.IsNearlyZero()) d = FVector2D(0.f, 1.f);
+            d.Normalize();
+            const FVector2D Half = ViewSize * 0.5f - FVector2D(OffscreenEdgeMargin);
+            const float sX = (FMath::Abs(d.X) > KINDA_SMALL_NUMBER) ? Half.X / FMath::Abs(d.X) : 1.e9f;
+            const float sY = (FMath::Abs(d.Y) > KINDA_SMALL_NUMBER) ? Half.Y / FMath::Abs(d.Y) : 1.e9f;
+            Needs.Add({ LC, Center + d * FMath::Min(sX, sY), LC->GetChatBubbleText(), LC->IsChatBubbleGuess() });
+        }
+    }
+
+    // ── Pass 2: liberar globitos cuyo dueño ya no necesita (o murió): ocultar + soltar. ──
+    for (UPTOffscreenChatWidget* B : OffscreenPool)
+    {
+        if (!B) continue;
+        const AActor* Owner = B->OwnerActor.Get();
+        const bool bStillNeeded = Owner && Needs.ContainsByPredicate(
+            [Owner](const FNeed& N){ return N.LC == Owner; });
+        if (!bStillNeeded)
+        {
+            B->SetVisibility(ESlateVisibility::Collapsed);
+            B->OwnerActor = nullptr;
+            B->bSmoothInit = false;
+        }
+    }
+
+    // ── Pass 3: asignar/actualizar un globito por jugador, con interpolación suave (lag). ──
+    for (const FNeed& N : Needs)
+    {
+        // Buscar el globito ya asignado a este jugador; si no, uno libre; si no, crear.
+        UPTOffscreenChatWidget* B = nullptr;
+        for (UPTOffscreenChatWidget* P : OffscreenPool)
+            if (P && P->OwnerActor.Get() == N.LC) { B = P; break; }
+        bool bNew = false;
+        if (!B)
+        {
+            for (UPTOffscreenChatWidget* P : OffscreenPool)
+                if (P && P->OwnerActor.Get() == nullptr) { B = P; break; }
+            if (!B)
+            {
+                B = CreateWidget<UPTOffscreenChatWidget>(this, OffscreenChatBubbleClass);
+                if (!B) continue;
+                OffscreenChatCanvas->AddChild(B);
+                OffscreenPool.Add(B);
+            }
+            B->OwnerActor = N.LC;
+            bNew = true;
+        }
+
+        // Posición suavizada: snap al aparecer, lag (InterpTo) mientras sigue → se lee fácil al girar.
+        if (bNew || !B->bSmoothInit) { B->SmoothPos = N.Target; B->bSmoothInit = true; }
+        else B->SmoothPos = FMath::Vector2DInterpTo(B->SmoothPos, N.Target, Dt, OffscreenLagSpeed);
+
+        // La flecha apunta desde el centro hacia donde está el globito (dir del jugador, suavizada).
+        const FVector2D sd = B->SmoothPos - Center;
+        const float AngleDeg = FMath::RadiansToDegrees(FMath::Atan2(sd.Y, sd.X));
+
+        B->SetVisibility(ESlateVisibility::HitTestInvisible);
+        B->SetBubble(N.Text, N.bGuess, AngleDeg);
+        if (UCanvasPanelSlot* CS = Cast<UCanvasPanelSlot>(B->Slot))
+        {
+            CS->SetAnchors(FAnchors(0.f, 0.f));
+            CS->SetAlignment(FVector2D(0.5f, 0.5f));
+            CS->SetAutoSize(true);
+            CS->SetPosition(B->SmoothPos);
+        }
+    }
 }
 
 void UPTGameplayHUDWidget::UpdateNetIcons()

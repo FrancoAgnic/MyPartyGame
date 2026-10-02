@@ -308,6 +308,19 @@ private:
 
     void RefreshTick();          // polling: pinta estado/reloj/panel/input según la fase
     void UpdateNetIcons();       // prende/apaga los iconos de red (packet loss / ping alto / caída)
+
+    // ── Chat off-screen: globitos en el BORDE del HUD para jugadores que hablaron pero NO estás viendo
+    //    (fuera de pantalla o a tu espalda). Apuntan en su dirección. Si los ves, queda el globo sobre su
+    //    cabeza (como siempre) y acá no se muestra nada. ──
+    UPROPERTY(meta=(BindWidgetOptional)) class UCanvasPanel* OffscreenChatCanvas; // contenedor (full-screen)
+    UPROPERTY(EditAnywhere, Category="OffscreenChat") TSubclassOf<class UPTOffscreenChatWidget> OffscreenChatBubbleClass;
+    UPROPERTY(EditAnywhere, Category="OffscreenChat") float OffscreenEdgeMargin = 90.f; // px (slate) desde el borde
+    // Velocidad de seguimiento del globito (Vector2DInterpTo). MÁS BAJO = más lag/suave (se lee mejor al girar).
+    UPROPERTY(EditAnywhere, Category="OffscreenChat") float OffscreenLagSpeed = 6.f;
+    // Segundos EXTRA que el globito de borde queda tras expirar el globo sobre la cabeza.
+    UPROPERTY(EditAnywhere, Category="OffscreenChat") float OffscreenExtraSeconds = 1.f;
+    UPROPERTY(Transient) TArray<class UPTOffscreenChatWidget*> OffscreenPool;          // pool reutilizable
+    void UpdateOffscreenChat(float Dt);
     void ChooseWord(int32 Index);
     void ApplyInputMode(bool bGameOnly);
     FString BuildScoreboard() const; // "Nombre: pts" ordenado por puntaje desc. (para resultados)
