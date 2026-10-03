@@ -1,0 +1,11 @@
+TITLE: v1.0.10 - More skin slots
+
+[h2]Sculpturillo v1.0.10[/h2]
+
+[h3]Locker[/h3]
+[list]
+[*]More skin slots in the Locker (up to [b]21[/b]).
+[/list]
+
+[hr][/hr]
+[i]This release also brings everything from the recent test builds to everyone: the Skin Workshop (publish, download, equip and edit community skins), the Empty slot button, and a batch of color-picker and thumbnail fixes.[/i]
