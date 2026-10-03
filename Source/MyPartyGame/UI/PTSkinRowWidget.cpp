@@ -27,8 +27,11 @@ void UPTSkinRowWidget::Init(const FPTWorkshopItem& InItem, UPTSkinWorkshopWidget
     Owner  = InOwner;
 
     if (TitleText) TitleText->SetText(FText::FromString(InItem.Title));
-    if (AddButton)     AddButton->SetIsEnabled(!bAdded);
-    if (AddButtonText) AddButtonText->SetText(PTText::Get(bAdded ? TEXT("WORKSHOP_ADDED") : TEXT("WORKSHOP_ADD")));
+    // Botón inteligente SIEMPRE clickable: "Añadir" si no estás suscrito (suscribe/descarga); "Equipar"
+    // si ya lo tenés (tu propia skin queda auto-suscrita por Steam, o una que ya añadiste) → al tocarlo
+    // la importa al Locker y la equipa. Antes se deshabilitaba si ya estabas suscrito → no se podía tocar.
+    if (AddButton)     AddButton->SetIsEnabled(true);
+    if (AddButtonText) AddButtonText->SetText(PTText::Get(bAdded ? TEXT("LOCKER_EQUIP") : TEXT("WORKSHOP_ADD")));
 
     if (DescText)
     {
@@ -67,10 +70,18 @@ void UPTSkinRowWidget::DownloadThumbnail(const FString& Url)
 
 void UPTSkinRowWidget::OnAddClicked()
 {
-    if (Owner) Owner->AddItem(ItemId);
-    bAdded = true;
-    if (AddButton)     AddButton->SetIsEnabled(false);
-    if (AddButtonText) AddButtonText->SetText(PTText::Get(TEXT("WORKSHOP_ADDED")));
+    if (!bAdded)
+    {
+        // No suscrito → suscribir (Steam lo descarga). El botón pasa a "Equipar" para cuando termine.
+        if (Owner) Owner->AddItem(ItemId);
+        bAdded = true;
+        if (AddButtonText) AddButtonText->SetText(PTText::Get(TEXT("LOCKER_EQUIP")));
+    }
+    else if (Owner)
+    {
+        // Ya suscrito/descargado → importar al Locker + equipar (si todavía descarga, avisa).
+        Owner->EquipItem(ItemId);
+    }
 }
 
 void UPTSkinRowWidget::OnEquipClicked()

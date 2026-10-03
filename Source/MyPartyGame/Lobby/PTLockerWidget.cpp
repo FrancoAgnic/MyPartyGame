@@ -24,6 +24,11 @@ void UPTLockerWidget::NativeConstruct()
     if (EditActionButton) EditActionButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnEditClicked);
     if (BackButton)       BackButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnBackClicked);
     if (SkinWorkshopButton) SkinWorkshopButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnSkinWorkshopClicked);
+    if (EmptySlotButton)       EmptySlotButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnEmptySlotClicked);
+    if (ClearConfirmYesButton) ClearConfirmYesButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnClearConfirmYes);
+    if (ClearConfirmNoButton)  ClearConfirmNoButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnClearConfirmNo);
+    if (ClearConfirmText)      ClearConfirmText->SetText(PTText::Get(TEXT("LOCKER_CLEAR_CONFIRM")));
+    if (ClearConfirmPanel)     ClearConfirmPanel->SetVisibility(ESlateVisibility::Collapsed);
     // Equipar = click en slot lleno; Crear = click en slot vacío. Ya no hay botón "Asignar/Crear".
     if (AssignButton)     AssignButton->SetVisibility(ESlateVisibility::Collapsed);
     BuildSlots();
@@ -198,6 +203,10 @@ void UPTLockerWidget::MoveSelection(int32 DX, int32 DY)
 
 void UPTLockerWidget::ApplySelectionVisual()
 {
+    // Al navegar/refrescar, cancelar cualquier confirmación de vaciado pendiente (evita borrar el slot
+    // equivocado si te moviste después de abrir el popup).
+    if (ClearConfirmPanel) ClearConfirmPanel->SetVisibility(ESlateVisibility::Collapsed);
+
     TArray<UPTLockerSlotWidget*>& List = ActiveList();
     for (int32 i = 0; i < List.Num(); ++i)
         if (List[i]) List[i]->SetSelected(i == SelectedIndex);
@@ -205,6 +214,9 @@ void UPTLockerWidget::ApplySelectionVisual()
     // Editar solo tiene sentido si el slot está lleno (crear/equipar son con click directo en el slot).
     const bool bUsed = List.IsValidIndex(SelectedIndex) && List[SelectedIndex] && List[SelectedIndex]->IsUsed();
     if (EditActionButton) EditActionButton->SetVisibility(bUsed ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+    // Vaciar: solo si el slot está lleno y NO es el slot 0 (Default, que no se borra).
+    const bool bCanEmpty = bUsed && SelectedIndex != 0;
+    if (EmptySlotButton) EmptySlotButton->SetVisibility(bCanEmpty ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 }
 
 void UPTLockerWidget::ActivateSelected()
@@ -265,6 +277,46 @@ void UPTLockerWidget::OnSkinWorkshopClicked()
         if (!SkinWorkshop->IsInViewport()) SkinWorkshop->AddToViewport(60); // re-agregar tras cerrarlo
         SkinWorkshop->ShowPanel();
     }
+}
+
+void UPTLockerWidget::OnEmptySlotClicked()
+{
+    // Mostrar la confirmación solo si hay algo que vaciar y no es el Default (slot 0).
+    TArray<UPTLockerSlotWidget*>& List = ActiveList();
+    const bool bUsed = List.IsValidIndex(SelectedIndex) && List[SelectedIndex] && List[SelectedIndex]->IsUsed();
+    if (!bUsed || SelectedIndex == 0) return;
+    if (ClearConfirmPanel) ClearConfirmPanel->SetVisibility(ESlateVisibility::Visible);
+}
+
+void UPTLockerWidget::OnClearConfirmNo()
+{
+    if (ClearConfirmPanel) ClearConfirmPanel->SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UPTLockerWidget::OnClearConfirmYes()
+{
+    if (ClearConfirmPanel) ClearConfirmPanel->SetVisibility(ESlateVisibility::Collapsed);
+    UPTLockerSubsystem* L = Locker();
+    if (!L) return;
+    const int32 Idx = SelectedIndex;
+    if (Idx == 0) return; // el Default (slot 0) no se borra
+
+    // Una SKIN ocupa el MISMO índice en cabeza y cuerpo, así que vaciar un slot borra los DOS (la cabeza
+    // Idx y el cuerpo Idx), sin importar en qué pestaña estés. Si alguno de los dos estaba equipado,
+    // volver al Default (slot 0) para que el personaje no quede sin look.
+    const int32 WasHeadEq = L->GetEquippedHead();
+    const int32 WasBodyEq = L->GetEquippedBody();
+
+    L->ClearHeadSlot(Idx);
+    L->ClearBodySlot(Idx);
+
+    if (APTLobbyPlayerController* PC = LobbyPC())
+    {
+        if (WasHeadEq == Idx) PC->EquipHeadSlot(0);
+        if (WasBodyEq == Idx) PC->EquipBodySlot(0);
+    }
+
+    RefreshSlots(); // refresca miniaturas/selección/botones en ambas pestañas
 }
 
 // ── Botones ──

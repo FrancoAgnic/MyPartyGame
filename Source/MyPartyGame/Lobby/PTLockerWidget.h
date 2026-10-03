@@ -59,6 +59,12 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   AssignLabel;
     // Botón que abre el popup del Workshop de skins (descargar/equipar/publicar).
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      SkinWorkshopButton;
+    // ── Vaciar slot (borrar la skin de un slot ocupado) + popup de confirmación ──
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*      EmptySlotButton;       // vaciar el slot seleccionado
+    UPROPERTY(meta = (BindWidgetOptional)) UWidget*      ClearConfirmPanel;     // popup de confirmación (arranca oculto)
+    UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   ClearConfirmText;      // "¿Vaciar este slot y borrar la skin?"
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*      ClearConfirmYesButton; // Vaciar (confirma)
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*      ClearConfirmNoButton;  // Cancelar
 
     UPROPERTY(EditAnywhere, Category = "Locker") TSubclassOf<UPTLockerSlotWidget> SlotWidgetClass;
     // WBP del popup de Skin Workshop (deriva de PTSkinWorkshopWidget). Asignar en Details del WBP del Locker.
@@ -76,6 +82,9 @@ protected:
     UFUNCTION() void OnEditClicked();
     UFUNCTION() void OnBackClicked();
     UFUNCTION() void OnSkinWorkshopClicked(); // abre el popup del Workshop de skins
+    UFUNCTION() void OnEmptySlotClicked();    // muestra el popup de confirmación de vaciado
+    UFUNCTION() void OnClearConfirmYes();     // confirma: vacía el slot (borra la skin)
+    UFUNCTION() void OnClearConfirmNo();      // cancela
 
 private:
     void BuildSlots();

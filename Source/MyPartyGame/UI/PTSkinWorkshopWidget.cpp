@@ -33,44 +33,48 @@ UPTLockerSubsystem* UPTSkinWorkshopWidget::Locker() const
 void UPTSkinWorkshopWidget::NativeConstruct()
 {
     Super::NativeConstruct();
-    if (SearchButton)       SearchButton->OnClicked.AddDynamic(this, &UPTSkinWorkshopWidget::OnSearchClicked);
-    if (BackButton)         BackButton->OnClicked.AddDynamic(this, &UPTSkinWorkshopWidget::OnBackClicked);
-    if (PublishButton)      PublishButton->OnClicked.AddDynamic(this, &UPTSkinWorkshopWidget::OnPublishClicked);
-    if (ApplyPublishButton) ApplyPublishButton->OnClicked.AddDynamic(this, &UPTSkinWorkshopWidget::OnApplyPublishClicked);
-    if (PopupCloseButton)   PopupCloseButton->OnClicked.AddDynamic(this, &UPTSkinWorkshopWidget::OnPopupCloseClicked);
-    if (SearchBox)          SearchBox->OnTextCommitted.AddDynamic(this, &UPTSkinWorkshopWidget::OnSearchCommitted);
-    if (PublishPopup)       PublishPopup->SetVisibility(ESlateVisibility::Collapsed);
-    if (PublishStatusText)  PublishStatusText->SetVisibility(ESlateVisibility::Collapsed);
 
-    if (UPTWordPackSubsystem* P = Packs())
+    // Bindeos UNA SOLA VEZ: este widget se CACHEA y se re-agrega al viewport (NativeConstruct corre cada
+    // vez), así que sin este guard los botones quedaban bindeados varias veces → OnPublishClicked se
+    // disparaba 2x y el popup abría/cerraba ("a veces no abre"). bBound NO se resetea (los bindeos a
+    // delegados UObject son débiles y mueren con el widget).
+    if (!bBound)
     {
-        if (!bBound)
+        if (SearchButton)       SearchButton->OnClicked.AddDynamic(this, &UPTSkinWorkshopWidget::OnSearchClicked);
+        if (BackButton)         BackButton->OnClicked.AddDynamic(this, &UPTSkinWorkshopWidget::OnBackClicked);
+        if (PublishButton)      PublishButton->OnClicked.AddDynamic(this, &UPTSkinWorkshopWidget::OnPublishClicked);
+        if (ApplyPublishButton) ApplyPublishButton->OnClicked.AddDynamic(this, &UPTSkinWorkshopWidget::OnApplyPublishClicked);
+        if (PopupCloseButton)   PopupCloseButton->OnClicked.AddDynamic(this, &UPTSkinWorkshopWidget::OnPopupCloseClicked);
+        if (SearchBox)          SearchBox->OnTextCommitted.AddDynamic(this, &UPTSkinWorkshopWidget::OnSearchCommitted);
+        if (UPTWordPackSubsystem* P = Packs())
         {
             P->OnWorkshopSearchComplete.AddUObject(this, &UPTSkinWorkshopWidget::OnSearchComplete);
             P->OnWordPackPublished.AddUObject(this, &UPTSkinWorkshopWidget::OnPublished);
-            // Al terminar una descarga, re-buscar para refrescar el estado (Añadido/Equipar).
-            P->OnWordPacksUpdated.AddUObject(this, &UPTSkinWorkshopWidget::RunSearch);
-            bBound = true;
+            // OJO: NO re-buscar en OnWordPacksUpdated. Ese evento dispara seguido (suscribir/descargar/
+            // detalles) y reconstruía TODA la lista mientras interactuabas → las filas se recreaban y el
+            // botón bajo el mouse desaparecía (no hacía hover/click). El estado del botón se actualiza
+            // local (Añadir→Equipar) y Equipar chequea en vivo si ya está descargada.
         }
+        bBound = true;
     }
-}
 
-void UPTSkinWorkshopWidget::NativeDestruct()
-{
-    if (UPTWordPackSubsystem* P = Packs())
-    {
-        P->OnWorkshopSearchComplete.RemoveAll(this);
-        P->OnWordPackPublished.RemoveAll(this);
-        P->OnWordPacksUpdated.RemoveAll(this);
-    }
-    bBound = false;
-    Super::NativeDestruct();
+    // Estado por apertura (sí cada vez): popup de publicar cerrado y sin avisos.
+    if (PublishPopup)      PublishPopup->SetVisibility(ESlateVisibility::Collapsed);
+    if (PublishStatusText) PublishStatusText->SetVisibility(ESlateVisibility::Collapsed);
 }
 
 void UPTSkinWorkshopWidget::ShowPanel()
 {
     SetVisibility(ESlateVisibility::Visible);
     if (PublishPopup) PublishPopup->SetVisibility(ESlateVisibility::Collapsed);
+    // El Locker tenía el foco de teclado; dárselo al popup para que reciba la UI (y el mouse ya va al
+    // widget de arriba por z-order). Aseguramos también cursor + input GameAndUI.
+    if (APlayerController* PC = GetOwningPlayer())
+    {
+        PC->SetInputMode(FInputModeGameAndUI());
+        PC->SetShowMouseCursor(true);
+    }
+    SetFocus();
     RunSearch();
 }
 
@@ -154,9 +158,8 @@ void UPTSkinWorkshopWidget::EquipItem(const FString& ItemId)
 
 void UPTSkinWorkshopWidget::OnPublishClicked()
 {
-    if (PublishPopup)
-        PublishPopup->SetVisibility(PublishPopup->GetVisibility() == ESlateVisibility::Collapsed
-            ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+    // Siempre ABRIR el popup (antes togglaba → a veces lo cerraba). Se cierra con PopupCloseButton.
+    if (PublishPopup)      PublishPopup->SetVisibility(ESlateVisibility::Visible);
     if (PublishStatusText) PublishStatusText->SetVisibility(ESlateVisibility::Collapsed);
     RefreshPublishPreview();
 }

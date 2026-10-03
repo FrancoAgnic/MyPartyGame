@@ -1,0 +1,16 @@
+TITLE: v1.0.9 - Skin Workshop polish + empty slot
+
+[h2]Sculpturillo v1.0.9[/h2]
+
+[h3]Locker & Skin Workshop[/h3]
+[list]
+[*]New [b]Empty slot[/b] button in the Locker: clears a skin from a slot (with a confirmation). Emptying a slot removes both its head and body (the whole skin).
+[*]Your own freshly published skins now show up in the Skin Workshop [b]right away[/b] (no waiting for Steam to index them).
+[*]Fixed the Publish button sometimes not opening the publish panel, and the Add button being stuck when you already owned a skin (it now reads "Equip").
+[/list]
+
+[h3]Fixes[/h3]
+[list]
+[*]When you open the color picker, the cursor now starts centered on the wheel, and it no longer stutters or flashes on screen.
+[*]Skin thumbnails: the background no longer shows a wrong (grey/black) material instead of your backdrop.
+[/list]

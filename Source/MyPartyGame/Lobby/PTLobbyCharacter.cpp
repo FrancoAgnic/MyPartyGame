@@ -39,6 +39,7 @@
 #include "Engine/GameInstance.h"
 #include "Engine/SceneCapture2D.h"
 #include "Components/SceneCaptureComponent2D.h"
+#include "RenderingThread.h" // FlushRenderingCommands: asegurar que el fondo/material estén listos antes de capturar
 #include "TextureResource.h"
 
 // Forward-decls de helpers estáticos (definidos más abajo en este archivo).
@@ -355,10 +356,12 @@ bool APTLobbyCharacter::CaptureLookThumbnailPNG(TArray<uint8>& OutPNG, bool bHea
         }
     }
 
-    // Capturamos DOS veces: el fondo y la luz se spawnearon en este MISMO frame y a veces su proxy de
-    // render (o el material del plano) todavía no entró a la escena del capture en el primer disparo →
-    // el fondo salía con el material default (gris) o el de error (rojo). La 1ra captura "calienta"
-    // (registra esos proxies/materiales); la 2da ya los ve → fondo correcto y estable.
+    // El fondo (plano con TU material) y la luz se spawnearon en ESTE mismo frame. Si capturamos sin
+    // esperar, a veces su proxy de render / la asignación del material todavía no entraron a la escena
+    // del capture → el fondo salía con el material DEFAULT (gris) o directamente NEGRO (plano ausente),
+    // en vez de tu material. FlushRenderingCommands fuerza al render thread a procesar esos comandos
+    // (crear proxy + aplicar material) ANTES de capturar → tu material sale siempre. + doble captura de respaldo.
+    FlushRenderingCommands();
     C->CaptureScene();
     C->CaptureScene();
 

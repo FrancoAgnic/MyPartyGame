@@ -158,58 +158,92 @@ struct FPTWorkshopQuery
     UGCQueryHandle_t Handle = k_UGCQueryHandleInvalid;
     CCallResult<FPTWorkshopQuery, SteamUGCQueryCompleted_t> QueryCR;
 
-    void Start(const FString& SearchText, const FString& Tag,
+    // Búsqueda en DOS fases para que tus propios items recién publicados aparezcan YA (Steam tarda en
+    // indexar los items nuevos en la búsqueda GLOBAL, hasta ~1h): 1) TUS publicados (instantáneo) →
+    // 2) catálogo global → se mergean (sin duplicar, los tuyos primero) y se devuelve una sola lista.
+    FString SearchText, Tag;
+    TArray<FPTWorkshopItem> Accum;
+    TSet<FString> SeenIds;
+    int32 Phase = 0;     // 0 = mis publicados, 1 = catálogo global
+    bool  bAnyOk = false;
+
+    void Start(const FString& InSearch, const FString& InTag,
                TFunction<void(TArray<FPTWorkshopItem>&&, bool)> InCb)
     {
         Cb = MoveTemp(InCb);
+        SearchText = InSearch; Tag = InTag;
+        Accum.Reset(); SeenIds.Reset(); bAnyOk = false; Phase = 0;
         if (!SteamUGC() || !SteamUtils()) { if (Cb) Cb({}, false); return; }
+        if (!RunMyPublished()) { Phase = 1; RunQueryAll(); } // sin SteamUser → saltar a la global
+    }
 
+    // Fase 0: items publicados por EL USUARIO ACTUAL (aparecen al instante, sin esperar el índice global).
+    bool RunMyPublished()
+    {
+        if (!SteamUser()) return false;
         const AppId_t App = SteamUtils()->GetAppID();
-        // Si hay texto de búsqueda, ordenar por relevancia; si no, por votos (populares primero).
+        const AccountID_t Acct = SteamUser()->GetSteamID().GetAccountID();
+        Handle = SteamUGC()->CreateQueryUserUGCRequest(Acct, k_EUserUGCList_Published,
+            k_EUGCMatchingUGCType_Items, k_EUserUGCListSortOrder_CreationOrderDesc, App, App, 1);
+        if (Handle == k_UGCQueryHandleInvalid) return false;
+        if (!Tag.IsEmpty()) SteamUGC()->AddRequiredTag(Handle, TCHAR_TO_UTF8(*Tag));
+        SteamUGC()->SetReturnLongDescription(Handle, true);
+        const SteamAPICall_t h = SteamUGC()->SendQueryUGCRequest(Handle);
+        QueryCR.Set(h, this, &FPTWorkshopQuery::OnComplete);
+        return true;
+    }
+
+    // Fase 1: catálogo global (todo lo publicado por la comunidad).
+    void RunQueryAll()
+    {
+        const AppId_t App = SteamUtils()->GetAppID();
         const EUGCQuery QueryType = SearchText.IsEmpty()
             ? k_EUGCQuery_RankedByVote : k_EUGCQuery_RankedByTextSearch;
         Handle = SteamUGC()->CreateQueryAllUGCRequest(QueryType, k_EUGCMatchingUGCType_Items, App, App, 1);
         if (!SearchText.IsEmpty()) SteamUGC()->SetSearchText(Handle, TCHAR_TO_UTF8(*SearchText));
         if (!Tag.IsEmpty())        SteamUGC()->AddRequiredTag(Handle, TCHAR_TO_UTF8(*Tag));
-        // Que el resultado traiga la descripción completa (si no, m_rgchDescription viene vacío/cortado).
         SteamUGC()->SetReturnLongDescription(Handle, true);
-
         const SteamAPICall_t h = SteamUGC()->SendQueryUGCRequest(Handle);
         QueryCR.Set(h, this, &FPTWorkshopQuery::OnComplete);
     }
 
+    void Harvest(SteamUGCQueryCompleted_t* p)
+    {
+        if (!SteamUGC() || !p) return;
+        for (uint32 i = 0; i < p->m_unNumResultsReturned; ++i)
+        {
+            SteamUGCDetails_t D;
+            if (!SteamUGC()->GetQueryUGCResult(Handle, i, &D)) continue;
+            FString Id = FString::Printf(TEXT("%llu"), D.m_nPublishedFileId);
+            if (SeenIds.Contains(Id)) continue; // dedup (mis publicados vs global)
+            SeenIds.Add(Id);
+            FPTWorkshopItem It;
+            It.Id          = Id;
+            It.Title       = UTF8_TO_TCHAR(D.m_rgchTitle);
+            It.Description = UTF8_TO_TCHAR(D.m_rgchDescription);
+            It.Tags        = UTF8_TO_TCHAR(D.m_rgchTags);
+            char PrevUrl[1024] = { 0 };
+            if (SteamUGC()->GetQueryUGCPreviewURL(Handle, i, PrevUrl, sizeof(PrevUrl)))
+                It.PreviewURL = UTF8_TO_TCHAR(PrevUrl);
+            It.bSubscribed = (SteamUGC()->GetItemState(D.m_nPublishedFileId) & k_EItemStateSubscribed) != 0;
+            Accum.Add(MoveTemp(It));
+        }
+    }
+
     void OnComplete(SteamUGCQueryCompleted_t* p, bool bIOFailure)
     {
-        TArray<FPTWorkshopItem> Out;
         const bool bOk = !bIOFailure && p && p->m_eResult == k_EResultOK;
-        if (bOk && SteamUGC())
-        {
-            for (uint32 i = 0; i < p->m_unNumResultsReturned; ++i)
-            {
-                SteamUGCDetails_t D;
-                if (SteamUGC()->GetQueryUGCResult(Handle, i, &D))
-                {
-                    FPTWorkshopItem It;
-                    It.Id          = FString::Printf(TEXT("%llu"), D.m_nPublishedFileId);
-                    It.Title       = UTF8_TO_TCHAR(D.m_rgchTitle);
-                    It.Description = UTF8_TO_TCHAR(D.m_rgchDescription);
-                    It.Tags        = UTF8_TO_TCHAR(D.m_rgchTags);
-                    // URL de la miniatura (se baja por HTTP en la fila del browser).
-                    char PrevUrl[1024] = { 0 };
-                    if (SteamUGC()->GetQueryUGCPreviewURL(Handle, i, PrevUrl, sizeof(PrevUrl)))
-                        It.PreviewURL = UTF8_TO_TCHAR(PrevUrl);
-                    const uint32 St = SteamUGC()->GetItemState(D.m_nPublishedFileId);
-                    It.bSubscribed = (St & k_EItemStateSubscribed) != 0;
-                    Out.Add(MoveTemp(It));
-                }
-            }
-        }
+        if (bOk) { bAnyOk = true; Harvest(p); }
         if (SteamUGC() && Handle != k_UGCQueryHandleInvalid)
-            SteamUGC()->ReleaseQueryUGCRequest(Handle);
+            { SteamUGC()->ReleaseQueryUGCRequest(Handle); Handle = k_UGCQueryHandleInvalid; }
+
+        if (Phase == 0) { Phase = 1; RunQueryAll(); return; } // terminó mis publicados → catálogo global
 
         TFunction<void(TArray<FPTWorkshopItem>&&, bool)> CB = MoveTemp(Cb);
+        TArray<FPTWorkshopItem> Out = MoveTemp(Accum);
+        const bool bResult = bAnyOk;
         AsyncTask(ENamedThreads::GameThread,
-            [CB = MoveTemp(CB), Out = MoveTemp(Out), bOk]() mutable { if (CB) CB(MoveTemp(Out), bOk); });
+            [CB = MoveTemp(CB), Out = MoveTemp(Out), bResult]() mutable { if (CB) CB(MoveTemp(Out), bResult); });
     }
 };
 

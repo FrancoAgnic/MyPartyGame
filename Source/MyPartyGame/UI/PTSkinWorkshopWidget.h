@@ -49,7 +49,6 @@ public:
 
 protected:
     virtual void NativeConstruct() override;
-    virtual void NativeDestruct() override;
 
     UPROPERTY(meta = (BindWidget))         UPanelWidget*     ResultsBox;
     UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* SearchBox;
