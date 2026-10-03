@@ -1,0 +1,8 @@
+TITLE: v1.0.11 - UI fix
+
+[h2]Sculpturillo v1.0.11[/h2]
+
+[h3]Fixes[/h3]
+[list]
+[*]Fixed a UI issue in the Locker.
+[/list]
