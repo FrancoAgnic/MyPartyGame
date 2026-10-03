@@ -409,6 +409,12 @@ protected:
     // Color picker (mantener RMB), reusando el WBP del gameplay: se abre, se tickea con el cursor
     // y al soltar se aplica el color a HeadPaintColor (esculpís/pintás con ese color).
     UPROPERTY() UUserWidget* HeadColorPicker = nullptr;
+    // Instancia OCULTA pre-cargada al entrar al lobby: evita el freeze de ~1s la 1ra vez que abrís el
+    // color picker en el Sculpt Head. Se renderiza a opacity 0 (calienta assets/shaders sin verse) con la
+    // animación de intro FRENADA (si no, pisaba la opacidad y se veía el border/anillo). Cacheada (GC).
+    UPROPERTY() UUserWidget* HeadColorPickerWarm = nullptr;
+    FTimerHandle HeadColorPickerWarmTimer;
+    void PrewarmHeadColorPicker();
     bool bHeadColorActive = false;
     void OnHeadColorPickPressed();
     void OnHeadColorPickReleased();

@@ -359,9 +359,11 @@ void APTSculptPlayerController::PrewarmColorPicker()
     if (!ColorPickerClass || ColorPickerWarm || !IsLocalController()) return;
     ColorPickerWarm = CreateWidget<UUserWidget>(this, ColorPickerClass);
     if (!ColorPickerWarm) return;
-    ColorPickerWarm->SetRenderOpacity(0.f);                              // invisible pero SE DIBUJA (compila shaders)
-    ColorPickerWarm->SetVisibility(ESlateVisibility::HitTestInvisible);  // que no capture clicks mientras precalienta
-    ColorPickerWarm->AddToViewport(-100);                               // z-order muy bajo: detrás de todo
+    ColorPickerWarm->AddToViewport(-100);                               // z-order muy bajo
+    // Se DIBUJA (compila shaders/carga assets) pero MUY LEJOS fuera de pantalla → no se ve, sin depender
+    // de la opacidad (la anim de intro del WBP la pisaba). HitTestInvisible para que no robe clics.
+    ColorPickerWarm->SetRenderTransform(FWidgetTransform(FVector2D(20000.f, 20000.f), FVector2D(1.f, 1.f), FVector2D(0.f, 0.f), 0.f));
+    ColorPickerWarm->SetVisibility(ESlateVisibility::HitTestInvisible);
     GetWorldTimerManager().SetTimer(ColorPickerWarmTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
     {
         // Sacarlo de pantalla, PERO mantener el objeto vivo (sigue referenciado) → texturas no se liberan.
@@ -2363,6 +2365,8 @@ void APTSculptPlayerController::OnColorPickPressed()
     SetInputMode(FInputModeGameAndUI());
     bShowMouseCursor  = true;
     bQuickColorActive = true;
+    // Arrancar con el cursor en el CENTRO de la rueda (si no, aparece donde estaba el mouse).
+    if (UPTColorPickerWidget* CP = Cast<UPTColorPickerWidget>(ColorPicker)) CP->CenterCursorOnWheel();
 }
 
 void APTSculptPlayerController::OnColorSavePressed()

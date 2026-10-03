@@ -310,6 +310,23 @@ void UPTWordPackSubsystem::SearchWorkshop(const FString& SearchText, const FStri
 #endif
 }
 
+bool UPTWordPackSubsystem::GetInstalledSkinBundle(const FString& Id, TArray<uint8>& OutBytes) const
+{
+#if PT_WITH_STEAM
+    if (!SteamUGC()) return false;
+    const uint64 Raw = FCString::Strtoui64(*Id, nullptr, 10);
+    if (Raw == 0) return false;
+    const PublishedFileId_t Fid = (PublishedFileId_t)Raw;
+    if (!(SteamUGC()->GetItemState(Fid) & k_EItemStateInstalled)) return false; // aún descargando / no está
+    uint64 SizeOnDisk = 0; uint32 Timestamp = 0; char FolderBuf[2048] = { 0 };
+    if (!SteamUGC()->GetItemInstallInfo(Fid, &SizeOnDisk, FolderBuf, sizeof(FolderBuf), &Timestamp)) return false;
+    const FString Path = FPaths::Combine(FString(UTF8_TO_TCHAR(FolderBuf)), TEXT("skin.bin"));
+    return FFileHelper::LoadFileToArray(OutBytes, *Path);
+#else
+    return false;
+#endif
+}
+
 void UPTWordPackSubsystem::SubscribeItem(const FString& Id)
 {
 #if PT_WITH_STEAM
@@ -811,6 +828,100 @@ void UPTWordPackSubsystem::PublishMap(const FString& MapFolder, const FString& T
         [this](bool bOk, FString Info)
         {
             UE_LOG(LogPTWordPacks, Log, TEXT("PublishMap: %s (%s)"), bOk ? TEXT("OK") : TEXT("FALLÓ"), *Info);
+            OnWordPackPublished.Broadcast(bOk, Info);
+        });
+#else
+    OnWordPackPublished.Broadcast(false, TEXT("Steamworks no disponible en esta plataforma"));
+#endif
+}
+
+void UPTWordPackSubsystem::PublishSkin(const TArray<uint8>& SkinBytes, const FString& Title,
+                                       const FString& Description, const FString& PreviewPath)
+{
+#if PT_WITH_STEAM
+    if (!SteamUGC() || !SteamUtils())
+    {
+        OnWordPackPublished.Broadcast(false, TEXT("Steam no disponible"));
+        return;
+    }
+    if (SkinBytes.Num() == 0)
+    {
+        OnWordPackPublished.Broadcast(false, TEXT("La skin está vacía"));
+        return;
+    }
+
+    // Staging en %TEMP%: <base>/content/ → skin.bin + mod.json ; <base>/preview.png fuera de content.
+    FString Base = FPaths::Combine(FString(FPlatformProcess::UserTempDir()),
+                                   TEXT("SculpturilloWorkshop"),
+                                   FGuid::NewGuid().ToString(EGuidFormats::Short));
+    Base = FPaths::ConvertRelativePathToFull(Base);
+    FPaths::MakePlatformFilename(Base);
+    FString Content = FPaths::Combine(Base, TEXT("content"));
+    FPaths::MakePlatformFilename(Content);
+
+    IFileManager& FM = IFileManager::Get();
+    const bool bDir = FM.MakeDirectory(*Content, /*Tree=*/true);
+    const bool bBin = FFileHelper::SaveArrayToFile(SkinBytes, *FPaths::Combine(Content, TEXT("skin.bin")));
+
+    FString EffTitle = Title; EffTitle.TrimStartAndEndInline();
+    if (EffTitle.IsEmpty()) EffTitle = TEXT("Skin");
+    FString EscTitle = EffTitle, EscDesc = Description.TrimStartAndEnd();
+    EscTitle.ReplaceInline(TEXT("\\"), TEXT("\\\\")); EscTitle.ReplaceInline(TEXT("\""), TEXT("\\\""));
+    EscDesc.ReplaceInline(TEXT("\\"), TEXT("\\\\"));  EscDesc.ReplaceInline(TEXT("\""), TEXT("\\\""));
+    EscDesc.ReplaceInline(TEXT("\r"), TEXT(" "));     EscDesc.ReplaceInline(TEXT("\n"), TEXT(" "));
+    const FString ModJson = FString::Printf(
+        TEXT("{ \"Title\": \"%s\", \"Description\": \"%s\", \"Type\": \"Skin\", \"Author\": \"\" }"),
+        *EscTitle, *EscDesc);
+    const bool bJson = FFileHelper::SaveStringToFile(ModJson, *FPaths::Combine(Content, TEXT("mod.json")));
+
+    // Preview: misma lógica que mapas/bancos (achicar a ≤512 y re-encodar; fallback branded; sólido).
+    FString UsePreview;
+    if (!PreviewPath.IsEmpty())
+    {
+        FString Processed;
+        if (PT_ProcessPreviewImage(PreviewPath, Base, Processed)) UsePreview = Processed;
+    }
+    if (UsePreview.IsEmpty())
+    {
+        const FString Branded = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("UI/Workshop/DefaultWordBankThumbnail.png"));
+        if (FPaths::FileExists(Branded))
+        {
+            FString Processed;
+            if (PT_ProcessPreviewImage(Branded, Base, Processed)) UsePreview = Processed;
+        }
+    }
+    if (UsePreview.IsEmpty())
+    {
+        const int32 Sz = 256;
+        TArray<FColor> Pixels; Pixels.Init(FColor(150, 110, 200, 255), Sz * Sz);
+        IImageWrapperModule& IW = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
+        TSharedPtr<IImageWrapper> Wrapper = IW.CreateImageWrapper(EImageFormat::PNG);
+        if (Wrapper.IsValid() &&
+            Wrapper->SetRaw(Pixels.GetData(), Pixels.Num() * sizeof(FColor), Sz, Sz, ERGBFormat::BGRA, 8))
+        {
+            const TArray64<uint8>& Png = Wrapper->GetCompressed(100);
+            const FString PrevFile = FPaths::Combine(Base, TEXT("preview.png"));
+            if (FFileHelper::SaveArrayToFile(TArray<uint8>(Png), *PrevFile)) UsePreview = PrevFile;
+        }
+    }
+    if (!UsePreview.IsEmpty()) FPaths::MakePlatformFilename(UsePreview);
+
+    UE_LOG(LogPTWordPacks, Warning, TEXT("[PublishSkin] Content='%s' dir=%d bin=%d json=%d preview='%s'"),
+        *Content, bDir ? 1 : 0, bBin ? 1 : 0, bJson ? 1 : 0, *UsePreview);
+    if (!bBin || !bJson)
+    {
+        OnWordPackPublished.Broadcast(false, FString::Printf(TEXT("No se pudo armar el staging: %s"), *Content));
+        return;
+    }
+
+    delete Publisher;
+    Publisher = new FPTWorkshopPublish();
+    Publisher->BaseTag    = TEXT("Skin");   // filtra en el popup de skins
+    Publisher->ChangeNote = TEXT("Skin");
+    Publisher->Start(Content, UsePreview, EffTitle, Description, /*LangTags=*/{},
+        [this](bool bOk, FString Info)
+        {
+            UE_LOG(LogPTWordPacks, Log, TEXT("PublishSkin: %s (%s)"), bOk ? TEXT("OK") : TEXT("FALLÓ"), *Info);
             OnWordPackPublished.Broadcast(bOk, Info);
         });
 #else

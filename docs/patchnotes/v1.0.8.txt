@@ -1,0 +1,15 @@
+TITLE: v1.0.8 - Share your skins on the Workshop
+
+[h2]Sculpturillo v1.0.8[/h2]
+
+[h3]New[/h3]
+[list]
+[*][b]Skin Workshop[/b]: from the Locker you can now open a Skin Workshop panel to browse skins published by the community, download them and equip them (and edit them afterwards like your own). You can also publish your current skin (head + body) straight from there.
+[/list]
+
+[h3]Fixes[/h3]
+[list]
+[*]The color picker no longer stutters the first time you open it in Head Sculpt (and it's warmed up quietly in the background).
+[*]When you open the color picker, the cursor now starts centered on the color wheel.
+[*]Fixed the background sometimes showing a wrong (red/grey) material in a freshly created skin thumbnail.
+[/list]

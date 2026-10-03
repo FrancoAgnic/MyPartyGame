@@ -88,9 +88,18 @@ public:
     UFUNCTION(BlueprintCallable, Category="WordPack")
     void PublishMap(const FString& MapFolder, const FString& Title, const FString& Description, const FString& PreviewPath);
 
+    /** Publica una SKIN (cabeza + cuerpo) al Workshop: sube skin.bin + mod.json con tag "Skin". SkinBytes
+     *  es el paquete serializado por el Locker (UPTLockerSubsystem::ExportSkinBundle). Async →
+     *  OnWordPackPublished. Requiere Steam + Workshop habilitado. */
+    void PublishSkin(const TArray<uint8>& SkinBytes, const FString& Title, const FString& Description, const FString& PreviewPath);
+
     /** Busca en el CATÁLOGO del Workshop (todos los items publicados) por texto, filtrando por Tag
-     *  ("WordBank" para bancos, "Map" para mapas). Async → OnWorkshopSearchComplete. */
+     *  ("WordBank" para bancos, "Map" para mapas, "Skin" para skins). Async → OnWorkshopSearchComplete. */
     void SearchWorkshop(const FString& SearchText, const FString& Tag);
+
+    /** Lee el skin.bin de un item del Workshop YA descargado (por su id). false si no está instalado o
+     *  no trae skin.bin. Para importar/equipar una skin suscrita sin exponer Steam a la UI. */
+    bool GetInstalledSkinBundle(const FString& Id, TArray<uint8>& OutBytes) const;
     /** Suscribir/desuscribir un item por su Id → Steam lo descarga/borra. Al bajarse aparece en GetPacks. */
     void SubscribeItem(const FString& Id);
     void UnsubscribeItem(const FString& Id);

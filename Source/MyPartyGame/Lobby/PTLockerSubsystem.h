@@ -57,6 +57,18 @@ public:
 
     void SaveToDisk();
 
+    // ── Workshop de skins (una SKIN = cabeza + cuerpo en un paquete) ──────────
+    // Serializa la skin (cabeza HeadIdx + cuerpo BodyIdx) a bytes: de la cabeza va BakedBlob (equipar) +
+    // RawState (editar) + Thumb; del cuerpo va BodyPNG + Thumb. false si la cabeza no tiene geometría
+    // (no hay nada que publicar). Para publicar al Workshop sin que el subsistema dependa del Locker.
+    bool ExportSkinBundle(int32 HeadIdx, int32 BodyIdx, TArray<uint8>& OutBytes) const;
+    // Importa un paquete de skin a slots LIBRES (cabeza + cuerpo). Devuelve el índice de cabeza importada
+    // (-1 = falló / Locker lleno). OutBodyIdx = índice de cuerpo (-1 si la skin no traía cuerpo). NO equipa.
+    int32 ImportSkinBundle(const TArray<uint8>& InBytes, int32& OutBodyIdx);
+    // Primer slot LIBRE (no usado), salteando el slot 0 "Default". -1 si no hay lugar.
+    int32 FirstFreeHeadSlot() const;
+    int32 FirstFreeBodySlot() const;
+
 private:
     UPROPERTY() UPTLockerSaveGame* Save = nullptr;
     void EnsureLoaded();

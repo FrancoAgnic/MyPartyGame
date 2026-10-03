@@ -57,8 +57,13 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      EditActionButton;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      BackButton;
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   AssignLabel;
+    // Botón que abre el popup del Workshop de skins (descargar/equipar/publicar).
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*      SkinWorkshopButton;
 
     UPROPERTY(EditAnywhere, Category = "Locker") TSubclassOf<UPTLockerSlotWidget> SlotWidgetClass;
+    // WBP del popup de Skin Workshop (deriva de PTSkinWorkshopWidget). Asignar en Details del WBP del Locker.
+    UPROPERTY(EditAnywhere, Category = "Locker") TSubclassOf<class UPTSkinWorkshopWidget> SkinWorkshopClass;
+    UPROPERTY(Transient) class UPTSkinWorkshopWidget* SkinWorkshop = nullptr; // creado una vez y reusado
     // Columnas por fila cuando el contenedor es un Uniform Grid Panel (para acomodar los 6 slots en grilla).
     UPROPERTY(EditAnywhere, Category = "Locker") int32 SlotsPerRow = 3;
     // Color de la pestaña ACTIVA vs. inactiva (se aplica al fondo del botón de la pestaña).
@@ -70,6 +75,7 @@ protected:
     UFUNCTION() void OnAssignClicked();
     UFUNCTION() void OnEditClicked();
     UFUNCTION() void OnBackClicked();
+    UFUNCTION() void OnSkinWorkshopClicked(); // abre el popup del Workshop de skins
 
 private:
     void BuildSlots();

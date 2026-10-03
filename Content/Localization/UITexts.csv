@@ -282,3 +282,14 @@ UI_COL_TITLE,Título,Tittle,Título,Titel,Titre,Titolo
 UI_COL_IMAGE,Imagen,Image,Imagem,Bild,Image,Immagine
 UI_COL_TYPE,Tipo,Type,Tipo,Typ,Type,Tipo
 UI_COL_SUBSCRIPTION,Suscripción,Subscription,Inscrição,Abonnement,Abonnement,Iscrizione
+WORKSHOP_SEARCH_BTN,Buscar,Search,Buscar,Suchen,Rechercher,Cerca
+SKIN_WS_TITLE,Workshop de skins,Skin Workshop,Workshop de skins,Skin-Workshop,Workshop de skins,Workshop delle skin
+SKIN_WS_BUTTON,Skins del Workshop,Workshop Skins,Skins da Workshop,Workshop-Skins,Skins du Workshop,Skin della Workshop
+SKIN_WS_PUBLISH,Publicar skin,Publish skin,Publicar skin,Skin veröffentlichen,Publier la skin,Pubblica skin
+SKIN_WS_DOWNLOADING,Descargando la skin... probá en unos segundos,Downloading the skin... try again in a few seconds,Baixando a skin... tente de novo em alguns segundos,Skin wird heruntergeladen... in ein paar Sekunden erneut versuchen,Téléchargement de la skin... réessaie dans quelques secondes,Scaricando la skin... riprova tra qualche secondo
+SKIN_WS_IMPORT_FAIL,No se pudo importar (Locker lleno o skin inválida),Couldn't import (Locker full or invalid skin),Não foi possível importar (Locker cheio ou skin inválida),Import fehlgeschlagen (Locker voll oder ungültige Skin),Import impossible (casier plein ou skin invalide),Impossibile importare (Locker pieno o skin non valida)
+SKIN_WS_EQUIPPED,¡Skin equipada! Quedó en tu Locker,Skin equipped! Saved to your Locker,Skin equipada! Salva no seu Locker,Skin ausgerüstet! In deinem Locker gespeichert,Skin équipée ! Enregistrée dans ton casier,Skin equipaggiata! Salvata nel tuo Locker
+SKIN_WS_NEED_HEAD,Equipá una cabeza propia (esculpida) antes de publicar,Equip your own (sculpted) head before publishing,Equipe uma cabeça própria (esculpida) antes de publicar,Rüste einen eigenen (modellierten) Kopf aus bevor du veröffentlichst,Équipe une tête à toi (sculptée) avant de publier,Equipaggia una testa tua (scolpita) prima di pubblicare
+SKIN_WS_UPLOADING,Subiendo skin al Workshop...,Uploading skin to the Workshop...,Enviando skin para a Workshop...,Skin wird in den Workshop hochgeladen...,Envoi de la skin sur le Workshop...,Caricamento della skin sulla Workshop...
+SKIN_WS_PUBLISHED,¡Skin publicada! Puede tardar un rato en aparecer,Skin published! It may take a while to show up,Skin publicada! Pode demorar um pouco para aparecer,Skin veröffentlicht! Kann etwas dauern bis sie erscheint,Skin publiée ! Elle peut mettre un moment à apparaître,Skin pubblicata! Può metterci un po' a comparire
+SKIN_WS_PUBLISH_FAIL,No se pudo publicar: {0},Couldn't publish: {0},Não foi possível publicar: {0},Veröffentlichen fehlgeschlagen: {0},Publication impossible : {0},Impossibile pubblicare: {0}

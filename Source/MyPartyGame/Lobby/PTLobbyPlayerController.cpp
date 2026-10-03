@@ -138,6 +138,10 @@ void APTLobbyPlayerController::BeginPlay()
 
         ShowLobbyOverlay();
 
+        // Pre-cargar el color picker del Sculpt Head OCULTO ahora, para que la 1ra apertura real no
+        // frizee ~1s (carga del WBP + assets + shaders). Ver PrewarmHeadColorPicker().
+        PrewarmHeadColorPicker();
+
         // Transición de LLEGADA: si venimos de salir de un nivel, mostrar la pantalla de carga ya TAPANDO
         // (empieza en el loop) y revelar el lobby con el AnimOut → la secuencia IN(en el nivel)→...→OUT(acá)
         // se ve continua. Solo cuando bTransitionCovering (no en el arranque normal del juego).
@@ -1530,6 +1534,29 @@ void APTLobbyPlayerController::RebuildEyesLiveMesh()
     if (Mat) HeadEyesLiveMesh->SetMaterial(0, Mat);
 }
 
+void APTLobbyPlayerController::PrewarmHeadColorPicker()
+{
+    // El color picker del Sculpt Head se crea recién la 1ª vez que lo abrís (clic der.): cargar su WBP +
+    // sus assets (rueda, cursores, anillo, fuentes) EN ESE momento frizea ~1s. Para evitarlo, al entrar
+    // al lobby lo PRE-CREAMOS (sin mostrarlo): eso carga la clase + los assets AHORA. NO se agrega al
+    // viewport, así que NO se ve (antes lo agregábamos oculto para calentar shaders, pero la animación de
+    // intro del WBP pisaba la opacidad y se alcanzaba a ver el border/anillo). La dejamos cacheada para
+    // que sus texturas no se liberen por GC; al abrir de verdad, la clase/assets ya están en memoria →
+    // la 1ª apertura es instantánea. No toca el flujo normal de abrir/cerrar.
+    if (!HeadColorPickerClass || HeadColorPickerWarm || !IsLocalController()) return;
+    HeadColorPickerWarm = CreateWidget<UUserWidget>(this, HeadColorPickerClass);
+    if (!HeadColorPickerWarm) return;
+    HeadColorPickerWarm->AddToViewport(-100);                         // render para calentar (z bajo)
+    // Se DIBUJA (calienta assets/shaders) pero lo mandamos MUY LEJOS fuera de pantalla → no se ve, sin
+    // depender de la opacidad (la anim de intro del WBP la pisaba). HitTestInvisible para que no robe clics.
+    HeadColorPickerWarm->SetRenderTransform(FWidgetTransform(FVector2D(20000.f, 20000.f), FVector2D(1.f, 1.f), FVector2D(0.f, 0.f), 0.f));
+    HeadColorPickerWarm->SetVisibility(ESlateVisibility::HitTestInvisible);
+    GetWorldTimerManager().SetTimer(HeadColorPickerWarmTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
+    {
+        if (HeadColorPickerWarm) HeadColorPickerWarm->RemoveFromParent(); // sacarlo de pantalla; queda cacheado
+    }), 0.6f, false);
+}
+
 void APTLobbyPlayerController::OnHeadColorPickPressed()
 {
     if (!bHeadSculptMode || !HeadColorPickerClass || HeadColorPicker) return;
@@ -1541,6 +1568,8 @@ void APTLobbyPlayerController::OnHeadColorPickPressed()
     SetShowMouseCursor(true);
     bHeadColorActive = true;
     bHeadStamping    = false; // no esculpir mientras elegís color
+    // Arrancar con el cursor en el CENTRO de la rueda (si no, aparece donde estaba el mouse).
+    if (UPTColorPickerWidget* CP = Cast<UPTColorPickerWidget>(HeadColorPicker)) CP->CenterCursorOnWheel();
 }
 
 void APTLobbyPlayerController::OnHeadColorPickReleased()

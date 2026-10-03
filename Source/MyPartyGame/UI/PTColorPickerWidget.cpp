@@ -15,6 +15,7 @@
 #include "Sound/SoundBase.h"
 #include "Engine/World.h"
 #include "Engine/GameViewportClient.h"
+#include "TimerManager.h" // SetTimerForNextTick para reintentar el centrado del cursor
 #include "UnrealClient.h" // FViewport::ReadPixels (gotero)
 #include "GameFramework/PlayerController.h"
 #include "Components/CanvasPanelSlot.h" // posicionar el cursor custom
@@ -369,6 +370,27 @@ bool UPTColorPickerWidget::SampleScreenColorAtCursor(FLinearColor& OutColor) con
     OutColor = FLinearColor::FromSRGBColor(Pixels[0]);
     OutColor.A = 1.f;
     return true;
+}
+
+void UPTColorPickerWidget::CenterCursorOnWheel()
+{
+    if (!Wheel) return;
+    const FGeometry& G = Wheel->GetCachedGeometry();
+    const FVector2D Size = G.GetLocalSize();
+    if (Size.X <= 1.f || Size.Y <= 1.f)
+    {
+        // Recién abierto: el layout todavía no calculó la geometría de la rueda → reintentar el próximo
+        // frame (unas pocas veces, por si tarda en asentarse).
+        if (CenterCursorTries++ < 10)
+            if (UWorld* W = GetWorld())
+                W->GetTimerManager().SetTimerForNextTick(this, &UPTColorPickerWidget::CenterCursorOnWheel);
+        return;
+    }
+    const FVector2D Abs = G.LocalToAbsolute(Size * 0.5f);
+    if (FSlateApplication::IsInitialized())
+        FSlateApplication::Get().SetCursorPos(Abs);
+    // Mover ya nuestro cursor custom al centro (si no, se vería en el borde hasta el próximo QuickPickTick).
+    UpdateCustomCursor(Abs, /*bOverPicker=*/true);
 }
 
 void UPTColorPickerWidget::SetColor(FLinearColor NewColor)

@@ -57,6 +57,10 @@ public:
     /** Guarda el color actual en la paleta persistente (lo llama el PlayerController con E). */
     void SaveCurrentColor();
 
+    /** Centra el cursor del SO en el medio de la rueda al abrir el picker (lo llama el PlayerController).
+     *  Reintenta solo si la geometría todavía no está lista (recién abierto). */
+    void CenterCursorOnWheel();
+
 protected:
     virtual void NativeConstruct() override;
     virtual void NativeDestruct() override; // restaura el cursor de hardware al cerrar el picker
@@ -94,6 +98,7 @@ protected:
 private:
     float Hue = 0.f, Sat = 0.f, Val = 1.f; // HSV actual (Val = brillo; el slider es opcional)
     bool  bDragging = false;
+    int32 CenterCursorTries = 0; // reintentos de centrar el cursor hasta que la geometría esté lista
 
     // Edición del BRILLO (Value) de un color guardado con la rueda del mouse: mientras el cursor
     // está sobre un swatch, la rueda le sube/baja el value (y el ValueSlider lo muestra en vivo);

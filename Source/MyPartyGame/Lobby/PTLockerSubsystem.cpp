@@ -3,6 +3,8 @@
 #include "PTLockerSubsystem.h"
 #include "PTHeadSaveGame.h"          // migración del save viejo (una sola cabeza)
 #include "Kismet/GameplayStatics.h"
+#include "Serialization/MemoryWriter.h" // empaquetar/leer el bundle de skin (Workshop)
+#include "Serialization/MemoryReader.h"
 
 namespace { const TCHAR* PTLockerSaveSlot = TEXT("PTLocker"); }
 
@@ -170,4 +172,67 @@ void UPTLockerSubsystem::ClearBodySlot(int32 Idx)
 void UPTLockerSubsystem::SaveToDisk()
 {
     if (Save) UGameplayStatics::SaveGameToSlot(Save, PTLockerSaveSlot, 0);
+}
+
+// ── Workshop de skins ───────────────────────────────────────────────────────────
+int32 UPTLockerSubsystem::FirstFreeHeadSlot() const
+{
+    if (!Save) return -1;
+    for (int32 i = 1; i < Save->HeadSlots.Num(); ++i) // salteamos el slot 0 (Default)
+        if (!Save->HeadSlots[i].bUsed) return i;
+    return -1;
+}
+int32 UPTLockerSubsystem::FirstFreeBodySlot() const
+{
+    if (!Save) return -1;
+    for (int32 i = 1; i < Save->BodySlots.Num(); ++i)
+        if (!Save->BodySlots[i].bUsed) return i;
+    return -1;
+}
+
+bool UPTLockerSubsystem::ExportSkinBundle(int32 HeadIdx, int32 BodyIdx, TArray<uint8>& OutBytes) const
+{
+    const_cast<UPTLockerSubsystem*>(this)->EnsureLoaded();
+    if (!Save) return false;
+
+    // Copias locales (FArchive operator<< necesita referencias NO const).
+    TArray<uint8> HBaked = GetHeadBaked(HeadIdx);
+    if (HBaked.Num() == 0) return false; // sin cabeza custom → nada que publicar
+    TArray<uint8> HRaw   = GetHeadRawState(HeadIdx);
+    TArray<uint8> HThumb = GetHeadThumb(HeadIdx);
+    TArray<uint8> BPNG   = GetBodyPNG(BodyIdx);
+    TArray<uint8> BThumb = GetBodyThumb(BodyIdx);
+
+    OutBytes.Reset();
+    FMemoryWriter Ar(OutBytes, /*bIsPersistent=*/true);
+    int32 Version = 1;
+    Ar << Version;
+    Ar << HBaked << HRaw << HThumb << BPNG << BThumb;
+    return true;
+}
+
+int32 UPTLockerSubsystem::ImportSkinBundle(const TArray<uint8>& InBytes, int32& OutBodyIdx)
+{
+    OutBodyIdx = -1;
+    EnsureLoaded();
+    if (!Save || InBytes.Num() == 0) return -1;
+
+    FMemoryReader Ar(InBytes, /*bIsPersistent=*/true);
+    int32 Version = 0;
+    Ar << Version;
+    if (Version != 1) return -1;
+    TArray<uint8> HBaked, HRaw, HThumb, BPNG, BThumb;
+    Ar << HBaked << HRaw << HThumb << BPNG << BThumb;
+    if (HBaked.Num() == 0) return -1;
+
+    const int32 HeadIdx = FirstFreeHeadSlot();
+    if (HeadIdx < 0) return -1; // Locker lleno
+    SaveHeadSlot(HeadIdx, HBaked, HRaw, HThumb);
+
+    if (BPNG.Num() > 0)
+    {
+        const int32 BodyIdx = FirstFreeBodySlot();
+        if (BodyIdx >= 0) { SaveBodySlot(BodyIdx, BPNG, BThumb); OutBodyIdx = BodyIdx; }
+    }
+    return HeadIdx;
 }

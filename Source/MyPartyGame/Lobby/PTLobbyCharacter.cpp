@@ -355,6 +355,11 @@ bool APTLobbyCharacter::CaptureLookThumbnailPNG(TArray<uint8>& OutPNG, bool bHea
         }
     }
 
+    // Capturamos DOS veces: el fondo y la luz se spawnearon en este MISMO frame y a veces su proxy de
+    // render (o el material del plano) todavía no entró a la escena del capture en el primer disparo →
+    // el fondo salía con el material default (gris) o el de error (rojo). La 1ra captura "calienta"
+    // (registra esos proxies/materiales); la 2da ya los ve → fondo correcto y estable.
+    C->CaptureScene();
     C->CaptureScene();
 
     FTextureRenderTargetResource* Res = RT->GameThread_GetRenderTargetResource();

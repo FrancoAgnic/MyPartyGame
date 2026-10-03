@@ -2,6 +2,7 @@
 
 #include "PTLockerWidget.h"
 #include "PTLockerSlotWidget.h"
+#include "../UI/PTSkinWorkshopWidget.h"
 #include "PTLockerSubsystem.h"
 #include "PTLobbyPlayerController.h"
 #include "PTLobbyCharacter.h"
@@ -22,6 +23,7 @@ void UPTLockerWidget::NativeConstruct()
     if (AssignButton)     AssignButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnAssignClicked);
     if (EditActionButton) EditActionButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnEditClicked);
     if (BackButton)       BackButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnBackClicked);
+    if (SkinWorkshopButton) SkinWorkshopButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnSkinWorkshopClicked);
     // Equipar = click en slot lleno; Crear = click en slot vacío. Ya no hay botón "Asignar/Crear".
     if (AssignButton)     AssignButton->SetVisibility(ESlateVisibility::Collapsed);
     BuildSlots();
@@ -250,6 +252,19 @@ void UPTLockerWidget::EditEquipped()
     SelectSlot(Equipped, bHead); // dejar la selección en la equipada (coherencia visual)
     if (bHead) PC->EnterHeadSculptForSlot(Equipped);
     else       PC->EnterBodyPaintForSlot(Equipped);
+}
+
+void UPTLockerWidget::OnSkinWorkshopClicked()
+{
+    // Abre el popup del Workshop de skins (se crea una vez y se reusa). Queda por encima del Locker.
+    if (!SkinWorkshopClass) return;
+    if (!SkinWorkshop)
+        SkinWorkshop = CreateWidget<UPTSkinWorkshopWidget>(this, SkinWorkshopClass);
+    if (SkinWorkshop)
+    {
+        if (!SkinWorkshop->IsInViewport()) SkinWorkshop->AddToViewport(60); // re-agregar tras cerrarlo
+        SkinWorkshop->ShowPanel();
+    }
 }
 
 // ── Botones ──
