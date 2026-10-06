@@ -267,8 +267,26 @@ void UPTGameInstance::DoEnterMapAuthoringTravel()
 
 // ── Modo LOCAL (party con celulares) ─────────────────────────────────────────
 
+void UPTGameInstance::EnterOnlineParty()
+{
+    bLocalPartyOnline = true;
+    bLocalPartyMode = true;
+    bSoloTest = false;
+    if (UPTLocalPartySubsystem* LP = GetSubsystem<UPTLocalPartySubsystem>()) LP->StartServer();
+    if (LoadingScreenClass)
+        if (UPTLoadingScreenWidget* LS = CreateLoadingScreen(/*bStartAtLoop=*/false))
+        {
+            LS->OnCovered.AddDynamic(this, &UPTGameInstance::DoEnterLocalPartyTravel);
+            if (UWorld* W = GetWorld())
+                W->GetTimerManager().SetTimer(TransitionSafetyTimer, this, &UPTGameInstance::DoEnterLocalPartyTravel, 2.0f, false);
+            return;
+        }
+    DoEnterLocalPartyTravel();
+}
+
 void UPTGameInstance::EnterLocalParty()
 {
+    bLocalPartyOnline = false;
     bLocalPartyMode = true;
     bSoloTest = false;
     // Levantar el servidor YA: los celulares pueden ir entrando mientras carga el mapa.
@@ -315,6 +333,7 @@ void UPTGameInstance::PTPadKey(const FString& KeyName)
 void UPTGameInstance::ExitLocalParty()
 {
     bLocalPartyMode = false;
+    bLocalPartyOnline = false;
     if (UPTLocalPartySubsystem* LP = GetSubsystem<UPTLocalPartySubsystem>())
     {
         LP->StopServer();

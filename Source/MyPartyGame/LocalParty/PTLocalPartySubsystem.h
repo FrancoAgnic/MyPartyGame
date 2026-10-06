@@ -15,7 +15,7 @@
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "Tickable.h"
 #include "PTSculptGameState.h"
-#include "PTLocalPartyServer.h" // TUniquePtr<FPTLocalPartyServer> necesita el tipo completo
+#include "PTPartyTransport.h" // TUniquePtr<IPTPartyTransport> necesita el tipo completo
 #include "PTLocalPartySubsystem.generated.h"
 
 class APTSculptGameMode;
@@ -55,8 +55,18 @@ public:
     virtual void Deinitialize() override;
 
     // ── Servidor ────────────────────────────────────────────────────────────
-    // Levanta el servidor (idempotente). false si no pudo abrir el puerto.
+    // Levanta el transporte (idempotente): servidor local en la WiFi o, en modo ONLINE, la conexión al
+    // relay (ver Tools/Relay). false si no se pudo (puerto ocupado / falta configurar el relay).
     bool StartServer();
+
+    // ── Modo online (relay) ──
+    UFUNCTION(BlueprintPure, Category="LocalParty") bool IsOnline() const { return bOnlineTransport; }
+    /** Código de la sala online ("KQZT"); vacío mientras conecta o en modo local. */
+    UFUNCTION(BlueprintPure, Category="LocalParty") FString GetRoomCode() const;
+    /** "play.tudominio.com" (lo que se escribe en el celular, sin https). */
+    UFUNCTION(BlueprintPure, Category="LocalParty") FString GetPublicHost() const;
+    /** Texto del último error del relay (para mostrar en la TV). */
+    FString GetOnlineError() const;
     void StopServer();
     UFUNCTION(BlueprintPure, Category="LocalParty") bool IsServerRunning() const;
 
@@ -67,6 +77,7 @@ public:
     int32 Port = 8787;
     // Máximo de jugadores de celular.
     int32 MaxPlayers = 12;
+    int32 MaxPlayersOnline = 24; // online (relay): amigos a distancia / audiencia chica
     // Segundos que se espera a un celular desconectado antes de sacarlo de la partida.
     float OfflineGraceInGame  = 90.f;
     float OfflineGraceInLobby = 20.f;
@@ -99,7 +110,9 @@ public:
     virtual ETickableTickType GetTickableTickType() const override { return ETickableTickType::Conditional; }
 
 private:
-    TUniquePtr<FPTLocalPartyServer> Server;
+    TUniquePtr<IPTPartyTransport> Server;
+    bool bOnlineTransport = false;
+    int32 LocalPort = 0;
     TArray<FPTPhonePlayer> Players;
     TWeakObjectPtr<APTSculptGameMode> GameMode;
     TWeakObjectPtr<APTSculptGameState> BoundGameState; // para el OnChatLine

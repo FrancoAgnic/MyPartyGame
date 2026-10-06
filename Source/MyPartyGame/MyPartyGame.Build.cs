@@ -37,6 +37,7 @@ public class MyPartyGame : ModuleRules
 			"JsonUtilities",
 			"Sockets",          // Modo local: servidor HTTP/WebSocket para los celulares (LocalParty/)
 			"Networking",
+			"WebSockets",       // Modo online: el juego se conecta al relay (Tools/Relay) por wss
 			// Online Subsystem — Steam (cargado dinámicamente vía plugin/config).
 			"OnlineSubsystem",
 			"OnlineSubsystemUtils",

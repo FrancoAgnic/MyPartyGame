@@ -50,6 +50,10 @@ private:
     UPROPERTY() UBorder*      LobbyPanel = nullptr;
     UPROPERTY() UImage*       QrImage    = nullptr;
     UPROPERTY() UTextBlock*   UrlText    = nullptr;
+    UPROPERTY() UTextBlock*   Step1Text  = nullptr;
+    UPROPERTY() UTextBlock*   Step2Text  = nullptr;
+    UPROPERTY() UWidget*      CodeRow    = nullptr; // online: "Código de sala: KQZT"
+    UPROPERTY() UTextBlock*   CodeText   = nullptr;
     UPROPERTY() UTextBlock*   RevealHint = nullptr;
     UPROPERTY() UTextBlock*   PlayersTitle = nullptr;
     UPROPERTY() UVerticalBox* PlayersBox = nullptr;

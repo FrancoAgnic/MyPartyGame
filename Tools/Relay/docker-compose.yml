@@ -1,0 +1,30 @@
+# Relay del modo online + Cloudflare Tunnel.
+# El túnel se conecta HACIA AFUERA a Cloudflare: no hace falta abrir puertos ni certificados, y la IP
+# de la VPS no queda expuesta. En el panel de Cloudflare el hostname público apunta a http://relay:8080.
+services:
+  relay:
+    build: .
+    container_name: sculpturillo-relay
+    restart: unless-stopped
+    environment:
+      - PORT=8080
+      - MAX_ROOMS=${MAX_ROOMS:-200}
+      - MAX_PHONES_PER_ROOM=${MAX_PHONES_PER_ROOM:-100}
+      - HOST_GRACE_SECONDS=${HOST_GRACE_SECONDS:-120}
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: sculpturillo-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    depends_on: [relay]
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }

@@ -68,6 +68,9 @@ protected:
     // "Modo local (celulares)": una PC + joystick, los jugadores entran desde el celular. Si el WBP no
     // tiene un botón con este nombre, se crea uno solo debajo de FindButton copiando su estilo.
     UPROPERTY(meta = (BindWidgetOptional)) UButton* LocalModeButton;
+    // "Modo online (celulares)": igual que el local pero los celulares entran por internet con un código.
+    // Si el WBP no lo trae, se intenta crear debajo de LocalModeButton.
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* OnlinePartyButton;
 
     // Agrupa el título "PLAY" del submenú (se muestra junto con Host/Find/EnterCode/Back).
     UPROPERTY(meta = (BindWidgetOptional)) UWidget* PlaySubmenuHeaderPanel;
@@ -116,6 +119,7 @@ protected:
     UFUNCTION() void OnSettingsClicked();
     UFUNCTION() void OnLockerClicked();
     UFUNCTION() void OnLocalModeClicked();
+    UFUNCTION() void OnOnlinePartyClicked();
     UButton* CreateFallbackLocalModeButton();
 
     void SetPlaySubmenuVisible(bool bVisible);

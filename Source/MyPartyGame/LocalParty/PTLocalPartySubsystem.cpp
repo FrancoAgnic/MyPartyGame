@@ -1,5 +1,7 @@
 #include "PTLocalPartySubsystem.h"
 #include "PTLocalPartyServer.h"
+#include "PTRelayTransport.h"
+#include "Misc/ConfigCacheIni.h"
 #include "PTSculptGameMode.h"
 #include "PTSculptGameState.h"
 #include "../Lobby/PTPlayerState.h"
@@ -87,26 +89,51 @@ void UPTLocalPartySubsystem::Deinitialize()
 
 bool UPTLocalPartySubsystem::StartServer()
 {
-    if (Server && Server->IsRunning()) return true;
+    const UPTGameInstance* GI = Cast<UPTGameInstance>(GetGameInstance());
+    const bool bWantOnline = GI && GI->bLocalPartyOnline;
+    if (Server && bOnlineTransport == bWantOnline) return true; // ya está andando (o conectando al relay)
+    StopServer();
 
-    Server = MakeUnique<FPTLocalPartyServer>();
-    Server->OnClientConnected.BindUObject(this, &UPTLocalPartySubsystem::HandleConnected);
-    Server->OnClientDisconnected.BindUObject(this, &UPTLocalPartySubsystem::HandleDisconnected);
-    Server->OnClientMessage.BindUObject(this, &UPTLocalPartySubsystem::HandleMessage);
+    if (bWantOnline)
+    {
+        // URL del relay: Config/DefaultGame.ini → [LocalParty] RelayUrl=wss://play.tudominio.com
+        FString RelayUrl;
+        GConfig->GetString(TEXT("LocalParty"), TEXT("RelayUrl"), RelayUrl, GGameIni);
+        if (RelayUrl.IsEmpty())
+        {
+            UE_LOG(LogPTLocalPartySub, Error, TEXT("Modo online: falta RelayUrl en [LocalParty] de DefaultGame.ini."));
+            return false;
+        }
+        TUniquePtr<FPTRelayTransport> Relay = MakeUnique<FPTRelayTransport>();
+        Relay->OnClientConnected.BindUObject(this, &UPTLocalPartySubsystem::HandleConnected);
+        Relay->OnClientDisconnected.BindUObject(this, &UPTLocalPartySubsystem::HandleDisconnected);
+        Relay->OnClientMessage.BindUObject(this, &UPTLocalPartySubsystem::HandleMessage);
+        Relay->Start(RelayUrl);
+        Server = MoveTemp(Relay);
+        bOnlineTransport = true;
+        return true;
+    }
+
+    TUniquePtr<FPTLocalPartyServer> Local = MakeUnique<FPTLocalPartyServer>();
+    Local->OnClientConnected.BindUObject(this, &UPTLocalPartySubsystem::HandleConnected);
+    Local->OnClientDisconnected.BindUObject(this, &UPTLocalPartySubsystem::HandleDisconnected);
+    Local->OnClientMessage.BindUObject(this, &UPTLocalPartySubsystem::HandleMessage);
 
     // Ruta RELATIVA (como los CSV de textos): en la build empaquetada el archivo vive en el pak (UFS).
     const FString WebRoot = FPaths::ProjectContentDir() / TEXT("LocalParty/Web");
     // Si el puerto está ocupado (otra instancia), probar los siguientes.
     for (int32 Try = 0; Try < 5; ++Try)
     {
-        if (Server->Start(Port + Try, WebRoot))
+        if (Local->Start(Port + Try, WebRoot))
         {
+            LocalPort = Port + Try;
+            Server = MoveTemp(Local);
+            bOnlineTransport = false;
             CachedLanIp = FPTLocalPartyServer::GetLanIp();
             UE_LOG(LogPTLocalPartySub, Log, TEXT("Modo local: los celulares entran en %s"), *GetJoinUrl());
             return true;
         }
     }
-    Server.Reset();
     return false;
 }
 
@@ -114,7 +141,29 @@ void UPTLocalPartySubsystem::StopServer()
 {
     if (Server) Server->Stop();
     Server.Reset();
+    bOnlineTransport = false;
     for (FPTPhonePlayer& P : Players) { P.bOnline = false; P.ConnId = INDEX_NONE; }
+}
+
+FString UPTLocalPartySubsystem::GetRoomCode() const
+{
+    if (!bOnlineTransport || !Server) return FString();
+    return static_cast<const FPTRelayTransport*>(Server.Get())->GetRoomCode();
+}
+
+FString UPTLocalPartySubsystem::GetPublicHost() const
+{
+    if (!bOnlineTransport || !Server) return FString();
+    FString U = static_cast<const FPTRelayTransport*>(Server.Get())->GetPublicBaseUrl();
+    U.RemoveFromStart(TEXT("https://"));
+    U.RemoveFromStart(TEXT("http://"));
+    return U;
+}
+
+FString UPTLocalPartySubsystem::GetOnlineError() const
+{
+    if (!bOnlineTransport || !Server) return FString();
+    return static_cast<const FPTRelayTransport*>(Server.Get())->GetLastError();
 }
 
 bool UPTLocalPartySubsystem::IsServerRunning() const
@@ -124,10 +173,16 @@ bool UPTLocalPartySubsystem::IsServerRunning() const
 
 FString UPTLocalPartySubsystem::GetJoinUrl() const
 {
-    if (!IsServerRunning() || CachedLanIp.IsEmpty()) return FString();
-    return Server->GetPort() == 80
+    if (!IsServerRunning()) return FString();
+    if (bOnlineTransport)
+    {
+        const FPTRelayTransport* R = static_cast<const FPTRelayTransport*>(Server.Get());
+        return R->GetRoomCode().IsEmpty() ? FString() : R->GetPublicBaseUrl() / R->GetRoomCode();
+    }
+    if (CachedLanIp.IsEmpty()) return FString();
+    return LocalPort == 80
         ? FString::Printf(TEXT("http://%s"), *CachedLanIp)
-        : FString::Printf(TEXT("http://%s:%d"), *CachedLanIp, Server->GetPort());
+        : FString::Printf(TEXT("http://%s:%d"), *CachedLanIp, LocalPort);
 }
 
 void UPTLocalPartySubsystem::OnPostLoadMap(UWorld* World)
@@ -143,6 +198,7 @@ void UPTLocalPartySubsystem::OnPostLoadMap(UWorld* World)
         if (GI->bLocalPartyMode)
             UE_LOG(LogPTLocalPartySub, Log, TEXT("Se salió del modo local (mapa %s)."), *World->GetMapName());
         GI->bLocalPartyMode = false;
+        GI->bLocalPartyOnline = false;
     }
     StopServer();
     ClearPlayers();
@@ -345,7 +401,7 @@ void UPTLocalPartySubsystem::HandleJoin(int32 ConnId, const TSharedPtr<FJsonObje
 
     if (!P)
     {
-        if (Players.Num() >= MaxPlayers) { Reject(TEXT("full")); return; }
+        if (Players.Num() >= (bOnlineTransport ? MaxPlayersOnline : MaxPlayers)) { Reject(TEXT("full")); return; }
         FPTPhonePlayer N;
         N.Id = NextPlayerId++;
         N.Name = Name;

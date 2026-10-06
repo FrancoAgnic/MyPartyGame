@@ -103,15 +103,30 @@ void UPTLocalPartyTVWidget::BuildTree()
     Title->SetText(PTText::Get(TEXT("LP_JOIN_TITLE")));
     AddToCol(Title, 14.f);
 
-    UTextBlock* Step1 = MakeText(BodyFontSize, Ink, false);
-    Step1->SetText(PTText::Get(TEXT("LP_JOIN_STEP1")));
-    AddToCol(Step1, 4.f);
-    UTextBlock* Step2 = MakeText(BodyFontSize, Ink, false);
-    Step2->SetText(PTText::Get(TEXT("LP_JOIN_STEP2")));
-    AddToCol(Step2, 6.f);
+    Step1Text = MakeText(BodyFontSize, Ink, false);
+    Step1Text->SetText(PTText::Get(TEXT("LP_JOIN_STEP1")));
+    AddToCol(Step1Text, 4.f);
+    Step2Text = MakeText(BodyFontSize, Ink, false);
+    Step2Text->SetText(PTText::Get(TEXT("LP_JOIN_STEP2")));
+    AddToCol(Step2Text, 6.f);
 
     UrlText = MakeText(UrlFontSize, FLinearColor::White, true);
     AddToCol(UrlText, 2.f);
+    // Online: el código de sala, bien grande.
+    {
+        UHorizontalBox* CodeBox = WidgetTree->ConstructWidget<UHorizontalBox>();
+        UTextBlock* Label = MakeText(BodyFontSize + 2, Ink, false);
+        Label->SetText(PTText::Get(TEXT("LP_ONLINE_CODE")));
+        if (UHorizontalBoxSlot* S = CodeBox->AddChildToHorizontalBox(Label))
+        {
+            S->SetVerticalAlignment(VAlign_Center);
+            S->SetPadding(FMargin(0.f, 0.f, 14.f, 0.f));
+        }
+        CodeText = MakeText(UrlFontSize + 18, AccentColor, true);
+        if (UHorizontalBoxSlot* S = CodeBox->AddChildToHorizontalBox(CodeText)) S->SetVerticalAlignment(VAlign_Center);
+        CodeRow = CodeBox;
+        AddToCol(CodeBox, 4.f);
+    }
     RevealHint = MakeText(BodyFontSize - 6, Muted, false);
     RevealHint->SetText(PTText::Get(TEXT("LP_SHOW_IP")));
     AddToCol(RevealHint, 22.f);
@@ -196,9 +211,25 @@ void UPTLocalPartyTVWidget::Refresh()
         if (QrImage && QrTexture) QrImage->SetBrushFromTexture(QrTexture, /*bMatchSize=*/false);
         Show(QrImage, QrTexture != nullptr);
     }
+    const bool bOnline = LP->IsOnline();
     const bool bReveal = IsRevealHeld();
-    if (UrlText) UrlText->SetText(FText::FromString(DisplayAddress(Url, bReveal)));
-    Show(RevealHint, bMaskJoinAddress && bServerOk && !bReveal);
+    const FString Code = LP->GetRoomCode();
+    if (bOnline)
+    {
+        // Online: dominio público (sin nada que ocultar) + código de sala.
+        if (Step1Text) Step1Text->SetText(PTText::Get(TEXT("LP_ONLINE_STEP1")));
+        Show(Step2Text, false);
+        if (UrlText) UrlText->SetText(FText::FromString(LP->GetPublicHost()));
+        if (CodeText) CodeText->SetText(FText::FromString(Code));
+        Show(CodeRow, !Code.IsEmpty());
+        Show(RevealHint, false);
+    }
+    else
+    {
+        if (UrlText) UrlText->SetText(FText::FromString(DisplayAddress(Url, bReveal)));
+        Show(CodeRow, false);
+        Show(RevealHint, bMaskJoinAddress && bServerOk && !bReveal);
+    }
 
     // Lista de jugadores (se rearma solo si cambió algo).
     const TArray<FPTPhonePlayer>& Players = LP->GetPlayers();
@@ -237,7 +268,8 @@ void UPTLocalPartyTVWidget::Refresh()
         if (const APTSculptGameMode* GM = W->GetAuthGameMode<APTSculptGameMode>())
             MinPlayers = GM->LocalParty_GetMinPlayers();
     FString Status;
-    if (!bServerOk)                         Status = PTText::GetStr(TEXT("LP_NO_SERVER"));
+    if (bOnline && !bServerOk)              Status = PTText::GetStr(LP->GetOnlineError().IsEmpty() ? TEXT("LP_ONLINE_CONNECTING") : TEXT("LP_ONLINE_ERROR"));
+    else if (!bServerOk)                    Status = PTText::GetStr(TEXT("LP_NO_SERVER"));
     else if (Players.Num() < MinPlayers)    Status = Fmt(TEXT("LP_NEED_MORE"), FString::FromInt(MinPlayers - Players.Num()));
     else                                    Status = Fmt(TEXT("LP_WAIT_VIP"), LP->GetVipName());
     if (StatusText) StatusText->SetText(FText::FromString(Status));
@@ -261,7 +293,8 @@ void UPTLocalPartyTVWidget::Refresh()
     }
 
     Show(CornerPanel, !bLobby && bServerOk);
-    if (CornerText) CornerText->SetText(FText::FromString(Fmt(TEXT("LP_JOIN_SMALL"), DisplayAddress(Url, bReveal))));
+    if (CornerText) CornerText->SetText(FText::FromString(Fmt(TEXT("LP_JOIN_SMALL"),
+        bOnline ? FString::Printf(TEXT("%s  \u00B7  %s"), *LP->GetPublicHost(), *Code) : DisplayAddress(Url, bReveal))));
 
 }
 

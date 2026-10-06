@@ -71,9 +71,16 @@ public:
     // lo baja ExitLocalParty (o el subsistema, si se sale al menú por cualquier otra vía).
     UPROPERTY(BlueprintReadOnly, Category="LocalParty")
     bool bLocalPartyMode = false;
+    // Modo local ONLINE: igual que el local, pero los celulares entran por internet con un código de sala
+    // (relay en Tools/Relay, URL en DefaultGame.ini [LocalParty] RelayUrl). Para streamers / amigos lejos.
+    UPROPERTY(BlueprintReadOnly, Category="LocalParty")
+    bool bLocalPartyOnline = false;
 
     // Entra al modo local: levanta el servidor de celulares y abre el mapa de juego (standalone).
     UFUNCTION(BlueprintCallable, Category="LocalParty") void EnterLocalParty();
+    // Igual, pero online (relay + código de sala).
+    UFUNCTION(BlueprintCallable, Category="LocalParty") void EnterOnlineParty();
+    UFUNCTION(Exec) void PTOnline() { EnterOnlineParty(); }
     // Sale del modo local: apaga el servidor, olvida a los jugadores y vuelve al menú principal.
     UFUNCTION(BlueprintCallable, Category="LocalParty") void ExitLocalParty();
     UFUNCTION() void DoEnterLocalPartyTravel();

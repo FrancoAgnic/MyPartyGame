@@ -9,37 +9,31 @@
 
 #pragma once
 #include "CoreMinimal.h"
+#include "PTPartyTransport.h"
 
 class FSocket;
 
-class MYPARTYGAME_API FPTLocalPartyServer
+class MYPARTYGAME_API FPTLocalPartyServer : public IPTPartyTransport
 {
 public:
-    DECLARE_DELEGATE_OneParam(FOnClientEvent, int32 /*ClientId*/);
-    DECLARE_DELEGATE_TwoParams(FOnClientMessage, int32 /*ClientId*/, const FString& /*Text*/);
-
-    FOnClientEvent   OnClientConnected;    // WebSocket abierto (handshake OK)
-    FOnClientEvent   OnClientDisconnected; // WebSocket cerrado / caído
-    FOnClientMessage OnClientMessage;      // frame de texto recibido
-
     FPTLocalPartyServer() = default;
     FPTLocalPartyServer(const FPTLocalPartyServer&) = delete;            // dueño de sockets: no copiable
     FPTLocalPartyServer& operator=(const FPTLocalPartyServer&) = delete;
-    ~FPTLocalPartyServer();
+    virtual ~FPTLocalPartyServer() override;
 
     // Abre el socket de escucha. WebRoot = carpeta con index.html y demás archivos estáticos.
     bool Start(int32 InPort, const FString& InWebRoot);
-    void Stop();
-    bool IsRunning() const { return ListenSocket != nullptr; }
+    virtual void Stop() override;
+    virtual bool IsRunning() const override { return ListenSocket != nullptr; }
     int32 GetPort() const { return Port; }
 
     // Llamar en cada frame (game thread).
-    void Tick();
+    virtual void Tick() override;
 
     // Manda un frame de texto a un cliente WebSocket (o a todos).
-    void Send(int32 ClientId, const FString& Text);
-    void Broadcast(const FString& Text);
-    void Disconnect(int32 ClientId);
+    virtual void Send(int32 ClientId, const FString& Text) override;
+    virtual void Broadcast(const FString& Text) override;
+    virtual void Disconnect(int32 ClientId) override;
 
     // IP de la PC en la red local (prefiere 192.168.x / 10.x / 172.16-31.x). Vacío si no hay.
     static FString GetLanIp();

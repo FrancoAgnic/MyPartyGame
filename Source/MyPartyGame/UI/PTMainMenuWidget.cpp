@@ -47,6 +47,9 @@ bool UPTMainMenuWidget::Initialize()
     if (CreateLevelButton) CreateLevelButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnCreateLevelClicked);
     if (!LocalModeButton)  LocalModeButton = CreateFallbackLocalModeButton();
     if (LocalModeButton)   LocalModeButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnLocalModeClicked);
+    if (!OnlinePartyButton && LocalModeButton)
+        OnlinePartyButton = PTWidgetUtils::CloneButtonAfter(this, LocalModeButton, TEXT("OnlinePartyButton"), PTText::Get(TEXT("MENU_ONLINE_MODE")));
+    if (OnlinePartyButton) OnlinePartyButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnOnlinePartyClicked);
 
     // Si hay un PlayButton, arrancar en la pantalla principal (submenú Host/Find/EnterCode oculto).
     // Si el WBP todavía no tiene PlayButton, no se toca nada (comportamiento previo, todo visible).
@@ -181,6 +184,7 @@ void UPTMainMenuWidget::SetPlaySubmenuVisible(bool bVisible)
     if (HostButton)             HostButton->SetVisibility(bVisible ? Shown : Hidden);
     if (FindButton)             FindButton->SetVisibility(bVisible ? Shown : Hidden);
     if (LocalModeButton)        LocalModeButton->SetVisibility(bVisible ? Shown : Hidden);
+    if (OnlinePartyButton)      OnlinePartyButton->SetVisibility(bVisible ? Shown : Hidden);
     if (EnterCodeButton)        EnterCodeButton->SetVisibility(bVisible ? Shown : Hidden);
     if (PlayBackButton)         PlayBackButton->SetVisibility(bVisible ? Shown : Hidden);
     if (PlaySubmenuHeaderPanel) PlaySubmenuHeaderPanel->SetVisibility(bVisible ? Shown : Hidden);
@@ -430,6 +434,11 @@ void UPTMainMenuWidget::OnLocalModeClicked()
 {
     // No necesita Steam ni sesión: abre el mapa de juego standalone y los celulares se conectan por WiFi.
     if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>()) GI->EnterLocalParty();
+}
+
+void UPTMainMenuWidget::OnOnlinePartyClicked()
+{
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>()) GI->EnterOnlineParty();
 }
 
 UButton* UPTMainMenuWidget::CreateFallbackLocalModeButton()

@@ -338,3 +338,8 @@ GPA_UNDO,Deshacer,Undo,Desfazer,Rückgängig,Annuler,Annulla
 GPA_PAUSE,Pausa,Pause,Pausa,Pause,Pause,Pausa
 GP_ON,Sí,On,Sim,An,Oui,Sì
 GP_OFF,No,Off,Não,Aus,Non,No
+MENU_ONLINE_MODE,Modo online (celulares),Online mode (phones),Modo online (celulares),Online-Modus (Handys),Mode en ligne (téléphones),Modalità online (telefoni)
+LP_ONLINE_STEP1,"Desde cualquier celular o PC, entra a:","From any phone or PC, go to:","De qualquer celular ou PC, entre em:",Öffne auf einem Handy oder PC:,"Depuis un téléphone ou un PC, va sur :","Da qualsiasi telefono o PC, vai su:"
+LP_ONLINE_CODE,Código de sala:,Room code:,Código da sala:,Raumcode:,Code de la salle :,Codice stanza:
+LP_ONLINE_CONNECTING,Conectando al servidor online…,Connecting to the online server…,Conectando ao servidor online…,Verbinde mit dem Online-Server…,Connexion au serveur en ligne…,Connessione al server online…
+LP_ONLINE_ERROR,No se pudo conectar al servidor online. Reintentando…,Couldn't reach the online server. Retrying…,Não foi possível conectar ao servidor online. Tentando de novo…,Online-Server nicht erreichbar. Neuer Versuch…,Impossible de joindre le serveur en ligne. Nouvel essai…,Impossibile raggiungere il server online. Nuovo tentativo…
