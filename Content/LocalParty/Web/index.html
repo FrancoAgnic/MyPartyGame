@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#1d1630">
+<title>Sculpturillo</title>
+<!--PT_RELAY-->
+<style>
+  :root {
+    --bg: #1d1630; --card: #2a2145; --card2: #352a57; --ink: #fff8ec; --muted: #b9add6;
+    --accent: #ffb84d; --accent-ink: #2a1a00; --good: #5be08a; --warn: #ff6b6b; --close: #ffd84d;
+    --radius: 18px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { display: flex; flex-direction: column; min-height: 100dvh; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 10px 16px; background: var(--card); font-weight: 700; }
+  header .me { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  header .me span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  header .meta { color: var(--muted); font-size: 14px; white-space: nowrap; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+  main { flex: 1; display: flex; flex-direction: column; gap: 14px; padding: 16px; max-width: 520px;
+    width: 100%; margin: 0 auto; }
+  h1 { font-size: 34px; margin: 8px 0 0; text-align: center; letter-spacing: .5px; }
+  h2 { font-size: 22px; margin: 0; text-align: center; }
+  p { margin: 0; }
+  .muted { color: var(--muted); text-align: center; }
+  .card { background: var(--card); border-radius: var(--radius); padding: 16px; }
+  input[type=text] { width: 100%; font-size: 20px; padding: 14px 16px; border-radius: 14px;
+    border: 2px solid var(--card2); background: #150f24; color: var(--ink); outline: none; }
+  input[type=text]:focus { border-color: var(--accent); }
+  button { font: inherit; font-size: 20px; font-weight: 800; border: 0; border-radius: 14px;
+    padding: 16px; background: var(--accent); color: var(--accent-ink); cursor: pointer; width: 100%; }
+  button:active { transform: scale(.97); }
+  button.ghost { background: var(--card2); color: var(--ink); }
+  button:disabled { opacity: .45; }
+  .row { display: flex; gap: 10px; }
+  .row input { flex: 1; }
+  .row button { width: auto; padding: 0 20px; }
+  .word { font-size: clamp(30px, 11vw, 54px); font-weight: 900; text-align: center; letter-spacing: 1px;
+    word-break: break-word; line-height: 1.1; }
+  .mask { font-family: ui-monospace, Consolas, monospace; font-size: clamp(22px, 8vw, 36px);
+    font-weight: 800; text-align: center; letter-spacing: 2px; word-break: break-word; }
+  .timer { font-size: 44px; font-weight: 900; text-align: center; font-variant-numeric: tabular-nums; }
+  .timer.low { color: var(--warn); }
+  .choices { display: flex; flex-direction: column; gap: 10px; }
+  .players { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .players li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px;
+    background: var(--card2); }
+  .players li .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .players li .score { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .players li.off { opacity: .45; }
+  .tag { font-size: 12px; font-weight: 800; padding: 2px 8px; border-radius: 99px; background: var(--good);
+    color: #08210f; }
+  .tag.sc { background: var(--accent); color: var(--accent-ink); }
+  .chat { display: flex; flex-direction: column; gap: 4px; max-height: 32vh; overflow-y: auto; font-size: 16px; }
+  .chat .l { padding: 2px 0; }
+  .chat .l b { color: var(--muted); }
+  .chat .correct { color: var(--good); font-weight: 700; }
+  .chat .system { color: var(--accent); }
+  .banner { border-radius: var(--radius); padding: 18px; text-align: center; font-weight: 800; font-size: 22px; }
+  .banner.good { background: var(--good); color: #08210f; }
+  .banner.close { background: var(--close); color: #2a2200; }
+  .big-emoji { font-size: 64px; text-align: center; line-height: 1; }
+  .hint { font-size: 14px; color: var(--muted); text-align: center; }
+  .hidden { display: none !important; }
+  .conn { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); background: var(--warn);
+    color: #fff; padding: 8px 16px; border-radius: 99px; font-weight: 700; font-size: 14px; z-index: 5; }
+  .flash { animation: flash .6s ease-out; }
+  @keyframes flash { from { transform: scale(1.08); } to { transform: scale(1); } }
+</style>
+</head>
+<body>
+<header id="hdr" class="hidden">
+  <div class="me"><div class="dot" id="hdrDot"></div><span id="hdrName"></span></div>
+  <div class="meta" id="hdrMeta"></div>
+</header>
+<main id="app"></main>
+<div class="conn hidden" id="conn"></div>
+
+<script>
+"use strict";
+// ── Textos (es / en). El idioma sale del navegador; el juego usa el mismo código para las palabras.
+const LANG = (navigator.language || "es").slice(0, 2).toLowerCase();
+const T = {
+  es: {
+    title: "Sculpturillo", joinHint: "Escribe tu nombre para entrar a la partida",
+    namePh: "Tu nombre", join: "Entrar", waiting: "Esperando jugadores",
+    start: "Empezar partida", needMore: n => `Faltan ${n} jugador${n === 1 ? "" : "es"} para empezar`,
+    vipHint: "Eres el anfitrión: empieza cuando estén todos", hostWill: "El anfitrión va a empezar la partida",
+    yourTurn: "¡Te toca esculpir!", grabPad: "Agarra el joystick 🎮", chooseWord: "Elige una palabra",
+    isChoosing: n => `${n} está eligiendo palabra…`, passPad: n => `Pásale el joystick a ${n}`,
+    sculptThis: "Esculpe esto:", dontSay: "¡No la digas en voz alta!",
+    guessPh: "¿Qué es?", send: "Enviar", youGuessed: "¡Adivinaste!", pts: p => `+${p} puntos`,
+    close: "¡Casi! Estás muy cerca", waitOthers: "Espera a que adivinen los demás",
+    wordWas: "La palabra era", round: (r, t) => `Ronda ${r}/${t}`, gameOver: "¡Fin de la partida!",
+    winner: n => `Ganó ${n}`, again: "Jugar de nuevo", menu: "Volver al menú",
+    hostDecides: "El anfitrión decide si juegan otra", reconnecting: "Reconectando…",
+    sculptor: "esculpe", nameTaken: "Ese nombre ya está en uso", full: "La partida está llena",
+    codePh: "Código de sala", badRoom: "Ese código no existe o la partida terminó", kicked: "Te desconectaron de la partida", nobody: "Todavía no entró nadie"
+  },
+  en: {
+    title: "Sculpturillo", joinHint: "Type your name to join the game",
+    namePh: "Your name", join: "Join", waiting: "Waiting for players",
+    start: "Start game", needMore: n => `${n} more player${n === 1 ? "" : "s"} needed`,
+    vipHint: "You're the host: start when everyone is in", hostWill: "The host will start the game",
+    yourTurn: "Your turn to sculpt!", grabPad: "Grab the controller 🎮", chooseWord: "Pick a word",
+    isChoosing: n => `${n} is picking a word…`, passPad: n => `Pass the controller to ${n}`,
+    sculptThis: "Sculpt this:", dontSay: "Don't say it out loud!",
+    guessPh: "What is it?", send: "Send", youGuessed: "You got it!", pts: p => `+${p} points`,
+    close: "So close!", waitOthers: "Wait for the others to guess",
+    wordWas: "The word was", round: (r, t) => `Round ${r}/${t}`, gameOver: "Game over!",
+    winner: n => `${n} wins`, again: "Play again", menu: "Back to menu",
+    hostDecides: "The host decides if you play again", reconnecting: "Reconnecting…",
+    sculptor: "sculpts", nameTaken: "That name is taken", full: "The game is full",
+    codePh: "Room code", badRoom: "That code doesn't exist or the game ended", kicked: "You were disconnected", nobody: "Nobody has joined yet"
+  },
+  pt: {
+    title: "Sculpturillo", joinHint: "Escreva seu nome para entrar na partida",
+    namePh: "Seu nome", join: "Entrar", waiting: "Aguardando jogadores",
+    start: "Começar partida", needMore: n => `Falta${n === 1 ? "" : "m"} ${n} jogador${n === 1 ? "" : "es"} para começar`,
+    vipHint: "Você é o anfitrião: comece quando todos estiverem aqui", hostWill: "O anfitrião vai começar a partida",
+    yourTurn: "Sua vez de esculpir!", grabPad: "Pegue o controle 🎮", chooseWord: "Escolha uma palavra",
+    isChoosing: n => `${n} está escolhendo a palavra…`, passPad: n => `Passe o controle para ${n}`,
+    sculptThis: "Esculpa isto:", dontSay: "Não fale em voz alta!",
+    guessPh: "O que é?", send: "Enviar", youGuessed: "Você acertou!", pts: p => `+${p} pontos`,
+    close: "Quase! Está muito perto", waitOthers: "Espere os outros adivinharem",
+    wordWas: "A palavra era", round: (r, t) => `Rodada ${r}/${t}`, gameOver: "Fim da partida!",
+    winner: n => `${n} venceu`, again: "Jogar de novo", menu: "Voltar ao menu",
+    hostDecides: "O anfitrião decide se jogam outra", reconnecting: "Reconectando…",
+    sculptor: "esculpe", nameTaken: "Esse nome já está em uso", full: "A partida está cheia",
+    codePh: "Código da sala", badRoom: "Esse código não existe ou a partida terminou", kicked: "Você foi desconectado", nobody: "Ninguém entrou ainda"
+  },
+  de: {
+    title: "Sculpturillo", joinHint: "Gib deinen Namen ein, um mitzuspielen",
+    namePh: "Dein Name", join: "Beitreten", waiting: "Warte auf Spieler",
+    start: "Spiel starten", needMore: n => `Noch ${n} Spieler nötig`,
+    vipHint: "Du bist der Gastgeber: starte, wenn alle da sind", hostWill: "Der Gastgeber startet das Spiel",
+    yourTurn: "Du bist dran mit Formen!", grabPad: "Nimm den Controller 🎮", chooseWord: "Wähle ein Wort",
+    isChoosing: n => `${n} wählt ein Wort…`, passPad: n => `Gib den Controller an ${n}`,
+    sculptThis: "Forme das:", dontSay: "Nicht laut sagen!",
+    guessPh: "Was ist das?", send: "Senden", youGuessed: "Richtig!", pts: p => `+${p} Punkte`,
+    close: "Fast! Ganz nah dran", waitOthers: "Warte, bis die anderen raten",
+    wordWas: "Das Wort war", round: (r, t) => `Runde ${r}/${t}`, gameOver: "Spiel vorbei!",
+    winner: n => `${n} gewinnt`, again: "Nochmal spielen", menu: "Zurück zum Menü",
+    hostDecides: "Der Gastgeber entscheidet, ob ihr nochmal spielt", reconnecting: "Verbinde neu…",
+    sculptor: "formt", nameTaken: "Dieser Name ist vergeben", full: "Das Spiel ist voll",
+    codePh: "Raumcode", badRoom: "Diesen Code gibt es nicht oder das Spiel ist vorbei", kicked: "Du wurdest getrennt", nobody: "Noch ist niemand da"
+  },
+  fr: {
+    title: "Sculpturillo", joinHint: "Écris ton nom pour rejoindre la partie",
+    namePh: "Ton nom", join: "Rejoindre", waiting: "En attente de joueurs",
+    start: "Lancer la partie", needMore: n => `Il manque ${n} joueur${n === 1 ? "" : "s"} pour commencer`,
+    vipHint: "Tu es l'hôte : lance quand tout le monde est là", hostWill: "L'hôte va lancer la partie",
+    yourTurn: "À toi de sculpter !", grabPad: "Prends la manette 🎮", chooseWord: "Choisis un mot",
+    isChoosing: n => `${n} choisit un mot…`, passPad: n => `Passe la manette à ${n}`,
+    sculptThis: "Sculpte ceci :", dontSay: "Ne le dis pas à voix haute !",
+    guessPh: "C'est quoi ?", send: "Envoyer", youGuessed: "Trouvé !", pts: p => `+${p} points`,
+    close: "Presque ! Tu y es presque", waitOthers: "Attends que les autres devinent",
+    wordWas: "Le mot était", round: (r, t) => `Manche ${r}/${t}`, gameOver: "Fin de la partie !",
+    winner: n => `${n} gagne`, again: "Rejouer", menu: "Retour au menu",
+    hostDecides: "L'hôte décide si vous rejouez", reconnecting: "Reconnexion…",
+    sculptor: "sculpte", nameTaken: "Ce nom est déjà pris", full: "La partie est pleine",
+    codePh: "Code de la salle", badRoom: "Ce code n'existe pas ou la partie est terminée", kicked: "Tu as été déconnecté", nobody: "Personne n'a encore rejoint"
+  },
+  it: {
+    title: "Sculpturillo", joinHint: "Scrivi il tuo nome per entrare in partita",
+    namePh: "Il tuo nome", join: "Entra", waiting: "In attesa di giocatori",
+    start: "Inizia partita", needMore: n => `Serv${n === 1 ? "e" : "ono"} altri ${n} giocator${n === 1 ? "e" : "i"} per iniziare`,
+    vipHint: "Sei l'host: inizia quando ci sono tutti", hostWill: "L'host avvierà la partita",
+    yourTurn: "Tocca a te scolpire!", grabPad: "Prendi il controller 🎮", chooseWord: "Scegli una parola",
+    isChoosing: n => `${n} sta scegliendo la parola…`, passPad: n => `Passa il controller a ${n}`,
+    sculptThis: "Scolpisci questo:", dontSay: "Non dirlo ad alta voce!",
+    guessPh: "Cos'è?", send: "Invia", youGuessed: "Indovinato!", pts: p => `+${p} punti`,
+    close: "Quasi! Ci sei vicino", waitOthers: "Aspetta che indovinino gli altri",
+    wordWas: "La parola era", round: (r, t) => `Round ${r}/${t}`, gameOver: "Fine della partita!",
+    winner: n => `Vince ${n}`, again: "Gioca ancora", menu: "Torna al menu",
+    hostDecides: "L'host decide se giocare ancora", reconnecting: "Riconnessione…",
+    sculptor: "scolpisce", nameTaken: "Questo nome è già in uso", full: "La partita è piena",
+    codePh: "Codice stanza", badRoom: "Questo codice non esiste o la partita è finita", kicked: "Sei stato disconnesso", nobody: "Non è ancora entrato nessuno"
+  }
+};
+const L = T[LANG] || T.es;
+document.documentElement.lang = T[LANG] ? LANG : "es";
+
+// ── Estado
+const app = document.getElementById("app");
+let ws = null, state = null, me = null, phaseEndsAt = 0, banner = null, chat = [];
+let token = localStorage.getItem("ptToken") || "";
+let myName = localStorage.getItem("ptName") || "";
+let joined = false, retry = 0, lastPhaseKey = "", draftGuess = "";
+// Modo ONLINE (detrás del relay): la sala va en la URL (/KQZT o ?room=KQZT). Modo local: no hay sala.
+const RELAY = !!window.PT_RELAY;
+let room = ((location.pathname.match(/^\/([A-Za-z]{4})\/?$/) || [])[1]
+         || new URLSearchParams(location.search).get("room") || "").toUpperCase();
+let stopRetry = false;
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const send = o => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
+const buzz = p => { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} };
+const secsLeft = () => Math.max(0, Math.ceil((phaseEndsAt - Date.now()) / 1000));
+
+// ── Conexión
+function connect() {
+  if (RELAY && !room) return; // primero hay que escribir el código de sala
+  stopRetry = false;
+  ws = RELAY
+    ? new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws?room=${encodeURIComponent(room)}`)
+    : new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => {
+    retry = 0;
+    showConn(false);
+    if (myName) send({ t: "join", name: myName, token, lang: LANG });
+  };
+  ws.onmessage = ev => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } onMsg(m); };
+  ws.onclose = () => {
+    if (stopRetry) return;
+    if (joined) showConn(true);
+    const wait = Math.min(5000, 500 * Math.pow(2, retry++));
+    setTimeout(connect, wait);
+  };
+}
+function showConn(on) {
+  const c = document.getElementById("conn");
+  c.textContent = L.reconnecting;
+  c.classList.toggle("hidden", !on);
+}
+setInterval(() => send({ t: "ping" }), 5000);
+
+function onMsg(m) {
+  switch (m.t) {
+    case "welcome":
+      joined = true; token = m.token; localStorage.setItem("ptToken", token);
+      me = m.id; render(); break;
+    case "error":
+      joined = false;
+      if (m.code === "room") { // sala inexistente o terminada: no reintentar, pedir otro código
+        stopRetry = true; room = ""; showConn(false);
+        try { history.replaceState(null, "", "/"); } catch (e) {}
+        renderJoin(L.badRoom); break;
+      }
+      if (m.code === "name") { myName = ""; localStorage.removeItem("ptName"); }
+      renderJoin(m.code === "name" ? L.nameTaken : m.code === "full" ? L.full : L.kicked); break;
+    case "state":
+      state = m; phaseEndsAt = Date.now() + (m.secs || 0) * 1000;
+      onPhase(); render(); break;
+    case "chat":
+      chat.push(m); if (chat.length > 30) chat.shift(); renderChat(); break;
+    case "guessed":
+      banner = { kind: "good", text: L.youGuessed, sub: `${m.word} · ${L.pts(m.pts)}` };
+      buzz([60, 40, 120]); render(); break;
+    case "close":
+      banner = { kind: "close", text: L.close }; buzz(40); render();
+      setTimeout(() => { if (banner && banner.kind === "close") { banner = null; render(); } }, 2500); break;
+    case "buzz":
+      buzz([200, 100, 200, 100, 400]); break;
+  }
+}
+
+function onPhase() {
+  const key = `${state.phase}|${state.round}|${state.sculptor ? state.sculptor.id : ""}`;
+  if (key === lastPhaseKey) return;
+  lastPhaseKey = key;
+  if (state.phase !== "drawing") banner = null;
+  if (state.phase === "choosing") chat = [];
+}
+
+// ── Pantallas
+function render() {
+  if (!joined || !state) { if (!joined) renderJoin(); return; }
+  const you = state.you || {};
+  const meP = (state.players || []).find(p => p.id === me) || {};
+  document.getElementById("hdr").classList.remove("hidden");
+  document.getElementById("hdrName").textContent = meP.name || myName;
+  document.getElementById("hdrDot").style.background = meP.color || "#888";
+  document.getElementById("hdrMeta").textContent =
+    state.round > 0 && state.phase !== "lobby" ? `${L.round(state.round, state.rounds)} · ${meP.score || 0} pts` : "";
+
+  switch (state.phase) {
+    case "lobby": return renderLobby(you);
+    case "choosing": return renderChoosing(you);
+    case "drawing": return renderDrawing(you);
+    case "turnend": return renderTurnEnd();
+    case "gameover": return renderGameOver(you);
+  }
+}
+
+function renderJoin(err) {
+  document.getElementById("hdr").classList.add("hidden");
+  app.innerHTML = `
+    <h1>${L.title}</h1>
+    <p class="muted">${L.joinHint}</p>
+    <div class="card" style="display:flex;flex-direction:column;gap:12px">
+      ${RELAY ? `<input id="room" type="text" maxlength="4" autocomplete="off" autocapitalize="characters"
+                 placeholder="${L.codePh}" value="${esc(room)}" style="text-transform:uppercase;letter-spacing:6px;text-align:center;font-weight:800">` : ""}
+      <input id="name" type="text" maxlength="16" autocomplete="off" placeholder="${L.namePh}" value="${esc(myName)}">
+      ${err ? `<p style="color:var(--warn);text-align:center;font-weight:700">${esc(err)}</p>` : ""}
+      <button id="go">${L.join}</button>
+    </div>`;
+  const inp = document.getElementById("name");
+  const go = () => {
+    const n = inp.value.trim().slice(0, 16);
+    if (!n) { inp.focus(); return; }
+    myName = n; localStorage.setItem("ptName", n);
+    if (RELAY) {
+      const r = (document.getElementById("room").value || "").trim().toUpperCase();
+      if (!/^[A-Z]{4}$/.test(r)) { document.getElementById("room").focus(); return; }
+      if (r !== room || !ws || ws.readyState > 1) {
+        room = r;
+        try { history.replaceState(null, "", "/" + r); } catch (e) {}
+        stopRetry = true; try { ws && ws.close(); } catch (e) {}
+        connect(); // al abrir manda el "join" con el nombre
+        return;
+      }
+    }
+    send({ t: "join", name: n, token, lang: LANG });
+  };
+  document.getElementById("go").onclick = go;
+  inp.onkeydown = e => { if (e.key === "Enter") go(); };
+}
+
+function playerList(showScore) {
+  const ps = [...(state.players || [])];
+  if (showScore) ps.sort((a, b) => b.score - a.score);
+  if (!ps.length) return `<p class="muted">${L.nobody}</p>`;
+  return `<ul class="players">${ps.map(p => `
+    <li class="${p.online ? "" : "off"}">
+      <div class="dot" style="background:${esc(p.color)}"></div>
+      <span class="name">${esc(p.name)}${p.id === me ? " ★" : ""}</span>
+      ${state.sculptor && p.id === state.sculptor.id && state.phase !== "gameover" ? `<span class="tag sc">${L.sculptor}</span>` : ""}
+      ${p.guessed ? `<span class="tag">✓</span>` : ""}
+      ${showScore ? `<span class="score">${p.score}</span>` : ""}
+    </li>`).join("")}</ul>`;
+}
+
+function renderLobby(you) {
+  const n = (state.players || []).length, need = Math.max(0, (state.minPlayers || 2) - n);
+  app.innerHTML = `
+    <h1>${L.title}</h1>
+    <h2>${L.waiting}</h2>
+    <div class="card">${playerList(false)}</div>
+    ${you.vip ? `
+      <button id="start" ${need > 0 ? "disabled" : ""}>${L.start}</button>
+      <p class="hint">${need > 0 ? L.needMore(need) : L.vipHint}</p>`
+    : `<p class="hint">${need > 0 ? L.needMore(need) : L.hostWill}</p>`}`;
+  const b = document.getElementById("start");
+  if (b) b.onclick = () => send({ t: "start" });
+}
+
+function renderChoosing(you) {
+  const sc = state.sculptor || {};
+  if (you.sculptor) {
+    app.innerHTML = `
+      <div class="big-emoji">🎮</div>
+      <h1>${L.yourTurn}</h1>
+      <p class="muted">${L.grabPad}</p>
+      <div class="timer" id="timer"></div>
+      <h2>${L.chooseWord}</h2>
+      <div class="choices">${(state.choices || []).map((w, i) =>
+        `<button class="${i ? "ghost" : ""}" data-i="${i}">${esc(w)}</button>`).join("")}</div>`;
+    app.querySelectorAll("[data-i]").forEach(b => b.onclick = () => send({ t: "choose", i: +b.dataset.i }));
+  } else {
+    app.innerHTML = `
+      <div class="big-emoji">🗿</div>
+      <h2>${L.isChoosing(esc(sc.name))}</h2>
+      <p class="muted">${L.passPad(esc(sc.name))}</p>
+      <div class="timer" id="timer"></div>
+      <div class="card">${playerList(true)}</div>`;
+  }
+  tickTimer();
+}
+
+function renderDrawing(you) {
+  if (you.sculptor) {
+    app.innerHTML = `
+      <div class="timer" id="timer"></div>
+      <div class="card" style="display:flex;flex-direction:column;gap:8px">
+        <p class="muted">${L.sculptThis}</p>
+        <div class="word">${esc(state.word)}</div>
+        <p class="hint">${L.dontSay}</p>
+      </div>
+      <div class="card">${playerList(true)}</div>
+      <div class="card chat" id="chat"></div>`;
+  } else {
+    app.innerHTML = `
+      <div class="timer" id="timer"></div>
+      <div class="mask">${esc(state.mask)}</div>
+      ${banner ? `<div class="banner ${banner.kind} flash">${esc(banner.text)}${banner.sub ? `<div style="font-size:16px;margin-top:4px">${esc(banner.sub)}</div>` : ""}</div>` : ""}
+      ${you.guessed ? `<p class="muted">${L.waitOthers}</p>` : `
+        <div class="row">
+          <input id="guess" type="text" maxlength="40" autocomplete="off" autocapitalize="off" placeholder="${L.guessPh}">
+          <button id="send">${L.send}</button>
+        </div>`}
+      <div class="card chat" id="chat"></div>
+      <div class="card">${playerList(true)}</div>`;
+    const inp = document.getElementById("guess");
+    if (inp) {
+      inp.value = draftGuess;
+      inp.oninput = () => { draftGuess = inp.value; };
+      const go = () => {
+        const v = inp.value.trim();
+        if (!v) return;
+        send({ t: "guess", text: v });
+        inp.value = ""; draftGuess = ""; inp.focus();
+      };
+      document.getElementById("send").onclick = go;
+      inp.onkeydown = e => { if (e.key === "Enter") go(); };
+      if (!banner) inp.focus();
+    }
+  }
+  renderChat();
+  tickTimer();
+}
+
+function renderTurnEnd() {
+  app.innerHTML = `
+    <p class="muted">${L.wordWas}</p>
+    <div class="word">${esc(state.mask)}</div>
+    <div class="card">${playerList(true)}</div>`;
+}
+
+function renderGameOver(you) {
+  const ps = [...(state.players || [])].sort((a, b) => b.score - a.score);
+  app.innerHTML = `
+    <div class="big-emoji">🏆</div>
+    <h1>${L.gameOver}</h1>
+    ${ps[0] ? `<h2>${L.winner(esc(ps[0].name))}</h2>` : ""}
+    <div class="card">${playerList(true)}</div>
+    ${you.vip ? `<button id="again">${L.again}</button><button class="ghost" id="menu">${L.menu}</button>`
+              : `<p class="hint">${L.hostDecides}</p>`}`;
+  const a = document.getElementById("again"), b = document.getElementById("menu");
+  if (a) a.onclick = () => send({ t: "again" });
+  if (b) b.onclick = () => send({ t: "menu" });
+}
+
+function renderChat() {
+  const box = document.getElementById("chat");
+  if (!box) return;
+  box.classList.toggle("hidden", chat.length === 0);
+  box.innerHTML = chat.map(c =>
+    c.kind === "correct" ? `<div class="l correct">✓ ${esc(c.name)}</div>`
+    : c.kind === "system" ? `<div class="l system">${esc(c.msg)}</div>`
+    : `<div class="l"><b>${esc(c.name)}:</b> ${esc(c.msg)}</div>`).join("");
+  box.scrollTop = box.scrollHeight;
+}
+
+function tickTimer() {
+  const el = document.getElementById("timer");
+  if (!el) return;
+  const s = secsLeft();
+  el.textContent = s > 0 ? s : "";
+  el.classList.toggle("low", s > 0 && s <= 10);
+}
+setInterval(tickTimer, 250);
+
+renderJoin();
+connect();
+</script>
+</body>
+</html>

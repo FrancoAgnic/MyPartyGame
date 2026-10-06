@@ -1,4 +1,6 @@
 #include "PTGameplayHUDWidget.h"
+#include "../PTGamepad.h"
+#include "../UI/PTGamepadUINavigator.h"
 #include "PTSculptPlayerController.h"
 #include "PTScoreRowWidget.h"
 #include "../Lobby/PTPlayerState.h"
@@ -226,15 +228,27 @@ UPTToolSlotWidget* UPTGameplayHUDWidget::CreateSlotIn(UPanelWidget* Box, UTextur
     return S;
 }
 
+FText UPTGameplayHUDWidget::KeyCap(const TCHAR* KeyboardId, const TCHAR* GamepadId, UTexture2D*& InOutKeyIcon) const
+{
+    if (bToolbarGamepad && GamepadId)
+    {
+        InOutKeyIcon = nullptr;
+        return FText::FromString(PTGamepad::KeyLabel(PTGamepad::GetKey(FName(GamepadId))));
+    }
+    return PT_ShortKeyLabel(PTInput::GetKey(FName(KeyboardId)));
+}
+
+FText UPTGameplayHUDWidget::KeyCap(const FKey& KeyboardKey, const TCHAR* GamepadId) const
+{
+    if (bToolbarGamepad && GamepadId)
+        return FText::FromString(PTGamepad::KeyLabel(PTGamepad::GetKey(FName(GamepadId))));
+    return PT_ShortKeyLabel(KeyboardKey);
+}
+
 void UPTGameplayHUDWidget::BuildToolbar()
 {
     if (!ToolSlotClass) return;
-
-    auto MakeSlot = [this](UPanelWidget* Box, UTexture2D* Icon, const FKey& Key, const FText& Label)
-        -> UPTToolSlotWidget*
-    {
-        return CreateSlotIn(Box, Icon, PT_ShortKeyLabel(Key), Label);
-    };
+    UTexture2D* NoIcon = nullptr;
 
     // Tools: la tecla sale de PTInput (misma tabla que bindea el controller) → si se rebindea,
     // el cuadrito muestra la tecla nueva sin tocar nada acá.
@@ -244,10 +258,10 @@ void UPTGameplayHUDWidget::BuildToolbar()
         TSubclassOf<UPTToolSlotWidget> ToolsCls = ToolSlotToolsClass ? ToolSlotToolsClass : ToolSlotClass;
         ToolsBox->ClearChildren();
         ToolSlots.Reset();
-        ToolSlots.Add(CreateSlotIn(ToolsBox, IconAdd,   PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModeAdd"))),   PTText::Get(TEXT("TOOL_ADD")),   nullptr, ToolsCls));
-        ToolSlots.Add(CreateSlotIn(ToolsBox, IconErase, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModeErase"))), PTText::Get(TEXT("TOOL_ERASE")), nullptr, ToolsCls));
-        ToolSlots.Add(CreateSlotIn(ToolsBox, IconPaint, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModePaint"))), PTText::Get(TEXT("TOOL_PAINT")), nullptr, ToolsCls));
-        ToolSlots.Add(CreateSlotIn(ToolsBox, IconEyes,  PT_ShortKeyLabel(PTInput::GetKey(TEXT("ModeEyes"))),  PTText::Get(TEXT("TOOL_EYES")),  nullptr, ToolsCls));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconAdd,   KeyCap(TEXT("ModeAdd"),   TEXT("ToolAdd"),   NoIcon), PTText::Get(TEXT("TOOL_ADD")),   nullptr, ToolsCls));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconErase, KeyCap(TEXT("ModeErase"), TEXT("ToolErase"), NoIcon), PTText::Get(TEXT("TOOL_ERASE")), nullptr, ToolsCls));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconPaint, KeyCap(TEXT("ModePaint"), TEXT("ToolPaint"), NoIcon), PTText::Get(TEXT("TOOL_PAINT")), nullptr, ToolsCls));
+        ToolSlots.Add(CreateSlotIn(ToolsBox, IconEyes,  KeyCap(TEXT("ModeEyes"),  TEXT("ToolEyes"),  NoIcon), PTText::Get(TEXT("TOOL_EYES")),  nullptr, ToolsCls));
     }
 
     // Formas + Color: ShapesBox lleva la celda-hint de formas ("mantener TAB → formas") y, al lado,
@@ -256,12 +270,12 @@ void UPTGameplayHUDWidget::BuildToolbar()
     {
         ShapesBox->ClearChildren();
         ShapeSlots.Reset(); // ya no hay 4 celdas por forma
-        const FKey TabKey = PTInput::GetKey(TEXT("CycleShape"));
-        ShapeHintSlot = MakeSlot(ShapesBox, IconShapesHint ? IconShapesHint : IconSphere,
-                                 TabKey, PTText::Get(TEXT("SHAPE_HINT")));
+        ShapeHintSlot = CreateSlotIn(ShapesBox, IconShapesHint ? IconShapesHint : IconSphere,
+                                     KeyCap(TEXT("CycleShape"), TEXT("ShapeRadial"), NoIcon), PTText::Get(TEXT("SHAPE_HINT")));
+        UTexture2D* ColorKeyIcon = IconKeyRMB;
+        const FText ColorKey = KeyCap(TEXT("ColorPick"), TEXT("ColorPick"), ColorKeyIcon);
         ColorSlot = CreateSlotIn(ShapesBox, IconColorPicker ? IconColorPicker : IconSaveColor,
-                                 PT_ShortKeyLabel(PTInput::GetKey(TEXT("ColorPick"))),
-                                 PTText::Get(TEXT("HINT_COLOR")), IconKeyRMB);
+                                 ColorKey, PTText::Get(TEXT("HINT_COLOR")), ColorKeyIcon);
     }
 
     // Borrar todo (BACKSPACE mantenido): cuadrito fijo con círculo de progreso + contador.
@@ -269,8 +283,9 @@ void UPTGameplayHUDWidget::BuildToolbar()
     if (ClearBox)
     {
         ClearBox->ClearChildren();
-        ClearSlot = CreateSlotIn(ClearBox, IconClearAll, PT_ShortKeyLabel(PTInput::GetKey(TEXT("ClearAll"))),
-                                 PTText::Get(TEXT("TOOL_CLEAR_ALL")), IconKeyBackspace);
+        UTexture2D* ClearKeyIcon = IconKeyBackspace;
+        const FText ClearKey = KeyCap(TEXT("ClearAll"), TEXT("Undo"), ClearKeyIcon);
+        ClearSlot = CreateSlotIn(ClearBox, IconClearAll, ClearKey, PTText::Get(TEXT("TOOL_CLEAR_ALL")), ClearKeyIcon);
         if (ClearSlot) ClearSlot->SetProgress(0.f, FText::GetEmpty()); // arranca sin círculo
 
         // Slots SOLO de autoría (Level Creator), en el mismo ClearBox: Cocinar (Enter, con anillo) + Ambiente
@@ -429,9 +444,13 @@ void UPTGameplayHUDWidget::RefreshToolbar()
         HintsBox->ClearChildren();
         HintSlots.Reset();
 
-        auto AddHint = [this](UTexture2D* Icon, const FKey& Key, const FText& Label) -> UPTToolSlotWidget*
+        // GamepadId null = esa acción no tiene botón de joystick: con joystick el cuadrito se crea igual
+        // (el resaltado del plano / detalle va por índice) pero colapsado.
+        auto AddHint = [this](UTexture2D* Icon, const FKey& Key, const TCHAR* GamepadId, const FText& Label) -> UPTToolSlotWidget*
         {
-            UPTToolSlotWidget* S = CreateSlotIn(HintsBox, Icon, PT_ShortKeyLabel(Key), Label);
+            const FText Cap = (bToolbarGamepad && !GamepadId) ? FText::GetEmpty() : KeyCap(Key, GamepadId);
+            UPTToolSlotWidget* S = CreateSlotIn(HintsBox, Icon, Cap, Label);
+            if (S && bToolbarGamepad && !GamepadId) S->SetVisibility(ESlateVisibility::Collapsed); // sin botón: no se muestra
             if (S) HintSlots.Add(S);
             return S;
         };
@@ -439,14 +458,15 @@ void UPTGameplayHUDWidget::RefreshToolbar()
         if (bPicker)
         {
             // Con la rueda de color abierta: E guarda el color donde tenés el puntero.
-            AddHint(IconSaveColor, PTInput::GetKey(TEXT("SaveColor")), PTText::Get(TEXT("HINT_SAVE_COLOR")));
+            if (!bToolbarGamepad) // con joystick no hay "guardar color"
+                AddHint(IconSaveColor, PTInput::GetKey(TEXT("SaveColor")), nullptr, PTText::Get(TEXT("HINT_SAVE_COLOR")));
         }
         else if (!bEyes && PC->EditMode == EPTEditMode::Add)
         {
             // Con Agregar: los dos planos de trazo recto + ALT (detalle en capa aparte).
-            AddHint(IconAxisVert,  PTInput::GetKey(TEXT("AxisVertical")),   PTText::Get(TEXT("HINT_PLANE_VERTICAL")));
-            AddHint(IconAxisHoriz, PTInput::GetKey(TEXT("AxisHorizontal")), PTText::Get(TEXT("HINT_PLANE_HORIZONTAL")));
-            AddHint(IconDetail,    FKey(EKeys::LeftAlt),                    PTText::Get(TEXT("TOOL_DETAIL")));
+            AddHint(IconAxisVert,  PTInput::GetKey(TEXT("AxisVertical")),   TEXT("AxisVertical"), PTText::Get(TEXT("HINT_PLANE_VERTICAL")));
+            AddHint(IconAxisHoriz, PTInput::GetKey(TEXT("AxisHorizontal")), nullptr,              PTText::Get(TEXT("HINT_PLANE_HORIZONTAL")));
+            AddHint(IconDetail,    FKey(EKeys::LeftAlt),                    TEXT("SurfaceSnap"),  PTText::Get(TEXT("TOOL_DETAIL")));
         }
     }
 
@@ -465,6 +485,18 @@ void UPTGameplayHUDWidget::RebuildControls()
     if (!ControlsBox || !ControlRowClass) return;
 
     ControlsBox->ClearChildren();
+    // Con joystick: las acciones del joystick (los mismos botones que el panel "Joystick").
+    if (bToolbarGamepad)
+    {
+        for (const FPTGamepadAction& A : PTGamepad::GetActions())
+        {
+            UPTControlRowWidget* Row = CreateWidget<UPTControlRowWidget>(GetOwningPlayer(), ControlRowClass);
+            if (!Row) continue;
+            Row->SetRow(PTText::Get(A.LabelKey), FText::FromString(PTGamepad::KeyLabel(A.Key)));
+            ControlsBox->AddChild(Row);
+        }
+        return;
+    }
     // Una fila por acción, leyendo la MISMA tabla que usa el PlayerController para bindear.
     for (const FPTKeyBinding& B : PTInput::GetBindings())
     {
@@ -681,6 +713,17 @@ void UPTGameplayHUDWidget::OnExitAuthorClicked()
 
 void UPTGameplayHUDWidget::RefreshTick()
 {
+    // ¿Mouse o joystick? Al cambiar, rearmar el hotbar y la lista de controles con los botones que tocan.
+    if (const UGameInstance* GI = GetGameInstance())
+        if (const UPTGamepadUINavigator* Nav = GI->GetSubsystem<UPTGamepadUINavigator>())
+            if (Nav->IsUsingGamepad() != bToolbarGamepad)
+            {
+                bToolbarGamepad = Nav->IsUsingGamepad();
+                CachedHintSig.Reset();
+                BuildToolbar();
+                RebuildControls();
+            }
+
     APTSculptGameState* G = GetGS();
 
     // Engancharse al chat una sola vez, cuando el GameState ya esté replicado.
@@ -726,7 +769,9 @@ void UPTGameplayHUDWidget::RefreshTick()
     RefreshToolbar();
 
     APTSculptPlayerController* PC = GetSculptPC();
-    const bool bSculptor = G->IsLocalPlayerSculptor();
+    // Modo local: la TV esculpe con el joystick pero NUNCA muestra la palabra (la están mirando todos);
+    // la palabra secreta y la elección viven en el celular del escultor.
+    const bool bSculptor = G->IsLocalPlayerSculptor() && !G->IsLocalPartyMode();
 
     // ¿Estoy espectando (dev) el POV del escultor? Entonces veo la palabra IGUAL que él.
     APTLobbyCharacter* SpecChar = Cast<APTLobbyCharacter>(PC ? PC->GetSpectatedPovPawn() : nullptr);
@@ -1389,7 +1434,7 @@ void UPTGameplayHUDWidget::UpdateGameplaySounds(APTSculptGameState* G)
     // misma animación de letras cayendo que un jugador que intenta adivinar.
     APTSculptPlayerController* PCg = GetSculptPC();
     const bool bGuessPreview = PCg && PCg->IsDevGuessPreview() && G->IsLocalPlayerSculptor();
-    const bool bGuesser = (!G->IsLocalPlayerSculptor() || bGuessPreview) && !bLocalGuessed;
+    const bool bGuesser = (!G->IsLocalPlayerSculptor() || G->IsLocalPartyMode() || bGuessPreview) && !bLocalGuessed;
     if (bGuesser && UseDelayedReveal())
     {
         // Inicializar la máscara mostrada al entrar. IMPORTANTE: arrancar TODO oculto (mismo largo,
@@ -1466,7 +1511,7 @@ FString UPTGameplayHUDWidget::BuildScoreboard() const
     TArray<APTPlayerState*> Players;
     for (APlayerState* PS : G->PlayerArray)
         if (APTPlayerState* PT = Cast<APTPlayerState>(PS))
-            if (!PT->bIsDevSpectator) // los espectadores dev no van en el marcador
+            if (!PT->bIsDevSpectator && !PT->bIsLocalPartyTV) // ni los espectadores dev ni la TV del modo local
                 Players.Add(PT);
 
     Players.Sort([](const APTPlayerState& A, const APTPlayerState& B){ return A.GameScore > B.GameScore; });
@@ -1486,7 +1531,7 @@ void UPTGameplayHUDWidget::RebuildScoreboard()
     TArray<APTPlayerState*> Players;
     for (APlayerState* PS : G->PlayerArray)
         if (APTPlayerState* PT = Cast<APTPlayerState>(PS))
-            if (!PT->bIsDevSpectator) // los espectadores dev no van en el marcador
+            if (!PT->bIsDevSpectator && !PT->bIsLocalPartyTV) // ni los espectadores dev ni la TV del modo local
                 Players.Add(PT);
     Players.Sort([](const APTPlayerState& A, const APTPlayerState& B){ return A.GameScore > B.GameScore; });
 
@@ -1499,7 +1544,9 @@ void UPTGameplayHUDWidget::RebuildScoreboard()
 
     // Firma del estado visible: solo reconstruimos las filas si algo cambió (no cada tick). Incluye el
     // flash "+N" para que el marcador se rearme cuando aparece Y cuando se vence (y así ocultarlo).
-    FString Sig;
+    // Arranca con un prefijo: con 0 jugadores (modo local, nadie entró aún) la firma vacía coincidía con
+    // la inicial y nunca se limpiaban las filas de EJEMPLO del WBP ("PlayerName 12").
+    FString Sig = TEXT("#");
     for (APTPlayerState* PT : Players)
         Sig += FString::Printf(TEXT("%s:%d:%d:%d:%d:%s|"), *NameFor(PT),
                                PT->GameScore, PT == G->CurrentSculptor ? 1 : 0, IsFlashing(PT) ? 1 : 0,

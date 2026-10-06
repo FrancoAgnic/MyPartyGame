@@ -35,6 +35,9 @@ public class MyPartyGame : ModuleRules
 			"PakFile",          // M1 mapas: montar .pak de mods de mapa en runtime (FCoreDelegates::MountPak)
 			"Json",             // M1 mapas: parsear mod.json (MapName/Title/Author)
 			"JsonUtilities",
+			"Sockets",          // Modo local: servidor HTTP/WebSocket para los celulares (LocalParty/)
+			"Networking",
+			"WebSockets",       // Modo online: el juego se conecta al relay (Tools/Relay) por wss
 			// Online Subsystem — Steam (cargado dinámicamente vía plugin/config).
 			"OnlineSubsystem",
 			"OnlineSubsystemUtils",
@@ -86,7 +89,8 @@ public class MyPartyGame : ModuleRules
 			"MyPartyGame/Variant_SideScrolling/Interfaces",
 			"MyPartyGame/Variant_SideScrolling/UI",
 			"MyPartyGame/Sculpt",
-			"MyPartyGame/Sculpt/SVO"
+			"MyPartyGame/Sculpt/SVO",
+			"MyPartyGame/LocalParty"
 		});
 	}
 }

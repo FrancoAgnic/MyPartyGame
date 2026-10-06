@@ -559,7 +559,7 @@ void APTSculptVolume::UpdateSculptBoundaryCollision()
         if (!P) continue;
         UPrimitiveComponent* Root = Cast<UPrimitiveComponent>(P->GetRootComponent()); // capsule del Character
         if (!Root) continue;
-        const bool bCanEnter = (!bTurnActive) || (PS == Sculptor);
+        const bool bCanEnter = (!bTurnActive) || GS->IsActingSculptor(PS); // modo local: la TV también
         Root->IgnoreActorWhenMoving(this, bCanEnter);
     }
 
@@ -576,7 +576,7 @@ void APTSculptVolume::UpdateSculptBoundaryCollision()
         {
             for (APlayerState* PS : GS->PlayerArray)
             {
-                if (!PS || PS == Sculptor) continue;
+                if (!PS || GS->IsActingSculptor(PS)) continue;
                 APawn* P = PS->GetPawn();
                 if (!P) continue;
                 const FVector L = BT.InverseTransformPosition(P->GetActorLocation());

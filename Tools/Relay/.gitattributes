@@ -1,0 +1,2 @@
+# El relay corre en Linux: siempre LF (un CRLF en .env rompe el token del túnel).
+* text=auto eol=lf

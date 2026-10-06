@@ -37,6 +37,7 @@ void APTSculptGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
     DOREPLIFETIME(APTSculptGameState, CurrentRound);
     DOREPLIFETIME(APTSculptGameState, TotalRounds);
     DOREPLIFETIME(APTSculptGameState, bTurnEndedAllGuessed);
+    DOREPLIFETIME(APTSculptGameState, bLocalParty);
 }
 
 float APTSculptGameState::GetTurnSecondsRemaining() const
@@ -51,8 +52,16 @@ bool APTSculptGameState::IsLocalPlayerSculptor() const
     if (!CurrentSculptor) return false;
     // Cliente: hay un solo PlayerController local; su PlayerState es el del jugador local.
     if (const APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
-        return PC->PlayerState == CurrentSculptor;
+        return IsActingSculptor(PC->PlayerState);
     return false;
+}
+
+bool APTSculptGameState::IsActingSculptor(const APlayerState* PS) const
+{
+    if (!CurrentSculptor || !PS) return false;
+    if (PS == CurrentSculptor) return true;
+    const APTPlayerState* PT = Cast<APTPlayerState>(PS);
+    return bLocalParty && PT && PT->bIsLocalPartyTV;
 }
 
 void APTSculptGameState::OnRep_TurnPhase()

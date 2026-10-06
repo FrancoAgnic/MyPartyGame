@@ -27,6 +27,7 @@
 #include "../PTGameUserSettings.h"
 #include "../Multiplayer/MultiplayerSessionsSubsystem.h"
 #include "../PTGameInstance.h"
+#include "../PTGamepad.h"
 #include "../PTTextTable.h"
 #include "Blueprint/UserWidget.h"
 #include "Kismet/GameplayStatics.h"
@@ -730,6 +731,11 @@ void APTLobbyPlayerController::SetupInputComponent()
 void APTLobbyPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
+
+    // Joystick: caminar con el stick izq. (y mirar con el der. donde el look no está bloqueado).
+    // La UI del lobby se navega con la cruceta (UPTGamepadUINavigator).
+    if (IsLocalController())
+        PTGamepad::TickMoveLook(this, DeltaTime, /*bAllowMove=*/true, /*bAllowLook=*/true, 150.f, 110.f, 1.6f);
 
     // Teclas toggle del modo espectador (dev): 1=UI del lobby, 2=nombres. Solo mientras espectás.
     if (Spectator && Spectator->IsActive())
@@ -2299,4 +2305,9 @@ void APTLobbyPlayerController::ToggleEscapeMenu(const FInputActionValue& Value)
     // necesita el mouse para tocar Listo). Si el menú quedó cerrado, restaurar el modo diorama.
     if (EscapeMenuWidget && !EscapeMenuWidget->IsMenuOpen())
         ApplyDioramaInputMode();
+}
+
+void APTLobbyPlayerController::PTLocal()
+{
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>()) GI->EnterLocalParty();
 }

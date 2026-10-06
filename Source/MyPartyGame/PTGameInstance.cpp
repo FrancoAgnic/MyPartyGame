@@ -1,6 +1,10 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "PTGameInstance.h"
+#include "Containers/Ticker.h"
+#include "Misc/CommandLine.h"
+#include "LocalParty/PTLocalPartySubsystem.h"
+#include "UI/PTGamepadUINavigator.h"
 #include "PTTextTable.h"
 #include "PTWordBank.h"
 #include "UI/PTLoadingScreenWidget.h"
@@ -259,6 +263,83 @@ void UPTGameInstance::DoEnterMapAuthoringTravel()
     const FString Options = FString::Printf(TEXT("game=%s"), *MapAuthorGameMode);
     UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Entrando a autoría: %s (%s) slug=%s"), *MapAuthorLevel, *Options, *CurrentAuthoringSlug);
     UGameplayStatics::OpenLevel(this, FName(*MapAuthorLevel), /*bAbsolute=*/true, Options);
+}
+
+// ── Modo LOCAL (party con celulares) ─────────────────────────────────────────
+
+void UPTGameInstance::EnterOnlineParty()
+{
+    bLocalPartyOnline = true;
+    bLocalPartyMode = true;
+    bSoloTest = false;
+    if (UPTLocalPartySubsystem* LP = GetSubsystem<UPTLocalPartySubsystem>()) LP->StartServer();
+    if (LoadingScreenClass)
+        if (UPTLoadingScreenWidget* LS = CreateLoadingScreen(/*bStartAtLoop=*/false))
+        {
+            LS->OnCovered.AddDynamic(this, &UPTGameInstance::DoEnterLocalPartyTravel);
+            if (UWorld* W = GetWorld())
+                W->GetTimerManager().SetTimer(TransitionSafetyTimer, this, &UPTGameInstance::DoEnterLocalPartyTravel, 2.0f, false);
+            return;
+        }
+    DoEnterLocalPartyTravel();
+}
+
+void UPTGameInstance::EnterLocalParty()
+{
+    bLocalPartyOnline = false;
+    bLocalPartyMode = true;
+    bSoloTest = false;
+    // Levantar el servidor YA: los celulares pueden ir entrando mientras carga el mapa.
+    if (UPTLocalPartySubsystem* LP = GetSubsystem<UPTLocalPartySubsystem>()) LP->StartServer();
+
+    // Misma transición que la autoría: AnimIn sobre el menú y recién ahí se viaja.
+    if (LoadingScreenClass)
+    {
+        if (UPTLoadingScreenWidget* LS = CreateLoadingScreen(/*bStartAtLoop=*/false))
+        {
+            LS->OnCovered.AddDynamic(this, &UPTGameInstance::DoEnterLocalPartyTravel);
+            if (UWorld* W = GetWorld())
+                W->GetTimerManager().SetTimer(TransitionSafetyTimer, this, &UPTGameInstance::DoEnterLocalPartyTravel, 2.0f, false);
+            return;
+        }
+    }
+    DoEnterLocalPartyTravel();
+}
+
+void UPTGameInstance::DoEnterLocalPartyTravel()
+{
+    if (bTransitionCovering) return;
+    bTransitionCovering = true;
+    if (UWorld* W = GetWorld()) W->GetTimerManager().ClearTimer(TransitionSafetyTimer);
+    const FString Options = FString::Printf(TEXT("game=%s"), *LocalPartyGameMode);
+    UE_LOG(LogTemp, Log, TEXT("[LocalParty] Entrando al modo local: %s (%s)"), *LocalPartyLevel, *Options);
+    UGameplayStatics::OpenLevel(this, FName(*LocalPartyLevel), /*bAbsolute=*/true, Options);
+}
+
+void UPTGameInstance::PTJoystick()
+{
+    if (UPTGamepadUINavigator* Nav = GetSubsystem<UPTGamepadUINavigator>()) Nav->OpenGamepadSettings();
+}
+
+void UPTGameInstance::PTPadKey(const FString& KeyName)
+{
+    const FKey Key(*KeyName);
+    if (!Key.IsValid() || !FSlateApplication::IsInitialized()) return;
+    const FKeyEvent E(Key, FModifierKeysState(), 0, false, 0, 0);
+    FSlateApplication::Get().ProcessKeyDownEvent(E);
+    FSlateApplication::Get().ProcessKeyUpEvent(E);
+}
+
+void UPTGameInstance::ExitLocalParty()
+{
+    bLocalPartyMode = false;
+    bLocalPartyOnline = false;
+    if (UPTLocalPartySubsystem* LP = GetSubsystem<UPTLocalPartySubsystem>())
+    {
+        LP->StopServer();
+        LP->ClearPlayers();
+    }
+    UGameplayStatics::OpenLevel(this, FName(*LocalPartyMenuLevel), /*bAbsolute=*/true);
 }
 
 FString UPTGameInstance::AuthoredLevelsDir() const
@@ -547,6 +628,28 @@ void UPTGameInstance::ApplyUIButtonSounds(UUserWidget* Root) const
 void UPTGameInstance::Init()
 {
     Super::Init();
+
+#if !UE_BUILD_SHIPPING
+    // DEV/automatización (opt-in con -PTCmdFile): ejecutar los comandos que aparezcan en
+    // Saved/PTCommands.txt (una línea = un comando). Sirve para probar la UI con joystick sin uno.
+    if (FParse::Param(FCommandLine::Get(), TEXT("PTCmdFile")))
+    {
+        FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateWeakLambda(this, [this](float)
+        {
+            const FString Path = FPaths::ProjectSavedDir() / TEXT("PTCommands.txt");
+            FString Text;
+            if (!FFileHelper::LoadFileToString(Text, *Path)) return true;
+            IFileManager::Get().Delete(*Path);
+            TArray<FString> Lines;
+            Text.ParseIntoArrayLines(Lines);
+            for (const FString& L : Lines)
+                if (UWorld* W = GetWorld())
+                    if (APlayerController* PC = W->GetFirstPlayerController()) PC->ConsoleCommand(L);
+                    else Exec(W, *L);
+            return true;
+        }), 0.25f);
+    }
+#endif
 
 #if WITH_GAMEPLAY_DEBUGGER
     // Blindar el GameplayDebugger (tecla ' ): si se activa, TOMA el input y rompe el gameplay (no se puede

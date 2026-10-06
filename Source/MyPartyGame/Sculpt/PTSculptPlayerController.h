@@ -197,6 +197,31 @@ public:
     UPROPERTY(EditAnywhere, Category="UI")
     TSubclassOf<class UPTGameplayHUDWidget> GameplayHUDClass;
 
+    // ── Modo local (party con celulares) ────────────────────────────────────
+    /** Overlay de la TV (QR para unirse, lista de jugadores, "pasale el joystick"). Por defecto la clase
+     *  C++ (se arma sola); se puede asignar un BP hijo para retocarla. Solo se crea en modo local. */
+    UPROPERTY(EditAnywhere, Category="LocalParty")
+    TSubclassOf<class UPTLocalPartyTVWidget> LocalPartyTVClass;
+    UPROPERTY() class UPTLocalPartyTVWidget* LocalPartyTV = nullptr;
+
+    // ── Joystick (gamepad) ──────────────────────────────────────────────────
+    // Esquema (Xbox): stick izq. moverse · stick der. mirar · RT esculpir · LB/RB tamaño · cruceta
+    // herramienta (arriba Agregar, der. Borrar, abajo Pintar, izq. Ojos) · X (mantener) color ·
+    // Y (mantener) forma · A/B subir/bajar · LT (mantener) pegar a la superficie · R3 (mantener) rotar
+    // la forma con el stick der. · L3 (mantener) plano vertical · View deshacer (mantener = borrar todo)
+    // · Menu pausa.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input|Gamepad") float GamepadLookYawSpeed   = 150.f; // grados/seg a fondo
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input|Gamepad") float GamepadLookPitchSpeed = 110.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input|Gamepad") bool  bGamepadInvertY       = false;
+    // Curva de respuesta del stick (1 = lineal, 2 = más fino cerca del centro).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input|Gamepad") float GamepadLookExponent   = 1.6f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input|Gamepad") float GamepadRotateSpeed    = 160.f; // rotar la forma (R3)
+    // LB/RB mantenidos: repetir el cambio de tamaño.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input|Gamepad") float GamepadRepeatDelay    = 0.3f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input|Gamepad") float GamepadRepeatInterval = 0.08f;
+    // Radio del "cursor virtual" en los menús radiales, como fracción del alto de la pantalla.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input|Gamepad") float GamepadRadialRadius   = 0.18f;
+
     // ── Pantalla de carga (al entrar a un mapa de props: tapa el nivel vacío mientras carga) ──
     /** Tiempo MÍNIMO que se muestra la pantalla de carga (para que se vean IN+LOOP aunque cargue instantáneo).
      *  La CLASE del widget se asigna en el GameInstance (LoadingScreenClass), un solo lugar para todas las transiciones. */
@@ -376,6 +401,7 @@ public:
     UFUNCTION(Exec) void PTHideHotbar();        // oculta/muestra la barra de herramientas
     UFUNCTION(Exec) void PTSpecSpeed(float N);  // multiplica la velocidad de la cámara
     UFUNCTION(Exec) void PTSpecSmooth(float N); // suavizado/lag de la cámara (bajo = más suave)
+    UFUNCTION(Exec) void PTLocalStart();        // DEV (modo local): empezar la partida como si tocara el VIP
     UFUNCTION(Exec) void PTSolo();              // DEV: jugar solo (1 jugador) → arranca el turno ya
     UFUNCTION(Exec) void PTLOD();               // DEV: prende/apaga el LOD real de props (para verlo en el editor)
     UFUNCTION(Exec) void PTLODDebug();          // DEV: overlay del LOD (cilindro + color por etapa + tris)
@@ -415,6 +441,7 @@ public:
     /** true mientras la rueda de color (mantener RMB) está activa. Igual que arriba: el HUD lo
      *  consulta para mantener el cursor visible y poder elegir color mientras se esculpe. */
     bool IsColorPickerOpen() const { return bQuickColorActive; }
+    bool IsShapeRadialOpen() const { return bShapeRadialActive; }
 
     /** Pawn cuyo POV estás espectando (nullptr si no espectás / vuelo libre). Para que el HUD muestre
      *  el hotbar del jugador que esculpe mientras lo mirás en 1ra persona. */
@@ -816,4 +843,27 @@ private:
     bool bEyesTool = false;
     void SetModeEyes();   // tecla 4: activar la herramienta de ojos
     void PlaceEyeAtCursor(); // coloca un ojo (sobre la superficie) → Volume->Server_AddEye
+
+    // ── Joystick (PTSculptPlayerController_Gamepad.cpp) ──
+    void SetupGamepadInput();
+public:
+    /** Rearma los bindings del joystick (después de reasignar botones en el panel "Joystick"). */
+    void RebuildGamepadInput();
+private:
+    void TickGamepad(float DeltaTime);
+    void CreateLocalPartyTV();
+    FVector2D ReadStick(const FKey& X, const FKey& Y) const; // con zona muerta radial y reescalado
+    void OnPadBiggerPressed();
+    void OnPadBiggerReleased()  { bPadBigger = false; }
+    void OnPadSmallerPressed();
+    void OnPadSmallerReleased() { bPadSmaller = false; }
+    void OnPadAscendPressed();
+    void OnPadAscendReleased();
+    void OnPadDescendPressed();
+    void OnPadDescendReleased();
+    bool  bPadBigger = false;
+    bool  bPadSmaller = false;
+    float PadRepeatTimer = 0.f;
+    bool  bPadLookLocked = false;   // stick der. ocupado por un menú / rotación → no mueve la cámara
+    bool  bUsingGamepad = false;    // último input fue del joystick (para el cursor virtual)
 };

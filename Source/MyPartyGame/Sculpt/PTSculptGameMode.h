@@ -90,6 +90,26 @@ public:
     void RequestPlayAgain(APTPlayerState* Requester);
     void RequestReturnToLobby(APTPlayerState* Requester);
 
+    // ── Modo LOCAL (party con celulares, ver UPTLocalPartySubsystem) ────────
+    // Una sola PC (la TV) con el joystick; cada jugador es una PlayerState SIN controller que existe
+    // en su celular. La partida no arranca sola: la empieza el "VIP" desde su celular.
+    UPROPERTY(EditDefaultsOnly, Category="LocalParty") int32 LocalPartyMinPlayers = 2;
+
+    // ¿Esta partida corre en modo local? (flag del GameInstance, seteado al entrar desde el menú).
+    bool IsLocalPartyGame() const;
+
+    APTPlayerState* LocalParty_AddPlayer(const FString& Name, const FString& Language, FLinearColor Color);
+    void LocalParty_RemovePlayer(APTPlayerState* PS);
+    void LocalParty_RequestStart();
+    void LocalParty_PlayAgain();
+    void LocalParty_ExitToMenu();
+    void LocalParty_Guess(APTPlayerState* PS, const FString& Text);
+    void LocalParty_Choose(APTPlayerState* PS, int32 ChoiceIndex);
+    // Opciones / palabra secreta EN EL IDIOMA del celular. Vacío si ese jugador no es el escultor.
+    TArray<FString> LocalParty_GetChoicesFor(const APTPlayerState* PS) const;
+    FString LocalParty_GetSecretWordFor(const APTPlayerState* PS) const;
+    int32 LocalParty_GetMinPlayers() const { return MinToStart(); }
+
 public:
     /** [server] Manda la palabra secreta actual a TODOS los dev-espectadores (para verla al espectar
      *  al escultor). Word vacío = limpiar. */
@@ -99,6 +119,8 @@ public:
     void SendCurrentSpectateWordTo(class APTSculptPlayerController* PC);
 
 protected:
+    virtual void InitGameState() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     virtual void BeginPlay() override;
     virtual void PostLogin(APlayerController* NewPlayer) override;
     virtual void HandleSeamlessTravelPlayer(AController*& C) override;
@@ -113,6 +135,9 @@ private:
     // Publica MatchMapModId en el GameState (server) para que cada máquina cargue su copia local.
     void LoadPropMapEnvironment();
     bool         bStartScheduled = false; // evita re-agendar el arranque en cada CheckStart
+    bool         bLocalStartRequested = false; // modo local: el VIP tocó "Empezar" en su celular
+    int32        NextPhonePlayerId = 1000;     // PlayerId de los jugadores de celular (no chocan con los reales)
+    class UPTLocalPartySubsystem* LocalParty() const; // null si no es modo local
 
     // Estado del turno (solo servidor). La palabra real vive acá (todas sus traducciones), jamás
     // se replica: a los clientes solo les llegan las MÁSCARAS.

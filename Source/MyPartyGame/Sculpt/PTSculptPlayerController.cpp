@@ -319,6 +319,9 @@ void APTSculptPlayerController::BeginPlay()
         if (GameplayHUD) GameplayHUD->ShowHUD();
     }
 
+    // Modo local (celulares): overlay de la TV con el QR para unirse y "pasale el joystick".
+    CreateLocalPartyTV();
+
     // Cámara espectador (dev-only): se maneja por comandos de consola.
     if (IsLocalController())
         Spectator = NewObject<UPTSpectatorComponent>(this, TEXT("SpectatorCam"));
@@ -657,12 +660,18 @@ void APTSculptPlayerController::SetupInputComponent()
 
     InputComponent->BindKey(K(TEXT("Pause")), IE_Pressed, this, &APTSculptPlayerController::OnPausePressed);
     InputComponent->BindKey(K(TEXT("Chat")),  IE_Pressed, this, &APTSculptPlayerController::OnOpenChat);
+
+    // Joystick: mismo set de acciones (ver PTSculptPlayerController_Gamepad.cpp).
+    SetupGamepadInput();
 }
 
 void APTSculptPlayerController::OnOpenChat()
 {
     // En modo autoría de mapa NO hay chat de texto (además Enter se usa para hornear). Ignorar.
     if (IsMapAuthorMode()) return;
+    // Modo local: en la TV nadie escribe (se adivina desde el celular). Enter no abre el chat.
+    if (const APTSculptGameState* G = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr)
+        if (G->IsLocalPartyMode()) return;
     if (GameplayHUD) GameplayHUD->FocusChat();
 }
 
@@ -765,7 +774,7 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
     {
         bPhaseWantsUILock =
             (G->TurnPhase == EPTTurnPhase::GameOver) ||
-            (G->TurnPhase == EPTTurnPhase::ChoosingWord && G->IsLocalPlayerSculptor());
+            (G->TurnPhase == EPTTurnPhase::ChoosingWord && G->IsLocalPlayerSculptor() && !G->IsLocalPartyMode());
 
         // Al EMPEZAR tu turno de esculpir (transición a "sos el escultor"), resetear rotación y escala.
         const bool bMyTurn = (G->TurnPhase == EPTTurnPhase::Drawing) && G->IsLocalPlayerSculptor();
@@ -794,6 +803,10 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
     }
 
     // (La lista de controles con H ahora vive en la UI del HUD: ver UPTGameplayHUDWidget::SetControlsVisible.)
+
+    // Joystick: mover/mirar con los sticks y "cursor virtual" de los menús radiales. Va ANTES de los
+    // ticks de los radiales para que lean el cursor ya movido este frame.
+    TickGamepad(DeltaTime);
 
     // Rueda de color abierta (mantener RMB): seguir el cursor para elegir matiz/saturación.
     if (bQuickColorActive)
@@ -2020,7 +2033,7 @@ void APTSculptPlayerController::Server_Undo_Implementation()
     if (const APTSculptGameState* G = GetWorld()->GetGameState<APTSculptGameState>())
     {
         if (G->TurnPhase != EPTTurnPhase::Drawing ||
-            G->CurrentSculptor != GetPlayerState<APTPlayerState>())
+            !G->IsActingSculptor(GetPlayerState<APTPlayerState>()))
             return;
     }
     if (!Volume)
@@ -2035,7 +2048,7 @@ void APTSculptPlayerController::Server_ClearSculpture_Implementation()
     if (const APTSculptGameState* G = GetWorld()->GetGameState<APTSculptGameState>())
     {
         if (G->TurnPhase != EPTTurnPhase::Drawing ||
-            G->CurrentSculptor != GetPlayerState<APTPlayerState>())
+            !G->IsActingSculptor(GetPlayerState<APTPlayerState>()))
             return;
     }
     if (!Volume)
@@ -2142,7 +2155,7 @@ void APTSculptPlayerController::Server_SetSculptPlane_Implementation(bool bEnabl
         if (const APTSculptGameState* G = GetWorld()->GetGameState<APTSculptGameState>())
         {
             if (G->TurnPhase != EPTTurnPhase::Drawing ||
-                G->CurrentSculptor != GetPlayerState<APTPlayerState>())
+                !G->IsActingSculptor(GetPlayerState<APTPlayerState>()))
                 bEnable = false;
         }
     }
@@ -2401,7 +2414,7 @@ void APTSculptPlayerController::Server_AddEye_Implementation(FVector WorldPos, f
     if (const APTSculptGameState* G = GetWorld()->GetGameState<APTSculptGameState>())
     {
         if (G->TurnPhase != EPTTurnPhase::Drawing ||
-            G->CurrentSculptor != GetPlayerState<APTPlayerState>())
+            !G->IsActingSculptor(GetPlayerState<APTPlayerState>()))
             return;
     }
     if (!Volume)
@@ -2573,7 +2586,7 @@ void APTSculptPlayerController::Server_ApplyStamp_Implementation(FVector WorldPo
     if (const APTSculptGameState* G = GetWorld()->GetGameState<APTSculptGameState>())
     {
         if (G->TurnPhase != EPTTurnPhase::Drawing ||
-            G->CurrentSculptor != GetPlayerState<APTPlayerState>())
+            !G->IsActingSculptor(GetPlayerState<APTPlayerState>()))
             return;
     }
     if (!Volume)
@@ -2589,7 +2602,7 @@ void APTSculptPlayerController::Server_BeginDetailLayer_Implementation()
     if (const APTSculptGameState* G = GetWorld()->GetGameState<APTSculptGameState>())
     {
         if (G->TurnPhase != EPTTurnPhase::Drawing ||
-            G->CurrentSculptor != GetPlayerState<APTPlayerState>())
+            !G->IsActingSculptor(GetPlayerState<APTPlayerState>()))
             return;
     }
     if (!Volume)
@@ -3173,4 +3186,11 @@ void APTSculptPlayerController::TickAuthorProps(float Dt)
         if (SculptGrid)   SculptGrid->SetVisibility(false);   // la grilla 3D no aplica afuera
         if (BoundaryMesh) BoundaryMesh->SetVisibility(false); // el límite del box tampoco
     }
+}
+
+void APTSculptPlayerController::PTLocalStart()
+{
+    if (!HasAuthority()) return;
+    if (APTSculptGameMode* GM = GetWorld()->GetAuthGameMode<APTSculptGameMode>())
+        GM->LocalParty_RequestStart();
 }

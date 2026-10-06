@@ -98,9 +98,23 @@ public:
         return FMath::Max(0.f, (float)(TurnEndServerTime - GetServerWorldTimeSeconds()));
     }
 
-    // ¿El jugador local es el escultor de este turno?
+    // ¿El jugador local es el escultor de este turno? En modo local (celulares) es true para la PC
+    // durante todo el turno: el joystick esculpe EN NOMBRE del escultor (ver IsActingSculptor).
     UFUNCTION(BlueprintPure, Category="Game")
     bool IsLocalPlayerSculptor() const;
+
+    // ── Modo local (party con celulares) ────────────────────────────────────
+    // true si la partida corre en modo local: una sola PC (la "TV") con el joystick que se pasan los
+    // jugadores, y cada jugador entra desde su celular. Lo setea el GameMode al arrancar.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
+    bool bLocalParty = false;
+
+    UFUNCTION(BlueprintPure, Category="Game")
+    bool IsLocalPartyMode() const { return bLocalParty; }
+
+    // ¿Este PlayerState puede esculpir en el turno actual? El escultor del turno, o en modo local la
+    // PlayerState de la TV (el joystick esculpe por el escultor, que solo existe en su celular).
+    bool IsActingSculptor(const APlayerState* PS) const;
 
     // El HUD (BP) se suscribe para redibujar cuando cambia la fase.
     UPROPERTY(BlueprintAssignable, Category="Game")

@@ -1,6 +1,8 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "PTSettingsWidget.h"
+#include "PTWidgetUtils.h"
+#include "PTGamepadUINavigator.h"
 #include "PTGameUserSettings.h"
 #include "../PTGameInstance.h"
 #include "Engine/World.h"
@@ -45,6 +47,8 @@ bool UPTSettingsWidget::Initialize()
     if (HighButton)    HighButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnHighClicked);
     if (ApplyButton)   ApplyButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnApplyClicked);
     if (BackButton)    BackButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnBackClicked);
+    if (!GamepadButton) GamepadButton = PTWidgetUtils::CloneButtonAfter(this, ApplyButton, TEXT("GamepadButton"), PTText::Get(TEXT("GP_TITLE")));
+    if (GamepadButton) GamepadButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnGamepadClicked);
     if (VSyncCheckBox) VSyncCheckBox->OnCheckStateChanged.AddDynamic(this, &UPTSettingsWidget::OnVSyncChanged);
     if (TypingSoundCheckBox) TypingSoundCheckBox->OnCheckStateChanged.AddDynamic(this, &UPTSettingsWidget::OnTypingSoundChanged);
 
@@ -341,4 +345,11 @@ void UPTSettingsWidget::OnVSyncChanged(bool bIsChecked)
         Settings->SetVSyncEnabled(bIsChecked);
         Settings->ApplyNonResolutionSettings(); // aplica VSync en caliente (se persiste en Apply)
     }
+}
+
+void UPTSettingsWidget::OnGamepadClicked()
+{
+    if (UGameInstance* GI = GetGameInstance())
+        if (UPTGamepadUINavigator* Nav = GI->GetSubsystem<UPTGamepadUINavigator>())
+            Nav->OpenGamepadSettings();
 }

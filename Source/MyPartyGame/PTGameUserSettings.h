@@ -86,6 +86,20 @@ public:
     void SetKeyOverride(FName ActionId, const FString& KeyName) { KeyOverrides.Add(ActionId, KeyName); }
     void ClearKeyOverrides() { KeyOverrides.Reset(); }
 
+    // ── Joystick (ver PTGamepad.h y el panel UPTGamepadSettingsWidget) ──────
+    float GetGamepadLookSensitivity() const { return GamepadLookSensitivity; }
+    void  SetGamepadLookSensitivity(float V) { GamepadLookSensitivity = FMath::Clamp(V, 0.2f, 3.f); }
+    bool  GetGamepadInvertY() const { return bGamepadInvertY; }
+    void  SetGamepadInvertY(bool b) { bGamepadInvertY = b; }
+    float GetGamepadDeadZone() const { return GamepadDeadZone; }
+    void  SetGamepadDeadZone(float V) { GamepadDeadZone = FMath::Clamp(V, 0.05f, 0.5f); }
+    float GetGamepadMoveSensitivity() const { return GamepadMoveSensitivity; }
+    void  SetGamepadMoveSensitivity(float V) { GamepadMoveSensitivity = FMath::Clamp(V, 0.3f, 1.f); }
+    // Botón por acción (Id → nombre de FKey). Solo las que el usuario cambió.
+    const TMap<FName, FString>& GetGamepadOverrides() const { return GamepadOverrides; }
+    void SetGamepadOverride(FName ActionId, const FString& KeyName) { GamepadOverrides.Add(ActionId, KeyName); }
+    void ClearGamepadOverrides() { GamepadOverrides.Reset(); }
+
 private:
     UPROPERTY(Config)
     float MasterVolume = 1.0f;
@@ -109,4 +123,10 @@ private:
 
     UPROPERTY(Config)
     TMap<FName, FString> KeyOverrides;
+
+    UPROPERTY(Config) float GamepadLookSensitivity = 1.0f; // multiplica la velocidad de cámara del stick
+    UPROPERTY(Config) bool  bGamepadInvertY = false;
+    UPROPERTY(Config) float GamepadDeadZone = 0.2f;
+    UPROPERTY(Config) float GamepadMoveSensitivity = 1.0f; // velocidad máxima al mover con el stick
+    UPROPERTY(Config) TMap<FName, FString> GamepadOverrides;
 };

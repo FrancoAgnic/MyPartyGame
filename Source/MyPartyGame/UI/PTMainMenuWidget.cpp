@@ -16,6 +16,13 @@
 #include "PTLobbyGameMode.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
+#include "Components/PanelWidget.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
+#include "Blueprint/WidgetTree.h"
+#include "PTWidgetUtils.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "HAL/PlatformApplicationMisc.h"
 #include "Misc/ConfigCacheIni.h"
@@ -38,6 +45,11 @@ bool UPTMainMenuWidget::Initialize()
     if (LockerButton)    LockerButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnLockerClicked);
     if (WorkshopButton)  WorkshopButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnWorkshopClicked);
     if (CreateLevelButton) CreateLevelButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnCreateLevelClicked);
+    if (!LocalModeButton)  LocalModeButton = CreateFallbackLocalModeButton();
+    if (LocalModeButton)   LocalModeButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnLocalModeClicked);
+    if (!OnlinePartyButton && LocalModeButton)
+        OnlinePartyButton = PTWidgetUtils::CloneButtonAfter(this, LocalModeButton, TEXT("OnlinePartyButton"), PTText::Get(TEXT("MENU_ONLINE_MODE")));
+    if (OnlinePartyButton) OnlinePartyButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnOnlinePartyClicked);
 
     // Si hay un PlayButton, arrancar en la pantalla principal (submenú Host/Find/EnterCode oculto).
     // Si el WBP todavía no tiene PlayButton, no se toca nada (comportamiento previo, todo visible).
@@ -171,6 +183,8 @@ void UPTMainMenuWidget::SetPlaySubmenuVisible(bool bVisible)
     // Pantalla "PLAY": Host/Find/EnterCode + su título + Back.
     if (HostButton)             HostButton->SetVisibility(bVisible ? Shown : Hidden);
     if (FindButton)             FindButton->SetVisibility(bVisible ? Shown : Hidden);
+    if (LocalModeButton)        LocalModeButton->SetVisibility(bVisible ? Shown : Hidden);
+    if (OnlinePartyButton)      OnlinePartyButton->SetVisibility(bVisible ? Shown : Hidden);
     if (EnterCodeButton)        EnterCodeButton->SetVisibility(bVisible ? Shown : Hidden);
     if (PlayBackButton)         PlayBackButton->SetVisibility(bVisible ? Shown : Hidden);
     if (PlaySubmenuHeaderPanel) PlaySubmenuHeaderPanel->SetVisibility(bVisible ? Shown : Hidden);
@@ -410,4 +424,25 @@ void UPTMainMenuWidget::ShowError(const FText& Msg)
     // SIEMPRE reprogramar el auto-ocultar → así ningún mensaje queda pegado para siempre.
     if (UWorld* World = GetWorld())
         World->GetTimerManager().SetTimer(ErrorTextTimerHandle, this, &UPTMainMenuWidget::HideErrorText, 3.f, false);
+}
+
+// ==========================================================================
+// Modo local (celulares + joystick)
+// ==========================================================================
+
+void UPTMainMenuWidget::OnLocalModeClicked()
+{
+    // No necesita Steam ni sesión: abre el mapa de juego standalone y los celulares se conectan por WiFi.
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>()) GI->EnterLocalParty();
+}
+
+void UPTMainMenuWidget::OnOnlinePartyClicked()
+{
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>()) GI->EnterOnlineParty();
+}
+
+UButton* UPTMainMenuWidget::CreateFallbackLocalModeButton()
+{
+    // El WBP no trae LocalModeButton: crear uno igual a FindButton y ponerlo justo debajo.
+    return PTWidgetUtils::CloneButtonAfter(this, FindButton, TEXT("LocalModeButton"), PTText::Get(TEXT("MENU_LOCAL_MODE")));
 }
