@@ -26,11 +26,17 @@ public:
 protected:
     virtual TSharedRef<SWidget> RebuildWidget() override;
     virtual void NativeConstruct() override;
-    virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+    virtual void NativeDestruct() override;
 
 private:
     void BuildTree();
+    void BuildStreamerSection(UVerticalBox* Col);
     void RefreshValues();
+    // Corre por TIMER (no NativeTick): un widget colapsado no tickea, y el panel tiene que volver a
+    // mostrarse solo al cerrar el banco de palabras / el Workshop o al volver a la espera.
+    void UpdateState();
+    void UpdateStreamerSection();
+    bool IsRevealHeld() const;
     UTextBlock* MakeText(int32 Size, const FLinearColor& Color, bool bBold);
     UButton* MakeButton(const FText& Label, FName Name, int32 FontSize, UTextBlock** OutText = nullptr);
     USlider* AddSliderRow(UVerticalBox* Box, UTextBlock*& OutLabel, float Min, float Max, float Step, UTextBlock*& OutValue);
@@ -40,6 +46,9 @@ private:
     UFUNCTION() void OnRevealChanged(float V);
     UFUNCTION() void OnWordsClicked();
     UFUNCTION() void OnStartClicked();
+    UFUNCTION() void OnToggleHostQr();
+    UFUNCTION() void OnOpenHostOnPC();
+    UFUNCTION() void OnCopyHostLink();
 
     UPROPERTY() USlider*    TimeSlider = nullptr;
     UPROPERTY() USlider*    RoundsSlider = nullptr;
@@ -55,5 +64,18 @@ private:
     UPROPERTY() UTextBlock* StartHint = nullptr;
     UPROPERTY() class UPTWordPackWidget* WordPack = nullptr;
 
-    float RefreshAccum = 1.f;
+    // ── Audiencia: conectar al streamer (QR PRIVADO en su propia zona fija, nunca en el QR público) ──
+    UPROPERTY() UWidget*    StreamerSection = nullptr;
+    UPROPERTY() UTextBlock* StreamerStatus = nullptr;
+    UPROPERTY() UWidget*    PrivateZone = nullptr;    // recuadro marcado: acá (y solo acá) aparece el QR
+    UPROPERTY() class UImage* PrivateQr = nullptr;
+    UPROPERTY() UTextBlock* PrivateZoneHint = nullptr;
+    UPROPERTY() UWidget*    StreamerButtons = nullptr;
+    UPROPERTY() UTextBlock* ToggleQrText = nullptr;
+    UPROPERTY() UTextBlock* CopyText = nullptr;
+    UPROPERTY() class UTexture2D* PrivateQrTexture = nullptr;
+    FString PrivateQrUrl;
+    bool    bHostQrShown = false;
+    double  CopiedUntil = 0.0;
+    FTimerHandle StateTimer;
 };

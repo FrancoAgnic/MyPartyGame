@@ -201,9 +201,10 @@ void UPTLocalPartyTVWidget::Refresh()
     const bool bAudience = LP->IsOnline();
     // Audiencia: mantener View / I muestra el QR PRIVADO del streamer (solo en la espera, y solo hasta
     // que se conecte; después ya no hace falta mostrarlo nunca más en el stream).
-    const bool bShowHostQr = bAudience && IsRevealHeld() && !LP->IsHostConnected()
-                          && (!G || G->TurnPhase == EPTTurnPhase::WaitingForPlayers);
-    const FString QrUrl = bShowHostQr ? LP->GetHostJoinUrl() : Url;
+    // El QR del centro es SIEMPRE el público. El del streamer vive en su zona privada del panel de la
+    // derecha (UPTLocalPartySettingsWidget), nunca acá.
+    const bool bShowHostQr = false;
+    const FString QrUrl = Url;
 
     auto Show = [](UWidget* W, bool bOn)
     {
@@ -225,14 +226,8 @@ void UPTLocalPartyTVWidget::Refresh()
     {
         // Online: dominio público (sin nada que ocultar) + código de sala.
         if (Step1Text) Step1Text->SetText(PTText::Get(bShowHostQr ? TEXT("LP_AUD_HOST_QR") : TEXT("LP_ONLINE_STEP1")));
-        // Línea del streamer: conectado ✓ / cómo ver su QR privado.
-        if (Step2Text)
-        {
-            Step2Text->SetText(PTText::Get(LP->IsHostConnected() ? TEXT("LP_AUD_HOST_OK") : TEXT("LP_AUD_HOST_HINT")));
-            Step2Text->SetColorAndOpacity(FSlateColor(LP->IsHostConnected() ? FLinearColor(0.36f, 0.88f, 0.54f, 1.f)
-                                                                            : FLinearColor(1.f, 0.97f, 0.92f, 1.f)));
-        }
-        Show(Step2Text, true);
+        // El streamer se conecta desde SU zona privada del panel de la derecha: acá no se menciona.
+        Show(Step2Text, false);
         if (UrlText) UrlText->SetText(FText::FromString(LP->GetPublicHost()));
         if (CodeText) CodeText->SetText(FText::FromString(Code));
         Show(CodeRow, !Code.IsEmpty());
