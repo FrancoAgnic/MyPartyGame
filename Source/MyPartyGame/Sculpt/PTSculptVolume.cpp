@@ -1665,6 +1665,8 @@ bool APTSculptVolume::ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float
     // Smooth no se usa en modo SVO (se ignora). Paint recolorea la superficie sin tocar geometría.
     if (Mode == EPTEditMode::Smooth) return false;
 
+    LastStampSize = Size; // para la escala AUTOMÁTICA del mallado en vivo por tamaño de brocha
+
     // Mapeo de forma clásica → forma del octree.
     EPTSVOShape S;
     switch (Shape)
@@ -1717,6 +1719,7 @@ bool APTSculptVolume::ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float
         if (BestD > 0.f) { bRemovedSolid = true; LastErasedColor = F.SampleColorLinear(BestP); }
     }
 
+    F.bNarrowBandEdit = bSculptNarrowBand; // refinar solo la banda de superficie (barato con brocha grande)
     F.EditShape(Xf, S, HalfExtent, /*bAdd=*/Mode == EPTEditMode::Add, Col);
     if (Mode == EPTEditMode::Add)
         WritePaintStamp(WorldPos, Shape, Size, PaintColor, /*bFull=*/false, SafeScale); // color al atlas también
@@ -1913,7 +1916,15 @@ void APTSculptVolume::RebuildSVOMesh(bool bCoarse)
     if (bSVOMeshing) return; // ya hay un mallado async en vuelo; se reintenta cuando termine (bSVODirty sigue)
 
     // Feedback en vivo (arrastrando) = grilla más gruesa (barato); al soltar (bCoarse=false) = full res.
-    const float CellScale = bCoarse ? FMath::Max(1.f, SVOLiveCellScale) : 1.f;
+    // La grosura en vivo es AUTOMÁTICA por tamaño de brocha: chica → 1.0 (no pierde detalle), grande → máx.
+    float CellScale = 1.f;
+    if (bCoarse)
+    {
+        const float MaxScale = FMath::Max(1.f, SVOLiveCellScale);
+        const float Small = FMath::Max(1.f, SVOLiveBrushSmall);
+        const float Big   = FMath::Max(Small + 1.f, SVOLiveBrushBig);
+        CellScale = FMath::GetMappedRangeValueClamped(FVector2D(Small, Big), FVector2D(1.f, MaxScale), LastStampSize);
+    }
 
     TArray<FBox> RefinedBounds;
     SVOField.Balance(&RefinedBounds); // mantiene 2:1 (barato, solo superficie)

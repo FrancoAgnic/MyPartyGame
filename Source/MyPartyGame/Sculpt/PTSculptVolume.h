@@ -55,6 +55,11 @@ public:
     // detalle en chico), con mallas por bloque y replicado por las mismas operaciones.
     // OFF (default) = campo clásico FPTSculptField. SVO soporta pintura y capas; Smooth se ignora.
     UPROPERTY(EditAnywhere, Category="Sculpt|SVO") bool bUseSVO = false;
+
+    // Refinamiento en banda de superficie al sellar (ver FPTVoxelOctree::bNarrowBandEdit): abarata muchísimo
+    // los sellos de brocha grande. true por defecto; se puede togglear en runtime con el comando dev PTNarrowBand
+    // para comparar/descartar si alguna vez dejara huecos.
+    UPROPERTY(EditAnywhere, Category="Sculpt|SVO") bool bSculptNarrowBand = true;
     UPROPERTY(EditAnywhere, Category="Sculpt") UMaterialInterface* ClayMaterial = nullptr;
     // Override opcional del material de la malla de arcilla. Si se asigna, el volumen lo usa en vez del
     // ClayMID (atlas) al crear/re-crear las secciones. Lo usa la CABEZA del modo G (material de pintura
@@ -419,11 +424,15 @@ private:
     // feedback se ADAPTA: cuantos más triángulos tiene el último mallado, más espaciado va (menos tirones);
     // el modelo chico queda en SVOLiveInterval (igual de responsivo). El remallado FINAL al soltar no cambia.
     int32 LastSVOMeshTris = 0;       // triángulos del último mallado SVO completado (señal de costo)
-    // El mallado muestrea el SDF en una grilla a la celda MÁS FINA sobre todo el modelo → O(n³), caro
-    // (~45 ms). MIENTRAS ARRASTRÁS se re-malla con la celda × este factor (grilla más gruesa = ~8× menos
-    // muestras y triángulos → mucho más barato y sin tirón). Al SOLTAR se re-malla a resolución completa
-    // (factor 1) → la arcilla queda nítida. Editable para tunear calidad/costo del feedback en vivo.
-    UPROPERTY(EditAnywhere, Category="Sculpt|SVO") float SVOLiveCellScale = 2.0f;
+    float LastStampSize   = 0.f;     // tamaño del último sello (UU) → escala del mallado en vivo por brocha
+    // El mallado muestrea el SDF en una grilla a la celda MÁS FINA sobre todo el modelo → O(n³), caro (~45 ms).
+    // MIENTRAS ARRASTRÁS se re-malla con una celda MÁS GRUESA (barato, sin tirón); al SOLTAR, full res (nítido).
+    // La grosura es AUTOMÁTICA por tamaño de brocha: brocha chica (≤ SVOLiveBrushSmall) = 1.0 (no pierde detalle),
+    // brocha grande (≥ SVOLiveBrushBig) = SVOLiveCellScale (3–4, más barato donde el detalle fino no importa);
+    // en el medio interpola. Así nunca hay que tocar el número a mano.
+    UPROPERTY(EditAnywhere, Category="Sculpt|SVO") float SVOLiveCellScale = 4.0f;  // escala a brocha GRANDE (máx)
+    UPROPERTY(EditAnywhere, Category="Sculpt|SVO") float SVOLiveBrushSmall = 55.f; // ≤ esto → escala 1 (fino)
+    UPROPERTY(EditAnywhere, Category="Sculpt|SVO") float SVOLiveBrushBig   = 180.f; // ≥ esto → escala máx
 
     // ── Glow de arcilla nueva en modo SVO ──
     // El octree no guarda "tiempo de agregado" por vóxel (a diferencia del campo clásico). Para que la
