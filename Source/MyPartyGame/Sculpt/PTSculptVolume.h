@@ -383,7 +383,7 @@ private:
     // LastErasedColor); resto → true. Así el erase solo tira partículas cuando realmente saca arcilla.
     bool ApplyStampSVO(FVector WorldPos, EPTStampShape Shape, float Size, EPTEditMode Mode,
                        FLinearColor PaintColor, FRotator StampRot, FVector StampScale);
-    void RebuildSVOMesh();        // remalla base (por chunks) + capas
+    void RebuildSVOMesh(bool bCoarse = false); // remalla el modelo; bCoarse = celda más gruesa (feedback en vivo)
     void RebuildSVOInto(FPTVoxelOctree& F, UProceduralMeshComponent* M); // remalla un octree entero a un mesh (capas)
 
     // Base: Mesh sección 0 = hojas grandes. Cada chunk fino ocupado tiene su propio componente;
@@ -411,8 +411,19 @@ private:
     // tras el último sello). NO cambia el mallado en sí → sigue watertight. Solo aplica en bUseSVO.
     float LastSVOStampTime  = 0.f;   // tiempo (s) del último sello que ensució el octree
     float LastSVORemeshTime = 0.f;   // tiempo (s) del último remallado disparado
-    static constexpr float SVOLiveInterval = 0.10f; // ritmo de feedback durante un trazo continuo
+    static constexpr float SVOLiveInterval = 0.10f; // ritmo BASE de feedback durante un trazo continuo
+    static constexpr float SVOLiveIntervalMax = 0.60f; // tope del ritmo adaptativo (modelo muy pesado)
     static constexpr float SVOSettleDelay  = 0.12f; // sin sellos por este lapso → remallado final
+    // El remallado en vivo clona + re-malla + sube el MODELO ENTERO (hilo principal) → cuesta según el
+    // TAMAÑO del modelo, no la brocha. Para que el esculpido no tironee con modelos pesados, el ritmo del
+    // feedback se ADAPTA: cuantos más triángulos tiene el último mallado, más espaciado va (menos tirones);
+    // el modelo chico queda en SVOLiveInterval (igual de responsivo). El remallado FINAL al soltar no cambia.
+    int32 LastSVOMeshTris = 0;       // triángulos del último mallado SVO completado (señal de costo)
+    // El mallado muestrea el SDF en una grilla a la celda MÁS FINA sobre todo el modelo → O(n³), caro
+    // (~45 ms). MIENTRAS ARRASTRÁS se re-malla con la celda × este factor (grilla más gruesa = ~8× menos
+    // muestras y triángulos → mucho más barato y sin tirón). Al SOLTAR se re-malla a resolución completa
+    // (factor 1) → la arcilla queda nítida. Editable para tunear calidad/costo del feedback en vivo.
+    UPROPERTY(EditAnywhere, Category="Sculpt|SVO") float SVOLiveCellScale = 2.0f;
 
     // ── Glow de arcilla nueva en modo SVO ──
     // El octree no guarda "tiempo de agregado" por vóxel (a diferencia del campo clásico). Para que la
@@ -447,7 +458,7 @@ private:
     float TimeSinceRebuild   = 0.f;
     static constexpr float RebuildInterval = 0.05f;
 
-    void RebuildDirty();
+    void RebuildDirty(bool bCoarse = false);
     // Crea el mesh de una capa de detalle (mismo transform/material que la base). Devuelve el componente.
     UProceduralMeshComponent* CreateDetailLayerMesh();
     void MarkStampDirty(int32 x0, int32 y0, int32 z0, int32 x1, int32 y1, int32 z1);

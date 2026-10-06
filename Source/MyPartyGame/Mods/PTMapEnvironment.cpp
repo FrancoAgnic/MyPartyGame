@@ -1115,6 +1115,63 @@ int64 APTMapEnvironment::GetEstimatedMemoryBytes() const
     return Total;
 }
 
+FString APTMapEnvironment::GetStatsReport() const
+{
+    auto TrisOf = [](const FPTPropGeometry& G) -> int64 { return (int64)G.Tris.Num() / 3; };
+
+    int32 NumAssetsPlaced = 0, NumPainted = 0, NumWithEyes = 0;
+    int64 TotalInst = 0;
+    int64 UniqueTris = 0;   // lo que un HISM subiría UNA sola vez (full, por asset, sin multiplicar)
+    int64 FullDrawnTris = 0; // triángulos dibujados HOY sin LOD (full × instancias) — el peor caso
+    int64 LODDrawnTris = 0;  // triángulos dibujados con el reparto de LOD actual (lo que se dibuja en partida)
+    int64 EyeTris = 0;
+
+    const FVector Origin = const_cast<APTMapEnvironment*>(this)->GetLODOrigin();
+
+    for (const FPTPropAsset& A : Assets)
+    {
+        const int32 N = A.InstXf.Num();
+        if (N == 0) continue;
+        ++NumAssetsPlaced;
+        if (A.PaintAtlas.bValid) ++NumPainted;
+        if (A.EyesGeo.IsValid())    ++NumWithEyes;
+        TotalInst += N;
+
+        const int64 FullT = TrisOf(A.Geo);
+        UniqueTris   += FullT;                 // 1 copia por asset (ideal HISM)
+        FullDrawnTris += FullT * N;            // duplicada por instancia (ProcMesh sin LOD)
+        if (A.EyesGeo.IsValid()) EyeTris += TrisOf(A.EyesGeo) * N;
+
+        const bool bUseLOD = bLODEnabled && (A.LODGeo[0].IsValid() || A.LODGeo[1].IsValid() || A.LODGeo[2].IsValid());
+        const int64 T1 = A.LODGeo[0].IsValid() ? TrisOf(A.LODGeo[0]) : FullT;
+        const int64 T2 = A.LODGeo[1].IsValid() ? TrisOf(A.LODGeo[1]) : FullT;
+        const int64 T3 = A.LODGeo[2].IsValid() ? TrisOf(A.LODGeo[2]) : FullT;
+        for (const FTransform& Xf : A.InstXf)
+        {
+            if (!bUseLOD) { LODDrawnTris += FullT; continue; }
+            const float D = FVector::Dist(Xf.GetLocation(), Origin);
+            if      (D >= LODStage3Dist) LODDrawnTris += T3;
+            else if (D >= LODStage2Dist) LODDrawnTris += T2;
+            else if (D >= LODStage1Dist) LODDrawnTris += T1;
+            else                         LODDrawnTris += FullT;
+        }
+    }
+
+    const double MB = (double)GetEstimatedMemoryBytes() / (1024.0 * 1024.0);
+    auto K = [](int64 V){ return (double)V / 1000.0; };
+
+    return FString::Printf(
+        TEXT("[PropStats] assets=%d (pintados=%d, con ojos=%d)  instancias=%lld  LOD=%s\n")
+        TEXT("  triangulos UNICOS (ideal HISM, 1 copia/asset): %.1f K\n")
+        TEXT("  triangulos DIBUJADOS hoy (ProcMesh, duplicados x instancia): %.1f K  [+ojos %.1f K]\n")
+        TEXT("  triangulos con LOD actual: %.1f K  (ahorro LOD: %.1f K)\n")
+        TEXT("  memoria geometria estimada: %.1f MB (tope %.0f MB)"),
+        NumAssetsPlaced, NumPainted, NumWithEyes, (long long)TotalInst,
+        bLODEnabled ? TEXT("ON") : TEXT("OFF"),
+        K(UniqueTris), K(FullDrawnTris), K(EyeTris), K(LODDrawnTris),
+        K(FullDrawnTris - LODDrawnTris), MB, MapMemoryBudgetMB);
+}
+
 void APTMapEnvironment::ClearAll()
 {
     for (FPTPropAsset& A : Assets)

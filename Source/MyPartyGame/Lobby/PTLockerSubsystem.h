@@ -30,6 +30,16 @@ public:
     int32 GetEquippedHead() const { return Save ? Save->EquippedHead : -1; }
     int32 GetEquippedBody() const { return Save ? Save->EquippedBody : -1; }
 
+    // ── Vista UNIFICADA de SKIN (modo "un solo slot" del Locker): la skin del slot i = cabeza i + cuerpo i
+    //    (ya emparejados por índice). No mueve ni borra datos: solo presenta el par como una unidad. ──
+    bool  IsSkinSlotUsed(int32 Idx) const { return IsHeadSlotUsed(Idx) || IsBodySlotUsed(Idx); }
+    // Índice de la skin equipada (la cabeza manda; al equipar una skin se equipan cabeza y cuerpo al mismo i).
+    int32 GetEquippedSkin() const { return GetEquippedHead(); }
+    // Miniatura representativa de la skin: la de la cabeza si hay, si no la del cuerpo.
+    const TArray<uint8>& GetSkinThumb(int32 Idx) const;
+    // Primer slot de SKIN libre (ni cabeza ni cuerpo usados), salteando el 0 (Default). -1 si no hay lugar.
+    int32 FirstFreeSkinSlot() const;
+
     // ── Guardar una creación en un slot (persistente a disco) ──
     void SaveHeadSlot(int32 Idx, const TArray<uint8>& BakedBlob, const TArray<uint8>& RawState, const TArray<uint8>& ThumbPNG);
     void SaveBodySlot(int32 Idx, const TArray<uint8>& BodyPNG, const TArray<uint8>& ThumbPNG);

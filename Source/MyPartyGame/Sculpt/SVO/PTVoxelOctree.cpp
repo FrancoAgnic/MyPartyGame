@@ -617,7 +617,7 @@ FColor FPTVoxelOctree::SampleSolidColor(const FVector& P) const
 }
 
 void FPTVoxelOctree::BuildMeshMC(TArray<FVector>& OutVerts, TArray<int32>& OutTris,
-                                 TArray<FVector>& OutNormals, TArray<FColor>& OutColors) const
+                                 TArray<FVector>& OutNormals, TArray<FColor>& OutColors, float CellScale) const
 {
     OutVerts.Reset(); OutTris.Reset(); OutNormals.Reset(); OutColors.Reset();
     if (!Root.IsValid()) return;
@@ -635,7 +635,8 @@ void FPTVoxelOctree::BuildMeshMC(TArray<FVector>& OutVerts, TArray<int32>& OutTr
     if (!BB.IsValid) return;
 
     // 2) Grilla uniforme a la resolución más fina, con 2 celdas de aire de margen (para que cierre).
-    const float Cell = FMath::Max(MinCellSize(), 0.5f);
+    // CellScale > 1 engrosa la celda → grilla mucho más chica (feedback en vivo barato); 1.0 = full.
+    const float Cell = FMath::Max(MinCellSize() * FMath::Max(CellScale, 1.f), 0.5f);
     const FVector GMin = BB.Min - FVector(Cell * 2.f);
     const int32 Nx = FMath::CeilToInt((BB.Max.X + Cell * 2.f - GMin.X) / Cell) + 1;
     const int32 Ny = FMath::CeilToInt((BB.Max.Y + Cell * 2.f - GMin.Y) / Cell) + 1;

@@ -176,6 +176,11 @@ public:
     /** true si ya se alcanzó/superó el tope (no se debería poder colocar más). */
     bool  IsOverMemoryBudget() const { return GetMemoryUsageMB() >= MapMemoryBudgetMB; }
 
+    /** DEV: reporte de diagnóstico de props para medir el costo (comando PTPropStats). Incluye assets,
+     *  instancias, triángulos ÚNICOS (lo que subiría 1 sola vez un HISM), triángulos DIBUJADOS hoy
+     *  (geometría duplicada por instancia, con/ sin el LOD según esté prendido) y memoria estimada. */
+    FString GetStatsReport() const;
+
 private:
     struct FPTPropAsset
     {

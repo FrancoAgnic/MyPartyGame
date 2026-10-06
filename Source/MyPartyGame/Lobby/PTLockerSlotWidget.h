@@ -27,6 +27,9 @@ class MYPARTYGAME_API UPTLockerSlotWidget : public UPTUserWidget
     GENERATED_BODY()
 public:
     void Setup(UPTLockerWidget* InOwner, int32 InIndex, bool bInHead, bool bUsed, bool bEquipped);
+    // Igual que Setup pero para el modo "un solo slot" (SKIN completa): etiqueta "Skin N". El owner enruta
+    // el click como skin (equipar/crear cabeza+cuerpo del mismo índice), así que bIsHead no importa acá.
+    void SetupSkin(UPTLockerWidget* InOwner, int32 InIndex, bool bUsed, bool bEquipped);
     void SetSelected(bool bSel);
     void SetThumbnailTexture(UTexture2D* Tex); // miniatura renderizada de la creación
     int32 GetIndex() const { return SlotIndex; }

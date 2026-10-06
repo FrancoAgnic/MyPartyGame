@@ -174,6 +174,23 @@ void UPTLockerSubsystem::SaveToDisk()
     if (Save) UGameplayStatics::SaveGameToSlot(Save, PTLockerSaveSlot, 0);
 }
 
+// ── Vista unificada de SKIN (modo "un solo slot") ───────────────────────────────
+const TArray<uint8>& UPTLockerSubsystem::GetSkinThumb(int32 Idx) const
+{
+    // La miniatura de la cabeza representa la skin; si la cabeza no tiene foto, usar la del cuerpo.
+    const TArray<uint8>& H = GetHeadThumb(Idx);
+    if (H.Num() > 0) return H;
+    return GetBodyThumb(Idx);
+}
+int32 UPTLockerSubsystem::FirstFreeSkinSlot() const
+{
+    if (!Save) return -1;
+    const int32 N = FMath::Min(Save->HeadSlots.Num(), Save->BodySlots.Num());
+    for (int32 i = 1; i < N; ++i) // saltear el slot 0 (Default)
+        if (!Save->HeadSlots[i].bUsed && !Save->BodySlots[i].bUsed) return i;
+    return -1;
+}
+
 // ── Workshop de skins ───────────────────────────────────────────────────────────
 int32 UPTLockerSubsystem::FirstFreeHeadSlot() const
 {
@@ -225,14 +242,13 @@ int32 UPTLockerSubsystem::ImportSkinBundle(const TArray<uint8>& InBytes, int32& 
     Ar << HBaked << HRaw << HThumb << BPNG << BThumb;
     if (HBaked.Num() == 0) return -1;
 
-    const int32 HeadIdx = FirstFreeHeadSlot();
-    if (HeadIdx < 0) return -1; // Locker lleno
-    SaveHeadSlot(HeadIdx, HBaked, HRaw, HThumb);
-
-    if (BPNG.Num() > 0)
-    {
-        const int32 BodyIdx = FirstFreeBodySlot();
-        if (BodyIdx >= 0) { SaveBodySlot(BodyIdx, BPNG, BThumb); OutBodyIdx = BodyIdx; }
-    }
-    return HeadIdx;
+    // Una SKIN ocupa el MISMO índice en cabeza y cuerpo (modelo fusionado del Locker). Buscar UN solo
+    // slot libre para las dos partes, así la skin importada queda emparejada (editar/equipar/vaciar la
+    // tratan como una unidad). Antes se pedían dos slots libres distintos y podían caer en índices
+    // distintos → la cabeza y el cuerpo quedaban "despareados".
+    const int32 SkinIdx = FirstFreeSkinSlot();
+    if (SkinIdx < 0) return -1; // Locker lleno
+    SaveHeadSlot(SkinIdx, HBaked, HRaw, HThumb);
+    if (BPNG.Num() > 0) { SaveBodySlot(SkinIdx, BPNG, BThumb); OutBodyIdx = SkinIdx; }
+    return SkinIdx;
 }

@@ -235,8 +235,9 @@ bool APTLobbyCharacter::GetBodyPaintPNG(TArray<uint8>& OutPNG)
     return PaintPixels.Num() > 0 && PT_EncodePNG_BGRA(PaintPixels, PaintTexN, OutPNG);
 }
 
-bool APTLobbyCharacter::CaptureLookThumbnailPNG(TArray<uint8>& OutPNG, bool bHeadFocus, int32 Size)
+bool APTLobbyCharacter::CaptureLookThumbnailPNG(TArray<uint8>& OutPNG, bool bHeadFocus, int32 Size, bool bFullSkin)
 {
+    // Skin completa: encuadre "foto carnet" (cabeza + hombros) y NO oscurecer/reemplazar nada.
     UWorld* W = GetWorld();
     if (!W || !GetMesh()) return false;
     Size = FMath::Clamp(Size, 64, 1024);
@@ -262,12 +263,28 @@ bool APTLobbyCharacter::CaptureLookThumbnailPNG(TArray<uint8>& OutPNG, bool bHea
     if (!bAlreadyPosed) SetSculptPose(true);
     else                GetMesh()->RefreshBoneTransforms();
 
-    // Encuadre: cabeza (cerca de HeadMesh) o cuerpo entero. Centro con offset + cámara con pitch.
-    FVector Center = bHeadFocus
-        ? (HeadMesh ? HeadMesh->GetComponentLocation() : GetActorLocation() + FVector(0, 0, ThumbHeight)) + FVector(0, 0, ThumbHeadHeight)
-        : (GetActorLocation() + FVector(0, 0, ThumbHeight));
-    const float Dist  = bHeadFocus ? ThumbHeadDistance : ThumbDistance;
-    const float Pitch = bHeadFocus ? ThumbHeadPitch    : ThumbBodyPitch;
+    // Encuadre: skin completa (foto carnet), cabeza sola, o cuerpo entero. Centro con offset + pitch.
+    const FVector HeadAnchor = HeadMesh ? HeadMesh->GetComponentLocation() : GetActorLocation() + FVector(0, 0, ThumbHeight);
+    FVector Center; float Dist; float Pitch;
+    if (bFullSkin)
+    {
+        // Foto carnet: anclada a la cabeza pero un poco más abajo (hombros) y más lejos (entran los hombros).
+        Center = HeadAnchor + FVector(0, 0, ThumbSkinHeight);
+        Dist   = ThumbSkinDistance;
+        Pitch  = ThumbSkinPitch;
+    }
+    else if (bHeadFocus)
+    {
+        Center = HeadAnchor + FVector(0, 0, ThumbHeadHeight);
+        Dist   = ThumbHeadDistance;
+        Pitch  = ThumbHeadPitch;
+    }
+    else
+    {
+        Center = GetActorLocation() + FVector(0, 0, ThumbHeight);
+        Dist   = ThumbDistance;
+        Pitch  = ThumbBodyPitch;
+    }
     FVector Fwd = GetActorForwardVector().RotateAngleAxis(Pitch, GetActorRightVector());
     const FVector Loc = Center + Fwd * Dist;
     Cap->SetActorLocation(Loc);
@@ -315,11 +332,16 @@ bool APTLobbyCharacter::CaptureLookThumbnailPNG(TArray<uint8>& OutPNG, bool bHea
     }
 
     // ── Aislar el foco: apagar/reemplazar la parte que no es el foco ──
+    // Skin completa (bFullSkin): NO se aísla nada → se ve la cabeza Y el cuerpo texturados.
     TArray<UMaterialInterface*> SavedBodyMats;
     UStaticMeshComponent* TempHead = nullptr;
     bool bHeadWasVisible = HeadMesh ? HeadMesh->IsVisible() : false;
 
-    if (bHeadFocus)
+    if (bFullSkin)
+    {
+        // nada: capturar el personaje tal cual (cabeza + cuerpo con sus texturas)
+    }
+    else if (bHeadFocus)
     {
         // Cuerpo en material apagado/default (sin la pintura editada).
         if (ThumbDimMaterial)
@@ -370,7 +392,11 @@ bool APTLobbyCharacter::CaptureLookThumbnailPNG(TArray<uint8>& OutPNG, bool bHea
     const bool bOk = Res && Res->ReadPixels(Px) && Px.Num() == Size * Size;
 
     // ── Restaurar todo ──
-    if (bHeadFocus)
+    if (bFullSkin)
+    {
+        // no se tocó nada que restaurar
+    }
+    else if (bHeadFocus)
     {
         for (int32 i = 0; i < SavedBodyMats.Num(); ++i) GetMesh()->SetMaterial(i, SavedBodyMats[i]);
     }
@@ -731,27 +757,8 @@ void APTLobbyCharacter::BuildHeadBlob(const TArray<FPTHeadSection>& Secs, TArray
     UE_LOG(LogTemp, Warning,
         TEXT("[HeadBlob] geom=%.1f KB | cabeza PNG=%.1f KB (%dx%d) | cuerpo PNG=%.1f KB (%dx%d) | TOTAL=%.1f KB -> %d chunks (limite seguro ~%d)"),
         KB(GN), KB(HN), HeadPaintN, HeadPaintN, KB(BN), PaintTexN, PaintTexN, KB(OutBlob.Num()), Chunks, kSafeChunks);
-
-    // ── Print en PANTALLA (para tunear la resolución en vivo) ──
-    if (GEngine)
-    {
-        const FColor Safe   = FColor(120, 230, 120);
-        const FColor Warn   = FColor(240, 210, 90);
-        const FColor Danger = FColor(255, 90, 90);
-        const float  Dur    = 12.f;
-
-        GEngine->AddOnScreenDebugMessage(7001, Dur, FColor(200, 200, 255),
-            FString::Printf(TEXT("CABEZA: %.0f KB  (%dx%d)"), KB(HN), HeadPaintN, HeadPaintN));
-        GEngine->AddOnScreenDebugMessage(7002, Dur, FColor(200, 200, 255),
-            FString::Printf(TEXT("CUERPO: %.0f KB  (%dx%d)"), KB(BN), PaintTexN, PaintTexN));
-
-        const FColor TotalCol = (Chunks > kSafeChunks) ? Danger : (Chunks > kSafeChunks * 3 / 4 ? Warn : Safe);
-        const TCHAR* Estado   = (Chunks > kSafeChunks) ? TEXT("!! SUPERA EL LIMITE !!")
-                              : (Chunks > kSafeChunks * 3 / 4 ? TEXT("(cerca del limite)") : TEXT("(OK)"));
-        GEngine->AddOnScreenDebugMessage(7003, Dur, TotalCol,
-            FString::Printf(TEXT("BLOB TOTAL: %.0f KB  ->  %d / %d chunks  %s"),
-                KB(OutBlob.Num()), Chunks, kSafeChunks, Estado));
-    }
+    // (El desglose queda SOLO en el log; antes había un print a pantalla — se sacó para que no salga el
+    //  texto de colores arriba a la izquierda al crear/editar una skin.)
 }
 
 bool APTLobbyCharacter::ParseHeadBlob(const TArray<uint8>& Blob, TArray<FPTHeadSection>& OutSecs,

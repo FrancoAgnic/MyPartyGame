@@ -406,6 +406,7 @@ public:
     UFUNCTION(Exec) void PTSolo();              // DEV: jugar solo (1 jugador) → arranca el turno ya
     UFUNCTION(Exec) void PTLOD();               // DEV: prende/apaga el LOD real de props (para verlo en el editor)
     UFUNCTION(Exec) void PTLODDebug();          // DEV: overlay del LOD (cilindro + color por etapa + tris)
+    UFUNCTION(Exec) void PTPropStats();         // DEV: diagnóstico de props (assets/instancias/triángulos/memoria)
     UFUNCTION(Exec) void PTGuessPreview();      // DEV/TikTok "¿adivinás?": el escultor ve SU palabra CON FILTRO
                                                 //   (máscara + letras revelándose), como un adivinador, mientras esculpe
 
