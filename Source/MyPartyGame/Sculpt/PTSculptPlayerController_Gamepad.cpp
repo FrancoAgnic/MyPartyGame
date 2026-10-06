@@ -10,6 +10,7 @@
 #include "../Lobby/PTLobbyCharacter.h"
 #include "../PTGameInstance.h"
 #include "../LocalParty/PTLocalPartyTVWidget.h"
+#include "../LocalParty/PTLocalPartySettingsWidget.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/InputComponent.h"
 #include "GameFramework/Pawn.h"
@@ -180,4 +181,7 @@ void APTSculptPlayerController::CreateLocalPartyTV()
     if (!Cls) Cls = UPTLocalPartyTVWidget::StaticClass();
     LocalPartyTV = CreateWidget<UPTLocalPartyTVWidget>(this, Cls);
     if (LocalPartyTV) LocalPartyTV->AddToViewport(1); // bajo: el menú de pausa y los popups van arriba
+    // Panel de configuración de la partida (visible solo en la espera; se oculta solo).
+    LocalPartySettings = CreateWidget<UPTLocalPartySettingsWidget>(this, UPTLocalPartySettingsWidget::StaticClass());
+    if (LocalPartySettings) LocalPartySettings->AddToViewport(2);
 }

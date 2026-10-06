@@ -194,6 +194,7 @@ int32 APTSculptGameMode::MinToStart() const
 {
     const UPTGameInstance* GI = GetGameInstance<UPTGameInstance>();
     if (GI && GI->bSoloTest) return 1;
+    if (IsAudienceGame()) return 1; // con un espectador alcanza (el streamer esculpe)
     return IsLocalPartyGame() ? FMath::Max(1, LocalPartyMinPlayers) : MinPlayersToStart;
 }
 
@@ -261,7 +262,7 @@ void APTSculptGameMode::StartGame()
     G->CurrentSculptor  = nullptr;       // el primer turno elige escultor al azar
     G->CurrentRound     = 1;
     G->TotalRounds      = NumRounds;
-    TurnsLeftThisRound  = Players.Num();  // una ronda = todos esculpen una vez
+    TurnsLeftThisRound  = IsAudienceGame() ? 1 : Players.Num(); // una ronda = todos esculpen una vez (audiencia: una palabra)
 
     // Primer turno (o "Jugar de nuevo"): sin colapso previo → limpiar el lienzo de una (instantáneo).
     if (APTSculptVolume* Vol = Cast<APTSculptVolume>(
@@ -316,6 +317,9 @@ void APTSculptGameMode::StartChoosingPhase()
         if (PrevIdx != INDEX_NONE) NextIdx = (PrevIdx + 1) % Players.Num();
     }
     APTPlayerState* Sculptor = Players[NextIdx];
+    // Audiencia: siempre esculpe el streamer (la PC). Los demás solo adivinan.
+    if (IsAudienceGame())
+        if (APTPlayerState* TV = GetTVPlayerState()) Sculptor = TV;
 
     // Elegir N palabras distintas al azar del pool elegible (categorías + dificultad del host).
     CurrentChoices.Reset();
@@ -468,7 +472,7 @@ void APTSculptGameMode::AdvanceTurn()
     {
         if (G->CurrentRound >= NumRounds) { EndGame(); return; } // última ronda → fin
         G->CurrentRound   += 1;
-        TurnsLeftThisRound = FMath::Max(1, GetActivePlayers().Num());
+        TurnsLeftThisRound = IsAudienceGame() ? 1 : FMath::Max(1, GetActivePlayers().Num());
         G->OnTurnPhaseChanged.Broadcast(); // refrescar "Ronda X/Y" en el HUD
     }
 
@@ -980,4 +984,25 @@ FString APTSculptGameMode::LocalParty_GetSecretWordFor(const APTPlayerState* PS)
     const APTSculptGameState* G = GS();
     if (!PS || !G || G->CurrentSculptor != PS || G->TurnPhase != EPTTurnPhase::Drawing) return FString();
     return CurrentWord.ForLang(PS->GetLanguageIndex());
+}
+
+bool APTSculptGameMode::IsAudienceGame() const
+{
+    const UPTGameInstance* GI = GetGameInstance<UPTGameInstance>();
+    return IsLocalPartyGame() && GI && GI->bLocalPartyOnline;
+}
+
+APTPlayerState* APTSculptGameMode::GetTVPlayerState() const
+{
+    if (const APTSculptGameState* G = GS())
+        for (APlayerState* PS : G->PlayerArray)
+            if (APTPlayerState* PT = Cast<APTPlayerState>(PS))
+                if (PT->bIsLocalPartyTV) return PT;
+    return nullptr;
+}
+
+void APTSculptGameMode::LocalParty_ChooseAsHost(int32 ChoiceIndex)
+{
+    if (IsAudienceGame())
+        if (APTPlayerState* TV = GetTVPlayerState()) HandleWordChosen(TV, ChoiceIndex);
 }

@@ -339,8 +339,24 @@ GPA_UNDO,Deshacer,Undo,Desfazer,Rückgängig,Annuler,Annulla
 GPA_PAUSE,Pausa,Pause,Pausa,Pause,Pause,Pausa
 GP_ON,Sí,On,Sim,An,Oui,Sì
 GP_OFF,No,Off,Não,Aus,Non,No
-MENU_ONLINE_MODE,Modo online (celulares),Online mode (phones),Modo online (celulares),Online-Modus (Handys),Mode en ligne (téléphones),Modalità online (telefoni)
+MENU_ONLINE_MODE,Modo audiencia (stream),Audience mode (stream),Modo audiência (live),Publikumsmodus (Stream),Mode public (stream),Modalità pubblico (stream)
 LP_ONLINE_STEP1,"Desde cualquier celular o PC, entra a:","From any phone or PC, go to:","De qualquer celular ou PC, entre em:",Öffne auf einem Handy oder PC:,"Depuis un téléphone ou un PC, va sur :","Da qualsiasi telefono o PC, vai su:"
 LP_ONLINE_CODE,Código de sala:,Room code:,Código da sala:,Raumcode:,Code de la salle :,Codice stanza:
 LP_ONLINE_CONNECTING,Conectando al servidor online…,Connecting to the online server…,Conectando ao servidor online…,Verbinde mit dem Online-Server…,Connexion au serveur en ligne…,Connessione al server online…
 LP_ONLINE_ERROR,No se pudo conectar al servidor online. Reintentando…,Couldn't reach the online server. Retrying…,Não foi possível conectar ao servidor online. Tentando de novo…,Online-Server nicht erreichbar. Neuer Versuch…,Impossible de joindre le serveur en ligne. Nouvel essai…,Impossibile raggiungere il server online. Nuovo tentativo…
+LP_SETTINGS_TITLE,Configuración de la partida,Game settings,Configurações da partida,Spieleinstellungen,Paramètres de la partie,Impostazioni partita
+LP_SET_TIME,Tiempo por turno,Time per turn,Tempo por turno,Zeit pro Zug,Temps par tour,Tempo per turno
+LP_SET_ROUNDS,Rondas,Rounds,Rodadas,Runden,Manches,Round
+LP_SET_WORDS_COUNT,Palabras a esculpir,Words to sculpt,Palavras para esculpir,Wörter zum Formen,Mots à sculpter,Parole da scolpire
+LP_SET_REVEAL,Letras reveladas,Revealed letters,Letras reveladas,Aufgedeckte Buchstaben,Lettres révélées,Lettere rivelate
+LP_SET_PACK,Banco de palabras,Word pack,Banco de palavras,Wortpaket,Pack de mots,Pacchetto di parole
+LP_SET_CHANGE,Cambiar,Change,Trocar,Ändern,Changer,Cambia
+LP_START,Empezar partida,Start game,Começar partida,Spiel starten,Lancer la partie,Inizia partita
+LP_AUD_HOST_OK,✓ Streamer conectado,✓ Streamer connected,✓ Streamer conectado,✓ Streamer verbunden,✓ Streamer connecté,✓ Streamer connesso
+LP_AUD_HOST_HINT,Streamer: mantén View o I para ver tu QR privado,Streamer: hold View or I to see your private QR,Streamer: segure View ou I para ver seu QR privado,Streamer: View oder I halten für deinen privaten QR,Streamer : maintiens View ou I pour voir ton QR privé,Streamer: tieni premuto View o I per il tuo QR privato
+LP_AUD_HOST_QR,QR PRIVADO del streamer: ¡no lo muestres en el stream!,Streamer's PRIVATE QR: don't show it on stream!,QR PRIVADO do streamer: não mostre na live!,PRIVATER QR des Streamers: nicht im Stream zeigen!,QR PRIVÉ du streamer : ne le montre pas en live !,QR PRIVATO dello streamer: non mostrarlo in live!
+LP_AUD_HOST_MISSING,Falta que el streamer se conecte con su QR privado,Waiting for the streamer to join with their private QR,Falta o streamer entrar com o QR privado,Der Streamer muss sich noch mit seinem privaten QR verbinden,Le streamer doit encore se connecter avec son QR privé,Manca che lo streamer si colleghi con il suo QR privato
+LP_AUD_READY,¡Listo! El streamer empieza desde su celular o la TV,Ready! The streamer starts from their phone or the TV,Pronto! O streamer começa pelo celular ou pela TV,Bereit! Der Streamer startet vom Handy oder vom TV,Prêt ! Le streamer lance depuis son téléphone ou la TV,Pronti! Lo streamer avvia dal telefono o dalla TV
+LP_AUD_CHOOSING,El streamer está eligiendo la palabra…,The streamer is picking a word…,O streamer está escolhendo a palavra…,Der Streamer wählt ein Wort…,Le streamer choisit un mot…,Lo streamer sta scegliendo la parola…
+LP_AUD_GET_READY,¡Prepárense para adivinar desde el celular!,Get ready to guess from your phone!,Preparem-se para adivinhar pelo celular!,Macht euch bereit zum Raten am Handy!,Préparez-vous à deviner sur votre téléphone !,Preparatevi a indovinare dal telefono!
+LP_AND_MORE,y {0} más,and {0} more,e mais {0},und {0} weitere,et {0} de plus,e altri {0}

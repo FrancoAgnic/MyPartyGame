@@ -25,17 +25,28 @@ Consume ~50 MB de RAM y convive sin problema con otros servicios.
 5. Guarda.
 
 ### 2. Subir esta carpeta a la VPS
-Desde la PC, en Git Bash, parado en la raíz del repo (reemplaza `IP_DE_LA_VPS`). Primero se crea la
-carpeta en la VPS:
+**Opción A (PowerShell en Windows, recomendada).** Parado en la raíz del repo. En la primera línea va
+tu IP; las demás se pegan tal cual. Si tu clave SSH tiene contraseña, te la pide en cada `scp` / `ssh`.
+
+```powershell
+$ip = "PONÉ.ACÁ.TU.IP"
+tar --exclude=node_modules --exclude=.env -czf "$env:TEMPelay.tgz" -C Tools/Relay .
+scp "$env:TEMPelay.tgz" "root@${ip}:/tmp/relay.tgz"
+ssh "root@$ip" "mkdir -p /opt/sculpturillo-relay && tar -xzf /tmp/relay.tgz -C /opt/sculpturillo-relay && rm /tmp/relay.tgz && ls /opt/sculpturillo-relay"
+```
+El último comando lista los archivos que llegaron: `Dockerfile`, `docker-compose.yml`, `server.js`,
+`public`, etc.
+
+**Opción B (Git Bash).** Primero la variable con tu IP:
 
 ```bash
-ssh root@IP_DE_LA_VPS "mkdir -p /opt/sculpturillo-relay"
+IP=PONÉ.ACÁ.TU.IP
 ```
 
-Después se sube el contenido (sin `node_modules`):
+Después, en una línea, crear la carpeta y subir el contenido:
 
 ```bash
-tar --exclude=node_modules --exclude=.env -czf - -C Tools/Relay . | ssh root@IP_DE_LA_VPS "tar -xzf - -C /opt/sculpturillo-relay"
+ssh root@$IP "mkdir -p /opt/sculpturillo-relay" && tar --exclude=node_modules --exclude=.env -czf - -C Tools/Relay . | ssh root@$IP "tar -xzf - -C /opt/sculpturillo-relay"
 ```
 
 ### 3. Levantarlo en la VPS

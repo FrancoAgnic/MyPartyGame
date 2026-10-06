@@ -90,6 +90,17 @@ const server = http.createServer((req, res) => {
       res.writeHead(500); return res.end("Falta public/index.html");
     }
   }
+  // Imágenes de la página (logo, banderas, Steam): solo archivos sueltos de public/assets.
+  const m = url.pathname.match(/^\/assets\/([A-Za-z0-9_\-]+\.(png|svg|jpg|webp))$/);
+  if (m) {
+    const file = path.join(__dirname, "public", "assets", m[1]);
+    return fs.readFile(file, (err, data) => {
+      if (err) { res.writeHead(404); return res.end(); }
+      const types = { png: "image/png", svg: "image/svg+xml", jpg: "image/jpeg", webp: "image/webp" };
+      res.writeHead(200, { "Content-Type": types[m[2]], "Cache-Control": "public, max-age=86400" });
+      res.end(data);
+    });
+  }
   res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
   res.end("No encontrado");
 });

@@ -25,12 +25,12 @@
 
 namespace
 {
-    const FLinearColor Ink(1.f, 0.97f, 0.92f, 1.f);
-    const FLinearColor Muted(0.72f, 0.68f, 0.84f, 1.f);
-    const FLinearColor Accent(1.f, 0.72f, 0.3f, 1.f);
-    const FLinearColor Panel(0.03f, 0.02f, 0.06f, 0.96f);
-    const FLinearColor ButtonFill(0.12f, 0.09f, 0.2f, 1.f);
-    const FLinearColor ButtonHover(0.22f, 0.16f, 0.36f, 1.f);
+    const FLinearColor GPS_Ink(1.f, 0.97f, 0.92f, 1.f);
+    const FLinearColor GPS_Muted(0.72f, 0.68f, 0.84f, 1.f);
+    const FLinearColor GPS_Accent(1.f, 0.72f, 0.3f, 1.f);
+    const FLinearColor GPS_Panel(0.03f, 0.02f, 0.06f, 0.96f);
+    const FLinearColor GPS_ButtonFill(0.12f, 0.09f, 0.2f, 1.f);
+    const FLinearColor GPS_ButtonHover(0.22f, 0.16f, 0.36f, 1.f);
 }
 
 void UPTGamepadRebindHandler::HandleClicked()
@@ -59,13 +59,13 @@ UButton* UPTGamepadSettingsWidget::MakeButton(const FText& Label, FName Name, UT
 {
     UButton* B = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), Name);
     FButtonStyle Style = B->GetStyle();
-    Style.Normal  = FSlateRoundedBoxBrush(ButtonFill, 10.f);
-    Style.Hovered = FSlateRoundedBoxBrush(ButtonHover, 10.f);
-    Style.Pressed = FSlateRoundedBoxBrush(Accent, 10.f);
+    Style.Normal  = FSlateRoundedBoxBrush(GPS_ButtonFill, 10.f);
+    Style.Hovered = FSlateRoundedBoxBrush(GPS_ButtonHover, 10.f);
+    Style.Pressed = FSlateRoundedBoxBrush(GPS_Accent, 10.f);
     Style.NormalPadding = FMargin(14.f, 6.f);
     Style.PressedPadding = FMargin(14.f, 6.f);
     B->SetStyle(Style);
-    UTextBlock* T = MakeText(18, Ink, true);
+    UTextBlock* T = MakeText(18, GPS_Ink, true);
     T->SetText(Label);
     B->AddChild(T);
     if (OutText) *OutText = T;
@@ -75,7 +75,7 @@ UButton* UPTGamepadSettingsWidget::MakeButton(const FText& Label, FName Name, UT
 USlider* UPTGamepadSettingsWidget::AddSliderRow(UVerticalBox* Box, const FText& Label, float Min, float Max, float Step, UTextBlock*& OutValue)
 {
     UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>();
-    UTextBlock* L = MakeText(18, Ink, false);
+    UTextBlock* L = MakeText(18, GPS_Ink, false);
     L->SetText(Label);
     if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(L))
     {
@@ -88,13 +88,13 @@ USlider* UPTGamepadSettingsWidget::AddSliderRow(UVerticalBox* Box, const FText& 
     Slider->SetMinValue(Min);
     Slider->SetMaxValue(Max);
     Slider->SetStepSize(Step);
-    Slider->SetSliderBarColor(Muted);
-    Slider->SetSliderHandleColor(Accent);
+    Slider->SetSliderBarColor(GPS_Muted);
+    Slider->SetSliderHandleColor(GPS_Accent);
     SliderBox->SetContent(Slider);
     if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(SliderBox)) S->SetVerticalAlignment(VAlign_Center);
     USizeBox* ValueBox = WidgetTree->ConstructWidget<USizeBox>();
     ValueBox->SetWidthOverride(70.f);
-    OutValue = MakeText(18, Accent, true);
+    OutValue = MakeText(18, GPS_Accent, true);
     OutValue->SetJustification(ETextJustify::Right);
     ValueBox->SetContent(OutValue);
     if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(ValueBox)) S->SetVerticalAlignment(VAlign_Center);
@@ -119,7 +119,7 @@ void UPTGamepadSettingsWidget::BuildTree()
 
     UBorder* Card = WidgetTree->ConstructWidget<UBorder>();
     Card->SetBrush(FSlateRoundedBoxBrush(FLinearColor::White, 24.f));
-    Card->SetBrushColor(Panel);
+    Card->SetBrushColor(GPS_Panel);
     Card->SetPadding(FMargin(32.f, 26.f));
     if (UOverlaySlot* S = Root->AddChildToOverlay(Card))
     {
@@ -134,7 +134,7 @@ void UPTGamepadSettingsWidget::BuildTree()
     UVerticalBox* Col = WidgetTree->ConstructWidget<UVerticalBox>();
     CardSize->SetContent(Col);
 
-    UTextBlock* Title = MakeText(32, Accent, true);
+    UTextBlock* Title = MakeText(32, GPS_Accent, true);
     Title->SetText(PTText::Get(TEXT("GP_TITLE")));
     if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Title)) S->SetPadding(FMargin(0.f, 0.f, 0.f, 12.f));
 
@@ -148,7 +148,7 @@ void UPTGamepadSettingsWidget::BuildTree()
     // Invertir Y.
     {
         UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>();
-        UTextBlock* L = MakeText(18, Ink, false);
+        UTextBlock* L = MakeText(18, GPS_Ink, false);
         L->SetText(PTText::Get(TEXT("GP_INVERT_Y")));
         if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(L))
         {
@@ -164,7 +164,7 @@ void UPTGamepadSettingsWidget::BuildTree()
         if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Row)) S->SetPadding(FMargin(0.f, 6.f));
     }
 
-    UTextBlock* ButtonsTitle = MakeText(22, Accent, true);
+    UTextBlock* ButtonsTitle = MakeText(22, GPS_Accent, true);
     ButtonsTitle->SetText(PTText::Get(TEXT("GP_BUTTONS")));
     if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(ButtonsTitle)) S->SetPadding(FMargin(0.f, 14.f, 0.f, 6.f));
 
@@ -174,7 +174,7 @@ void UPTGamepadSettingsWidget::BuildTree()
     for (const FPTGamepadAction& A : PTGamepad::GetActions())
     {
         UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>();
-        UTextBlock* L = MakeText(17, Ink, false);
+        UTextBlock* L = MakeText(17, GPS_Ink, false);
         L->SetText(PTText::Get(A.LabelKey));
         if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(L))
         {
@@ -206,7 +206,7 @@ void UPTGamepadSettingsWidget::BuildTree()
     UButton* Back = MakeButton(PTText::Get(TEXT("GP_BACK")), TEXT("BackButton")); // "Back" → B lo encuentra solo
     Back->OnClicked.AddDynamic(this, &UPTGamepadSettingsWidget::OnBackClicked);
     if (UHorizontalBoxSlot* S = Bottom->AddChildToHorizontalBox(Reset)) S->SetPadding(FMargin(0.f, 0.f, 12.f, 0.f));
-    UTextBlock* Hint = MakeText(14, Muted, false);
+    UTextBlock* Hint = MakeText(14, GPS_Muted, false);
     Hint->SetText(PTText::Get(TEXT("GP_HINT")));
     if (UHorizontalBoxSlot* S = Bottom->AddChildToHorizontalBox(Hint))
     {

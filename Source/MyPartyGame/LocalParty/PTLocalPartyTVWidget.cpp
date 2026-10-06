@@ -75,6 +75,7 @@ void UPTLocalPartyTVWidget::BuildTree()
     {
         S->SetHorizontalAlignment(HAlign_Center);
         S->SetVerticalAlignment(VAlign_Center);
+        S->SetPadding(FMargin(0.f, 0.f, 380.f, 0.f)); // corrido a la izquierda: a la derecha va la configuración
     }
     UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>();
     LobbyPanel->SetContent(Row);
@@ -197,6 +198,12 @@ void UPTLocalPartyTVWidget::Refresh()
     const EPTTurnPhase Phase = G ? G->TurnPhase : EPTTurnPhase::WaitingForPlayers;
     const FString Url = LP->GetJoinUrl();
     const bool bServerOk = LP->IsServerRunning() && !Url.IsEmpty();
+    const bool bAudience = LP->IsOnline();
+    // Audiencia: mantener View / I muestra el QR PRIVADO del streamer (solo en la espera, y solo hasta
+    // que se conecte; después ya no hace falta mostrarlo nunca más en el stream).
+    const bool bShowHostQr = bAudience && IsRevealHeld() && !LP->IsHostConnected()
+                          && (!G || G->TurnPhase == EPTTurnPhase::WaitingForPlayers);
+    const FString QrUrl = bShowHostQr ? LP->GetHostJoinUrl() : Url;
 
     auto Show = [](UWidget* W, bool bOn)
     {
@@ -204,10 +211,10 @@ void UPTLocalPartyTVWidget::Refresh()
     };
 
     // QR (se regenera solo si cambió la URL).
-    if (Url != QrForUrl)
+    if (QrUrl != QrForUrl)
     {
-        QrForUrl = Url;
-        QrTexture = Url.IsEmpty() ? nullptr : PTQR::MakeTexture(Url, 8);
+        QrForUrl = QrUrl;
+        QrTexture = QrUrl.IsEmpty() ? nullptr : PTQR::MakeTexture(QrUrl, 8);
         if (QrImage && QrTexture) QrImage->SetBrushFromTexture(QrTexture, /*bMatchSize=*/false);
         Show(QrImage, QrTexture != nullptr);
     }
@@ -217,8 +224,15 @@ void UPTLocalPartyTVWidget::Refresh()
     if (bOnline)
     {
         // Online: dominio público (sin nada que ocultar) + código de sala.
-        if (Step1Text) Step1Text->SetText(PTText::Get(TEXT("LP_ONLINE_STEP1")));
-        Show(Step2Text, false);
+        if (Step1Text) Step1Text->SetText(PTText::Get(bShowHostQr ? TEXT("LP_AUD_HOST_QR") : TEXT("LP_ONLINE_STEP1")));
+        // Línea del streamer: conectado ✓ / cómo ver su QR privado.
+        if (Step2Text)
+        {
+            Step2Text->SetText(PTText::Get(LP->IsHostConnected() ? TEXT("LP_AUD_HOST_OK") : TEXT("LP_AUD_HOST_HINT")));
+            Step2Text->SetColorAndOpacity(FSlateColor(LP->IsHostConnected() ? FLinearColor(0.36f, 0.88f, 0.54f, 1.f)
+                                                                            : FLinearColor(1.f, 0.97f, 0.92f, 1.f)));
+        }
+        Show(Step2Text, true);
         if (UrlText) UrlText->SetText(FText::FromString(LP->GetPublicHost()));
         if (CodeText) CodeText->SetText(FText::FromString(Code));
         Show(CodeRow, !Code.IsEmpty());
@@ -232,8 +246,12 @@ void UPTLocalPartyTVWidget::Refresh()
     }
 
     // Lista de jugadores (se rearma solo si cambió algo).
-    const TArray<FPTPhonePlayer>& Players = LP->GetPlayers();
-    FString Sig;
+    TArray<FPTPhonePlayer> Players;
+    for (const FPTPhonePlayer& P : LP->GetPlayers()) if (!P.bIsHost) Players.Add(P);
+    const int32 TotalPlayers = Players.Num();
+    const int32 MaxListed = bAudience ? 8 : 12;
+    if (Players.Num() > MaxListed) Players.SetNum(MaxListed);
+    FString Sig = FString::FromInt(TotalPlayers) + TEXT("#");
     for (const FPTPhonePlayer& P : Players)
         Sig += FString::Printf(TEXT("%s|%d|%d;"), *P.Name, P.bOnline ? 1 : 0, P.bVip ? 1 : 0);
     if (Sig != PlayersSig && PlayersBox)
@@ -257,9 +275,15 @@ void UPTLocalPartyTVWidget::Refresh()
             if (UHorizontalBoxSlot* S = R->AddChildToHorizontalBox(N)) S->SetVerticalAlignment(VAlign_Center);
             if (UVerticalBoxSlot* S = PlayersBox->AddChildToVerticalBox(R)) S->SetPadding(FMargin(0.f, 3.f));
         }
+        if (TotalPlayers > Players.Num())
+        {
+            UTextBlock* More = MakeText(BodyFontSize, FLinearColor(1.f, 1.f, 1.f, 0.6f), false);
+            More->SetText(FText::FromString(Fmt(TEXT("LP_AND_MORE"), FString::FromInt(TotalPlayers - Players.Num()))));
+            PlayersBox->AddChildToVerticalBox(More);
+        }
     }
     if (PlayersTitle)
-        PlayersTitle->SetText(Players.Num() > 0 ? FText::FromString(Fmt(TEXT("LP_PLAYERS"), FString::FromInt(Players.Num())))
+        PlayersTitle->SetText(TotalPlayers > 0 ? FText::FromString(Fmt(TEXT("LP_PLAYERS"), FString::FromInt(TotalPlayers)))
                                                 : PTText::Get(TEXT("LP_NOBODY")));
 
     // Qué falta para arrancar.
@@ -270,7 +294,8 @@ void UPTLocalPartyTVWidget::Refresh()
     FString Status;
     if (bOnline && !bServerOk)              Status = PTText::GetStr(LP->GetOnlineError().IsEmpty() ? TEXT("LP_ONLINE_CONNECTING") : TEXT("LP_ONLINE_ERROR"));
     else if (!bServerOk)                    Status = PTText::GetStr(TEXT("LP_NO_SERVER"));
-    else if (Players.Num() < MinPlayers)    Status = Fmt(TEXT("LP_NEED_MORE"), FString::FromInt(MinPlayers - Players.Num()));
+    else if (TotalPlayers < MinPlayers)     Status = Fmt(TEXT("LP_NEED_MORE"), FString::FromInt(MinPlayers - TotalPlayers));
+    else if (bAudience)                     Status = PTText::GetStr(LP->IsHostConnected() ? TEXT("LP_AUD_READY") : TEXT("LP_AUD_HOST_MISSING"));
     else                                    Status = Fmt(TEXT("LP_WAIT_VIP"), LP->GetVipName());
     if (StatusText) StatusText->SetText(FText::FromString(Status));
 
@@ -286,8 +311,9 @@ void UPTLocalPartyTVWidget::Refresh()
     if (bChoosing && G && G->CurrentSculptor)
     {
         const FString Name = G->CurrentSculptor->GetPlayerName();
-        if (BannerTitle) BannerTitle->SetText(FText::FromString(Fmt(TEXT("LP_PASS_PAD"), Name)));
-        if (BannerSub)   BannerSub->SetText(PTText::Get(TEXT("LP_CHOOSING")));
+        if (BannerTitle) BannerTitle->SetText(bAudience ? PTText::Get(TEXT("LP_AUD_CHOOSING"))
+                                                        : FText::FromString(Fmt(TEXT("LP_PASS_PAD"), Name)));
+        if (BannerSub)   BannerSub->SetText(PTText::Get(bAudience ? TEXT("LP_AUD_GET_READY") : TEXT("LP_CHOOSING")));
         if (const FPTPhonePlayer* Rec = LP->FindByPlayerState(G->CurrentSculptor))
             if (BannerTitle) BannerTitle->SetColorAndOpacity(FSlateColor(Rec->Color));
     }
