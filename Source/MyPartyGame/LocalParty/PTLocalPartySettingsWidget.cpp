@@ -23,12 +23,12 @@
 
 namespace
 {
-    const FLinearColor Ink(1.f, 0.97f, 0.92f, 1.f);
-    const FLinearColor Muted(0.72f, 0.68f, 0.84f, 1.f);
-    const FLinearColor Accent(1.f, 0.72f, 0.3f, 1.f);
-    const FLinearColor PanelCol(0.012f, 0.008f, 0.03f, 0.9f);
-    const FLinearColor ButtonFill(0.12f, 0.09f, 0.2f, 1.f);
-    const FLinearColor ButtonHover(0.22f, 0.16f, 0.36f, 1.f);
+    const FLinearColor LPS_Ink(1.f, 0.97f, 0.92f, 1.f);
+    const FLinearColor LPS_Muted(0.72f, 0.68f, 0.84f, 1.f);
+    const FLinearColor LPS_Accent(1.f, 0.72f, 0.3f, 1.f);
+    const FLinearColor LPS_PanelCol(0.012f, 0.008f, 0.03f, 0.9f);
+    const FLinearColor LPS_ButtonFill(0.12f, 0.09f, 0.2f, 1.f);
+    const FLinearColor LPS_ButtonHover(0.22f, 0.16f, 0.36f, 1.f);
 
     bool IsAudience(const UUserWidget* W)
     {
@@ -58,14 +58,14 @@ UButton* UPTLocalPartySettingsWidget::MakeButton(const FText& Label, FName Name,
 {
     UButton* B = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), Name);
     FButtonStyle Style = B->GetStyle();
-    Style.Normal  = FSlateRoundedBoxBrush(ButtonFill, 10.f);
-    Style.Hovered = FSlateRoundedBoxBrush(ButtonHover, 10.f);
-    Style.Pressed = FSlateRoundedBoxBrush(Accent, 10.f);
+    Style.Normal  = FSlateRoundedBoxBrush(LPS_ButtonFill, 10.f);
+    Style.Hovered = FSlateRoundedBoxBrush(LPS_ButtonHover, 10.f);
+    Style.Pressed = FSlateRoundedBoxBrush(LPS_Accent, 10.f);
     Style.Disabled = FSlateRoundedBoxBrush(FLinearColor(0.08f, 0.07f, 0.1f, 1.f), 10.f);
     Style.NormalPadding = FMargin(14.f, 8.f);
     Style.PressedPadding = FMargin(14.f, 8.f);
     B->SetStyle(Style);
-    UTextBlock* T = MakeText(FontSize, Ink, true);
+    UTextBlock* T = MakeText(FontSize, LPS_Ink, true);
     T->SetText(Label);
     T->SetJustification(ETextJustify::Center);
     B->AddChild(T);
@@ -76,9 +76,9 @@ UButton* UPTLocalPartySettingsWidget::MakeButton(const FText& Label, FName Name,
 USlider* UPTLocalPartySettingsWidget::AddSliderRow(UVerticalBox* Box, UTextBlock*& OutLabel, float Min, float Max, float Step, UTextBlock*& OutValue)
 {
     UHorizontalBox* Head = WidgetTree->ConstructWidget<UHorizontalBox>();
-    OutLabel = MakeText(17, Ink, false);
+    OutLabel = MakeText(17, LPS_Ink, false);
     if (UHorizontalBoxSlot* S = Head->AddChildToHorizontalBox(OutLabel)) S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-    OutValue = MakeText(17, Accent, true);
+    OutValue = MakeText(17, LPS_Accent, true);
     Head->AddChildToHorizontalBox(OutValue);
     if (UVerticalBoxSlot* S = Box->AddChildToVerticalBox(Head)) S->SetPadding(FMargin(0.f, 8.f, 0.f, 2.f));
 
@@ -86,8 +86,8 @@ USlider* UPTLocalPartySettingsWidget::AddSliderRow(UVerticalBox* Box, UTextBlock
     Slider->SetMinValue(Min);
     Slider->SetMaxValue(Max);
     Slider->SetStepSize(Step);
-    Slider->SetSliderBarColor(Muted);
-    Slider->SetSliderHandleColor(Accent);
+    Slider->SetSliderBarColor(LPS_Muted);
+    Slider->SetSliderHandleColor(LPS_Accent);
     Box->AddChildToVerticalBox(Slider);
     return Slider;
 }
@@ -99,7 +99,7 @@ void UPTLocalPartySettingsWidget::BuildTree()
 
     UBorder* Card = WidgetTree->ConstructWidget<UBorder>();
     Card->SetBrush(FSlateRoundedBoxBrush(FLinearColor::White, 22.f));
-    Card->SetBrushColor(PanelCol);
+    Card->SetBrushColor(LPS_PanelCol);
     Card->SetPadding(FMargin(24.f, 20.f));
     if (UOverlaySlot* S = Root->AddChildToOverlay(Card))
     {
@@ -114,7 +114,7 @@ void UPTLocalPartySettingsWidget::BuildTree()
     UVerticalBox* Col = WidgetTree->ConstructWidget<UVerticalBox>();
     Width->SetContent(Col);
 
-    UTextBlock* Title = MakeText(22, Accent, true);
+    UTextBlock* Title = MakeText(22, LPS_Accent, true);
     Title->SetText(PTText::Get(TEXT("LP_SETTINGS_TITLE")));
     if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Title)) S->SetPadding(FMargin(0.f, 0.f, 0.f, 4.f));
 
@@ -132,10 +132,10 @@ void UPTLocalPartySettingsWidget::BuildTree()
     {
         UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>();
         UVerticalBox* Txt = WidgetTree->ConstructWidget<UVerticalBox>();
-        UTextBlock* L = MakeText(17, Ink, false);
+        UTextBlock* L = MakeText(17, LPS_Ink, false);
         L->SetText(PTText::Get(TEXT("LP_SET_PACK")));
         Txt->AddChildToVerticalBox(L);
-        WordsValue = MakeText(15, Accent, true);
+        WordsValue = MakeText(15, LPS_Accent, true);
         Txt->AddChildToVerticalBox(WordsValue);
         if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(Txt))
         {
@@ -152,7 +152,7 @@ void UPTLocalPartySettingsWidget::BuildTree()
     StartButton = MakeButton(PTText::Get(TEXT("LP_START")), TEXT("StartButton"), 20);
     StartButton->OnClicked.AddDynamic(this, &UPTLocalPartySettingsWidget::OnStartClicked);
     if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(StartButton)) S->SetPadding(FMargin(0.f, 18.f, 0.f, 4.f));
-    StartHint = MakeText(14, Muted, false);
+    StartHint = MakeText(14, LPS_Muted, false);
     StartHint->SetAutoWrapText(true);
     Col->AddChildToVerticalBox(StartHint);
 }
