@@ -23,6 +23,7 @@ class UTextBlock;
 class UPTLockerSlotWidget;
 class UPTLockerSubsystem;
 class APTLobbyPlayerController;
+class UPTToolSlotWidget;
 
 UCLASS()
 class MYPARTYGAME_API UPTLockerWidget : public UPTUserWidget
@@ -51,6 +52,10 @@ protected:
 
     UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* HeadSlotsBox;
     UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* BodySlotsBox;
+    // Modo "un solo slot" (SKIN = cabeza+cuerpo juntos): si el WBP trae ESTE contenedor, el Locker arma
+    // UNA sola grilla de skins y las pestañas Cabeza/Cuerpo quedan sin uso. Si NO está (WBP viejo de
+    // pestañas), el Locker funciona como antes. Así la migración del WBP no rompe nada.
+    UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* SkinSlotsBox;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      HeadTabButton;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      BodyTabButton;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      AssignButton;
@@ -59,6 +64,13 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   AssignLabel;
     // Botón que abre el popup del Workshop de skins (descargar/equipar/publicar).
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      SkinWorkshopButton;
+    // Cruz de cámara (WASD): el MISMO panel del HeadSculptHUD. Se "aprietan" (animación OnPressed del
+    // WBP_ToolSlot) mientras mantenés la tecla, para ver que te estás moviendo con el personaje mientras
+    // elegís skins. Opcionales: si el WBP no los trae, no pasa nada.
+    UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* WasdUp;    // W
+    UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* WasdDown;  // S
+    UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* WasdLeft;  // A
+    UPROPERTY(meta = (BindWidgetOptional)) UPTToolSlotWidget* WasdRight; // D
     // ── Vaciar slot (borrar la skin de un slot ocupado) + popup de confirmación ──
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      EmptySlotButton;       // vaciar el slot seleccionado
     UPROPERTY(meta = (BindWidgetOptional)) UWidget*      ClearConfirmPanel;     // popup de confirmación (arranca oculto)
@@ -103,8 +115,10 @@ private:
 
     UPROPERTY() TArray<UPTLockerSlotWidget*> HeadSlotWidgets;
     UPROPERTY() TArray<UPTLockerSlotWidget*> BodySlotWidgets;
-    int32 ActiveTab     = 0; // 0 cabeza, 1 cuerpo
+    UPROPERTY() TArray<UPTLockerSlotWidget*> SkinSlotWidgets; // modo "un solo slot"
+    int32 ActiveTab     = 0; // 0 cabeza, 1 cuerpo (ignorado en modo skin)
     int32 SelectedIndex = 0;
     bool  bBuilt = false;
+    bool  bSkinMode = false; // true si el WBP trae SkinSlotsBox → una sola grilla de skins
     bool  bPreviewingHover = false; // true mientras un slot no-equipado está en preview por hover
 };

@@ -28,6 +28,8 @@
 #include "Engine/StaticMeshActor.h"    // marcador de spawn (mesh + material)
 #include "Camera/PlayerCameraManager.h" // ocultar marcador cerca de la cámara
 #include "EngineUtils.h" // TActorIterator
+#include "RHI.h" // GNumDrawCallsRHI / GNumPrimitivesDrawnRHI (draw calls y triángulos dibujados — PTPropStats)
+#include "Misc/App.h" // FApp::GetDeltaTime (ms del frame en PTPropStats)
 #include "DrawDebugHelpers.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Styling/SlateBrush.h"
@@ -565,6 +567,36 @@ void APTSculptPlayerController::PTLODDebug()
         Env->IsLODDebug() ? TEXT("ON") : TEXT("OFF"), Env->IsLODEnabled() ? TEXT("ON") : TEXT("OFF"));
 }
 
+void APTSculptPlayerController::PTPropStats()
+{
+    // DEV: diagnóstico del costo de props del mapa (para decidir la optimización con datos). Combinalo con
+    // `stat unit` (frame/GPU) y `stat RHI` (draw calls / triángulos dibujados) desde la consola oculta.
+    APTMapEnvironment* Env = Cast<APTMapEnvironment>(
+        UGameplayStatics::GetActorOfClass(GetWorld(), APTMapEnvironment::StaticClass()));
+    if (!Env) { UE_LOG(LogTemp, Warning, TEXT("[PTPropStats] No hay APTMapEnvironment en el nivel.")); return; }
+    const FString Report = Env->GetStatsReport();
+
+    // Rendimiento GLOBAL del frame (para saber si el cuello son los props o es otra cosa):
+    //   - FPS / ms del último frame (delta del mundo)
+    //   - draw calls y triángulos DIBUJADOS por el RHI el último frame (lo que de verdad manda a la GPU)
+    const double Dt = FApp::GetDeltaTime();
+    const double FrameMs = Dt * 1000.0;
+    const double FPS = (Dt > 0.0) ? 1.0 / Dt : 0.0;
+    const int32 DrawCalls  = GNumDrawCallsRHI[0];
+    const int32 PrimsDrawn = GNumPrimitivesDrawnRHI[0];
+    const FString Perf = FString::Printf(
+        TEXT("[PropStats][perf] FPS=%.0f (frame %.2f ms)  drawcalls=%d  triangulos dibujados (RHI)=%.1f K"),
+        FPS, FrameMs, DrawCalls, (double)PrimsDrawn / 1000.0);
+
+    // Al log (yo lo leo) y a pantalla.
+    UE_LOG(LogTemp, Log, TEXT("%s\n%s"), *Report, *Perf);
+    if (GEngine)
+    {
+        GEngine->AddOnScreenDebugMessage(918273, 25.f, FColor(180, 230, 255), Report);
+        GEngine->AddOnScreenDebugMessage(918274, 25.f, FColor(255, 230, 140), Perf);
+    }
+}
+
 void APTSculptPlayerController::SetupInputComponent()
 {
     Super::SetupInputComponent();
@@ -965,9 +997,15 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
     if (BrushDecalMaterial && (EditMode == EPTEditMode::Add || EditMode == EPTEditMode::Erase))
     {
         FRotator DecalRot = (-Normal).Rotation();
+        // OJO perf: el DecalSize es (profundidad, ancho, alto) a lo largo del eje de proyección. Antes iba
+        // StampSize*0.5 en las TRES → con brocha grande proyectaba a través de TODO el volumen y, en mapas
+        // con props, sobre toda su geometría → el pase de decals de la GPU disparaba el frame a 100-400 ms.
+        // La profundidad se fija CHICA (solo proyecta justo en la superficie); ancho/alto siguen el tamaño
+        // de la brocha. Mismo indicador visual, costo de GPU mínimo e independiente del tamaño de brocha.
+        const float HalfBrush = StampSize * 0.5f;
         UGameplayStatics::SpawnDecalAtLocation(
             GetWorld(), BrushDecalMaterial,
-            FVector(StampSize * 0.5f),
+            FVector(16.f, HalfBrush, HalfBrush),
             StampPos, DecalRot, 0.12f);
     }
 
@@ -976,7 +1014,11 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
     {
         FHitResult Down;
         FCollisionQueryParams QP;
-        QP.bTraceComplex = true; // superficie real de la arcilla (ProceduralMesh)
+        // Colisión SIMPLE (no por-triángulo): el down-trace es solo para la sombrita/altura y corre cada
+        // frame; con bTraceComplex=true pegaba contra la colisión por-triángulo de TODOS los props del mapa
+        // (~0.5 ms/frame en mapas densos). La arcilla que esculpís no tiene colisión igual, así que esto
+        // mide desde el piso/props por colisión simple = mismo resultado visual, mucho más barato.
+        QP.bTraceComplex = false;
         if (PreviewActor)                QP.AddIgnoredActor(PreviewActor);
         if (const APawn* Pw = GetPawn())  QP.AddIgnoredActor(Pw);
         // Arrancar el rayo 50 UU debajo del cursor: así no pega en la arcilla que estás
@@ -1058,11 +1100,23 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
             const float Dist = FVector::Dist(LastStampPos, StampPos);
             const float Step = FMath::Max(StampSize * 0.2f, 2.f); // solape entre sellos
             const int32 N = FMath::Clamp(FMath::CeilToInt(Dist / Step), 1, 32);
+            // PRESUPUESTO DE TIEMPO por frame: cada sello del octree puede costar varios ms (más con brocha
+            // grande sobre un modelo detallado). Si al mover rápido se encolan muchos sellos, el frame se
+            // dispara y, como el mouse se movió más, el frame siguiente encola MÁS → ESPIRAL (trabones).
+            // Solución: aplicar sellos hasta gastar StampBudgetSeconds y DIFERIR el resto al próximo frame,
+            // continuando desde el último sello aplicado (no se pierde el trazo, solo se reparte en frames).
+            const double StampBudgetSeconds = 0.012; // ~12 ms de sellado como tope por frame
+            const double T0 = FPlatformTime::Seconds();
+            FVector LastApplied = LastStampPos;
             for (int32 i = 1; i <= N; ++i)
             {
                 const FVector P = FMath::Lerp(LastStampPos, StampPos, (float)i / N);
                 Server_ApplyStamp(P, Sh, StampSize, EditMode, CurrentPaintColor, StampRotation, bStrokeIsDetail, StampScale);
+                LastApplied = P;
+                // Siempre al menos 1 sello; si nos pasamos del presupuesto, el resto va al próximo frame.
+                if (i < N && (FPlatformTime::Seconds() - T0) >= StampBudgetSeconds) break;
             }
+            LastStampPos = LastApplied; // continuar desde acá el próximo frame (el trazo "alcanza" al cursor)
         }
         else
         {
@@ -1070,8 +1124,8 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
             bStrokeActive = true;
             // ALT+Add ya NO congela un plano: cada sello se pega a la superficie de la BASE (ver
             // GetStampPoint) → el trazo sigue el contorno de la malla sin trepar hacia la cámara.
+            LastStampPos = StampPos;
         }
-        LastStampPos = StampPos;
     }
     else
     {

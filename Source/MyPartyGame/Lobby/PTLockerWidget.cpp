@@ -3,6 +3,7 @@
 #include "PTLockerWidget.h"
 #include "PTLockerSlotWidget.h"
 #include "../UI/PTSkinWorkshopWidget.h"
+#include "../UI/PTToolSlotWidget.h"
 #include "PTLockerSubsystem.h"
 #include "PTLobbyPlayerController.h"
 #include "PTLobbyCharacter.h"
@@ -14,6 +15,8 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Engine/GameInstance.h"
+#include "GameFramework/PlayerController.h"
+#include "InputCoreTypes.h"
 
 void UPTLockerWidget::NativeConstruct()
 {
@@ -29,9 +32,20 @@ void UPTLockerWidget::NativeConstruct()
     if (ClearConfirmNoButton)  ClearConfirmNoButton->OnClicked.AddDynamic(this, &UPTLockerWidget::OnClearConfirmNo);
     if (ClearConfirmText)      ClearConfirmText->SetText(PTText::Get(TEXT("LOCKER_CLEAR_CONFIRM")));
     if (ClearConfirmPanel)     ClearConfirmPanel->SetVisibility(ESlateVisibility::Collapsed);
+    // Cruz WASD (igual que el HeadSculptHUD): poner los keycaps una vez; el "apretado" se actualiza en el tick.
+    if (WasdUp)    WasdUp->SetSlot(nullptr,    FText::FromString(TEXT("W")), FText::GetEmpty());
+    if (WasdDown)  WasdDown->SetSlot(nullptr,  FText::FromString(TEXT("S")), FText::GetEmpty());
+    if (WasdLeft)  WasdLeft->SetSlot(nullptr,  FText::FromString(TEXT("A")), FText::GetEmpty());
+    if (WasdRight) WasdRight->SetSlot(nullptr, FText::FromString(TEXT("D")), FText::GetEmpty());
     // Equipar = click en slot lleno; Crear = click en slot vacío. Ya no hay botón "Asignar/Crear".
     if (AssignButton)     AssignButton->SetVisibility(ESlateVisibility::Collapsed);
     BuildSlots();
+    // En modo "un solo slot" (una sola grilla de skins) no hay pestañas Cabeza/Cuerpo: ocultarlas.
+    if (bSkinMode)
+    {
+        if (HeadTabButton) HeadTabButton->SetVisibility(ESlateVisibility::Collapsed);
+        if (BodyTabButton) BodyTabButton->SetVisibility(ESlateVisibility::Collapsed);
+    }
     SwitchTab(0);
 }
 
@@ -45,10 +59,12 @@ APTLobbyPlayerController* UPTLockerWidget::LobbyPC() const
 }
 TArray<UPTLockerSlotWidget*>& UPTLockerWidget::ActiveList()
 {
+    if (bSkinMode) return SkinSlotWidgets;
     return (ActiveTab == 0) ? HeadSlotWidgets : BodySlotWidgets;
 }
 int32 UPTLockerWidget::ActiveCount() const
 {
+    if (bSkinMode) return SkinSlotWidgets.Num();
     return (ActiveTab == 0) ? HeadSlotWidgets.Num() : BodySlotWidgets.Num();
 }
 
@@ -60,7 +76,7 @@ void UPTLockerWidget::BuildSlots()
     if (L) L->RefreshSlotCount(); // releer el máximo de slots (Project Settings) antes de armar la grilla
     const int32 NHead = L ? L->NumHeadSlots() : UPTLockerSaveGame::DefaultSlots;
     const int32 NBody = L ? L->NumBodySlots() : UPTLockerSaveGame::DefaultSlots;
-    auto Make = [this](UPanelWidget* Box, int32 Count, bool bHead, TArray<UPTLockerSlotWidget*>& Out)
+    auto Make = [this](UPanelWidget* Box, int32 Count, TArray<UPTLockerSlotWidget*>& Out)
     {
         if (!Box) return;
         Box->ClearChildren();
@@ -80,14 +96,37 @@ void UPTLockerWidget::BuildSlots()
                 Out.Add(S);
             }
     };
-    Make(HeadSlotsBox, NHead, true,  HeadSlotWidgets);
-    Make(BodySlotsBox, NBody, false, BodySlotWidgets);
+    // Modo "un solo slot": si el WBP trae SkinSlotsBox, UNA sola grilla de skins (cabeza+cuerpo por índice).
+    // Si no, el modo clásico de dos grillas (cabeza / cuerpo) con pestañas.
+    if (SkinSlotsBox)
+    {
+        bSkinMode = true;
+        Make(SkinSlotsBox, FMath::Min(NHead, NBody), SkinSlotWidgets);
+    }
+    else
+    {
+        bSkinMode = false;
+        Make(HeadSlotsBox, NHead, HeadSlotWidgets);
+        Make(BodySlotsBox, NBody, BodySlotWidgets);
+    }
 }
 
 void UPTLockerWidget::RefreshSlots()
 {
     UPTLockerSubsystem* L = Locker();
     if (!L) return;
+    if (bSkinMode)
+    {
+        const int32 EqSkin = L->GetEquippedSkin();
+        for (int32 i = 0; i < SkinSlotWidgets.Num(); ++i)
+            if (UPTLockerSlotWidget* S = SkinSlotWidgets[i])
+            {
+                S->SetupSkin(this, i, L->IsSkinSlotUsed(i), EqSkin == i);
+                S->SetThumbnailTexture(APTLobbyCharacter::MakeTextureFromPNG(S, L->GetSkinThumb(i)));
+            }
+        ApplySelectionVisual();
+        return;
+    }
     for (int32 i = 0; i < HeadSlotWidgets.Num(); ++i)
         if (UPTLockerSlotWidget* S = HeadSlotWidgets[i])
         {
@@ -105,6 +144,15 @@ void UPTLockerWidget::RefreshSlots()
 
 void UPTLockerWidget::SwitchTab(int32 Tab)
 {
+    if (bSkinMode)
+    {
+        // No hay pestañas: arrancar seleccionando la skin EQUIPADA y refrescar la grilla.
+        if (SkinSlotsBox) SkinSlotsBox->SetVisibility(ESlateVisibility::Visible);
+        SelectedIndex = 0;
+        if (UPTLockerSubsystem* L = Locker()) SelectedIndex = FMath::Max(0, L->GetEquippedSkin());
+        RefreshSlots();
+        return;
+    }
     ActiveTab = FMath::Clamp(Tab, 0, 1);
     // Arrancar seleccionando lo EQUIPADO de esa pestaña (así ves marcado lo que tenés puesto).
     SelectedIndex = 0;
@@ -126,7 +174,7 @@ void UPTLockerWidget::ApplyTabVisual()
 
 void UPTLockerWidget::SelectSlot(int32 Index, bool bHead)
 {
-    if (bHead != (ActiveTab == 0)) SwitchTab(bHead ? 0 : 1);
+    if (!bSkinMode && bHead != (ActiveTab == 0)) SwitchTab(bHead ? 0 : 1);
     SelectedIndex = FMath::Clamp(Index, 0, FMath::Max(0, ActiveCount() - 1));
     ApplySelectionVisual();
 }
@@ -134,10 +182,14 @@ void UPTLockerWidget::SelectSlot(int32 Index, bool bHead)
 void UPTLockerWidget::HoverSlot(int32 Index, bool bHead)
 {
     // Hover sobre slot LLENO: lo selecciona (Editar apunta ahí) y previsualiza la skin en el personaje.
-    TArray<UPTLockerSlotWidget*>& List = (bHead ? HeadSlotWidgets : BodySlotWidgets);
+    TArray<UPTLockerSlotWidget*>& List = bSkinMode ? SkinSlotWidgets : (bHead ? HeadSlotWidgets : BodySlotWidgets);
     if (!List.IsValidIndex(Index) || !List[Index] || !List[Index]->IsUsed()) return;
     SelectSlot(Index, bHead);
-    if (APTLobbyPlayerController* PC = LobbyPC()) PC->PreviewLookSlot(Index, bHead);
+    if (APTLobbyPlayerController* PC = LobbyPC())
+    {
+        if (bSkinMode) PC->PreviewSkinSlot(Index);
+        else           PC->PreviewLookSlot(Index, bHead);
+    }
     bPreviewingHover = true;
 }
 
@@ -146,7 +198,10 @@ void UPTLockerWidget::EndHoverPreview()
     // Al salir de los slots: el personaje y la selección vuelven a lo EQUIPADO (Editar = el equipado).
     if (APTLobbyPlayerController* PC = LobbyPC()) PC->RevertLookPreview();
     if (UPTLockerSubsystem* L = Locker())
-        SelectSlot(ActiveTab == 0 ? FMath::Max(0, L->GetEquippedHead()) : FMath::Max(0, L->GetEquippedBody()), ActiveTab == 0);
+    {
+        if (bSkinMode) SelectSlot(FMath::Max(0, L->GetEquippedSkin()), true);
+        else           SelectSlot(ActiveTab == 0 ? FMath::Max(0, L->GetEquippedHead()) : FMath::Max(0, L->GetEquippedBody()), ActiveTab == 0);
+    }
     bPreviewingHover = false;
 }
 
@@ -154,12 +209,24 @@ void UPTLockerWidget::CreateSlotNow(int32 Index, bool bHead)
 {
     // Click en slot VACÍO → entra directo a crearlo (sin pasar por un botón Crear).
     SelectSlot(Index, bHead);
-    EditSelected(); // EnterHeadSculptForSlot / EnterBodyPaintForSlot: slot vacío = crear
+    EditSelected(); // skin: EnterSkinEditForSlot; clásico: EnterHeadSculptForSlot / EnterBodyPaintForSlot
 }
 
 void UPTLockerWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
     Super::NativeTick(MyGeometry, InDeltaTime);
+
+    // Cruz WASD: se "aprietan" (animación OnPressed del WBP_ToolSlot) mientras mantenés la tecla, igual
+    // que en el HeadSculptHUD. Así ves que te movés con el personaje mientras elegís skins.
+    if (WasdUp || WasdDown || WasdLeft || WasdRight)
+        if (APlayerController* PC = GetOwningPlayer())
+        {
+            if (WasdUp)    WasdUp->SetPressed(PC->IsInputKeyDown(EKeys::W));
+            if (WasdDown)  WasdDown->SetPressed(PC->IsInputKeyDown(EKeys::S));
+            if (WasdLeft)  WasdLeft->SetPressed(PC->IsInputKeyDown(EKeys::A));
+            if (WasdRight) WasdRight->SetPressed(PC->IsInputKeyDown(EKeys::D));
+        }
+
     // Si estábamos previsualizando por hover y el mouse ya no está sobre NINGÚN slot (te fuiste del
     // menú o quedaste en un hueco), volver al equipado. Así el preview nunca se queda "pegado".
     if (!bPreviewingHover) return;
@@ -171,12 +238,14 @@ void UPTLockerWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 
 void UPTLockerWidget::EquipSlotNow(int32 Index, bool bHead)
 {
-    TArray<UPTLockerSlotWidget*>& List = (bHead ? HeadSlotWidgets : BodySlotWidgets);
+    TArray<UPTLockerSlotWidget*>& List = bSkinMode ? SkinSlotWidgets : (bHead ? HeadSlotWidgets : BodySlotWidgets);
     if (!List.IsValidIndex(Index) || !List[Index] || !List[Index]->IsUsed()) return; // vacío: no equipa
     SelectSlot(Index, bHead);
     if (APTLobbyPlayerController* PC = LobbyPC())
     {
-        if (bHead) PC->EquipHeadSlot(Index); else PC->EquipBodySlot(Index);
+        if (bSkinMode)  PC->EquipSkinSlot(Index);
+        else if (bHead) PC->EquipHeadSlot(Index);
+        else            PC->EquipBodySlot(Index);
     }
     RefreshSlots();
 }
@@ -229,7 +298,9 @@ void UPTLockerWidget::ActivateSelected()
     if (!PC) return;
     if (List[SelectedIndex]->IsUsed())
     {
-        if (bHead) PC->EquipHeadSlot(SelectedIndex); else PC->EquipBodySlot(SelectedIndex);
+        if (bSkinMode)  PC->EquipSkinSlot(SelectedIndex);
+        else if (bHead) PC->EquipHeadSlot(SelectedIndex);
+        else            PC->EquipBodySlot(SelectedIndex);
         RefreshSlots();
     }
     else EditSelected(); // vacío → crear
@@ -238,12 +309,12 @@ void UPTLockerWidget::ActivateSelected()
 void UPTLockerWidget::EditSelected()
 {
     // Edita el slot SELECCIONADO (lo usa CreateSlotNow para crear un slot vacío recién clickeado).
+    APTLobbyPlayerController* PC = LobbyPC();
+    if (!PC) return;
+    if (bSkinMode) { PC->EnterSkinEditForSlot(SelectedIndex); return; } // skin completa (secuencial cabeza→cuerpo)
     const bool bHead = (ActiveTab == 0);
-    if (APTLobbyPlayerController* PC = LobbyPC())
-    {
-        if (bHead) PC->EnterHeadSculptForSlot(SelectedIndex);
-        else       PC->EnterBodyPaintForSlot(SelectedIndex);
-    }
+    if (bHead) PC->EnterHeadSculptForSlot(SelectedIndex);
+    else       PC->EnterBodyPaintForSlot(SelectedIndex);
 }
 
 void UPTLockerWidget::EditEquipped()
@@ -256,6 +327,14 @@ void UPTLockerWidget::EditEquipped()
     UPTLockerSubsystem* L = Locker();
     APTLobbyPlayerController* PC = LobbyPC();
     if (!L || !PC) return;
+
+    if (bSkinMode)
+    {
+        const int32 EqSkin = FMath::Max(0, L->GetEquippedSkin());
+        SelectSlot(EqSkin, true);
+        PC->EnterSkinEditForSlot(EqSkin); // editar la skin equipada (secuencial cabeza→cuerpo)
+        return;
+    }
 
     const bool bHead = (ActiveTab == 0);
     const int32 Equipped = bHead ? L->GetEquippedHead() : L->GetEquippedBody();
@@ -343,7 +422,8 @@ FReply UPTLockerWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyE
         return FReply::Unhandled();
 
     const FKey Key = InKeyEvent.GetKey();
-    if (Key == EKeys::Tab)   { SwitchTab(ActiveTab == 0 ? 1 : 0); return FReply::Handled(); }
+    // En modo "un solo slot" no hay pestañas: Tab no hace nada (lo consumimos para que no mueva el foco).
+    if (Key == EKeys::Tab)   { if (!bSkinMode) SwitchTab(ActiveTab == 0 ? 1 : 0); return FReply::Handled(); }
     if (Key == EKeys::Right) { MoveSelection(+1, 0); return FReply::Handled(); }
     if (Key == EKeys::Left)  { MoveSelection(-1, 0); return FReply::Handled(); }
     if (Key == EKeys::Down)  { MoveSelection(0, +1); return FReply::Handled(); }

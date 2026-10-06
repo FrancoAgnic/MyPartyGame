@@ -500,12 +500,17 @@ void APTSculptVolume::Tick(float DeltaTime)
         // espaciado para feedback y una vez más al asentarse el trazo. El resultado final es el mismo
         // MC watertight; solo cambia CADA CUÁNTO se dispara.
         const float Now       = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+        // Feedback en vivo mientras ARRASTRÁS: re-mallado con celda GRUESA (barato) a un ritmo adaptativo al
+        // costo; al ASENTARSE el trazo (bSettled), UN re-mallado a resolución COMPLETA (nítido). El preview
+        // de la brocha ya muestra lo que agregás, así que el vivo grueso alcanza para ubicarse.
+        const float LiveInterval = FMath::Clamp(
+            SVOLiveInterval * (1.f + (float)LastSVOMeshTris / 15000.f), SVOLiveInterval, SVOLiveIntervalMax);
         const bool  bSettled  = (Now - LastSVOStampTime)  >= SVOSettleDelay;   // el trazo se detuvo
-        const bool  bLiveTick = (Now - LastSVORemeshTime) >= SVOLiveInterval;  // toca feedback en arrastre
+        const bool  bLiveTick = (Now - LastSVORemeshTime) >= LiveInterval;     // toca feedback en arrastre
         if (!bSVOMeshing && (bSettled || bLiveTick))
         {
             LastSVORemeshTime = Now;
-            RebuildDirty();
+            RebuildDirty(/*bCoarse=*/ !bSettled); // arrastrando = grueso (barato); al soltar = full res
         }
         return;
     }
@@ -1554,12 +1559,12 @@ void APTSculptVolume::BuildStampPreview(EPTStampShape Shape, float Size, float V
     PT_ScalePreview(OutVerts, OutNormals, StampScale); // escala no-uniforme
 }
 
-void APTSculptVolume::RebuildDirty()
+void APTSculptVolume::RebuildDirty(bool bCoarse)
 {
     // SVO: balance local y remallado de los componentes afectados.
     if (bUseSVO)
     {
-        if (bSVODirty) RebuildSVOMesh(); // maneja bSVODirty y el mallado async internamente
+        if (bSVODirty) RebuildSVOMesh(bCoarse); // maneja bSVODirty y el mallado async internamente
         return;
     }
 
@@ -1902,10 +1907,13 @@ void APTSculptVolume::ComputeSVOGlowUVs(const TArray<FVector>& Verts, const TArr
     }
 }
 
-void APTSculptVolume::RebuildSVOMesh()
+void APTSculptVolume::RebuildSVOMesh(bool bCoarse)
 {
     if (!Mesh) return;
     if (bSVOMeshing) return; // ya hay un mallado async en vuelo; se reintenta cuando termine (bSVODirty sigue)
+
+    // Feedback en vivo (arrastrando) = grilla más gruesa (barato); al soltar (bCoarse=false) = full res.
+    const float CellScale = bCoarse ? FMath::Max(1.f, SVOLiveCellScale) : 1.f;
 
     TArray<FBox> RefinedBounds;
     SVOField.Balance(&RefinedBounds); // mantiene 2:1 (barato, solo superficie)
@@ -1937,11 +1945,11 @@ void APTSculptVolume::RebuildSVOMesh()
     const float GlowInner   = NewClayGlowInnerFrac;
     const float GlowCell    = SVOField.MinCellSize();
     Async(EAsyncExecution::ThreadPool,
-        [WeakThis, Clone, Gen, GlowEvents = MoveTemp(GlowEvents), GlowNow, GlowSeconds, GlowScale, GlowInner, GlowCell]()
+        [WeakThis, Clone, Gen, CellScale, GlowEvents = MoveTemp(GlowEvents), GlowNow, GlowSeconds, GlowScale, GlowInner, GlowCell]()
     {
         struct FRes { TArray<FVector> V, N; TArray<int32> T; TArray<FColor> C; TArray<FVector2D> UV; };
         TSharedPtr<FRes, ESPMode::ThreadSafe> R = MakeShared<FRes, ESPMode::ThreadSafe>();
-        Clone->BuildMeshMC(R->V, R->T, R->N, R->C); // Marching Cubes uniforme = watertight garantizado
+        Clone->BuildMeshMC(R->V, R->T, R->N, R->C, CellScale); // MC uniforme (grueso en vivo, full al soltar)
         // Glow (UV0.x por vértice) EN EL WORKER, con el snapshot de eventos.
         APTSculptVolume::ComputeSVOGlowUVs(R->V, GlowEvents, GlowNow, GlowSeconds, GlowScale, GlowInner, GlowCell, R->UV);
 
@@ -1961,6 +1969,7 @@ void APTSculptVolume::RebuildSVOMesh()
                     Self->Mesh->CreateMeshSection(0, R->V, R->T, R->N, R->UV, R->C, Tan, /*collision=*/false);
                     if (Mat) Self->Mesh->SetMaterial(0, Mat);
                 }
+                Self->LastSVOMeshTris = R->T.Num() / 3; // costo del modelo → ritmo adaptativo del feedback
             }
             Self->bSVOMeshing = false;
         });

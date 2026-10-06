@@ -1763,6 +1763,18 @@ void APTLobbyPlayerController::EquipBodySlot(int32 Idx)
     if (APTLobbyCharacter* C = Cast<APTLobbyCharacter>(GetPawn())) C->LoadHead();
 }
 
+void APTLobbyPlayerController::EquipSkinSlot(int32 Idx)
+{
+    // Equipar la SKIN = cabeza + cuerpo del mismo índice, aplicando/replicando UNA sola vez (LoadHead).
+    if (UPTLockerSubsystem* L = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLockerSubsystem>() : nullptr)
+    {
+        // Si una parte del slot está vacía, equipar esa parte del Default (0) para no quedar sin look.
+        L->EquipHead(L->IsHeadSlotUsed(Idx) ? Idx : 0);
+        L->EquipBody(L->IsBodySlotUsed(Idx) ? Idx : 0);
+    }
+    if (APTLobbyCharacter* C = Cast<APTLobbyCharacter>(GetPawn())) C->LoadHead();
+}
+
 void APTLobbyPlayerController::PreviewLookSlot(int32 Index, bool bHead)
 {
     UPTLockerSubsystem* L = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLockerSubsystem>() : nullptr;
@@ -1772,6 +1784,13 @@ void APTLobbyPlayerController::PreviewLookSlot(int32 Index, bool bHead)
     const int32 H = bHead ? Index : L->GetEquippedHead();
     const int32 B = bHead ? L->GetEquippedBody() : Index;
     C->ApplyLookPreview(H, B);
+}
+
+void APTLobbyPlayerController::PreviewSkinSlot(int32 Index)
+{
+    APTLobbyCharacter* C = Cast<APTLobbyCharacter>(GetPawn());
+    if (!C) return;
+    C->ApplyLookPreview(Index, Index); // skin completa: cabeza Index + cuerpo Index
 }
 
 void APTLobbyPlayerController::RevertLookPreview()
@@ -1789,6 +1808,7 @@ void APTLobbyPlayerController::EnterHeadSculptForSlot(int32 Idx)
     EditingHeadSlot = Idx;
     EditingBodySlot = L ? L->GetEquippedBody() : -1;
     bHeadSculptBodyOnly = false; bHeadStartOnBody = false;
+    bSkinSequentialEdit = false; // edición de una sola parte (cabeza) → Confirmar sale directo
     bReturnToLockerAfterEdit = bLockerOpen;
     if (LockerWidget) LockerWidget->SetVisibility(ESlateVisibility::Collapsed); // ocultar Locker al editar
     EnterHeadSculpt();
@@ -1801,9 +1821,24 @@ void APTLobbyPlayerController::EnterBodyPaintForSlot(int32 Idx)
     EditingBodySlot = Idx;
     EditingHeadSlot = L ? L->GetEquippedHead() : -1;
     bHeadSculptBodyOnly = false; bHeadStartOnBody = true;
+    bSkinSequentialEdit = false; // edición de una sola parte (cuerpo) → Confirmar sale directo
     bReturnToLockerAfterEdit = bLockerOpen;
     if (LockerWidget) LockerWidget->SetVisibility(ESlateVisibility::Collapsed);
     EnterHeadSculpt(); // adentro: arranca enfocado en el cuerpo pero con el volumen de cabeza listo
+}
+
+void APTLobbyPlayerController::EnterSkinEditForSlot(int32 Idx)
+{
+    // SKIN completa (modo "un solo slot"): cabeza y cuerpo van al MISMO índice. Arranca en la cabeza; el
+    // flujo secuencial del Confirmar (ver ConfirmHeadEdit) pasa primero al cuerpo y recién el 2º Confirmar
+    // guarda y sale. El SHIFT sigue alternando cabeza/cuerpo libremente.
+    EditingHeadSlot = Idx;
+    EditingBodySlot = Idx;
+    bHeadSculptBodyOnly = false; bHeadStartOnBody = false;
+    bSkinSequentialEdit = true;
+    bReturnToLockerAfterEdit = bLockerOpen;
+    if (LockerWidget) LockerWidget->SetVisibility(ESlateVisibility::Collapsed);
+    EnterHeadSculpt();
 }
 
 void APTLobbyPlayerController::EnterHeadSculpt()
@@ -2027,6 +2062,24 @@ void APTLobbyPlayerController::ConfirmHeadEdit()
     // Con el popup abierto, las TECLAS ya no lo resuelven: solo se resuelve con CLICK en los botones
     // (evita que un Enter/Escape sin querer guarde o descarte). Enter directo (sin popup) sí confirma.
     if (bDiscardPopupOpen) return;
+
+    // SKIN completa (modo "un solo slot"): el PRIMER Confirmar, estando en la CABEZA, NO sale: pasa a
+    // pintar el CUERPO (mismo slot). El SEGUNDO Confirmar (ya en el cuerpo) guarda las dos partes y sale.
+    // El SHIFT sigue alternando cabeza/cuerpo como siempre.
+    if (bSkinSequentialEdit && !bBodyPaintMode && !bHeadSculptBodyOnly && !bHeadShapeRadialActive)
+    {
+        // Pasar al cuerpo igual que OnHeadToggleBodyPaint (el cuerpo solo se pinta).
+        HeadToolBeforeBody  = HeadEditMode;
+        bHeadEyesBeforeBody = bHeadEyesTool;
+        HeadEditMode  = EPTEditMode::Paint;
+        bHeadEyesTool = false;
+        bBodyPaintMode = true;
+        bHeadStamping = false;
+        bHasLastBodyCursor = false;
+        UpdateHeadCam(); // reencuadra al cuerpo
+        return;
+    }
+
     ExitHeadSculpt(true); // Enter directo = confirmar (guardar + equipar)
 }
 void APTLobbyPlayerController::RequestHeadBack()
@@ -2159,9 +2212,24 @@ void APTLobbyPlayerController::ExitHeadSculpt(bool bSaveChanges)
 
             // Aplica + replica el look equipado final (cabeza + cuerpo).
             Char->LoadHead();
+
+            // Miniatura de la SKIN completa (modo "un solo slot"): personaje ENTERO con cabeza Y cuerpo
+            // texturados (antes la miniatura del slot salía con la mitad en gris, porque cada parte se
+            // capturaba aislada). Se guarda en el MISMO índice para cabeza y cuerpo → GetSkinThumb la usa.
+            if (bSkinSequentialEdit && L)
+            {
+                const int32 SkinSlot = (EditingHeadSlot >= 0) ? EditingHeadSlot : L->GetEquippedSkin();
+                TArray<uint8> SkinThumb;
+                if (SkinSlot >= 0 && Char->CaptureLookThumbnailPNG(SkinThumb, /*bHeadFocus=*/false, 256, /*bFullSkin=*/true))
+                {
+                    L->SetHeadThumb(SkinSlot, SkinThumb);
+                    L->SetBodyThumb(SkinSlot, SkinThumb);
+                }
+            }
         }
     }
     EditingHeadSlot = -1; EditingBodySlot = -1; bHeadSculptBodyOnly = false; bHeadStartOnBody = false;
+    bSkinSequentialEdit = false;
 
     // Cerrar el color picker si quedó abierto.
     if (HeadColorPicker) { HeadColorPicker->RemoveFromParent(); HeadColorPicker = nullptr; }

@@ -38,6 +38,19 @@ void UPTLockerSlotWidget::Setup(UPTLockerWidget* InOwner, int32 InIndex, bool bI
     // La miniatura (Thumbnail) se setea en la Parte C; acá solo se deja como esté.
 }
 
+void UPTLockerSlotWidget::SetupSkin(UPTLockerWidget* InOwner, int32 InIndex, bool bInUsed, bool bEquipped)
+{
+    Owner = InOwner; SlotIndex = InIndex; bIsHead = true; bUsed = bInUsed;
+    if (LabelText)
+    {
+        const FString Base = FString::Printf(TEXT("%s %d"), *PTText::GetStr(TEXT("LOCKER_SKIN")), SlotIndex + 1);
+        LabelText->SetText(FText::FromString(
+            bUsed ? Base : FString::Printf(TEXT("%s — %s"), *Base, *PTText::GetStr(TEXT("LOCKER_EMPTY")))));
+    }
+    if (EquippedMark)
+        EquippedMark->SetVisibility(bEquipped ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+}
+
 void UPTLockerSlotWidget::SetSelected(bool bSel)
 {
     bSelected = bSel;

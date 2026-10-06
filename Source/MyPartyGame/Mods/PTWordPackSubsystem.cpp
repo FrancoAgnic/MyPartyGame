@@ -844,6 +844,13 @@ void UPTWordPackSubsystem::PublishMap(const FString& MapFolder, const FString& T
     }
     if (!UsePreview.IsEmpty()) FPaths::MakePlatformFilename(UsePreview);
 
+    // Además de la miniatura de la PÁGINA de Steam (SetItemPreview), dejar una COPIA dentro del content
+    // (content/preview.png). SetItemPreview NO queda en la carpeta instalada del suscriptor, así que la
+    // lista de mapas del juego (que lee preview.png de la carpeta del item) no tenía miniatura. Copiándola
+    // acá, al instalarse el mapa su carpeta trae el preview y la miniatura aparece en la lista.
+    if (!UsePreview.IsEmpty())
+        FM.Copy(*FPaths::Combine(Content, TEXT("preview.png")), *UsePreview);
+
     UE_LOG(LogPTWordPacks, Warning, TEXT("[PublishMap] Content='%s' dir=%d blob=%d json=%d preview='%s'"),
         *Content, bDir ? 1 : 0, bBlob ? 1 : 0, bJson ? 1 : 0, *UsePreview);
     if (!bBlob || !bJson)

@@ -318,6 +318,10 @@ protected:
     int32 EditingHeadSlot = -1;
     int32 EditingBodySlot = -1;
     bool  bHeadSculptBodyOnly = false; // modo edición de un slot de CUERPO (sin volumen de cabeza)
+    // Edición SECUENCIAL de una SKIN completa (modo "un solo slot"): se arranca en la cabeza y el PRIMER
+    // Confirmar pasa al cuerpo (no sale); el SEGUNDO Confirmar (ya en el cuerpo) guarda y sale. El SHIFT
+    // sigue alternando cabeza/cuerpo libremente. -1 fuera de este modo.
+    bool  bSkinSequentialEdit = false;
 public:
     /** Abre el Locker: colapsa el menú, lleva la cámara a la vista lateral (blend) y muestra el widget. */
     void OpenLocker();
@@ -327,13 +331,20 @@ public:
     /** Equipa un slot (aplica al personaje y replica solo lo equipado). */
     void EquipHeadSlot(int32 Idx);
     void EquipBodySlot(int32 Idx);
+    /** Equipa la SKIN del slot (cabeza + cuerpo del mismo índice) de una vez. Modo "un solo slot". */
+    void EquipSkinSlot(int32 Idx);
 
     // Preview local (hover en el locker): muestra la combinación sin equipar; revert vuelve a lo equipado.
     void PreviewLookSlot(int32 Index, bool bHead);
+    /** Preview de la SKIN completa del slot (cabeza + cuerpo del mismo índice). Modo "un solo slot". */
+    void PreviewSkinSlot(int32 Index);
     void RevertLookPreview();
     /** Entra a crear/editar un slot de cabeza o de cuerpo. */
     void EnterHeadSculptForSlot(int32 Idx);
     void EnterBodyPaintForSlot(int32 Idx);
+    /** Entra a crear/editar una SKIN completa (slot único): arranca en la cabeza, Confirmar pasa al cuerpo
+     *  y el 2º Confirmar guarda y sale. Cabeza y cuerpo se guardan en el MISMO índice. */
+    void EnterSkinEditForSlot(int32 Idx);
 protected:
     /** WBP del Locker (deriva de UPTLockerWidget). Asignar en BP_LobbyPlayerController. */
     UPROPERTY(EditAnywhere, Category="Lobby") TSubclassOf<class UPTLockerWidget> LockerWidgetClass;

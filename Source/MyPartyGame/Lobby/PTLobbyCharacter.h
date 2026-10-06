@@ -142,7 +142,9 @@ public:
 
     // Renderiza una MINIATURA del personaje (SceneCapture) a PNG. bHeadFocus=true → encuadra la cabeza y
     // el cuerpo se ve default/oscurecido; false → cuerpo entero con una cabeza esfera default/oscurecida.
-    bool CaptureLookThumbnailPNG(TArray<uint8>& OutPNG, bool bHeadFocus, int32 Size = 256);
+    // bFullSkin=true → personaje ENTERO con cabeza Y cuerpo texturados (sin oscurecer nada): para la
+    // miniatura de una SKIN completa (modo "un solo slot"). Ignora bHeadFocus.
+    bool CaptureLookThumbnailPNG(TArray<uint8>& OutPNG, bool bHeadFocus, int32 Size = 256, bool bFullSkin = false);
     // Crea una UTexture2D desde un PNG (para mostrar la miniatura en el Locker). Outer = dueño (GC).
     static UTexture2D* MakeTextureFromPNG(UObject* Outer, const TArray<uint8>& PNG);
     // Parámetros de encuadre de la miniatura (frente al personaje).
@@ -154,6 +156,11 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Locker") float ThumbHeadHeight = 0.f;   // sube/baja el centro (cabeza)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Locker") float ThumbHeadPitch  = 0.f;   // inclina la cámara (cabeza)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Locker") float ThumbBodyPitch  = 0.f;   // inclina la cámara (cuerpo)
+    // Encuadre "foto carnet" de la SKIN completa (bFullSkin): cabeza + hasta un poco debajo de los hombros.
+    // Más lejos que la cabeza sola (para que entren los hombros) y centro algo más abajo que la cabeza.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Locker") float ThumbSkinDistance = 140.f; // distancia de cámara
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Locker") float ThumbSkinHeight   = -18.f; // baja el centro desde la cabeza (hombros)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Locker") float ThumbSkinPitch    = 0.f;   // inclina la cámara
     // Intensidad de la luz frontal limpia de la miniatura (sin sombras). 0 = sin luz extra.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Locker") float ThumbLightIntensity = 6.f;
     // Color de fondo de la miniatura. Requiere ThumbBackdropMaterial (unlit, con parámetro vector "Color").

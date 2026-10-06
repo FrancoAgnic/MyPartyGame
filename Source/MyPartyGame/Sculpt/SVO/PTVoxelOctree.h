@@ -109,8 +109,10 @@ public:
     // Mallado por MARCHING CUBES sobre una grilla UNIFORME muestreada del octree (reusa el MC probado del
     // proyecto). Uniforme = sin T-junctions = WATERTIGHT garantizado (sin grietas, en ningún caso). Pierde
     // la ventaja adaptativa de "grande = pocos triángulos", pero cierra siempre. Verts en espacio LOCAL.
+    // CellScale > 1 = grilla MÁS GRUESA (muestrea con celda × CellScale): ~CellScale³ menos muestras y
+    // triángulos. Para el feedback en vivo durante el arrastre (mucho más barato); al soltar se usa 1.0.
     void BuildMeshMC(TArray<FVector>& OutVerts, TArray<int32>& OutTris,
-                     TArray<FVector>& OutNormals, TArray<FColor>& OutColors) const;
+                     TArray<FVector>& OutNormals, TArray<FColor>& OutColors, float CellScale = 1.f) const;
 
     // ── Baking / persistencia (serialización del octree a bytes) ─────────────
     // Snapshot compacto del árbol para guardar (SaveGame), bakear escenografía o mandar por red.
