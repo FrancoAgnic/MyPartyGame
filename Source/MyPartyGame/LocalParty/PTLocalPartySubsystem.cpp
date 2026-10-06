@@ -68,7 +68,7 @@ namespace
     {
         FString Out;
         for (TCHAR C : In) if (C >= 32 && C != 127) Out.AppendChar(C);
-        return Out.TrimStartAndEnd().Left(16);
+        return Out.TrimStartAndEnd().Left(UPTLocalPartySubsystem::MaxNameLen);
     }
 }
 
@@ -118,6 +118,10 @@ bool UPTLocalPartySubsystem::StartServer()
         Relay->OnClientDisconnected.BindUObject(this, &UPTLocalPartySubsystem::HandleDisconnected);
         Relay->OnClientMessage.BindUObject(this, &UPTLocalPartySubsystem::HandleMessage);
         Relay->Start(RelayUrl);
+        HostKey = FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(10).ToLower();
+#if !UE_BUILD_SHIPPING
+        UE_LOG(LogPTLocalPartySub, Log, TEXT("[DEV] Clave del streamer (link privado ?h=): %s"), *HostKey);
+#endif
         Server = MoveTemp(Relay);
         bOnlineTransport = true;
         return true;
@@ -152,6 +156,25 @@ void UPTLocalPartySubsystem::StopServer()
     Server.Reset();
     bOnlineTransport = false;
     for (FPTPhonePlayer& P : Players) { P.bOnline = false; P.ConnId = INDEX_NONE; }
+}
+
+FString UPTLocalPartySubsystem::GetHostJoinUrl() const
+{
+    const FString Url = bOnlineTransport ? GetJoinUrl() : FString();
+    return Url.IsEmpty() ? FString() : Url + TEXT("?h=") + HostKey;
+}
+
+bool UPTLocalPartySubsystem::IsHostConnected() const
+{
+    for (const FPTPhonePlayer& P : Players) if (P.bIsHost && P.bOnline) return true;
+    return false;
+}
+
+int32 UPTLocalPartySubsystem::GetGuesserCount() const
+{
+    int32 N = 0;
+    for (const FPTPhonePlayer& P : Players) if (!P.bIsHost) ++N;
+    return N;
 }
 
 FString UPTLocalPartySubsystem::GetRoomCode() const
@@ -272,7 +295,7 @@ FPTPhonePlayer* UPTLocalPartySubsystem::FindById(int32 Id)
 
 void UPTLocalPartySubsystem::EnsurePlayerState(FPTPhonePlayer& P)
 {
-    if (P.PlayerState.IsValid()) return;
+    if (P.PlayerState.IsValid() || P.bIsHost) return; // el streamer no es jugador (esculpe la PC)
     if (APTSculptGameMode* GM = GameMode.Get())
         P.PlayerState = GM->LocalParty_AddPlayer(P.Name, P.Language, P.Color);
 }
@@ -297,7 +320,13 @@ void UPTLocalPartySubsystem::RemovePlayer(int32 Id)
 
 void UPTLocalPartySubsystem::EnsureVip()
 {
-    // El VIP (quien empieza la partida) es el primero que entró y sigue conectado.
+    // Audiencia: el único anfitrión es el streamer.
+    if (bOnlineTransport)
+    {
+        for (FPTPhonePlayer& P : Players) P.bVip = P.bIsHost;
+        return;
+    }
+    // Local: el VIP (quien empieza la partida) es el primero que entró y sigue conectado.
     bool bHasOnlineVip = false;
     for (const FPTPhonePlayer& P : Players) if (P.bVip && P.bOnline) bHasOnlineVip = true;
     if (bHasOnlineVip) return;
@@ -352,11 +381,26 @@ void UPTLocalPartySubsystem::HandleMessage(int32 ConnId, const FString& Text)
 
     if (Type == TEXT("guess"))
     {
-        if (GM && PS) GM->LocalParty_Guess(PS, Msg->GetStringField(TEXT("text")));
+        if (GM && PS && !P->bIsHost)
+            GM->LocalParty_Guess(PS, Msg->GetStringField(TEXT("text")).Left(MaxGuessLen));
     }
     else if (Type == TEXT("choose"))
     {
-        if (GM && PS) GM->LocalParty_Choose(PS, (int32)Msg->GetNumberField(TEXT("i")));
+        const int32 I = (int32)Msg->GetNumberField(TEXT("i"));
+        if (GM && P->bIsHost)  GM->LocalParty_ChooseAsHost(I);
+        else if (GM && PS)     GM->LocalParty_Choose(PS, I);
+    }
+    else if (Type == TEXT("lang"))
+    {
+        // Cambió el idioma desde el celular: las palabras le llegan en ese idioma desde ahora.
+        FString Lang = Msg->GetStringField(TEXT("lang")).ToLower().Left(2);
+        if (PTText::GetLanguageIndex(Lang) != INDEX_NONE)
+        {
+            P->Language = Lang;
+            if (PS) PS->Language = Lang;
+            if (P->bIsHost && GM)
+                if (APTPlayerState* TV = GM->GetTVPlayerState()) TV->Language = Lang;
+        }
     }
     else if (Type == TEXT("start"))
     {
@@ -388,6 +432,47 @@ void UPTLocalPartySubsystem::HandleJoin(int32 ConnId, const TSharedPtr<FJsonObje
         SendToConn(ConnId, E);
     };
 
+    // Streamer: entra con el link privado (?h=CLAVE). Hay uno solo; si vuelve a entrar, retoma.
+    const FString HostTry = Msg->GetStringField(TEXT("host"));
+    if (bOnlineTransport && !HostTry.IsEmpty() && HostTry == HostKey)
+    {
+        FPTPhonePlayer* H = Players.FindByPredicate([](const FPTPhonePlayer& X) { return X.bIsHost; });
+        if (!H)
+        {
+            FPTPhonePlayer N;
+            N.Id = NextPlayerId++;
+            N.Token = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+            N.bIsHost = true;
+            N.Color = FLinearColor(1.f, 0.72f, 0.3f, 1.f);
+            Players.Add(N);
+            H = &Players.Last();
+        }
+        else if (H->ConnId != INDEX_NONE && H->ConnId != ConnId && Server)
+        {
+            Server->Disconnect(H->ConnId);
+        }
+        H->Name = Name.IsEmpty() ? TEXT("Streamer") : Name;
+        H->Language = Lang;
+        H->ConnId = ConnId;
+        H->bOnline = true;
+        H->OfflineSince = 0.0;
+        H->LastSentState.Reset();
+        if (APTSculptGameMode* GM = GameMode.Get())
+            if (APTPlayerState* TV = GM->GetTVPlayerState()) TV->Language = Lang;
+        EnsureVip();
+        UE_LOG(LogPTLocalPartySub, Log, TEXT("Se conectó el celular del streamer (conn %d)."), ConnId);
+
+        TSharedRef<FJsonObject> W = MakeShared<FJsonObject>();
+        W->SetStringField(TEXT("t"), TEXT("welcome"));
+        W->SetNumberField(TEXT("id"), H->Id);
+        W->SetStringField(TEXT("token"), H->Token);
+        W->SetBoolField(TEXT("host"), true);
+        SendTo(*H, W);
+        OnPlayersChanged.Broadcast();
+        PushStates(true);
+        return;
+    }
+
     if (Name.IsEmpty()) { Reject(TEXT("name")); return; }
 
     // ¿Ya era jugador? (mismo celular → mismo token). Si la conexión vieja sigue viva, se reemplaza.
@@ -410,7 +495,7 @@ void UPTLocalPartySubsystem::HandleJoin(int32 ConnId, const TSharedPtr<FJsonObje
 
     if (!P)
     {
-        if (Players.Num() >= (bOnlineTransport ? MaxPlayersOnline : MaxPlayers)) { Reject(TEXT("full")); return; }
+        if (GetGuesserCount() >= (bOnlineTransport ? MaxPlayersOnline : MaxPlayers)) { Reject(TEXT("full")); return; }
         FPTPhonePlayer N;
         N.Id = NextPlayerId++;
         N.Name = Name;
@@ -493,36 +578,42 @@ FString UPTLocalPartySubsystem::BuildStateFor(const FPTPhonePlayer& Me) const
 {
     const APTSculptGameState* G = BoundGameState.Get();
     const APTSculptGameMode* GM = GameMode.Get();
-    const APTPlayerState* MyPS = Me.PlayerState.Get();
+    // El celular del streamer "es" la PC (su PlayerState) para opciones / palabra / máscara.
+    const APTPlayerState* MyPS = Me.bIsHost ? (GM ? GM->GetTVPlayerState() : nullptr) : Me.PlayerState.Get();
     const EPTTurnPhase Phase = G ? G->TurnPhase : EPTTurnPhase::WaitingForPlayers;
 
     TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
     O->SetStringField(TEXT("t"), TEXT("state"));
     O->SetStringField(TEXT("phase"), PhaseName(Phase));
+    O->SetBoolField(TEXT("audience"), bOnlineTransport);
     O->SetNumberField(TEXT("round"), G ? G->CurrentRound : 0);
     O->SetNumberField(TEXT("rounds"), G ? G->TotalRounds : 0);
     O->SetNumberField(TEXT("minPlayers"), GM ? GM->LocalParty_GetMinPlayers() : 2);
+    O->SetBoolField(TEXT("hostOnline"), IsHostConnected());
 
     float Secs = 0.f;
     if (G && Phase == EPTTurnPhase::ChoosingWord) Secs = G->GetPhaseSecondsRemaining();
     if (G && Phase == EPTTurnPhase::Drawing)      Secs = G->GetTurnSecondsRemaining();
     O->SetNumberField(TEXT("secs"), FMath::CeilToInt(Secs));
 
-    // Escultor del turno.
+    // Escultor del turno (en audiencia es la PC → se muestra como el streamer).
     const APTPlayerState* Sculptor = G ? G->CurrentSculptor : nullptr;
     const FPTPhonePlayer* SculptorRec = FindByPlayerState(Sculptor);
-    if (SculptorRec)
+    if (!SculptorRec && Sculptor && Sculptor->bIsLocalPartyTV)
+        SculptorRec = Players.FindByPredicate([](const FPTPhonePlayer& X) { return X.bIsHost; });
+    if (Sculptor)
     {
         TSharedRef<FJsonObject> S = MakeShared<FJsonObject>();
-        S->SetNumberField(TEXT("id"), SculptorRec->Id);
-        S->SetStringField(TEXT("name"), SculptorRec->Name);
+        S->SetNumberField(TEXT("id"), SculptorRec ? SculptorRec->Id : -1);
+        S->SetStringField(TEXT("name"), SculptorRec ? SculptorRec->Name : Sculptor->GetPlayerName());
         O->SetObjectField(TEXT("sculptor"), S);
     }
 
     // Máscara en el idioma de ESTE celular (al final del turno trae la palabra completa).
-    if (G && MyPS)
+    if (G)
     {
-        const int32 L = MyPS->GetLanguageIndex();
+        int32 L = PTText::GetLanguageIndex(Me.Language);
+        if (L == INDEX_NONE) L = 0;
         const FString Mask = G->MaskedWords.IsValidIndex(L) ? G->MaskedWords[L]
                            : (G->MaskedWords.Num() > 0 ? G->MaskedWords[0] : FString());
         O->SetStringField(TEXT("mask"), Mask);
@@ -546,21 +637,42 @@ FString UPTLocalPartySubsystem::BuildStateFor(const FPTPhonePlayer& Me) const
 
     TSharedRef<FJsonObject> You = MakeShared<FJsonObject>();
     You->SetBoolField(TEXT("vip"), Me.bVip);
+    You->SetBoolField(TEXT("host"), Me.bIsHost);
     You->SetBoolField(TEXT("sculptor"), bIsSculptor);
     You->SetBoolField(TEXT("guessed"), MyPS && MyPS->bHasGuessedThisTurn);
+    You->SetNumberField(TEXT("score"), (MyPS && !Me.bIsHost) ? MyPS->GameScore : 0);
     O->SetObjectField(TEXT("you"), You);
 
-    TArray<TSharedPtr<FJsonValue>> PArr;
-    for (const FPTPhonePlayer& P : Players)
+    // Jugadores (sin el streamer). Audiencia: solo el top + vos (si no, con 100 sería enorme).
+    TArray<const FPTPhonePlayer*> List;
+    for (const FPTPhonePlayer& P : Players) if (!P.bIsHost) List.Add(&P);
+    O->SetNumberField(TEXT("count"), List.Num());
+    if (bOnlineTransport)
     {
-        const APTPlayerState* PS = P.PlayerState.Get();
+        List.Sort([](const FPTPhonePlayer& A, const FPTPhonePlayer& B)
+        {
+            const int32 SA = A.PlayerState.IsValid() ? A.PlayerState->GameScore : 0;
+            const int32 SB = B.PlayerState.IsValid() ? B.PlayerState->GameScore : 0;
+            return SA > SB;
+        });
+        const bool bMeInTop = List.IndexOfByKey(&Me) < AudienceTopN;
+        TArray<const FPTPhonePlayer*> Top;
+        for (int32 i = 0; i < List.Num() && Top.Num() < AudienceTopN; ++i) Top.Add(List[i]);
+        if (!Me.bIsHost && !bMeInTop) Top.Add(&Me);
+        List = MoveTemp(Top);
+    }
+
+    TArray<TSharedPtr<FJsonValue>> PArr;
+    for (const FPTPhonePlayer* P : List)
+    {
+        const APTPlayerState* PS = P->PlayerState.Get();
         TSharedRef<FJsonObject> J = MakeShared<FJsonObject>();
-        J->SetNumberField(TEXT("id"), P.Id);
-        J->SetStringField(TEXT("name"), P.Name);
+        J->SetNumberField(TEXT("id"), P->Id);
+        J->SetStringField(TEXT("name"), P->Name);
         J->SetNumberField(TEXT("score"), PS ? PS->GameScore : 0);
         J->SetBoolField(TEXT("guessed"), PS && PS->bHasGuessedThisTurn && Phase == EPTTurnPhase::Drawing);
-        J->SetBoolField(TEXT("online"), P.bOnline);
-        J->SetStringField(TEXT("color"), ColorHex(P.Color));
+        J->SetBoolField(TEXT("online"), P->bOnline);
+        J->SetStringField(TEXT("color"), ColorHex(P->Color));
         PArr.Add(MakeShared<FJsonValueObject>(J));
     }
     O->SetArrayField(TEXT("players"), PArr);
@@ -587,6 +699,7 @@ void UPTLocalPartySubsystem::BroadcastJson(const TSharedRef<FJsonObject>& Obj)
 void UPTLocalPartySubsystem::OnChatLine(const FString& Name, const FString& Message, EPTChatType Type)
 {
     if (Type == EPTChatType::Close) return; // privado del que escribió (lo manda NotifyCloseGuess)
+    if (bOnlineTransport && Type == EPTChatType::Normal) return; // audiencia: el chat se ve en la TV / stream
     TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
     O->SetStringField(TEXT("t"), TEXT("chat"));
     O->SetStringField(TEXT("name"), Name);
@@ -622,7 +735,10 @@ void UPTLocalPartySubsystem::NotifyCloseGuess(const APTPlayerState* PS)
 
 void UPTLocalPartySubsystem::NotifyTurnStarted(const APTPlayerState* Sculptor)
 {
-    if (const FPTPhonePlayer* P = FindByPlayerState(Sculptor))
+    const FPTPhonePlayer* P = FindByPlayerState(Sculptor);
+    if (!P && Sculptor && Sculptor->bIsLocalPartyTV)
+        P = Players.FindByPredicate([](const FPTPhonePlayer& X) { return X.bIsHost; });
+    if (P)
     {
         TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
         O->SetStringField(TEXT("t"), TEXT("buzz"));

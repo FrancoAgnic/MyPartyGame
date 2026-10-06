@@ -956,7 +956,9 @@ void UPTGameplayHUDWidget::RefreshTick()
     const bool bMenuOpen    = PC && PC->IsEscapeMenuOpen();
     const bool bColorPicker = PC && PC->IsColorPickerOpen();
     const bool bWantUI = bChatOpen || bGameOver || bMenuOpen || bColorPicker ||
-                         (bSculptor && G->TurnPhase == EPTTurnPhase::ChoosingWord);
+                         (bSculptor && G->TurnPhase == EPTTurnPhase::ChoosingWord) ||
+                         // Modo local / audiencia: en la espera está el panel de configuración en la TV.
+                         (G->IsLocalPartyMode() && G->TurnPhase == EPTTurnPhase::WaitingForPlayers);
     ApplyInputMode(!bWantUI);
 
     // Mientras la RUEDA DE COLOR está abierta (mantener RMB), el scroll del chat NO debe robar el
@@ -1534,6 +1536,10 @@ void UPTGameplayHUDWidget::RebuildScoreboard()
             if (!PT->bIsDevSpectator && !PT->bIsLocalPartyTV) // ni los espectadores dev ni la TV del modo local
                 Players.Add(PT);
     Players.Sort([](const APTPlayerState& A, const APTPlayerState& B){ return A.GameScore > B.GameScore; });
+    // Modo audiencia: puede haber 100 espectadores → en la TV solo el top 10.
+    if (const UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
+        if (GI->bLocalPartyMode && GI->bLocalPartyOnline && Players.Num() > 10)
+            Players.SetNum(10);
 
     const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
     auto IsFlashing = [&](APTPlayerState* PT) -> bool

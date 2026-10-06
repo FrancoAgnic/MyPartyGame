@@ -97,6 +97,13 @@ public:
 
     // ¿Esta partida corre en modo local? (flag del GameInstance, seteado al entrar desde el menú).
     bool IsLocalPartyGame() const;
+    // Modo AUDIENCIA (local por internet, para streamers): siempre esculpe el streamer (la PC / TV),
+    // la audiencia solo adivina desde el celular. El streamer elige y ve la palabra en SU celular.
+    bool IsAudienceGame() const;
+    // PlayerState de la PC (el streamer en modo audiencia). null si no hay.
+    APTPlayerState* GetTVPlayerState() const;
+    // El streamer eligió una de las 3 palabras desde su celular (modo audiencia).
+    void LocalParty_ChooseAsHost(int32 ChoiceIndex);
 
     APTPlayerState* LocalParty_AddPlayer(const FString& Name, const FString& Language, FLinearColor Color);
     void LocalParty_RemovePlayer(APTPlayerState* PS);

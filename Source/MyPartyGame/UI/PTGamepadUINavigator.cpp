@@ -182,8 +182,9 @@ bool UPTGamepadUINavigator::HandleKey(const FKey& Key, bool bDown, bool bRepeat)
     }
     if (!bMenuActive || Candidates.Num() == 0) return false;
 
-    // Start/Menu pasa de largo: el juego lo usa para abrir/cerrar la pausa.
-    if (Key == EKeys::Gamepad_Special_Right) return false;
+    // Start/Menu pasa de largo (abre/cierra la pausa) y View también (mantenerlo muestra la IP / el QR
+    // privado del streamer en la TV, que lo lee del input del juego).
+    if (Key == EKeys::Gamepad_Special_Right || Key == EKeys::Gamepad_Special_Left) return false;
 
     ConsumedDown.Add(Key);
 

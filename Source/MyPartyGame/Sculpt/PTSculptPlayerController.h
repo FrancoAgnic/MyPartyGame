@@ -203,6 +203,7 @@ public:
     UPROPERTY(EditAnywhere, Category="LocalParty")
     TSubclassOf<class UPTLocalPartyTVWidget> LocalPartyTVClass;
     UPROPERTY() class UPTLocalPartyTVWidget* LocalPartyTV = nullptr;
+    UPROPERTY() class UPTLocalPartySettingsWidget* LocalPartySettings = nullptr;
 
     // ── Joystick (gamepad) ──────────────────────────────────────────────────
     // Esquema (Xbox): stick izq. moverse · stick der. mirar · RT esculpir · LB/RB tamaño · cruceta

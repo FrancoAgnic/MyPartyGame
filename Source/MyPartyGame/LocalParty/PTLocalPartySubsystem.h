@@ -35,6 +35,9 @@ struct FPTPhonePlayer
     UPROPERTY(BlueprintReadOnly) FLinearColor Color = FLinearColor::White;
     UPROPERTY(BlueprintReadOnly) bool         bOnline = false;
     UPROPERTY(BlueprintReadOnly) bool         bVip = false; // el "anfitrión": empieza la partida / jugar de nuevo
+    // Modo audiencia: el celular del STREAMER (entró con el link privado). No juega ni adivina: elige y ve
+    // la palabra que esculpe la PC. No tiene PlayerState propio.
+    UPROPERTY(BlueprintReadOnly) bool         bIsHost = false;
 
     FString Token;
     int32   ConnId = INDEX_NONE;
@@ -77,7 +80,21 @@ public:
     int32 Port = 8787;
     // Máximo de jugadores de celular.
     int32 MaxPlayers = 12;
-    int32 MaxPlayersOnline = 24; // online (relay): amigos a distancia / audiencia chica
+    int32 MaxPlayersOnline = 99; // audiencia (relay): espectadores por sala (+1 el streamer)
+
+    // Límites de texto (también se cortan en el celular).
+    static constexpr int32 MaxNameLen  = 12;
+    static constexpr int32 MaxGuessLen = 30;
+    // Cuántos jugadores ve cada celular en modo audiencia (top + él mismo): con 100 espectadores no se
+    // manda la lista entera a cada uno varias veces por segundo.
+    int32 AudienceTopN = 10;
+
+    // ── Modo audiencia ──
+    /** Link PRIVADO del streamer (https://.../CODIGO?h=CLAVE). Vacío si no es modo audiencia / sin sala. */
+    UFUNCTION(BlueprintPure, Category="LocalParty") FString GetHostJoinUrl() const;
+    UFUNCTION(BlueprintPure, Category="LocalParty") bool IsHostConnected() const;
+    /** Jugadores de celular (sin contar al streamer). */
+    UFUNCTION(BlueprintPure, Category="LocalParty") int32 GetGuesserCount() const;
     // Segundos que se espera a un celular desconectado antes de sacarlo de la partida.
     float OfflineGraceInGame  = 90.f;
     float OfflineGraceInLobby = 20.f;
@@ -112,6 +129,7 @@ public:
 private:
     TUniquePtr<IPTPartyTransport> Server;
     bool bOnlineTransport = false;
+    FString HostKey; // clave del link privado del streamer (se genera al abrir la sala)
     int32 LocalPort = 0;
     TArray<FPTPhonePlayer> Players;
     TWeakObjectPtr<APTSculptGameMode> GameMode;

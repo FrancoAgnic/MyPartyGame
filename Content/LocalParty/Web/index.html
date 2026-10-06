@@ -70,13 +70,20 @@
   .conn { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); background: var(--warn);
     color: #fff; padding: 8px 16px; border-radius: 99px; font-weight: 700; font-size: 14px; z-index: 5; }
   .flash { animation: flash .6s ease-out; }
+  .langs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .lang { font-size: 15px; padding: 10px 6px; background: var(--card2); color: var(--ink); }
+  .lang.on { background: var(--accent); color: var(--accent-ink); }
+  .langbtn { width: auto; font-size: 13px; padding: 6px 10px; background: var(--card2); color: var(--ink); }
+  .sheet { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: flex-end; z-index: 10; }
+  .sheet .card { width: 100%; border-radius: 22px 22px 0 0; display: flex; flex-direction: column; gap: 12px; }
   @keyframes flash { from { transform: scale(1.08); } to { transform: scale(1); } }
 </style>
 </head>
 <body>
 <header id="hdr" class="hidden">
   <div class="me"><div class="dot" id="hdrDot"></div><span id="hdrName"></span></div>
-  <div class="meta" id="hdrMeta"></div>
+  <div style="display:flex;align-items:center;gap:8px"><div class="meta" id="hdrMeta"></div>
+  <button class="langbtn" id="hdrLang">🌐</button></div>
 </header>
 <main id="app"></main>
 <div class="conn hidden" id="conn"></div>
@@ -84,9 +91,10 @@
 <script>
 "use strict";
 // ── Textos (es / en). El idioma sale del navegador; el juego usa el mismo código para las palabras.
-const LANG = (navigator.language || "es").slice(0, 2).toLowerCase();
+let LANG = (localStorage.getItem("ptLang") || navigator.language || "es").slice(0, 2).toLowerCase();
 const T = {
   es: {
+    langLabel: "Idioma", hostTitle: "Eres el streamer 🎥", hostJoin: "Entrar como streamer", hostLobbyHint: "Tú esculpes con el joystick y el chat adivina. Empieza cuando quieras.", streamerWill: "El streamer va a empezar la partida", pickWord: "¡Elige la palabra!", dontSayStream: "¡Que no se vea en el stream!", playing: n => `${n} jugando`, hostMissing: "Esperando al streamer…", 
     title: "Sculpturillo", joinHint: "Escribe tu nombre para entrar a la partida",
     namePh: "Tu nombre", join: "Entrar", waiting: "Esperando jugadores",
     start: "Empezar partida", needMore: n => `Faltan ${n} jugador${n === 1 ? "" : "es"} para empezar`,
@@ -103,6 +111,7 @@ const T = {
     codePh: "Código de sala", badRoom: "Ese código no existe o la partida terminó", kicked: "Te desconectaron de la partida", nobody: "Todavía no entró nadie"
   },
   en: {
+    langLabel: "Language", hostTitle: "You're the streamer 🎥", hostJoin: "Join as streamer", hostLobbyHint: "You sculpt with the controller and chat guesses. Start whenever you want.", streamerWill: "The streamer will start the game", pickWord: "Pick the word!", dontSayStream: "Keep it off the stream!", playing: n => `${n} playing`, hostMissing: "Waiting for the streamer…", 
     title: "Sculpturillo", joinHint: "Type your name to join the game",
     namePh: "Your name", join: "Join", waiting: "Waiting for players",
     start: "Start game", needMore: n => `${n} more player${n === 1 ? "" : "s"} needed`,
@@ -119,6 +128,7 @@ const T = {
     codePh: "Room code", badRoom: "That code doesn't exist or the game ended", kicked: "You were disconnected", nobody: "Nobody has joined yet"
   },
   pt: {
+    langLabel: "Idioma", hostTitle: "Você é o streamer 🎥", hostJoin: "Entrar como streamer", hostLobbyHint: "Você esculpe com o controle e o chat adivinha. Comece quando quiser.", streamerWill: "O streamer vai começar a partida", pickWord: "Escolha a palavra!", dontSayStream: "Não deixe aparecer na live!", playing: n => `${n} jogando`, hostMissing: "Esperando o streamer…", 
     title: "Sculpturillo", joinHint: "Escreva seu nome para entrar na partida",
     namePh: "Seu nome", join: "Entrar", waiting: "Aguardando jogadores",
     start: "Começar partida", needMore: n => `Falta${n === 1 ? "" : "m"} ${n} jogador${n === 1 ? "" : "es"} para começar`,
@@ -135,6 +145,7 @@ const T = {
     codePh: "Código da sala", badRoom: "Esse código não existe ou a partida terminou", kicked: "Você foi desconectado", nobody: "Ninguém entrou ainda"
   },
   de: {
+    langLabel: "Sprache", hostTitle: "Du bist der Streamer 🎥", hostJoin: "Als Streamer beitreten", hostLobbyHint: "Du formst mit dem Controller, der Chat rät. Starte, wann du willst.", streamerWill: "Der Streamer startet das Spiel", pickWord: "Wähle das Wort!", dontSayStream: "Nicht im Stream zeigen!", playing: n => `${n} spielen`, hostMissing: "Warte auf den Streamer…", 
     title: "Sculpturillo", joinHint: "Gib deinen Namen ein, um mitzuspielen",
     namePh: "Dein Name", join: "Beitreten", waiting: "Warte auf Spieler",
     start: "Spiel starten", needMore: n => `Noch ${n} Spieler nötig`,
@@ -151,6 +162,7 @@ const T = {
     codePh: "Raumcode", badRoom: "Diesen Code gibt es nicht oder das Spiel ist vorbei", kicked: "Du wurdest getrennt", nobody: "Noch ist niemand da"
   },
   fr: {
+    langLabel: "Langue", hostTitle: "Tu es le streamer 🎥", hostJoin: "Rejoindre comme streamer", hostLobbyHint: "Tu sculptes à la manette, le chat devine. Lance quand tu veux.", streamerWill: "Le streamer va lancer la partie", pickWord: "Choisis le mot !", dontSayStream: "Que ça ne se voie pas en live !", playing: n => `${n} en jeu`, hostMissing: "En attente du streamer…", 
     title: "Sculpturillo", joinHint: "Écris ton nom pour rejoindre la partie",
     namePh: "Ton nom", join: "Rejoindre", waiting: "En attente de joueurs",
     start: "Lancer la partie", needMore: n => `Il manque ${n} joueur${n === 1 ? "" : "s"} pour commencer`,
@@ -167,6 +179,7 @@ const T = {
     codePh: "Code de la salle", badRoom: "Ce code n'existe pas ou la partie est terminée", kicked: "Tu as été déconnecté", nobody: "Personne n'a encore rejoint"
   },
   it: {
+    langLabel: "Lingua", hostTitle: "Sei lo streamer 🎥", hostJoin: "Entra come streamer", hostLobbyHint: "Tu scolpisci col controller, la chat indovina. Inizia quando vuoi.", streamerWill: "Lo streamer avvierà la partita", pickWord: "Scegli la parola!", dontSayStream: "Non farla vedere in live!", playing: n => `${n} in gioco`, hostMissing: "In attesa dello streamer…", 
     title: "Sculpturillo", joinHint: "Scrivi il tuo nome per entrare in partita",
     namePh: "Il tuo nome", join: "Entra", waiting: "In attesa di giocatori",
     start: "Inizia partita", needMore: n => `Serv${n === 1 ? "e" : "ono"} altri ${n} giocator${n === 1 ? "e" : "i"} per iniziare`,
@@ -183,8 +196,32 @@ const T = {
     codePh: "Codice stanza", badRoom: "Questo codice non esiste o la partita è finita", kicked: "Sei stato disconnesso", nobody: "Non è ancora entrato nessuno"
   }
 };
-const L = T[LANG] || T.es;
-document.documentElement.lang = T[LANG] ? LANG : "es";
+if (!T[LANG]) LANG = "es";
+let L = T[LANG];
+document.documentElement.lang = LANG;
+const LANG_NAMES = { es: "Español", en: "English", pt: "Português", de: "Deutsch", fr: "Français", it: "Italiano" };
+// Límites (el server también los corta).
+const MAX_NAME = 12, MAX_GUESS = 30;
+// Streamer (modo audiencia): entra con el link privado ?h=CLAVE.
+const HOST_KEY = new URLSearchParams(location.search).get("h") || "";
+let isHost = false, langOpen = false;
+
+function setLang(code) {
+  if (!T[code]) return;
+  LANG = code; L = T[code];
+  document.documentElement.lang = code;
+  localStorage.setItem("ptLang", code);
+  send({ t: "lang", lang: code });
+  langOpen = false;
+  if (joined && state) render(); else renderJoin();
+}
+function langPicker() {
+  return `<div class="langs">${Object.keys(LANG_NAMES).filter(c => T[c]).map(c =>
+    `<button class="lang ${c === LANG ? "on" : ""}" data-lang="${c}">${LANG_NAMES[c]}</button>`).join("")}</div>`;
+}
+function bindLangPicker(root) {
+  (root || document).querySelectorAll("[data-lang]").forEach(b => b.onclick = () => setLang(b.dataset.lang));
+}
 
 // ── Estado
 const app = document.getElementById("app");
@@ -213,7 +250,7 @@ function connect() {
   ws.onopen = () => {
     retry = 0;
     showConn(false);
-    if (myName) send({ t: "join", name: myName, token, lang: LANG });
+    if (myName || HOST_KEY) send({ t: "join", name: myName, token, lang: LANG, host: HOST_KEY });
   };
   ws.onmessage = ev => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } onMsg(m); };
   ws.onclose = () => {
@@ -233,7 +270,7 @@ setInterval(() => send({ t: "ping" }), 5000);
 function onMsg(m) {
   switch (m.t) {
     case "welcome":
-      joined = true; token = m.token; localStorage.setItem("ptToken", token);
+      joined = true; token = m.token; localStorage.setItem("ptToken", token); isHost = !!m.host;
       me = m.id; render(); break;
     case "error":
       joined = false;
@@ -277,8 +314,14 @@ function render() {
   document.getElementById("hdrName").textContent = meP.name || myName;
   document.getElementById("hdrDot").style.background = meP.color || "#888";
   document.getElementById("hdrMeta").textContent =
-    state.round > 0 && state.phase !== "lobby" ? `${L.round(state.round, state.rounds)} · ${meP.score || 0} pts` : "";
+    state.round > 0 && state.phase !== "lobby"
+      ? (you.host ? L.round(state.round, state.rounds) : `${L.round(state.round, state.rounds)} · ${you.score || 0} pts`)
+      : (state.audience ? L.playing(state.count || 0) : "");
+  document.getElementById("hdrLang").textContent = "🌐 " + LANG.toUpperCase();
+  document.getElementById("hdrLang").onclick = () => { langOpen = true; render(); };
+  if (you.host) document.getElementById("hdrName").textContent = L.hostTitle;
 
+  renderLangSheet();
   switch (state.phase) {
     case "lobby": return renderLobby(you);
     case "choosing": return renderChoosing(you);
@@ -292,20 +335,23 @@ function renderJoin(err) {
   document.getElementById("hdr").classList.add("hidden");
   app.innerHTML = `
     <h1>${L.title}</h1>
-    <p class="muted">${L.joinHint}</p>
+    <p class="muted">${HOST_KEY ? L.hostLobbyHint : L.joinHint}</p>
     <div class="card" style="display:flex;flex-direction:column;gap:12px">
-      ${RELAY ? `<input id="room" type="text" maxlength="4" autocomplete="off" autocapitalize="characters"
+      ${RELAY && !HOST_KEY ? `<input id="room" type="text" maxlength="4" autocomplete="off" autocapitalize="characters"
                  placeholder="${L.codePh}" value="${esc(room)}" style="text-transform:uppercase;letter-spacing:6px;text-align:center;font-weight:800">` : ""}
-      <input id="name" type="text" maxlength="16" autocomplete="off" placeholder="${L.namePh}" value="${esc(myName)}">
+      <input id="name" type="text" maxlength="${MAX_NAME}" autocomplete="off" placeholder="${L.namePh}" value="${esc(myName)}">
+      <p class="hint" style="text-align:left">${L.langLabel}</p>
+      ${langPicker()}
       ${err ? `<p style="color:var(--warn);text-align:center;font-weight:700">${esc(err)}</p>` : ""}
-      <button id="go">${L.join}</button>
+      <button id="go">${HOST_KEY ? L.hostJoin : L.join}</button>
     </div>`;
+  bindLangPicker(app);
   const inp = document.getElementById("name");
   const go = () => {
-    const n = inp.value.trim().slice(0, 16);
-    if (!n) { inp.focus(); return; }
+    const n = inp.value.trim().slice(0, MAX_NAME);
+    if (!n && !HOST_KEY) { inp.focus(); return; }
     myName = n; localStorage.setItem("ptName", n);
-    if (RELAY) {
+    if (RELAY && !HOST_KEY) {
       const r = (document.getElementById("room").value || "").trim().toUpperCase();
       if (!/^[A-Z]{4}$/.test(r)) { document.getElementById("room").focus(); return; }
       if (r !== room || !ws || ws.readyState > 1) {
@@ -316,7 +362,7 @@ function renderJoin(err) {
         return;
       }
     }
-    send({ t: "join", name: n, token, lang: LANG });
+    send({ t: "join", name: n, token, lang: LANG, host: HOST_KEY });
   };
   document.getElementById("go").onclick = go;
   inp.onkeydown = e => { if (e.key === "Enter") go(); };
@@ -337,15 +383,17 @@ function playerList(showScore) {
 }
 
 function renderLobby(you) {
-  const n = (state.players || []).length, need = Math.max(0, (state.minPlayers || 2) - n);
+  const n = state.count != null ? state.count : (state.players || []).length;
+  const need = Math.max(0, (state.minPlayers || 2) - n);
+  const hint = need > 0 ? L.needMore(need)
+             : you.vip ? (you.host ? L.hostLobbyHint : L.vipHint)
+             : state.audience ? (state.hostOnline ? L.streamerWill : L.hostMissing) : L.hostWill;
   app.innerHTML = `
-    <h1>${L.title}</h1>
-    <h2>${L.waiting}</h2>
+    <h1>${you.host ? L.hostTitle : L.title}</h1>
+    <h2>${state.audience ? L.playing(n) : L.waiting}</h2>
     <div class="card">${playerList(false)}</div>
-    ${you.vip ? `
-      <button id="start" ${need > 0 ? "disabled" : ""}>${L.start}</button>
-      <p class="hint">${need > 0 ? L.needMore(need) : L.vipHint}</p>`
-    : `<p class="hint">${need > 0 ? L.needMore(need) : L.hostWill}</p>`}`;
+    ${you.vip ? `<button id="start" ${need > 0 ? "disabled" : ""}>${L.start}</button>` : ""}
+    <p class="hint">${hint}</p>`;
   const b = document.getElementById("start");
   if (b) b.onclick = () => send({ t: "start" });
 }
@@ -354,9 +402,9 @@ function renderChoosing(you) {
   const sc = state.sculptor || {};
   if (you.sculptor) {
     app.innerHTML = `
-      <div class="big-emoji">🎮</div>
-      <h1>${L.yourTurn}</h1>
-      <p class="muted">${L.grabPad}</p>
+      <div class="big-emoji">${you.host ? "🎥" : "🎮"}</div>
+      <h1>${you.host ? L.pickWord : L.yourTurn}</h1>
+      ${you.host ? "" : `<p class="muted">${L.grabPad}</p>`}
       <div class="timer" id="timer"></div>
       <h2>${L.chooseWord}</h2>
       <div class="choices">${(state.choices || []).map((w, i) =>
@@ -366,7 +414,7 @@ function renderChoosing(you) {
     app.innerHTML = `
       <div class="big-emoji">🗿</div>
       <h2>${L.isChoosing(esc(sc.name))}</h2>
-      <p class="muted">${L.passPad(esc(sc.name))}</p>
+      ${state.audience ? "" : `<p class="muted">${L.passPad(esc(sc.name))}</p>`}
       <div class="timer" id="timer"></div>
       <div class="card">${playerList(true)}</div>`;
   }
@@ -380,7 +428,7 @@ function renderDrawing(you) {
       <div class="card" style="display:flex;flex-direction:column;gap:8px">
         <p class="muted">${L.sculptThis}</p>
         <div class="word">${esc(state.word)}</div>
-        <p class="hint">${L.dontSay}</p>
+        <p class="hint">${you.host ? L.dontSayStream : L.dontSay}</p>
       </div>
       <div class="card">${playerList(true)}</div>
       <div class="card chat" id="chat"></div>`;
@@ -391,7 +439,7 @@ function renderDrawing(you) {
       ${banner ? `<div class="banner ${banner.kind} flash">${esc(banner.text)}${banner.sub ? `<div style="font-size:16px;margin-top:4px">${esc(banner.sub)}</div>` : ""}</div>` : ""}
       ${you.guessed ? `<p class="muted">${L.waitOthers}</p>` : `
         <div class="row">
-          <input id="guess" type="text" maxlength="40" autocomplete="off" autocapitalize="off" placeholder="${L.guessPh}">
+          <input id="guess" type="text" maxlength="${MAX_GUESS}" autocomplete="off" autocapitalize="off" placeholder="${L.guessPh}">
           <button id="send">${L.send}</button>
         </div>`}
       <div class="card chat" id="chat"></div>
@@ -434,6 +482,15 @@ function renderGameOver(you) {
   const a = document.getElementById("again"), b = document.getElementById("menu");
   if (a) a.onclick = () => send({ t: "again" });
   if (b) b.onclick = () => send({ t: "menu" });
+}
+
+function renderLangSheet() {
+  let sh = document.getElementById("langSheet");
+  if (!langOpen) { if (sh) sh.remove(); return; }
+  if (!sh) { sh = document.createElement("div"); sh.id = "langSheet"; sh.className = "sheet"; document.body.appendChild(sh); }
+  sh.innerHTML = `<div class="card"><h2>${L.langLabel}</h2>${langPicker()}</div>`;
+  sh.onclick = e => { if (e.target === sh) { langOpen = false; renderLangSheet(); } };
+  bindLangPicker(sh);
 }
 
 function renderChat() {
