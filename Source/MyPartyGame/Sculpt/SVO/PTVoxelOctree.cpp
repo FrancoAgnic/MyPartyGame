@@ -290,6 +290,30 @@ void FPTVoxelOctree::EditFieldNode(FPTOctreeNode& Node, const FVector& NodeMin, 
     const FBox NodeBox(NodeMin, NodeMin + FVector(NodeSize));
     if (!NodeBox.Intersect(WorldBounds)) return; // el AABB de la shape no toca el nodo
 
+    // ── Refinamiento en BANDA DE SUPERFICIE ──────────────────────────────────────────────
+    // Si todo el nodo está LEJOS de la superficie de la forma (completamente adentro o afuera), no hace
+    // falta bajar a celdas finas: lo resolvemos de una a ESTA resolución. Cota: una SDF real es 1-Lipschitz,
+    // así que |SDF(centro)| > media-diagonal ⇒ el nodo entero tiene el mismo signo. Usamos un margen
+    // GENEROSO (las SDF de algunas formas son aproximadas) → solo saltea lo que está MUY lejos del borde;
+    // la cáscara cercana a la superficie se sigue refinando igual (sin huecos ni pérdida de forma).
+    if (bNarrowBandEdit)
+    {
+        const FVector C  = NodeMin + FVector(NodeSize * 0.5f);
+        const float   dC = SDF(C);
+        const float   Safe = NodeSize * 1.9f; // ~2.2× la media-diagonal (0.87·NodeSize) de colchón
+        if (dC < -Safe) return; // nodo ENTERO fuera de la forma → el sello no lo toca (Add y Erase: no-op)
+        if (dC >  Safe)
+        {
+            // Nodo ENTERO dentro de la forma → sólido (Add) / aire (Erase) a ESTA resolución, SIN recorrer
+            // ni crear celdas finas adentro. Si tenía detalle fino, la brocha grande lo tapa (igual que el
+            // colapso de abajo). Ampliamos el bounds de balance para regradar la orilla contra los vecinos.
+            PendingBalanceBounds += FBox(NodeMin - FVector(NodeSize), NodeMin + FVector(NodeSize * 2.f));
+            if (!Node.IsLeaf()) CollapseToLeaf(Node);
+            WriteCorners(Node, NodeMin, NodeSize, bAdd, PaintColor, SDF);
+            return;
+        }
+    }
+
     if (Node.IsLeaf())
     {
         // Refining a leaf also changes the siblings outside the brush AABB.

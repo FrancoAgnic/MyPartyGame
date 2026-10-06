@@ -135,6 +135,12 @@ public:
     int32   GetMaxDepth() const { return MaxDepth; }
     float   MinCellSize() const { return RootSize / (float)(1 << MaxDepth); }
 
+    // Refinamiento en BANDA DE SUPERFICIE: al editar, saltear los subárboles que están completamente
+    // ADENTRO o completamente AFUERA de la forma del sello (lejos de su superficie), en vez de recorrer
+    // todo el volumen de la brocha. Baja el costo de un sello de O(volumen) a ~O(superficie) → brocha
+    // grande sobre modelo detallado deja de costar ~12 ms. true por defecto; toggle para A/B test.
+    bool bNarrowBandEdit = true;
+
 private:
     FVector Origin = FVector::ZeroVector;
     float   RootSize = 1024.f;

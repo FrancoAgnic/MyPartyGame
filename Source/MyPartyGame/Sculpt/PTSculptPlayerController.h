@@ -407,6 +407,7 @@ public:
     UFUNCTION(Exec) void PTLOD();               // DEV: prende/apaga el LOD real de props (para verlo en el editor)
     UFUNCTION(Exec) void PTLODDebug();          // DEV: overlay del LOD (cilindro + color por etapa + tris)
     UFUNCTION(Exec) void PTPropStats();         // DEV: diagnóstico de props (assets/instancias/triángulos/memoria)
+    UFUNCTION(Exec) void PTNarrowBand();        // DEV: togglea el refinamiento en banda de superficie (A/B del costo de sello)
     UFUNCTION(Exec) void PTGuessPreview();      // DEV/TikTok "¿adivinás?": el escultor ve SU palabra CON FILTRO
                                                 //   (máscara + letras revelándose), como un adivinador, mientras esculpe
 

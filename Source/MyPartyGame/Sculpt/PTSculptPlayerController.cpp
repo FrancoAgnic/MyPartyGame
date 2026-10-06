@@ -600,6 +600,18 @@ void APTSculptPlayerController::PTPropStats()
     }
 }
 
+void APTSculptPlayerController::PTNarrowBand()
+{
+    // DEV: prende/apaga el refinamiento en banda de superficie (para comparar el costo del sello y descartar
+    // que deje huecos). Afecta al volumen de esculpido activo.
+    if (!Volume) { UE_LOG(LogTemp, Warning, TEXT("[PTNarrowBand] No hay volumen de esculpido.")); return; }
+    Volume->bSculptNarrowBand = !Volume->bSculptNarrowBand;
+    const FString Msg = FString::Printf(TEXT("[PTNarrowBand] Banda de superficie: %s"),
+        Volume->bSculptNarrowBand ? TEXT("ON") : TEXT("OFF"));
+    UE_LOG(LogTemp, Log, TEXT("%s"), *Msg);
+    if (GEngine) GEngine->AddOnScreenDebugMessage(918275, 4.f, FColor(255, 230, 140), Msg);
+}
+
 void APTSculptPlayerController::SetupInputComponent()
 {
     Super::SetupInputComponent();
