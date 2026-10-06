@@ -1,7 +1,6 @@
 #include "PTLocalPartyTVWidget.h"
 #include "PTLocalPartySubsystem.h"
 #include "PTQRCode.h"
-#include "../PTGamepad.h"
 #include "PTSculptGameState.h"
 #include "PTSculptGameMode.h"
 #include "PTSculptPlayerController.h"
@@ -158,21 +157,6 @@ void UPTLocalPartyTVWidget::BuildTree()
     CornerText = MakeText(16, Ink, true);
     CornerPanel->SetContent(CornerText);
 
-    // ── Ayuda de controles del joystick (mientras se esculpe) ───────────────
-    PadPanel = MakePanel(PanelColor, 12.f, FMargin(14.f, 8.f));
-    if (UOverlaySlot* S = Root->AddChildToOverlay(PadPanel))
-    {
-        S->SetHorizontalAlignment(HAlign_Center);
-        S->SetVerticalAlignment(VAlign_Bottom);
-        S->SetPadding(FMargin(0.f, 0.f, 0.f, 60.f)); // arriba de la URL chica (arriba está el reloj)
-    }
-    PadText = MakeText(15, Ink, false, /*bWrap=*/true);
-    PadText->SetJustification(ETextJustify::Center);
-    USizeBox* PadWidth = WidgetTree->ConstructWidget<USizeBox>();
-    PadWidth->SetMaxDesiredWidth(820.f); // la lista es larga: que corte en 2-3 líneas
-    PadWidth->SetContent(PadText);
-    PadPanel->SetContent(PadWidth);
-
     SetVisibility(ESlateVisibility::HitTestInvisible); // nunca roba el mouse
 }
 
@@ -279,9 +263,6 @@ void UPTLocalPartyTVWidget::Refresh()
     Show(CornerPanel, !bLobby && bServerOk);
     if (CornerText) CornerText->SetText(FText::FromString(Fmt(TEXT("LP_JOIN_SMALL"), DisplayAddress(Url, bReveal))));
 
-    Show(PadPanel, Phase == EPTTurnPhase::Drawing);
-    // Con los botones ACTUALES (se pueden reasignar en el panel "Joystick").
-    if (PadText && Phase == EPTTurnPhase::Drawing) PadText->SetText(FText::FromString(PTGamepad::BuildHintLine()));
 }
 
 bool UPTLocalPartyTVWidget::IsRevealHeld() const

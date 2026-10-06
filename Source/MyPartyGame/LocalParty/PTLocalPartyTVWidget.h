@@ -59,8 +59,6 @@ private:
     UPROPERTY() UTextBlock*   BannerSub  = nullptr;
     UPROPERTY() UBorder*      CornerPanel = nullptr;
     UPROPERTY() UTextBlock*   CornerText = nullptr;
-    UPROPERTY() UBorder*      PadPanel   = nullptr;
-    UPROPERTY() UTextBlock*   PadText    = nullptr;
     UPROPERTY() UTexture2D*   QrTexture  = nullptr;
 
     FString QrForUrl = TEXT("?"); // distinto de cualquier URL → el primer Refresh arma el QR

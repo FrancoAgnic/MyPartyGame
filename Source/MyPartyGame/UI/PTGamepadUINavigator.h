@@ -66,6 +66,8 @@ private:
     TWeakObjectPtr<UWidget> Hovered;    // al que le mandamos OnHovered (para el OnUnhovered)
 
     bool  bUsingGamepad = false;
+    bool  bCursorHidden = false;        // escondimos el cursor del PC por estar con joystick
+    void  UpdateCursorVisibility();
     bool  bMenuActive = false;
     float RefreshAccum = 1.f;
     TSet<FKey> ConsumedDown;            // para tragarse también el "soltar" de lo que se tragó

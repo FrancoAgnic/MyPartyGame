@@ -217,6 +217,14 @@ protected:
     UPROPERTY() class UPTToolSlotWidget* ClearSlot = nullptr; // BACKSPACE (con círculo de progreso)
     UPROPERTY() class UPTToolSlotWidget* ColorSlot = nullptr; // RMB → abrir color picker
     FString CachedHintSig; // los atajos contextuales solo se rearman si cambia el contexto
+
+    // Joystick: con el último input del joystick, los keycaps del hotbar muestran SUS botones
+    // (flechas, Y, X, View...) en vez de las teclas. Cambia solo al pasar de mouse a joystick y viceversa.
+    bool bToolbarGamepad = false;
+    // Texto del keycap: tecla del teclado (Id de PTInput) o botón del joystick (Id de PTGamepad). Con
+    // joystick se anula el ícono de tecla (RMB / Backspace) para que se vea el nombre del botón.
+    FText KeyCap(const TCHAR* KeyboardId, const TCHAR* GamepadId, UTexture2D*& InOutKeyIcon) const;
+    FText KeyCap(const FKey& KeyboardKey, const TCHAR* GamepadId) const;
     // RichTextBlock: el nombre usa el estilo "name" (color); el mensaje queda en el default.
     UPROPERTY(meta=(BindWidgetOptional)) class URichTextBlock* TxtChat;    // log de chat (Auto Wrap)
     UPROPERTY(meta=(BindWidgetOptional)) UEditableTextBox* ChatInput;

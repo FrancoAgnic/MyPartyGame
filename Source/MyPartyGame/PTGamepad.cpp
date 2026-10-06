@@ -133,18 +133,6 @@ FString PTGamepad::KeyLabel(const FKey& K)
     return K.GetDisplayName().ToString();
 }
 
-FString PTGamepad::BuildHintLine()
-{
-    FString Out;
-    for (const FPTGamepadAction& A : GetActions())
-    {
-        if (A.Id == TEXT("Pause")) continue;
-        if (!Out.IsEmpty()) Out += TEXT("  ·  ");
-        Out += KeyLabel(A.Key) + TEXT(" ") + PTText::GetStr(A.LabelKey);
-    }
-    return Out;
-}
-
 float PTGamepad::LookSensitivity()
 {
     const UPTGameUserSettings* S = UPTGameUserSettings::Get();

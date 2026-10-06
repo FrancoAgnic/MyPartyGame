@@ -270,6 +270,37 @@ void UPTGamepadUINavigator::Tick(float DeltaTime)
     }
 
     UpdateHighlight(DeltaTime);
+    UpdateCursorVisibility();
+}
+
+void UPTGamepadUINavigator::UpdateCursorVisibility()
+{
+    UWorld* W = GetGameWorld();
+    APlayerController* PC = W ? W->GetFirstPlayerController() : nullptr;
+    if (!PC) return;
+
+    if (bUsingGamepad && !bCursorHidden)
+    {
+        // Con joystick no hay flecha: se esconde y se corre a la esquina (si no, el puntero quieto
+        // dejaría un botón en hover además del que tiene el foco).
+        bCursorHidden = true;
+        PC->CurrentMouseCursor = EMouseCursor::None;
+        if (bMenuActive)
+        {
+            int32 VX = 0, VY = 0;
+            PC->GetViewportSize(VX, VY);
+            if (VX > 0 && VY > 0) PC->SetMouseLocation(VX - 1, VY - 1);
+        }
+    }
+    else if (!bUsingGamepad && bCursorHidden)
+    {
+        bCursorHidden = false;
+        PC->CurrentMouseCursor = EMouseCursor::Default;
+    }
+    else if (bCursorHidden && PC->CurrentMouseCursor != EMouseCursor::None)
+    {
+        PC->CurrentMouseCursor = EMouseCursor::None; // algún widget lo restauró: mantenerlo oculto
+    }
 }
 
 bool UPTGamepadUINavigator::ComputeMenuContext() const

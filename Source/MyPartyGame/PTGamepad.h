@@ -35,9 +35,6 @@ namespace PTGamepad
     /** Nombre corto para la UI: "A", "RB", "LT", "↑"... */
     MYPARTYGAME_API FString KeyLabel(const FKey& Key);
 
-    /** Línea de ayuda "RT Esculpir · LB Achicar · ..." con los botones actuales (para la TV). */
-    MYPARTYGAME_API FString BuildHintLine();
-
     // ── Ajustes del jugador ──
     MYPARTYGAME_API float LookSensitivity();
     MYPARTYGAME_API float MoveSensitivity();
