@@ -75,6 +75,9 @@ private:
     UPROPERTY() UTextBlock* CopyText = nullptr;
     UPROPERTY() class UTexture2D* PrivateQrTexture = nullptr;
     FString PrivateQrUrl;
+    // Último título de banco escrito: solo se reescribe si cambia (si no, se pisa con la traducción
+    // automática de PTText y el texto alterna "Películas" ↔ "Movies").
+    FString ShownPackTitle = TEXT("?");
     bool    bHostQrShown = false;
     double  CopiedUntil = 0.0;
     FTimerHandle StateTimer;

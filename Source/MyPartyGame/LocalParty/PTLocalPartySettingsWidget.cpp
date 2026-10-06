@@ -189,7 +189,7 @@ void UPTLocalPartySettingsWidget::BuildStreamerSection(UVerticalBox* Col)
     ZoneSize->SetHeightOverride(200.f);
     UBorder* Zone = WidgetTree->ConstructWidget<UBorder>();
     Zone->SetBrush(FSlateRoundedBoxBrush(FLinearColor(0.f, 0.f, 0.f, 0.35f), 12.f, Red, 3.f));
-    Zone->SetPadding(FMargin(10.f));
+    Zone->SetPadding(FMargin(6.f));
     Zone->SetHorizontalAlignment(HAlign_Center);
     Zone->SetVerticalAlignment(VAlign_Center);
     ZoneSize->SetContent(Zone);
@@ -204,13 +204,18 @@ void UPTLocalPartySettingsWidget::BuildStreamerSection(UVerticalBox* Col)
         S->SetHorizontalAlignment(HAlign_Center);
         S->SetVerticalAlignment(VAlign_Center);
     }
+    // El QR va en una caja de tamaño FIJO (como el QR público): solo con la imagen, UMG la dibujaba
+    // al tamaño por defecto del brush (32 px) y no se podía escanear.
+    USizeBox* QrBox = WidgetTree->ConstructWidget<USizeBox>();
+    QrBox->SetWidthOverride(176.f);
+    QrBox->SetHeightOverride(176.f);
     PrivateQr = WidgetTree->ConstructWidget<UImage>();
-    PrivateQr->SetDesiredSizeOverride(FVector2D(176.f, 176.f)); // llena el recuadro (la textura es chica)
+    QrBox->SetContent(PrivateQr);
     PrivateQr->SetVisibility(ESlateVisibility::Collapsed);
-    if (UOverlaySlot* S = ZoneContent->AddChildToOverlay(PrivateQr))
+    if (UOverlaySlot* S = ZoneContent->AddChildToOverlay(QrBox))
     {
-        S->SetHorizontalAlignment(HAlign_Fill);
-        S->SetVerticalAlignment(VAlign_Fill);
+        S->SetHorizontalAlignment(HAlign_Center);
+        S->SetVerticalAlignment(VAlign_Center);
     }
     PrivateZone = ZoneSize;
     if (UVerticalBoxSlot* S = Sec->AddChildToVerticalBox(ZoneSize)) S->SetHorizontalAlignment(HAlign_Center);
@@ -326,8 +331,11 @@ void UPTLocalPartySettingsWidget::RefreshValues()
     if (TimeValue)    TimeValue->SetText(FText::FromString(FString::Printf(TEXT("%d s"), FMath::RoundToInt(M.TurnDuration))));
     if (RoundsValue)  RoundsValue->SetText(FText::AsNumber(M.NumRounds));
     if (RevealValue)  RevealValue->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::RoundToInt(M.RevealFraction * 100.f))));
-    if (WordsValue)   WordsValue->SetText(GI->SelectedWordPackTitle.IsEmpty() ? PTText::Get(TEXT("GS_DEFAULT"))
-                                                                              : FText::FromString(GI->SelectedWordPackTitle));
+    if (WordsValue && GI->SelectedWordPackTitle != ShownPackTitle)
+    {
+        ShownPackTitle = GI->SelectedWordPackTitle;
+        WordsValue->SetText(ShownPackTitle.IsEmpty() ? PTText::Get(TEXT("GS_DEFAULT")) : FText::FromString(ShownPackTitle));
+    }
 }
 
 void UPTLocalPartySettingsWidget::UpdateState()
@@ -348,11 +356,14 @@ void UPTLocalPartySettingsWidget::UpdateState()
     if (!bShow) { bHostQrShown = false; return; } // al irse el panel, el QR privado se oculta
     UpdateStreamerSection();
 
-    // Solo los TEXTOS (los sliders no: pisarían al jugador mientras arrastra). El banco de palabras
-    // puede haber cambiado en su propio panel.
+    // El banco de palabras puede haber cambiado en su propio panel. Se escribe SOLO si cambió: el
+    // subsistema de localización traduce el título en pantalla y reescribirlo lo hacía parpadear.
     if (const UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
-        if (WordsValue) WordsValue->SetText(GI->SelectedWordPackTitle.IsEmpty() ? PTText::Get(TEXT("GS_DEFAULT"))
-                                                                               : FText::FromString(GI->SelectedWordPackTitle));
+        if (WordsValue && GI->SelectedWordPackTitle != ShownPackTitle)
+        {
+            ShownPackTitle = GI->SelectedWordPackTitle;
+            WordsValue->SetText(ShownPackTitle.IsEmpty() ? PTText::Get(TEXT("GS_DEFAULT")) : FText::FromString(ShownPackTitle));
+        }
 
     // ¿Se puede empezar?
     const APTSculptGameMode* GM = GetWorld()->GetAuthGameMode<APTSculptGameMode>();
