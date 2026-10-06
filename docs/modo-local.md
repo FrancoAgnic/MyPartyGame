@@ -65,3 +65,39 @@ categoría *Input | Gamepad*.
   - De la PC al celular: `welcome`, `error{code}`, `state` (personalizado: solo el escultor recibe
     `choices`/`word`), `chat`, `guessed`, `close` y `buzz`.
 - El puerto por defecto es **8787**; si está ocupado prueba 8788…8791.
+
+## Menús con joystick (toda la UI)
+
+`UPTGamepadUINavigator` (`Source/MyPartyGame/UI/`) maneja **todos** los menús con joystick sin tocar
+los WBP. Mientras hay un menú en pantalla (cursor visible):
+
+| Botón | Acción |
+|---|---|
+| Cruceta (o stick izquierdo, si el personaje no puede caminar) | Mover el foco (borde dorado) |
+| A | Activar: botón, checkbox o combo. En un cuadro de texto, escribir con el teclado |
+| ← / → o LB / RB | Ajustar sliders y combos |
+| B | Volver: aprieta el botón *Back / Cerrar / Cancelar* visible o, si no hay, simula Esc |
+| Stick derecho | Scrollear listas |
+| Y (en Ajustes) | Abrir el panel *Joystick* |
+| Menu | Pausa (pasa directo al juego) |
+
+- **Controles tapados:** solo se navega a los que están realmente arriba; un hit-test de Slate
+  descarta lo que tapa un popup.
+- **Para que B funcione:** un botón de "volver" tiene que llamarse con algo como *Back*, *Close*,
+  *Cancel* o *Resume*.
+
+## Panel "Joystick"
+
+`UPTGamepadSettingsWidget` permite ajustar:
+- sensibilidad de la cámara;
+- velocidad al moverse;
+- zona muerta del stick;
+- invertir el eje Y;
+- **reasignar cada acción**: A sobre la acción y después el botón nuevo; si ese botón ya lo usaba
+  otra acción, se intercambian.
+
+Se guarda en `GameUserSettings.ini`, y los cambios valen al instante, incluso en plena partida.
+Se abre desde Ajustes (botón `GamepadButton` o Y) o con el comando `PTJoystick`.
+
+**Para probar sin joystick:** lanza con `-PTCmdFile` y escribe comandos en `Saved/PTCommands.txt`,
+por ejemplo `PTPadKey Gamepad_DPad_Down`. Esto queda desactivado en Shipping.
