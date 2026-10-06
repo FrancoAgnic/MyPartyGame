@@ -73,11 +73,15 @@
   .logo { display: block; width: min(320px, 82%); height: auto; margin: 8px auto 0; }
   .flag { width: 22px; height: auto; border-radius: 3px; vertical-align: -3px; margin-right: 6px; }
   .lang .flag { width: 18px; margin-right: 5px; }
-  footer { padding: 14px 16px 22px; text-align: center; }
+  footer { padding: 14px 16px 22px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
   .steam { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 99px;
     background: #171a21; color: #c7d5e0; text-decoration: none; font-weight: 700; font-size: 14px; }
   .steam:active { transform: scale(.97); }
   .steam svg { width: 20px; height: 20px; fill: currentColor; }
+  .studio { display: inline-flex; align-items: center; gap: 8px; padding: 5px 16px; border-radius: 99px;
+    background: #171a21; color: #c7c2d9; text-decoration: none; font-size: 13px; font-weight: 600; }
+  .studio:active { transform: scale(.97); }
+  .studio img { height: 28px; width: auto; display: block; }
   .langs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .lang { font-size: 14px; padding: 10px 4px; background: var(--card2); color: var(--ink); white-space: nowrap; }
   .lang.on { background: var(--accent); color: var(--accent-ink); }
@@ -98,6 +102,9 @@
   <a class="steam" id="steamLink" href="https://store.steampowered.com/app/5114580/Sculpturillo/" target="_blank" rel="noopener">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.727L.436 15.27C1.862 20.307 6.486 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.605 0 11.979 0zM7.54 18.21l-1.473-.61c.262.543.714.999 1.314 1.25 1.297.539 2.793-.076 3.332-1.375.263-.63.264-1.319.005-1.949s-.75-1.121-1.377-1.383c-.624-.26-1.29-.249-1.878-.03l1.523.63c.956.4 1.409 1.5 1.009 2.455-.397.957-1.497 1.41-2.454 1.012H7.54zm11.415-9.303c0-1.662-1.353-3.015-3.015-3.015-1.665 0-3.015 1.353-3.015 3.015 0 1.665 1.35 3.015 3.015 3.015 1.663 0 3.015-1.35 3.015-3.015zm-5.273-.005c0-1.252 1.013-2.266 2.265-2.266 1.249 0 2.266 1.014 2.266 2.266 0 1.251-1.017 2.265-2.266 2.265-1.253 0-2.265-1.014-2.265-2.265z"/></svg><span id="steamText">Sculpturillo en Steam</span>
   </a>
+  <a class="studio" id="studioLink" href="https://svoltanic.com/en" target="_blank" rel="noopener">
+    <span id="studioText">Conoce a</span><img src="/assets/svoltanic.png" alt="Svoltanic">
+  </a>
 </footer>
 <div class="conn hidden" id="conn"></div>
 
@@ -107,7 +114,7 @@
 let LANG = (localStorage.getItem("ptLang") || navigator.language || "es").slice(0, 2).toLowerCase();
 const T = {
   es: {
-    steamLink: "Sculpturillo en Steam", langLabel: "Idioma", hostTitle: "Eres el streamer 🎥", hostJoin: "Entrar como streamer", hostLobbyHint: "Tú esculpes con el joystick y el chat adivina. Empieza cuando quieras.", streamerWill: "El streamer va a empezar la partida", pickWord: "¡Elige la palabra!", dontSayStream: "¡Que no se vea en el stream!", playing: n => `${n} jugando`, hostMissing: "Esperando al streamer…", 
+    studioLink: "Conoce a", steamLink: "Sculpturillo en Steam", langLabel: "Idioma", hostTitle: "Eres el streamer 🎥", hostJoin: "Entrar como streamer", hostLobbyHint: "Tú esculpes con el joystick y el chat adivina. Empieza cuando quieras.", streamerWill: "El streamer va a empezar la partida", pickWord: "¡Elige la palabra!", dontSayStream: "¡Que no se vea en el stream!", playing: n => `${n} jugando`, hostMissing: "Esperando al streamer…", 
     title: "Sculpturillo", joinHint: "Escribe tu nombre para entrar a la partida",
     namePh: "Tu nombre", join: "Entrar", waiting: "Esperando jugadores",
     start: "Empezar partida", needMore: n => `Faltan ${n} jugador${n === 1 ? "" : "es"} para empezar`,
@@ -124,7 +131,7 @@ const T = {
     codePh: "Código de sala", badRoom: "Ese código no existe o la partida terminó", kicked: "Te desconectaron de la partida", nobody: "Todavía no entró nadie"
   },
   en: {
-    steamLink: "Sculpturillo on Steam", langLabel: "Language", hostTitle: "You're the streamer 🎥", hostJoin: "Join as streamer", hostLobbyHint: "You sculpt with the controller and chat guesses. Start whenever you want.", streamerWill: "The streamer will start the game", pickWord: "Pick the word!", dontSayStream: "Keep it off the stream!", playing: n => `${n} playing`, hostMissing: "Waiting for the streamer…", 
+    studioLink: "Meet", steamLink: "Sculpturillo on Steam", langLabel: "Language", hostTitle: "You're the streamer 🎥", hostJoin: "Join as streamer", hostLobbyHint: "You sculpt with the controller and chat guesses. Start whenever you want.", streamerWill: "The streamer will start the game", pickWord: "Pick the word!", dontSayStream: "Keep it off the stream!", playing: n => `${n} playing`, hostMissing: "Waiting for the streamer…", 
     title: "Sculpturillo", joinHint: "Type your name to join the game",
     namePh: "Your name", join: "Join", waiting: "Waiting for players",
     start: "Start game", needMore: n => `${n} more player${n === 1 ? "" : "s"} needed`,
@@ -141,7 +148,7 @@ const T = {
     codePh: "Room code", badRoom: "That code doesn't exist or the game ended", kicked: "You were disconnected", nobody: "Nobody has joined yet"
   },
   pt: {
-    steamLink: "Sculpturillo na Steam", langLabel: "Idioma", hostTitle: "Você é o streamer 🎥", hostJoin: "Entrar como streamer", hostLobbyHint: "Você esculpe com o controle e o chat adivinha. Comece quando quiser.", streamerWill: "O streamer vai começar a partida", pickWord: "Escolha a palavra!", dontSayStream: "Não deixe aparecer na live!", playing: n => `${n} jogando`, hostMissing: "Esperando o streamer…", 
+    studioLink: "Conheça a", steamLink: "Sculpturillo na Steam", langLabel: "Idioma", hostTitle: "Você é o streamer 🎥", hostJoin: "Entrar como streamer", hostLobbyHint: "Você esculpe com o controle e o chat adivinha. Comece quando quiser.", streamerWill: "O streamer vai começar a partida", pickWord: "Escolha a palavra!", dontSayStream: "Não deixe aparecer na live!", playing: n => `${n} jogando`, hostMissing: "Esperando o streamer…", 
     title: "Sculpturillo", joinHint: "Escreva seu nome para entrar na partida",
     namePh: "Seu nome", join: "Entrar", waiting: "Aguardando jogadores",
     start: "Começar partida", needMore: n => `Falta${n === 1 ? "" : "m"} ${n} jogador${n === 1 ? "" : "es"} para começar`,
@@ -158,7 +165,7 @@ const T = {
     codePh: "Código da sala", badRoom: "Esse código não existe ou a partida terminou", kicked: "Você foi desconectado", nobody: "Ninguém entrou ainda"
   },
   de: {
-    steamLink: "Sculpturillo auf Steam", langLabel: "Sprache", hostTitle: "Du bist der Streamer 🎥", hostJoin: "Als Streamer beitreten", hostLobbyHint: "Du formst mit dem Controller, der Chat rät. Starte, wann du willst.", streamerWill: "Der Streamer startet das Spiel", pickWord: "Wähle das Wort!", dontSayStream: "Nicht im Stream zeigen!", playing: n => `${n} spielen`, hostMissing: "Warte auf den Streamer…", 
+    studioLink: "Entdecke", steamLink: "Sculpturillo auf Steam", langLabel: "Sprache", hostTitle: "Du bist der Streamer 🎥", hostJoin: "Als Streamer beitreten", hostLobbyHint: "Du formst mit dem Controller, der Chat rät. Starte, wann du willst.", streamerWill: "Der Streamer startet das Spiel", pickWord: "Wähle das Wort!", dontSayStream: "Nicht im Stream zeigen!", playing: n => `${n} spielen`, hostMissing: "Warte auf den Streamer…", 
     title: "Sculpturillo", joinHint: "Gib deinen Namen ein, um mitzuspielen",
     namePh: "Dein Name", join: "Beitreten", waiting: "Warte auf Spieler",
     start: "Spiel starten", needMore: n => `Noch ${n} Spieler nötig`,
@@ -175,7 +182,7 @@ const T = {
     codePh: "Raumcode", badRoom: "Diesen Code gibt es nicht oder das Spiel ist vorbei", kicked: "Du wurdest getrennt", nobody: "Noch ist niemand da"
   },
   fr: {
-    steamLink: "Sculpturillo sur Steam", langLabel: "Langue", hostTitle: "Tu es le streamer 🎥", hostJoin: "Rejoindre comme streamer", hostLobbyHint: "Tu sculptes à la manette, le chat devine. Lance quand tu veux.", streamerWill: "Le streamer va lancer la partie", pickWord: "Choisis le mot !", dontSayStream: "Que ça ne se voie pas en live !", playing: n => `${n} en jeu`, hostMissing: "En attente du streamer…", 
+    studioLink: "Découvre", steamLink: "Sculpturillo sur Steam", langLabel: "Langue", hostTitle: "Tu es le streamer 🎥", hostJoin: "Rejoindre comme streamer", hostLobbyHint: "Tu sculptes à la manette, le chat devine. Lance quand tu veux.", streamerWill: "Le streamer va lancer la partie", pickWord: "Choisis le mot !", dontSayStream: "Que ça ne se voie pas en live !", playing: n => `${n} en jeu`, hostMissing: "En attente du streamer…", 
     title: "Sculpturillo", joinHint: "Écris ton nom pour rejoindre la partie",
     namePh: "Ton nom", join: "Rejoindre", waiting: "En attente de joueurs",
     start: "Lancer la partie", needMore: n => `Il manque ${n} joueur${n === 1 ? "" : "s"} pour commencer`,
@@ -192,7 +199,7 @@ const T = {
     codePh: "Code de la salle", badRoom: "Ce code n'existe pas ou la partie est terminée", kicked: "Tu as été déconnecté", nobody: "Personne n'a encore rejoint"
   },
   it: {
-    steamLink: "Sculpturillo su Steam", langLabel: "Lingua", hostTitle: "Sei lo streamer 🎥", hostJoin: "Entra come streamer", hostLobbyHint: "Tu scolpisci col controller, la chat indovina. Inizia quando vuoi.", streamerWill: "Lo streamer avvierà la partita", pickWord: "Scegli la parola!", dontSayStream: "Non farla vedere in live!", playing: n => `${n} in gioco`, hostMissing: "In attesa dello streamer…", 
+    studioLink: "Scopri", steamLink: "Sculpturillo su Steam", langLabel: "Lingua", hostTitle: "Sei lo streamer 🎥", hostJoin: "Entra come streamer", hostLobbyHint: "Tu scolpisci col controller, la chat indovina. Inizia quando vuoi.", streamerWill: "Lo streamer avvierà la partita", pickWord: "Scegli la parola!", dontSayStream: "Non farla vedere in live!", playing: n => `${n} in gioco`, hostMissing: "In attesa dello streamer…", 
     title: "Sculpturillo", joinHint: "Scrivi il tuo nome per entrare in partita",
     namePh: "Il tuo nome", join: "Entra", waiting: "In attesa di giocatori",
     start: "Inizia partita", needMore: n => `Serv${n === 1 ? "e" : "ono"} altri ${n} giocator${n === 1 ? "e" : "i"} per iniziare`,
@@ -229,9 +236,18 @@ function setLang(code) {
   langOpen = false;
   if (joined && state) render(); else renderJoin();
 }
+// UTM: para ver en las estadísticas (web de Svoltanic y Steam) cuánta gente llega desde el juego.
 function updateSteam() {
+  const UTM = `utm_source=sculpturillo&utm_medium=${RELAY ? "audience" : "local"}&utm_campaign=phone`;
   const t = document.getElementById("steamText");
   if (t) t.textContent = L.steamLink;
+  const st = document.getElementById("steamLink");
+  if (st) st.href = `https://store.steampowered.com/app/5114580/Sculpturillo/?${UTM}`;
+  // La web de Svoltanic tiene español e inglés: el resto de los idiomas va a la versión en inglés.
+  const sv = document.getElementById("studioLink");
+  if (sv) sv.href = `https://svoltanic.com/${LANG === "es" ? "es" : "en"}?${UTM}`;
+  const sx = document.getElementById("studioText");
+  if (sx) sx.textContent = L.studioLink;
 }
 function langPicker() {
   return `<div class="langs">${Object.keys(LANG_NAMES).filter(c => T[c]).map(c =>
