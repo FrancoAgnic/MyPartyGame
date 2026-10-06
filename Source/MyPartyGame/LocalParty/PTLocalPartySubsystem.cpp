@@ -99,7 +99,16 @@ bool UPTLocalPartySubsystem::StartServer()
         // URL del relay: Config/DefaultGame.ini → [LocalParty] RelayUrl=wss://play.tudominio.com
         FString RelayUrl;
         GConfig->GetString(TEXT("LocalParty"), TEXT("RelayUrl"), RelayUrl, GGameIni);
-        if (RelayUrl.IsEmpty())
+        RelayUrl.TrimStartAndEndInline();
+        RelayUrl.TrimQuotesInline();
+        // Sin esquema (o cortado a "wss:" por un "//" sin comillas en el .ini) → asumir wss://host.
+        if (!RelayUrl.Contains(TEXT("://")))
+        {
+            RelayUrl.RemoveFromStart(TEXT("wss:"));
+            RelayUrl.RemoveFromStart(TEXT("ws:"));
+            if (!RelayUrl.IsEmpty()) RelayUrl = TEXT("wss://") + RelayUrl;
+        }
+        if (RelayUrl.IsEmpty() || RelayUrl == TEXT("wss://"))
         {
             UE_LOG(LogPTLocalPartySub, Error, TEXT("Modo online: falta RelayUrl en [LocalParty] de DefaultGame.ini."));
             return false;
