@@ -78,6 +78,11 @@ public:
     UFUNCTION(BlueprintCallable, Category="LocalParty") void ExitLocalParty();
     UFUNCTION() void DoEnterLocalPartyTravel();
 
+    // Consola: abre el panel de configuración del joystick (sensibilidad / botones).
+    UFUNCTION(Exec) void PTJoystick();
+    // DEV: simula un botón del joystick (p. ej. "PTPadKey Gamepad_DPad_Down") para probar la navegación sin uno.
+    UFUNCTION(Exec) void PTPadKey(const FString& KeyName);
+
     // Mapa y GameMode del modo local (editables en BP_GameInstance por si cambian de lugar).
     UPROPERTY(EditAnywhere, Category="LocalParty") FString LocalPartyLevel = TEXT("/Game/Template/levels/Lvl-01");
     UPROPERTY(EditAnywhere, Category="LocalParty") FString LocalPartyGameMode = TEXT("/Game/Template/Character/BP_SculptGameMode.BP_SculptGameMode_C");

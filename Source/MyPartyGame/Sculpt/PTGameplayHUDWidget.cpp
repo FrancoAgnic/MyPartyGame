@@ -1501,7 +1501,9 @@ void UPTGameplayHUDWidget::RebuildScoreboard()
 
     // Firma del estado visible: solo reconstruimos las filas si algo cambió (no cada tick). Incluye el
     // flash "+N" para que el marcador se rearme cuando aparece Y cuando se vence (y así ocultarlo).
-    FString Sig;
+    // Arranca con un prefijo: con 0 jugadores (modo local, nadie entró aún) la firma vacía coincidía con
+    // la inicial y nunca se limpiaban las filas de EJEMPLO del WBP ("PlayerName 12").
+    FString Sig = TEXT("#");
     for (APTPlayerState* PT : Players)
         Sig += FString::Printf(TEXT("%s:%d:%d:%d:%d:%s|"), *NameFor(PT),
                                PT->GameScore, PT == G->CurrentSculptor ? 1 : 0, IsFlashing(PT) ? 1 : 0,

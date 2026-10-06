@@ -68,6 +68,9 @@ protected:
 
     UPROPERTY(meta = (BindWidget)) UButton* ApplyButton;
     UPROPERTY(meta = (BindWidgetOptional)) UButton* BackButton; // opcional: se cierra con Esc
+    // Abre el panel "Joystick" (UPTGamepadSettingsWidget). Si el WBP no lo trae, se crea al lado de
+    // ApplyButton copiando su estilo. Con el joystick también se abre con Y.
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* GamepadButton;
 
     // Checkbox de sincronización vertical (VSync). Crear un CheckBox llamado "VSyncCheckBox" en el WBP.
     UPROPERTY(meta = (BindWidgetOptional)) UCheckBox* VSyncCheckBox;
@@ -84,6 +87,7 @@ protected:
     UFUNCTION() void OnHighClicked();
     UFUNCTION() void OnApplyClicked();
     UFUNCTION() void OnBackClicked();
+    UFUNCTION() void OnGamepadClicked();
     UFUNCTION() void OnVSyncChanged(bool bIsChecked);
     UFUNCTION() void OnTypingSoundChanged(bool bIsChecked);
 

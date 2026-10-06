@@ -14,61 +14,51 @@
 #include "Components/InputComponent.h"
 #include "GameFramework/Pawn.h"
 #include "InputCoreTypes.h"
+#include "../PTGamepad.h"
 
 void APTSculptPlayerController::SetupGamepadInput()
 {
     if (!InputComponent) return;
+    // Los botones salen de PTGamepad (reasignables desde el panel "Joystick"); nada hardcodeado acá.
+    const auto K = [](const TCHAR* Id) { return PTGamepad::GetKey(FName(Id)); };
+    auto Bind = [this, &K](const TCHAR* Id, void (APTSculptPlayerController::*Pressed)(),
+                           void (APTSculptPlayerController::*Released)())
+    {
+        const FKey Key = K(Id);
+        if (!Key.IsValid()) return;
+        if (Pressed)  InputComponent->BindKey(Key, IE_Pressed,  this, Pressed);
+        if (Released) InputComponent->BindKey(Key, IE_Released, this, Released);
+    };
 
-    // Esculpir (igual que el click izquierdo).
-    InputComponent->BindKey(EKeys::Gamepad_RightTrigger, IE_Pressed,  this, &APTSculptPlayerController::OnStampPressed);
-    InputComponent->BindKey(EKeys::Gamepad_RightTrigger, IE_Released, this, &APTSculptPlayerController::OnStampReleased);
+    Bind(TEXT("Sculpt"),       &APTSculptPlayerController::OnStampPressed,        &APTSculptPlayerController::OnStampReleased);
+    Bind(TEXT("BrushBigger"),  &APTSculptPlayerController::OnPadBiggerPressed,    &APTSculptPlayerController::OnPadBiggerReleased);
+    Bind(TEXT("BrushSmaller"), &APTSculptPlayerController::OnPadSmallerPressed,   &APTSculptPlayerController::OnPadSmallerReleased);
+    Bind(TEXT("ToolAdd"),      &APTSculptPlayerController::SetModeAdd,            nullptr);
+    Bind(TEXT("ToolErase"),    &APTSculptPlayerController::SetModeErase,          nullptr);
+    Bind(TEXT("ToolPaint"),    &APTSculptPlayerController::SetModePaint,          nullptr);
+    Bind(TEXT("ToolEyes"),     &APTSculptPlayerController::SetModeEyes,           nullptr);
+    Bind(TEXT("ColorPick"),    &APTSculptPlayerController::OnColorPickPressed,    &APTSculptPlayerController::OnColorPickReleased);
+    Bind(TEXT("ShapeRadial"),  &APTSculptPlayerController::OnShapeRadialPressed,  &APTSculptPlayerController::OnShapeRadialReleased);
+    Bind(TEXT("FlyUp"),        &APTSculptPlayerController::OnPadAscendPressed,    &APTSculptPlayerController::OnPadAscendReleased);
+    Bind(TEXT("FlyDown"),      &APTSculptPlayerController::OnPadDescendPressed,   &APTSculptPlayerController::OnPadDescendReleased);
+    Bind(TEXT("SurfaceSnap"),  &APTSculptPlayerController::OnSurfaceSnapPressed,  &APTSculptPlayerController::OnSurfaceSnapReleased);
+    Bind(TEXT("AxisVertical"), &APTSculptPlayerController::OnAxisVerticalPressed, &APTSculptPlayerController::OnAxisVerticalReleased);
+    Bind(TEXT("RotateShape"),  &APTSculptPlayerController::OnShapeRotatePressed,  &APTSculptPlayerController::OnShapeRotateReleased);
+    Bind(TEXT("Undo"),         &APTSculptPlayerController::OnClearAllPressed,     &APTSculptPlayerController::OnClearAllReleased);
+    Bind(TEXT("Pause"),        &APTSculptPlayerController::OnPausePressed,        nullptr);
+}
 
-    // Tamaño (igual que la rueda; con la rueda de color abierta ajusta el brillo). Mantener = repetir.
-    InputComponent->BindKey(EKeys::Gamepad_RightShoulder, IE_Pressed,  this, &APTSculptPlayerController::OnPadBiggerPressed);
-    InputComponent->BindKey(EKeys::Gamepad_RightShoulder, IE_Released, this, &APTSculptPlayerController::OnPadBiggerReleased);
-    InputComponent->BindKey(EKeys::Gamepad_LeftShoulder,  IE_Pressed,  this, &APTSculptPlayerController::OnPadSmallerPressed);
-    InputComponent->BindKey(EKeys::Gamepad_LeftShoulder,  IE_Released, this, &APTSculptPlayerController::OnPadSmallerReleased);
-
-    // Herramientas en la cruceta (mismo orden que el hotbar 1-2-3-4, en sentido horario desde arriba).
-    InputComponent->BindKey(EKeys::Gamepad_DPad_Up,    IE_Pressed, this, &APTSculptPlayerController::SetModeAdd);
-    InputComponent->BindKey(EKeys::Gamepad_DPad_Right, IE_Pressed, this, &APTSculptPlayerController::SetModeErase);
-    InputComponent->BindKey(EKeys::Gamepad_DPad_Down,  IE_Pressed, this, &APTSculptPlayerController::SetModePaint);
-    InputComponent->BindKey(EKeys::Gamepad_DPad_Left,  IE_Pressed, this, &APTSculptPlayerController::SetModeEyes);
-
-    // Menús radiales (mantener): X = color, Y = forma. El stick elige; soltar confirma.
-    InputComponent->BindKey(EKeys::Gamepad_FaceButton_Left, IE_Pressed,  this, &APTSculptPlayerController::OnColorPickPressed);
-    InputComponent->BindKey(EKeys::Gamepad_FaceButton_Left, IE_Released, this, &APTSculptPlayerController::OnColorPickReleased);
-    InputComponent->BindKey(EKeys::Gamepad_FaceButton_Top,  IE_Pressed,  this, &APTSculptPlayerController::OnShapeRadialPressed);
-    InputComponent->BindKey(EKeys::Gamepad_FaceButton_Top,  IE_Released, this, &APTSculptPlayerController::OnShapeRadialReleased);
-
-    // Vuelo: A sube, B baja (Espacio / Ctrl).
-    InputComponent->BindKey(EKeys::Gamepad_FaceButton_Bottom, IE_Pressed,  this, &APTSculptPlayerController::OnPadAscendPressed);
-    InputComponent->BindKey(EKeys::Gamepad_FaceButton_Bottom, IE_Released, this, &APTSculptPlayerController::OnPadAscendReleased);
-    InputComponent->BindKey(EKeys::Gamepad_FaceButton_Right,  IE_Pressed,  this, &APTSculptPlayerController::OnPadDescendPressed);
-    InputComponent->BindKey(EKeys::Gamepad_FaceButton_Right,  IE_Released, this, &APTSculptPlayerController::OnPadDescendReleased);
-
-    // LT (mantener): pegar el sello a la superficie (Alt). L3: plano vertical (Z). R3: rotar la forma.
-    InputComponent->BindKey(EKeys::Gamepad_LeftTrigger,        IE_Pressed,  this, &APTSculptPlayerController::OnSurfaceSnapPressed);
-    InputComponent->BindKey(EKeys::Gamepad_LeftTrigger,        IE_Released, this, &APTSculptPlayerController::OnSurfaceSnapReleased);
-    InputComponent->BindKey(EKeys::Gamepad_LeftThumbstick,     IE_Pressed,  this, &APTSculptPlayerController::OnAxisVerticalPressed);
-    InputComponent->BindKey(EKeys::Gamepad_LeftThumbstick,     IE_Released, this, &APTSculptPlayerController::OnAxisVerticalReleased);
-    InputComponent->BindKey(EKeys::Gamepad_RightThumbstick,    IE_Pressed,  this, &APTSculptPlayerController::OnShapeRotatePressed);
-    InputComponent->BindKey(EKeys::Gamepad_RightThumbstick,    IE_Released, this, &APTSculptPlayerController::OnShapeRotateReleased);
-
-    // View: deshacer (toque) / borrar todo (mantener 3 s). Menu: pausa.
-    InputComponent->BindKey(EKeys::Gamepad_Special_Left,  IE_Pressed,  this, &APTSculptPlayerController::OnClearAllPressed);
-    InputComponent->BindKey(EKeys::Gamepad_Special_Left,  IE_Released, this, &APTSculptPlayerController::OnClearAllReleased);
-    InputComponent->BindKey(EKeys::Gamepad_Special_Right, IE_Pressed,  this, &APTSculptPlayerController::OnPausePressed);
+void APTSculptPlayerController::RebuildGamepadInput()
+{
+    if (!InputComponent) return;
+    // Sacar todos los bindings de botones de joystick y volver a armarlos con la tabla actual.
+    InputComponent->KeyBindings.RemoveAll([](const FInputKeyBinding& B) { return B.Chord.Key.IsGamepadKey(); });
+    SetupGamepadInput();
 }
 
 FVector2D APTSculptPlayerController::ReadStick(const FKey& X, const FKey& Y) const
 {
-    const FVector2D Raw(GetInputAnalogKeyState(X), GetInputAnalogKeyState(Y));
-    const float Mag = Raw.Size();
-    const float Dz = FMath::Clamp(GamepadDeadZone, 0.f, 0.9f);
-    if (Mag <= Dz) return FVector2D::ZeroVector;
-    // Zona muerta RADIAL reescalada: justo afuera de la zona muerta arranca en 0 (sin salto).
-    return Raw / Mag * ((FMath::Min(Mag, 1.f) - Dz) / (1.f - Dz));
+    return PTGamepad::ReadStick(this, X, Y);
 }
 
 void APTSculptPlayerController::OnPadBiggerPressed()
@@ -173,33 +163,11 @@ void APTSculptPlayerController::TickGamepad(float DeltaTime)
         StampRotation.Normalize();
     }
 
-    // Cámara con el stick derecho (si no lo está usando un menú o la rotación).
+    // Cámara (stick der.) y movimiento (stick izq.), con la sensibilidad / invertir Y del jugador.
+    // Con un menú radial abierto los sticks apuntan, y con R3 el derecho rota la forma.
     const bool bRightBusy = bRadial || bPicker || bRotatingShape;
-    if (!bRightBusy && !R.IsZero() && !IsLookInputIgnored())
-    {
-        // Curva: más precisión cerca del centro, velocidad completa a fondo.
-        const float Mag = FMath::Pow(FMath::Min(R.Size(), 1.f), FMath::Max(1.f, GamepadLookExponent));
-        const FVector2D D = R.GetSafeNormal() * Mag;
-
-        FRotator Rot = GetControlRotation();
-        Rot.Yaw += D.X * GamepadLookYawSpeed * DeltaTime;
-        float Pitch = FRotator::NormalizeAxis(Rot.Pitch) + D.Y * (bGamepadInvertY ? -1.f : 1.f) * GamepadLookPitchSpeed * DeltaTime;
-        const float MinP = PlayerCameraManager ? PlayerCameraManager->ViewPitchMin : -89.f;
-        const float MaxP = PlayerCameraManager ? PlayerCameraManager->ViewPitchMax :  89.f;
-        Rot.Pitch = FMath::Clamp(Pitch, FMath::Max(MinP, -89.f), FMath::Min(MaxP, 89.f));
-        SetControlRotation(Rot);
-    }
-
-    // Movimiento con el stick izquierdo (no con un menú abierto: ahí el stick apunta).
-    if (!bRadial && !bPicker && !L.IsZero())
-    {
-        if (APawn* P = GetPawn())
-        {
-            const FRotator YawRot(0.f, GetControlRotation().Yaw, 0.f);
-            P->AddMovementInput(FRotationMatrix(YawRot).GetUnitAxis(EAxis::X), L.Y);
-            P->AddMovementInput(FRotationMatrix(YawRot).GetUnitAxis(EAxis::Y), L.X);
-        }
-    }
+    PTGamepad::TickMoveLook(this, DeltaTime, /*bAllowMove=*/!bRadial && !bPicker, /*bAllowLook=*/!bRightBusy,
+                            GamepadLookYawSpeed, GamepadLookPitchSpeed, GamepadLookExponent, bGamepadInvertY);
 }
 
 void APTSculptPlayerController::CreateLocalPartyTV()
@@ -211,5 +179,5 @@ void APTSculptPlayerController::CreateLocalPartyTV()
     TSubclassOf<UPTLocalPartyTVWidget> Cls = LocalPartyTVClass;
     if (!Cls) Cls = UPTLocalPartyTVWidget::StaticClass();
     LocalPartyTV = CreateWidget<UPTLocalPartyTVWidget>(this, Cls);
-    if (LocalPartyTV) LocalPartyTV->AddToViewport(15);
+    if (LocalPartyTV) LocalPartyTV->AddToViewport(1); // bajo: el menú de pausa y los popups van arriba
 }

@@ -22,6 +22,7 @@
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Blueprint/WidgetTree.h"
+#include "PTWidgetUtils.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "HAL/PlatformApplicationMisc.h"
 #include "Misc/ConfigCacheIni.h"
@@ -433,51 +434,6 @@ void UPTMainMenuWidget::OnLocalModeClicked()
 
 UButton* UPTMainMenuWidget::CreateFallbackLocalModeButton()
 {
-    // El WBP no trae LocalModeButton: crear uno igual a FindButton y ponerlo justo debajo. Solo si
-    // FindButton vive en una caja vertical/horizontal (en un Canvas no sabríamos dónde ubicarlo).
-    if (!FindButton || !WidgetTree) return nullptr;
-    UPanelWidget* Parent = FindButton->GetParent();
-    const bool bVBox = Parent && Parent->IsA<UVerticalBox>();
-    const bool bHBox = Parent && Parent->IsA<UHorizontalBox>();
-    if (!bVBox && !bHBox)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("[Menu] Sin LocalModeButton en WBP_MainMenu y FindButton no está en una Vertical/Horizontal Box: agregar el botón a mano."));
-        return nullptr;
-    }
-
-    UButton* Btn = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("LocalModeButton"));
-    Btn->SetStyle(FindButton->GetStyle());
-    Btn->SetColorAndOpacity(FindButton->GetColorAndOpacity());
-    Btn->SetBackgroundColor(FindButton->GetBackgroundColor());
-
-    UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>();
-    if (const UTextBlock* Src = Cast<UTextBlock>(FindButton->GetChildAt(0)))
-    {
-        Label->SetFont(Src->GetFont());
-        Label->SetColorAndOpacity(Src->GetColorAndOpacity());
-        Label->SetShadowOffset(Src->GetShadowOffset());
-        Label->SetShadowColorAndOpacity(Src->GetShadowColorAndOpacity());
-    }
-    Label->SetText(PTText::Get(TEXT("MENU_LOCAL_MODE")));
-    Btn->AddChild(Label);
-
-    const int32 Index = Parent->GetChildIndex(FindButton);
-    UPanelSlot* NewSlot = Parent->InsertChildAt(Index + 1, Btn);
-    if (UVerticalBoxSlot* Dst = Cast<UVerticalBoxSlot>(NewSlot))
-        if (const UVerticalBoxSlot* Src = Cast<UVerticalBoxSlot>(FindButton->Slot))
-        {
-            Dst->SetPadding(Src->GetPadding());
-            Dst->SetSize(Src->GetSize());
-            Dst->SetHorizontalAlignment(Src->GetHorizontalAlignment());
-            Dst->SetVerticalAlignment(Src->GetVerticalAlignment());
-        }
-    if (UHorizontalBoxSlot* Dst = Cast<UHorizontalBoxSlot>(NewSlot))
-        if (const UHorizontalBoxSlot* Src = Cast<UHorizontalBoxSlot>(FindButton->Slot))
-        {
-            Dst->SetPadding(Src->GetPadding());
-            Dst->SetSize(Src->GetSize());
-            Dst->SetHorizontalAlignment(Src->GetHorizontalAlignment());
-            Dst->SetVerticalAlignment(Src->GetVerticalAlignment());
-        }
-    return Btn;
+    // El WBP no trae LocalModeButton: crear uno igual a FindButton y ponerlo justo debajo.
+    return PTWidgetUtils::CloneButtonAfter(this, FindButton, TEXT("LocalModeButton"), PTText::Get(TEXT("MENU_LOCAL_MODE")));
 }

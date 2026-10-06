@@ -213,7 +213,6 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input|Gamepad") float GamepadLookYawSpeed   = 150.f; // grados/seg a fondo
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input|Gamepad") float GamepadLookPitchSpeed = 110.f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input|Gamepad") bool  bGamepadInvertY       = false;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input|Gamepad") float GamepadDeadZone       = 0.2f;
     // Curva de respuesta del stick (1 = lineal, 2 = más fino cerca del centro).
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input|Gamepad") float GamepadLookExponent   = 1.6f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input|Gamepad") float GamepadRotateSpeed    = 160.f; // rotar la forma (R3)
@@ -441,6 +440,7 @@ public:
     /** true mientras la rueda de color (mantener RMB) está activa. Igual que arriba: el HUD lo
      *  consulta para mantener el cursor visible y poder elegir color mientras se esculpe. */
     bool IsColorPickerOpen() const { return bQuickColorActive; }
+    bool IsShapeRadialOpen() const { return bShapeRadialActive; }
 
     /** Pawn cuyo POV estás espectando (nullptr si no espectás / vuelo libre). Para que el HUD muestre
      *  el hotbar del jugador que esculpe mientras lo mirás en 1ra persona. */
@@ -845,6 +845,10 @@ private:
 
     // ── Joystick (PTSculptPlayerController_Gamepad.cpp) ──
     void SetupGamepadInput();
+public:
+    /** Rearma los bindings del joystick (después de reasignar botones en el panel "Joystick"). */
+    void RebuildGamepadInput();
+private:
     void TickGamepad(float DeltaTime);
     void CreateLocalPartyTV();
     FVector2D ReadStick(const FKey& X, const FKey& Y) const; // con zona muerta radial y reescalado

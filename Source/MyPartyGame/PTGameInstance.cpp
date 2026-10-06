@@ -1,7 +1,10 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "PTGameInstance.h"
+#include "Containers/Ticker.h"
+#include "Misc/CommandLine.h"
 #include "LocalParty/PTLocalPartySubsystem.h"
+#include "UI/PTGamepadUINavigator.h"
 #include "PTTextTable.h"
 #include "PTWordBank.h"
 #include "UI/PTLoadingScreenWidget.h"
@@ -293,6 +296,20 @@ void UPTGameInstance::DoEnterLocalPartyTravel()
     const FString Options = FString::Printf(TEXT("game=%s"), *LocalPartyGameMode);
     UE_LOG(LogTemp, Log, TEXT("[LocalParty] Entrando al modo local: %s (%s)"), *LocalPartyLevel, *Options);
     UGameplayStatics::OpenLevel(this, FName(*LocalPartyLevel), /*bAbsolute=*/true, Options);
+}
+
+void UPTGameInstance::PTJoystick()
+{
+    if (UPTGamepadUINavigator* Nav = GetSubsystem<UPTGamepadUINavigator>()) Nav->OpenGamepadSettings();
+}
+
+void UPTGameInstance::PTPadKey(const FString& KeyName)
+{
+    const FKey Key(*KeyName);
+    if (!Key.IsValid() || !FSlateApplication::IsInitialized()) return;
+    const FKeyEvent E(Key, FModifierKeysState(), 0, false, 0, 0);
+    FSlateApplication::Get().ProcessKeyDownEvent(E);
+    FSlateApplication::Get().ProcessKeyUpEvent(E);
 }
 
 void UPTGameInstance::ExitLocalParty()
@@ -592,6 +609,28 @@ void UPTGameInstance::ApplyUIButtonSounds(UUserWidget* Root) const
 void UPTGameInstance::Init()
 {
     Super::Init();
+
+#if !UE_BUILD_SHIPPING
+    // DEV/automatización (opt-in con -PTCmdFile): ejecutar los comandos que aparezcan en
+    // Saved/PTCommands.txt (una línea = un comando). Sirve para probar la UI con joystick sin uno.
+    if (FParse::Param(FCommandLine::Get(), TEXT("PTCmdFile")))
+    {
+        FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateWeakLambda(this, [this](float)
+        {
+            const FString Path = FPaths::ProjectSavedDir() / TEXT("PTCommands.txt");
+            FString Text;
+            if (!FFileHelper::LoadFileToString(Text, *Path)) return true;
+            IFileManager::Get().Delete(*Path);
+            TArray<FString> Lines;
+            Text.ParseIntoArrayLines(Lines);
+            for (const FString& L : Lines)
+                if (UWorld* W = GetWorld())
+                    if (APlayerController* PC = W->GetFirstPlayerController()) PC->ConsoleCommand(L);
+                    else Exec(W, *L);
+            return true;
+        }), 0.25f);
+    }
+#endif
 
 #if WITH_GAMEPLAY_DEBUGGER
     // Blindar el GameplayDebugger (tecla ' ): si se activa, TOMA el input y rompe el gameplay (no se puede

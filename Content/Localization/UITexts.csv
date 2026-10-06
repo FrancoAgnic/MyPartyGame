@@ -309,5 +309,32 @@ LP_CHOOSING,Está eligiendo la palabra en su celular,Picking a word on their pho
 LP_SCULPTING,Esculpe: {0},Sculpting: {0},Esculpindo: {0},Formt: {0},Sculpte : {0},Scolpisce: {0}
 LP_JOIN_SMALL,Únete: {0},Join: {0},Entre: {0},Mitmachen: {0},Rejoindre : {0},Unisciti: {0}
 LP_NO_SERVER,No se pudo abrir el servidor local. Revisa que el firewall de Windows permita el juego en redes privadas.,Couldn't start the local server. Make sure Windows Firewall allows the game on private networks.,Não foi possível abrir o servidor local. Verifique se o firewall do Windows permite o jogo em redes privadas.,"Lokaler Server konnte nicht starten. Prüfe, ob die Windows-Firewall das Spiel in privaten Netzwerken erlaubt.",Impossible de démarrer le serveur local. Vérifie que le pare-feu Windows autorise le jeu sur les réseaux privés.,Impossibile avviare il server locale. Controlla che il firewall di Windows consenta il gioco sulle reti private.
-LP_PAD_CONTROLS,RT esculpir · LB/RB tamaño · Cruceta herramienta · X color · Y forma · A/B subir/bajar · View deshacer,RT sculpt · LB/RB size · D-pad tool · X color · Y shape · A/B up/down · View undo,RT esculpir · LB/RB tamanho · Direcional ferramenta · X cor · Y forma · A/B subir/descer · View desfazer,RT formen · LB/RB Größe · Steuerkreuz Werkzeug · X Farbe · Y Form · A/B hoch/runter · View rückgängig,RT sculpter · LB/RB taille · Croix outil · X couleur · Y forme · A/B monter/descendre · View annuler,RT scolpire · LB/RB dimensione · Croce strumento · X colore · Y forma · A/B su/giù · View annulla
 LP_SHOW_IP,(mantén View o la tecla I para ver la dirección completa),(hold View or the I key to show the full address),(segure View ou a tecla I para ver o endereço completo),"(View oder die Taste I halten, um die volle Adresse zu sehen)",(maintiens View ou la touche I pour voir l'adresse complète),(tieni premuto View o il tasto I per vedere l'indirizzo completo)
+GP_TITLE,Joystick,Controller,Controle,Controller,Manette,Controller
+GP_LOOK_SENS,Sensibilidad de cámara,Camera sensitivity,Sensibilidade da câmera,Kameraempfindlichkeit,Sensibilité de la caméra,Sensibilità della telecamera
+GP_MOVE_SENS,Velocidad al moverse,Movement speed,Velocidade de movimento,Bewegungsgeschwindigkeit,Vitesse de déplacement,Velocità di movimento
+GP_DEADZONE,Zona muerta del stick,Stick dead zone,Zona morta do analógico,Stick-Totzone,Zone morte du stick,Zona morta dello stick
+GP_INVERT_Y,Invertir eje Y,Invert Y axis,Inverter eixo Y,Y-Achse umkehren,Inverser l'axe Y,Inverti asse Y
+GP_BUTTONS,Botones,Buttons,Botões,Tasten,Boutons,Pulsanti
+GP_PRESS,Presiona un botón…,Press a button…,Pressione um botão…,Drücke eine Taste…,Appuie sur un bouton…,Premi un pulsante…
+GP_RESET,Restaurar,Reset,Restaurar,Zurücksetzen,Réinitialiser,Ripristina
+GP_BACK,Volver,Back,Voltar,Zurück,Retour,Indietro
+GP_HINT,A elegir · B volver · ←/→ ajustar,A select · B back · ←/→ adjust,A escolher · B voltar · ←/→ ajustar,A wählen · B zurück · ←/→ anpassen,A choisir · B retour · ←/→ ajuster,A scegli · B indietro · ←/→ regola
+GPA_SCULPT,Esculpir,Sculpt,Esculpir,Formen,Sculpter,Scolpire
+GPA_SMALLER,Achicar pincel,Smaller brush,Diminuir pincel,Pinsel kleiner,Pinceau plus petit,Pennello più piccolo
+GPA_BIGGER,Agrandar pincel,Bigger brush,Aumentar pincel,Pinsel größer,Pinceau plus grand,Pennello più grande
+GPA_TOOL_ADD,Agregar,Add,Adicionar,Hinzufügen,Ajouter,Aggiungi
+GPA_TOOL_ERASE,Borrar,Erase,Apagar,Löschen,Effacer,Cancella
+GPA_TOOL_PAINT,Pintar,Paint,Pintar,Malen,Peindre,Dipingi
+GPA_TOOL_EYES,Ojos,Eyes,Olhos,Augen,Yeux,Occhi
+GPA_COLOR,Color,Color,Cor,Farbe,Couleur,Colore
+GPA_SHAPE,Forma,Shape,Forma,Form,Forme,Forma
+GPA_FLY_UP,Subir,Up,Subir,Hoch,Monter,Su
+GPA_FLY_DOWN,Bajar,Down,Descer,Runter,Descendre,Giù
+GPA_SURFACE,Pegar a la superficie,Stick to surface,Colar na superfície,An Oberfläche haften,Coller à la surface,Attacca alla superficie
+GPA_AXIS,Plano vertical,Vertical plane,Plano vertical,Vertikale Ebene,Plan vertical,Piano verticale
+GPA_ROTATE,Rotar forma,Rotate shape,Girar forma,Form drehen,Tourner la forme,Ruota forma
+GPA_UNDO,Deshacer,Undo,Desfazer,Rückgängig,Annuler,Annulla
+GPA_PAUSE,Pausa,Pause,Pausa,Pause,Pause,Pausa
+GP_ON,Sí,On,Sim,An,Oui,Sì
+GP_OFF,No,Off,Não,Aus,Non,No
