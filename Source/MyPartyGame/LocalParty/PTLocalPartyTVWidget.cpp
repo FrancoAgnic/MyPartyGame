@@ -20,6 +20,8 @@
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
+#include "InputCoreTypes.h"
 
 namespace
 {
@@ -108,7 +110,10 @@ void UPTLocalPartyTVWidget::BuildTree()
     AddToCol(Step2, 6.f);
 
     UrlText = MakeText(UrlFontSize, FLinearColor::White, true);
-    AddToCol(UrlText, 24.f);
+    AddToCol(UrlText, 2.f);
+    RevealHint = MakeText(BodyFontSize - 6, Muted, false);
+    RevealHint->SetText(PTText::Get(TEXT("LP_SHOW_IP")));
+    AddToCol(RevealHint, 22.f);
 
     PlayersTitle = MakeText(BodyFontSize, Muted, true);
     AddToCol(PlayersTitle, 8.f);
@@ -202,7 +207,9 @@ void UPTLocalPartyTVWidget::Refresh()
         if (QrImage && QrTexture) QrImage->SetBrushFromTexture(QrTexture, /*bMatchSize=*/false);
         Show(QrImage, QrTexture != nullptr);
     }
-    if (UrlText) UrlText->SetText(FText::FromString(Url.Replace(TEXT("http://"), TEXT(""))));
+    const bool bReveal = IsRevealHeld();
+    if (UrlText) UrlText->SetText(FText::FromString(DisplayAddress(Url, bReveal)));
+    Show(RevealHint, bMaskJoinAddress && bServerOk && !bReveal);
 
     // Lista de jugadores (se rearma solo si cambió algo).
     const TArray<FPTPhonePlayer>& Players = LP->GetPlayers();
@@ -262,7 +269,31 @@ void UPTLocalPartyTVWidget::Refresh()
     }
 
     Show(CornerPanel, !bLobby && bServerOk);
-    if (CornerText) CornerText->SetText(FText::FromString(Fmt(TEXT("LP_JOIN_SMALL"), Url.Replace(TEXT("http://"), TEXT("")))));
+    if (CornerText) CornerText->SetText(FText::FromString(Fmt(TEXT("LP_JOIN_SMALL"), DisplayAddress(Url, bReveal))));
 
     Show(PadPanel, Phase == EPTTurnPhase::Drawing);
+}
+
+bool UPTLocalPartyTVWidget::IsRevealHeld() const
+{
+    const APlayerController* PC = GetOwningPlayer();
+    return PC && (PC->IsInputKeyDown(EKeys::Gamepad_Special_Left) || PC->IsInputKeyDown(EKeys::I));
+}
+
+FString UPTLocalPartyTVWidget::DisplayAddress(const FString& Url, bool bReveal) const
+{
+    FString Addr = Url.Replace(TEXT("http://"), TEXT(""));
+    if (!bMaskJoinAddress || bReveal || Addr.IsEmpty()) return Addr;
+
+    // "192.168.1.15:8787" → "192.168.•••.•••:8787": los dos primeros octetos son los de casi cualquier
+    // red de casa (no identifican nada); se tapan los dos últimos.
+    FString Host = Addr, Port;
+    Addr.Split(TEXT(":"), &Host, &Port);
+    TArray<FString> Oct;
+    Host.ParseIntoArray(Oct, TEXT("."));
+    if (Oct.Num() != 4) return TEXT("•••");
+    const FString Dots = TEXT("•••");
+    FString Out = Oct[0] + TEXT(".") + Oct[1] + TEXT(".") + Dots + TEXT(".") + Dots;
+    if (!Port.IsEmpty()) Out += TEXT(":") + Port;
+    return Out;
 }

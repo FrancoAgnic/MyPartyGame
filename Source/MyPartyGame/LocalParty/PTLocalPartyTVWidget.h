@@ -29,6 +29,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="LocalParty") int32 BodyFontSize    = 22;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="LocalParty") int32 UrlFontSize     = 34;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="LocalParty") int32 BannerFontSize  = 46;
+    // Ocultar la IP escrita (para streams/capturas): se ve "192.168.•••.•••:8787" y la completa solo
+    // mientras se mantiene View (joystick) o la tecla I. El QR siempre lleva la dirección real.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="LocalParty") bool bMaskJoinAddress = true;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="LocalParty") FLinearColor PanelColor  = FLinearColor(0.012f, 0.008f, 0.03f, 0.88f);
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="LocalParty") FLinearColor AccentColor = FLinearColor(1.f, 0.48f, 0.08f, 1.f);
 
@@ -39,12 +42,15 @@ protected:
 private:
     void BuildTree();
     void Refresh();
+    bool IsRevealHeld() const;
+    FString DisplayAddress(const FString& Url, bool bReveal) const;
     UTextBlock* MakeText(int32 Size, const FLinearColor& Color, bool bBold, bool bWrap = false);
     UBorder* MakePanel(const FLinearColor& Color, float Radius, const FMargin& InPadding);
 
     UPROPERTY() UBorder*      LobbyPanel = nullptr;
     UPROPERTY() UImage*       QrImage    = nullptr;
     UPROPERTY() UTextBlock*   UrlText    = nullptr;
+    UPROPERTY() UTextBlock*   RevealHint = nullptr;
     UPROPERTY() UTextBlock*   PlayersTitle = nullptr;
     UPROPERTY() UVerticalBox* PlayersBox = nullptr;
     UPROPERTY() UTextBlock*   StatusText = nullptr;
