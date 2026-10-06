@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "PTGameInstance.h"
+#include "LocalParty/PTLocalPartySubsystem.h"
 #include "PTTextTable.h"
 #include "PTWordBank.h"
 #include "UI/PTLoadingScreenWidget.h"
@@ -259,6 +260,50 @@ void UPTGameInstance::DoEnterMapAuthoringTravel()
     const FString Options = FString::Printf(TEXT("game=%s"), *MapAuthorGameMode);
     UE_LOG(LogTemp, Log, TEXT("[MapAuthor] Entrando a autoría: %s (%s) slug=%s"), *MapAuthorLevel, *Options, *CurrentAuthoringSlug);
     UGameplayStatics::OpenLevel(this, FName(*MapAuthorLevel), /*bAbsolute=*/true, Options);
+}
+
+// ── Modo LOCAL (party con celulares) ─────────────────────────────────────────
+
+void UPTGameInstance::EnterLocalParty()
+{
+    bLocalPartyMode = true;
+    bSoloTest = false;
+    // Levantar el servidor YA: los celulares pueden ir entrando mientras carga el mapa.
+    if (UPTLocalPartySubsystem* LP = GetSubsystem<UPTLocalPartySubsystem>()) LP->StartServer();
+
+    // Misma transición que la autoría: AnimIn sobre el menú y recién ahí se viaja.
+    if (LoadingScreenClass)
+    {
+        if (UPTLoadingScreenWidget* LS = CreateLoadingScreen(/*bStartAtLoop=*/false))
+        {
+            LS->OnCovered.AddDynamic(this, &UPTGameInstance::DoEnterLocalPartyTravel);
+            if (UWorld* W = GetWorld())
+                W->GetTimerManager().SetTimer(TransitionSafetyTimer, this, &UPTGameInstance::DoEnterLocalPartyTravel, 2.0f, false);
+            return;
+        }
+    }
+    DoEnterLocalPartyTravel();
+}
+
+void UPTGameInstance::DoEnterLocalPartyTravel()
+{
+    if (bTransitionCovering) return;
+    bTransitionCovering = true;
+    if (UWorld* W = GetWorld()) W->GetTimerManager().ClearTimer(TransitionSafetyTimer);
+    const FString Options = FString::Printf(TEXT("game=%s"), *LocalPartyGameMode);
+    UE_LOG(LogTemp, Log, TEXT("[LocalParty] Entrando al modo local: %s (%s)"), *LocalPartyLevel, *Options);
+    UGameplayStatics::OpenLevel(this, FName(*LocalPartyLevel), /*bAbsolute=*/true, Options);
+}
+
+void UPTGameInstance::ExitLocalParty()
+{
+    bLocalPartyMode = false;
+    if (UPTLocalPartySubsystem* LP = GetSubsystem<UPTLocalPartySubsystem>())
+    {
+        LP->StopServer();
+        LP->ClearPlayers();
+    }
+    UGameplayStatics::OpenLevel(this, FName(*LocalPartyMenuLevel), /*bAbsolute=*/true);
 }
 
 FString UPTGameInstance::AuthoredLevelsDir() const

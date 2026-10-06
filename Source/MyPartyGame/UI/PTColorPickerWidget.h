@@ -61,6 +61,10 @@ public:
      *  Reintenta solo si la geometría todavía no está lista (recién abierto). */
     void CenterCursorOnWheel();
 
+    /** Joystick: ubica el cursor sobre la rueda según la dirección del stick (dirección = matiz,
+     *  inclinación = saturación). Stick en (0,0) no mueve nada (se queda el color elegido). */
+    void SetCursorFromStick(FVector2D Stick);
+
 protected:
     virtual void NativeConstruct() override;
     virtual void NativeDestruct() override; // restaura el cursor de hardware al cerrar el picker

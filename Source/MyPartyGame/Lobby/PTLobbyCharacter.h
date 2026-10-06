@@ -68,6 +68,10 @@ public:
     // (APTSculptPlayerController::AcknowledgePossession), porque el input corre en el cliente.
     void ApplyGameplayMovementMode();
 
+    // Joystick (lo llama APTSculptPlayerController): subir / bajar en vuelo, igual que Espacio / Ctrl.
+    void SetGamepadAscend(bool bDown)  { if (bDown) OnJumpPressed(); else OnJumpReleased(); }
+    void SetGamepadDescend(bool bDown) { if (bDown) OnDescendPressed(); else OnDescendReleased(); }
+
 
     // Globo de chat: muestra el texto en el cartel del nombre ~2s (lo ven todos). Si
     // bGuess=true, va en verde ("adivinó la palabra") y spawnea el confetti. Lo llama

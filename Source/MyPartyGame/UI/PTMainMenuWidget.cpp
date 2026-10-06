@@ -16,6 +16,12 @@
 #include "PTLobbyGameMode.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
+#include "Components/PanelWidget.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
+#include "Blueprint/WidgetTree.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "HAL/PlatformApplicationMisc.h"
 #include "Misc/ConfigCacheIni.h"
@@ -38,6 +44,8 @@ bool UPTMainMenuWidget::Initialize()
     if (LockerButton)    LockerButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnLockerClicked);
     if (WorkshopButton)  WorkshopButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnWorkshopClicked);
     if (CreateLevelButton) CreateLevelButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnCreateLevelClicked);
+    if (!LocalModeButton)  LocalModeButton = CreateFallbackLocalModeButton();
+    if (LocalModeButton)   LocalModeButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnLocalModeClicked);
 
     // Si hay un PlayButton, arrancar en la pantalla principal (submenú Host/Find/EnterCode oculto).
     // Si el WBP todavía no tiene PlayButton, no se toca nada (comportamiento previo, todo visible).
@@ -171,6 +179,7 @@ void UPTMainMenuWidget::SetPlaySubmenuVisible(bool bVisible)
     // Pantalla "PLAY": Host/Find/EnterCode + su título + Back.
     if (HostButton)             HostButton->SetVisibility(bVisible ? Shown : Hidden);
     if (FindButton)             FindButton->SetVisibility(bVisible ? Shown : Hidden);
+    if (LocalModeButton)        LocalModeButton->SetVisibility(bVisible ? Shown : Hidden);
     if (EnterCodeButton)        EnterCodeButton->SetVisibility(bVisible ? Shown : Hidden);
     if (PlayBackButton)         PlayBackButton->SetVisibility(bVisible ? Shown : Hidden);
     if (PlaySubmenuHeaderPanel) PlaySubmenuHeaderPanel->SetVisibility(bVisible ? Shown : Hidden);
@@ -410,4 +419,65 @@ void UPTMainMenuWidget::ShowError(const FText& Msg)
     // SIEMPRE reprogramar el auto-ocultar → así ningún mensaje queda pegado para siempre.
     if (UWorld* World = GetWorld())
         World->GetTimerManager().SetTimer(ErrorTextTimerHandle, this, &UPTMainMenuWidget::HideErrorText, 3.f, false);
+}
+
+// ==========================================================================
+// Modo local (celulares + joystick)
+// ==========================================================================
+
+void UPTMainMenuWidget::OnLocalModeClicked()
+{
+    // No necesita Steam ni sesión: abre el mapa de juego standalone y los celulares se conectan por WiFi.
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>()) GI->EnterLocalParty();
+}
+
+UButton* UPTMainMenuWidget::CreateFallbackLocalModeButton()
+{
+    // El WBP no trae LocalModeButton: crear uno igual a FindButton y ponerlo justo debajo. Solo si
+    // FindButton vive en una caja vertical/horizontal (en un Canvas no sabríamos dónde ubicarlo).
+    if (!FindButton || !WidgetTree) return nullptr;
+    UPanelWidget* Parent = FindButton->GetParent();
+    const bool bVBox = Parent && Parent->IsA<UVerticalBox>();
+    const bool bHBox = Parent && Parent->IsA<UHorizontalBox>();
+    if (!bVBox && !bHBox)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[Menu] Sin LocalModeButton en WBP_MainMenu y FindButton no está en una Vertical/Horizontal Box: agregar el botón a mano."));
+        return nullptr;
+    }
+
+    UButton* Btn = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("LocalModeButton"));
+    Btn->SetStyle(FindButton->GetStyle());
+    Btn->SetColorAndOpacity(FindButton->GetColorAndOpacity());
+    Btn->SetBackgroundColor(FindButton->GetBackgroundColor());
+
+    UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>();
+    if (const UTextBlock* Src = Cast<UTextBlock>(FindButton->GetChildAt(0)))
+    {
+        Label->SetFont(Src->GetFont());
+        Label->SetColorAndOpacity(Src->GetColorAndOpacity());
+        Label->SetShadowOffset(Src->GetShadowOffset());
+        Label->SetShadowColorAndOpacity(Src->GetShadowColorAndOpacity());
+    }
+    Label->SetText(PTText::Get(TEXT("MENU_LOCAL_MODE")));
+    Btn->AddChild(Label);
+
+    const int32 Index = Parent->GetChildIndex(FindButton);
+    UPanelSlot* NewSlot = Parent->InsertChildAt(Index + 1, Btn);
+    if (UVerticalBoxSlot* Dst = Cast<UVerticalBoxSlot>(NewSlot))
+        if (const UVerticalBoxSlot* Src = Cast<UVerticalBoxSlot>(FindButton->Slot))
+        {
+            Dst->SetPadding(Src->GetPadding());
+            Dst->SetSize(Src->GetSize());
+            Dst->SetHorizontalAlignment(Src->GetHorizontalAlignment());
+            Dst->SetVerticalAlignment(Src->GetVerticalAlignment());
+        }
+    if (UHorizontalBoxSlot* Dst = Cast<UHorizontalBoxSlot>(NewSlot))
+        if (const UHorizontalBoxSlot* Src = Cast<UHorizontalBoxSlot>(FindButton->Slot))
+        {
+            Dst->SetPadding(Src->GetPadding());
+            Dst->SetSize(Src->GetSize());
+            Dst->SetHorizontalAlignment(Src->GetHorizontalAlignment());
+            Dst->SetVerticalAlignment(Src->GetVerticalAlignment());
+        }
+    return Btn;
 }

@@ -65,6 +65,24 @@ public:
     UPROPERTY(BlueprintReadWrite, Category="Match")
     bool bSoloTest = false;
 
+    // ── Modo LOCAL (party con celulares + joystick) ─────────────────────────
+    // true mientras se juega en modo local: una PC en la TV, un joystick que se pasan, y cada jugador
+    // entra desde el navegador de su celular (ver UPTLocalPartySubsystem). Lo prende EnterLocalParty y
+    // lo baja ExitLocalParty (o el subsistema, si se sale al menú por cualquier otra vía).
+    UPROPERTY(BlueprintReadOnly, Category="LocalParty")
+    bool bLocalPartyMode = false;
+
+    // Entra al modo local: levanta el servidor de celulares y abre el mapa de juego (standalone).
+    UFUNCTION(BlueprintCallable, Category="LocalParty") void EnterLocalParty();
+    // Sale del modo local: apaga el servidor, olvida a los jugadores y vuelve al menú principal.
+    UFUNCTION(BlueprintCallable, Category="LocalParty") void ExitLocalParty();
+    UFUNCTION() void DoEnterLocalPartyTravel();
+
+    // Mapa y GameMode del modo local (editables en BP_GameInstance por si cambian de lugar).
+    UPROPERTY(EditAnywhere, Category="LocalParty") FString LocalPartyLevel = TEXT("/Game/Template/levels/Lvl-01");
+    UPROPERTY(EditAnywhere, Category="LocalParty") FString LocalPartyGameMode = TEXT("/Game/Template/Character/BP_SculptGameMode.BP_SculptGameMode_C");
+    UPROPERTY(EditAnywhere, Category="LocalParty") FString LocalPartyMenuLevel = TEXT("/Game/Template/levels/MainMenu");
+
     // Abre un diálogo nativo para elegir un .csv y carga sus palabras en
     // PendingMatchSettings.CustomWords (+ bUseCustomWords=true). Formato por línea:
     // "Palabra,Categoria,Dificultad" (Dificultad: Facil/Media/Dificil o 1/2/3; categoría y

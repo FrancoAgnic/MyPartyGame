@@ -56,6 +56,20 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
     int32 GameScore = 0;
 
+    // ── Modo local (party con celulares) ────────────────────────────────────
+    // La PlayerState de la propia PC (la "TV" con el joystick). No juega: no esculpe por turno, no
+    // adivina, no aparece en el marcador. Esculpe en nombre de quien tenga el turno.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
+    bool bIsLocalPartyTV = false;
+
+    // Jugador que existe SOLO en un celular (PlayerState sin controller, creado por el GameMode).
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
+    bool bIsPhonePlayer = false;
+
+    // Color del jugador en la UI del celular y de la TV (asignado al entrar).
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
+    FLinearColor PartyColor = FLinearColor::White;
+
     // Idioma elegido por el jugador ("es", "en", "pt", ...). El cliente lo manda al servidor para
     // que el GameMode le muestre la palabra a adivinar EN SU IDIOMA (ver Server_SetLanguage).
     // Viaja el CÓDIGO y no el índice: si dos jugadores tuvieran CSV distintos, el código sigue

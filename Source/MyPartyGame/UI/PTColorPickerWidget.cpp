@@ -393,6 +393,19 @@ void UPTColorPickerWidget::CenterCursorOnWheel()
     UpdateCustomCursor(Abs, /*bOverPicker=*/true);
 }
 
+void UPTColorPickerWidget::SetCursorFromStick(FVector2D Stick)
+{
+    if (!Wheel || Stick.IsNearlyZero() || !FSlateApplication::IsInitialized()) return;
+    const FGeometry& G = Wheel->GetCachedGeometry();
+    const FVector2D Size = G.GetLocalSize();
+    if (Size.X <= 1.f || Size.Y <= 1.f) return;
+    const float Radius = FMath::Min(Size.X, Size.Y) * 0.5f * 0.97f;
+    const FVector2D S = Stick.GetSafeNormal() * FMath::Min(1.f, Stick.Size());
+    // Y del stick crece hacia arriba; Y de pantalla hacia abajo.
+    const FVector2D Local = Size * 0.5f + FVector2D(S.X, -S.Y) * Radius;
+    FSlateApplication::Get().SetCursorPos(G.LocalToAbsolute(Local));
+}
+
 void UPTColorPickerWidget::SetColor(FLinearColor NewColor)
 {
     // Descomponer a HSV para que la rueda y el slider queden coherentes.

@@ -2232,3 +2232,8 @@ void APTLobbyPlayerController::ToggleEscapeMenu(const FInputActionValue& Value)
     if (EscapeMenuWidget && !EscapeMenuWidget->IsMenuOpen())
         ApplyDioramaInputMode();
 }
+
+void APTLobbyPlayerController::PTLocal()
+{
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>()) GI->EnterLocalParty();
+}

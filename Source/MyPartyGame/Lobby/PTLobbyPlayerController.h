@@ -70,6 +70,7 @@ public:
     UFUNCTION(Exec) void PTHideNames();         // oculta/muestra los nombres flotantes
     UFUNCTION(Exec) void PTSpecSpeed(float N);  // multiplica la velocidad de la cámara
     UFUNCTION(Exec) void PTSpecSmooth(float N); // suavizado/lag de la cámara (bajo = más suave)
+    UFUNCTION(Exec) void PTLocal();             // DEV: entrar al modo local (celulares + joystick) sin el botón
     UFUNCTION(Exec) void PTSolo();              // DEV: jugar solo → marca solo y arranca la partida ya
     UFUNCTION(Exec) void PTMapMod(int32 Index); // DEV (mapas M1): monta el mod local #Index y viaja a su mapa
 

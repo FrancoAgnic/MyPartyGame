@@ -8,6 +8,7 @@
 #include "../PTWordBank.h"
 #include "../PTTextTable.h"
 #include "../Lobby/PTGameState.h"
+#include "../LocalParty/PTLocalPartySubsystem.h"
 #include "GameFramework/PlayerState.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
@@ -22,10 +23,26 @@ APTSculptGameMode::APTSculptGameMode()
     GameStateClass        = APTSculptGameState::StaticClass();
 }
 
+void APTSculptGameMode::InitGameState()
+{
+    Super::InitGameState();
+    if (APTSculptGameState* G = GS()) G->bLocalParty = IsLocalPartyGame();
+}
+
+void APTSculptGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    if (UPTLocalPartySubsystem* LP = LocalParty()) LP->UnbindGameMode(this);
+    Super::EndPlay(EndPlayReason);
+}
+
 void APTSculptGameMode::BeginPlay()
 {
     Super::BeginPlay();
     if (WordBank.Num() == 0) SeedDefaultWords();
+
+    // Modo local: levantar/enganchar el servidor de celulares. Los jugadores que ya habían entrado
+    // desde el celular reciben acá su PlayerState.
+    if (UPTLocalPartySubsystem* LP = LocalParty()) LP->BindGameMode(this);
 
     // Publicar el mapa de props elegido en el GameState (replicado) → cada máquina (host y clientes)
     // carga su propia copia local del sculpt.bin en su entorno (el PlayerController lo hace). Así NO se
@@ -57,7 +74,7 @@ TArray<APTPlayerState*> APTSculptGameMode::GetActivePlayers() const
         {
             if (APTPlayerState* PT = Cast<APTPlayerState>(PS))
             {
-                if (!PT->IsInactive() && !PT->IsOnlyASpectator() && !PT->bIsDevSpectator)
+                if (!PT->IsInactive() && !PT->IsOnlyASpectator() && !PT->bIsDevSpectator && !PT->bIsLocalPartyTV)
                     Out.Add(PT);
             }
         }
@@ -69,6 +86,14 @@ void APTSculptGameMode::PostLogin(APlayerController* NewPlayer)
 {
     Super::PostLogin(NewPlayer); // el lobby hace RestartPlayer acá → ya hay pawn
     StartPawnFlying(NewPlayer);
+
+    // Modo local: la PC es la "TV" (esculpe con el joystick por el escultor de turno, no juega).
+    if (IsLocalPartyGame() && NewPlayer && NewPlayer->IsLocalController())
+        if (APTPlayerState* PT = NewPlayer->GetPlayerState<APTPlayerState>())
+        {
+            PT->bIsLocalPartyTV = true;
+            PT->bIsHost = true;
+        }
     CheckStart();
 
     // #3 — Si este jugador ya había estado y se reconecta, restaurarle el puntaje guardado.
@@ -168,7 +193,8 @@ void APTSculptGameMode::Logout(AController* Exiting)
 int32 APTSculptGameMode::MinToStart() const
 {
     const UPTGameInstance* GI = GetGameInstance<UPTGameInstance>();
-    return (GI && GI->bSoloTest) ? 1 : MinPlayersToStart;
+    if (GI && GI->bSoloTest) return 1;
+    return IsLocalPartyGame() ? FMath::Max(1, LocalPartyMinPlayers) : MinPlayersToStart;
 }
 
 void APTSculptGameMode::SoloStart()
@@ -181,6 +207,9 @@ void APTSculptGameMode::CheckStart()
 {
     APTSculptGameState* G = GS();
     if (!G) return;
+    // Modo local: los celulares entran de a uno → no arrancar solo al llegar al mínimo; espera a que el
+    // VIP toque "Empezar" (LocalParty_RequestStart).
+    if (IsLocalPartyGame() && !bLocalStartRequested) return;
     if (G->TurnPhase == EPTTurnPhase::WaitingForPlayers &&
         GetActivePlayers().Num() >= MinToStart() &&
         !bStartScheduled)
@@ -215,6 +244,7 @@ void APTSculptGameMode::ApplyMatchSettingsFromGameInstance()
 void APTSculptGameMode::StartGame()
 {
     bStartScheduled = false;
+    bLocalStartRequested = false; // consumido: si vuelve a la espera, el VIP tiene que tocar de nuevo
 
     APTSculptGameState* G = GS();
     if (!G) return;
@@ -314,6 +344,8 @@ void APTSculptGameMode::StartChoosingPhase()
     for (const FPTWordEntry& E : CurrentChoices) ChoiceTexts.Add(E.ForLang(SculptorLang));
     if (APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(Sculptor->GetOwningController()))
         PC->Client_ReceiveWordChoices(ChoiceTexts);
+    // Modo local: el escultor elige en SU celular (las opciones viajan en su estado) → vibrarle.
+    if (UPTLocalPartySubsystem* LP = LocalParty()) LP->NotifyTurnStarted(Sculptor);
 
     UE_LOG(LogTemp, Log, TEXT("[SculptGM] Turno: esculpe '%s'. Eligiendo palabra (%d opciones)."),
            *Sculptor->GetPlayerName(), CurrentChoices.Num());
@@ -502,6 +534,7 @@ void APTSculptGameMode::RequestPlayAgain(APTPlayerState* Requester)
 void APTSculptGameMode::RequestReturnToLobby(APTPlayerState* Requester)
 {
     if (!Requester || !Requester->bIsHost) return; // solo el anfitrión decide
+    if (IsLocalPartyGame()) { LocalParty_ExitToMenu(); return; } // sin sala online: al menú
     GetWorldTimerManager().ClearTimer(PhaseTimer);
 
     // "Back to Lobby": volver TODOS al lobby (MainMenu) MANTENIENDO la sala. DEBE ser SEAMLESS.
@@ -530,6 +563,8 @@ void APTSculptGameMode::HandlePlayerGuessedCorrectly(APTPlayerState* Guesser)
     // Popup GRANDE al que adivinó: la palabra en SU idioma + los puntos que sumó.
     if (APTSculptPlayerController* GPC = Cast<APTSculptPlayerController>(Guesser->GetOwningController()))
         GPC->Client_YouGuessed(CurrentWord.ForLang(Guesser->GetLanguageIndex()), Pts);
+    if (UPTLocalPartySubsystem* LP = LocalParty())
+        LP->NotifyGuessed(Guesser, CurrentWord.ForLang(Guesser->GetLanguageIndex()), Pts);
 
     // Aviso a TODOS (mini-popup junto a su nombre). Sin la palabra: anti-spoiler.
     G->Multicast_SomeoneGuessed(Guesser, Pts);
@@ -592,6 +627,7 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
                 Char->Multicast_ShowChatBubble(Text, false);
             if (APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(Sender->GetOwningController()))
                 PC->Client_ShowCloseGuess();
+            if (UPTLocalPartySubsystem* LP = LocalParty()) LP->NotifyCloseGuess(Sender);
             return;
         }
 
@@ -832,4 +868,116 @@ TArray<FPTWordEntry> APTSculptGameMode::BuildEligibleWordPool() const
     }
 
     return Pool;
+}
+
+// ── Modo LOCAL (party con celulares) ────────────────────────────────────────
+
+bool APTSculptGameMode::IsLocalPartyGame() const
+{
+    const UPTGameInstance* GI = GetGameInstance<UPTGameInstance>();
+    return GI && GI->bLocalPartyMode && GetNetMode() != NM_Client;
+}
+
+UPTLocalPartySubsystem* APTSculptGameMode::LocalParty() const
+{
+    if (!IsLocalPartyGame()) return nullptr;
+    const UGameInstance* GI = GetGameInstance();
+    return GI ? GI->GetSubsystem<UPTLocalPartySubsystem>() : nullptr;
+}
+
+APTPlayerState* APTSculptGameMode::LocalParty_AddPlayer(const FString& Name, const FString& Language, FLinearColor Color)
+{
+    UWorld* W = GetWorld();
+    if (!W) return nullptr;
+
+    // PlayerState SIN controller: entra solo al PlayerArray (lo registra su PostInitializeComponents).
+    // El GameMode la trata como a cualquier jugador; lo que necesita su controller (RPCs de cliente)
+    // simplemente no llega, y el subsistema le manda esa info al celular.
+    FActorSpawnParameters P;
+    P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    P.ObjectFlags |= RF_Transient;
+    UClass* Cls = PlayerStateClass ? PlayerStateClass.Get() : APTPlayerState::StaticClass();
+    APTPlayerState* PS = W->SpawnActor<APTPlayerState>(Cls, P);
+    if (!PS) return nullptr;
+
+    PS->SetPlayerId(NextPhonePlayerId++);
+    PS->SetPlayerName(Name);
+    PS->DisplayName    = Name;
+    PS->Language       = Language;
+    PS->PartyColor     = Color;
+    PS->bIsPhonePlayer = true;
+    PS->GameScore      = 0;
+
+    UE_LOG(LogTemp, Log, TEXT("[SculptGM] Modo local: jugador de celular '%s' (%s)."), *Name, *Language);
+    return PS;
+}
+
+void APTSculptGameMode::LocalParty_RemovePlayer(APTPlayerState* PS)
+{
+    if (!PS) return;
+    APTSculptGameState* G = GS();
+    const bool bWasSculptor = G && G->CurrentSculptor == PS;
+    PS->Destroy(); // la saca del PlayerArray (APlayerState::Destroyed)
+
+    if (!G || G->TurnPhase == EPTTurnPhase::WaitingForPlayers || G->TurnPhase == EPTTurnPhase::GameOver) return;
+
+    if (GetActivePlayers().Num() < MinToStart())
+    {
+        GoToWaiting();
+    }
+    else if (bWasSculptor &&
+             (G->TurnPhase == EPTTurnPhase::Drawing || G->TurnPhase == EPTTurnPhase::ChoosingWord))
+    {
+        GetWorldTimerManager().ClearTimer(PhaseTimer);
+        EndTurn();
+    }
+}
+
+void APTSculptGameMode::LocalParty_RequestStart()
+{
+    APTSculptGameState* G = GS();
+    if (!G || G->TurnPhase != EPTTurnPhase::WaitingForPlayers) return;
+    bLocalStartRequested = true;
+    CheckStart();
+    if (!bStartScheduled) bLocalStartRequested = false; // faltan jugadores: no dejarlo "armado"
+}
+
+void APTSculptGameMode::LocalParty_PlayAgain()
+{
+    APTSculptGameState* G = GS();
+    if (!G || G->TurnPhase != EPTTurnPhase::GameOver) return;
+    StartGame();
+}
+
+void APTSculptGameMode::LocalParty_ExitToMenu()
+{
+    GetWorldTimerManager().ClearTimer(PhaseTimer);
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>()) GI->ExitLocalParty();
+}
+
+void APTSculptGameMode::LocalParty_Guess(APTPlayerState* PS, const FString& Text)
+{
+    if (PS && PS->bIsPhonePlayer) HandleChat(PS, Text);
+}
+
+void APTSculptGameMode::LocalParty_Choose(APTPlayerState* PS, int32 ChoiceIndex)
+{
+    if (PS && PS->bIsPhonePlayer) HandleWordChosen(PS, ChoiceIndex);
+}
+
+TArray<FString> APTSculptGameMode::LocalParty_GetChoicesFor(const APTPlayerState* PS) const
+{
+    TArray<FString> Out;
+    const APTSculptGameState* G = GS();
+    if (!PS || !G || G->CurrentSculptor != PS || G->TurnPhase != EPTTurnPhase::ChoosingWord) return Out;
+    const int32 Lang = PS->GetLanguageIndex();
+    for (const FPTWordEntry& E : CurrentChoices) Out.Add(E.ForLang(Lang));
+    return Out;
+}
+
+FString APTSculptGameMode::LocalParty_GetSecretWordFor(const APTPlayerState* PS) const
+{
+    const APTSculptGameState* G = GS();
+    if (!PS || !G || G->CurrentSculptor != PS || G->TurnPhase != EPTTurnPhase::Drawing) return FString();
+    return CurrentWord.ForLang(PS->GetLanguageIndex());
 }

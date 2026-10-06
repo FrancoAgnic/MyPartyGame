@@ -65,6 +65,9 @@ protected:
     UPROPERTY(meta = (BindWidget))         UButton* FindButton;
     UPROPERTY(meta = (BindWidgetOptional)) UButton* EnterCodeButton;
     UPROPERTY(meta = (BindWidgetOptional)) UButton* PlayBackButton;
+    // "Modo local (celulares)": una PC + joystick, los jugadores entran desde el celular. Si el WBP no
+    // tiene un botón con este nombre, se crea uno solo debajo de FindButton copiando su estilo.
+    UPROPERTY(meta = (BindWidgetOptional)) UButton* LocalModeButton;
 
     // Agrupa el título "PLAY" del submenú (se muestra junto con Host/Find/EnterCode/Back).
     UPROPERTY(meta = (BindWidgetOptional)) UWidget* PlaySubmenuHeaderPanel;
@@ -112,6 +115,8 @@ protected:
     UFUNCTION() void OnQuitClicked();
     UFUNCTION() void OnSettingsClicked();
     UFUNCTION() void OnLockerClicked();
+    UFUNCTION() void OnLocalModeClicked();
+    UButton* CreateFallbackLocalModeButton();
 
     void SetPlaySubmenuVisible(bool bVisible);
 

@@ -726,7 +726,9 @@ void UPTGameplayHUDWidget::RefreshTick()
     RefreshToolbar();
 
     APTSculptPlayerController* PC = GetSculptPC();
-    const bool bSculptor = G->IsLocalPlayerSculptor();
+    // Modo local: la TV esculpe con el joystick pero NUNCA muestra la palabra (la están mirando todos);
+    // la palabra secreta y la elección viven en el celular del escultor.
+    const bool bSculptor = G->IsLocalPlayerSculptor() && !G->IsLocalPartyMode();
 
     // ¿Estoy espectando (dev) el POV del escultor? Entonces veo la palabra IGUAL que él.
     APTLobbyCharacter* SpecChar = Cast<APTLobbyCharacter>(PC ? PC->GetSpectatedPovPawn() : nullptr);
@@ -1389,7 +1391,7 @@ void UPTGameplayHUDWidget::UpdateGameplaySounds(APTSculptGameState* G)
     // misma animación de letras cayendo que un jugador que intenta adivinar.
     APTSculptPlayerController* PCg = GetSculptPC();
     const bool bGuessPreview = PCg && PCg->IsDevGuessPreview() && G->IsLocalPlayerSculptor();
-    const bool bGuesser = (!G->IsLocalPlayerSculptor() || bGuessPreview) && !bLocalGuessed;
+    const bool bGuesser = (!G->IsLocalPlayerSculptor() || G->IsLocalPartyMode() || bGuessPreview) && !bLocalGuessed;
     if (bGuesser && UseDelayedReveal())
     {
         // Inicializar la máscara mostrada al entrar. IMPORTANTE: arrancar TODO oculto (mismo largo,
@@ -1466,7 +1468,7 @@ FString UPTGameplayHUDWidget::BuildScoreboard() const
     TArray<APTPlayerState*> Players;
     for (APlayerState* PS : G->PlayerArray)
         if (APTPlayerState* PT = Cast<APTPlayerState>(PS))
-            if (!PT->bIsDevSpectator) // los espectadores dev no van en el marcador
+            if (!PT->bIsDevSpectator && !PT->bIsLocalPartyTV) // ni los espectadores dev ni la TV del modo local
                 Players.Add(PT);
 
     Players.Sort([](const APTPlayerState& A, const APTPlayerState& B){ return A.GameScore > B.GameScore; });
@@ -1486,7 +1488,7 @@ void UPTGameplayHUDWidget::RebuildScoreboard()
     TArray<APTPlayerState*> Players;
     for (APlayerState* PS : G->PlayerArray)
         if (APTPlayerState* PT = Cast<APTPlayerState>(PS))
-            if (!PT->bIsDevSpectator) // los espectadores dev no van en el marcador
+            if (!PT->bIsDevSpectator && !PT->bIsLocalPartyTV) // ni los espectadores dev ni la TV del modo local
                 Players.Add(PT);
     Players.Sort([](const APTPlayerState& A, const APTPlayerState& B){ return A.GameScore > B.GameScore; });
 
