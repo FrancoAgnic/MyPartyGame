@@ -16,6 +16,7 @@
 #include "Tickable.h"
 #include "PTSculptGameState.h"
 #include "PTPartyTransport.h" // TUniquePtr<IPTPartyTransport> necesita el tipo completo
+#include "PTStreamChat.h"
 #include "PTLocalPartySubsystem.generated.h"
 
 class APTSculptGameMode;
@@ -38,7 +39,11 @@ struct FPTPhonePlayer
     // Modo audiencia: el celular del STREAMER (entró con el link privado). No juega ni adivina: elige y ve
     // la palabra que esculpe la PC. No tiene PlayerState propio.
     UPROPERTY(BlueprintReadOnly) bool         bIsHost = false;
+    // De dónde juega: 0 = celular, 1 = chat de Twitch, 2 = chat de Kick (escribió !unirse; adivina por el chat).
+    UPROPERTY(BlueprintReadOnly) uint8        ChatPlatform = 0;
 
+    FString ChatUserId;      // "1:<id de Twitch>" / "2:<id de Kick>"
+    double  LastChatAt = 0.0; // anti-spam: un intento por segundo
     FString Token;
     int32   ConnId = INDEX_NONE;
     double  OfflineSince = 0.0;
@@ -95,6 +100,21 @@ public:
     UFUNCTION(BlueprintPure, Category="LocalParty") bool IsHostConnected() const;
     /** Jugadores de celular (sin contar al streamer). */
     UFUNCTION(BlueprintPure, Category="LocalParty") int32 GetGuesserCount() const;
+    /** Jugadores que entraron con !unirse desde el chat de Twitch / Kick. */
+    UFUNCTION(BlueprintPure, Category="LocalParty") int32 GetChatPlayerCount() const;
+
+    // ── Chat del stream (audiencia): la gente escribe !unirse y adivina desde el chat ──
+    /** Guarda el canal (nombre o link; vacío = apagar) y empieza a leer su chat. */
+    void SetStreamChannel(EPTChatPlatform Platform, const FString& Channel);
+    FString GetStreamChannel(EPTChatPlatform Platform) const;
+    FPTStreamChat::EStatus GetStreamChatStatus(EPTChatPlatform Platform) const;
+    FString GetStreamChatError(EPTChatPlatform Platform) const;
+    bool HasStreamChatGivenUp(EPTChatPlatform Platform) const;
+    /** true si se está leyendo al menos un chat. */
+    bool IsStreamChatConnected() const;
+    int32 MaxChatPlayers = 150;
+    float ChatGuessCooldown = 1.0f; // segundos entre intentos de una misma persona del chat
+
     // Segundos que se espera a un celular desconectado antes de sacarlo de la partida.
     float OfflineGraceInGame  = 90.f;
     float OfflineGraceInLobby = 20.f;
@@ -137,6 +157,14 @@ private:
     int32  NextPlayerId = 1;
     float  StateAccum = 0.f;
     FString CachedLanIp;
+    TSharedPtr<FPTStreamChat> TwitchChat;
+    TSharedPtr<FPTStreamChat> KickChat;
+
+    void StartStreamChats();
+    void StopStreamChats();
+    void HandleStreamChat(const FPTStreamChatMessage& M);
+    void JoinFromChat(const FPTStreamChatMessage& M, const FString& Key, const FString& Lang);
+    int32 GetPhoneGuesserCount() const;
 
     FPTPhonePlayer* FindByConn(int32 ConnId);
     FPTPhonePlayer* FindById(int32 Id);

@@ -91,6 +91,8 @@ public:
     UFUNCTION(Exec) void PTPadKey(const FString& KeyName);
     // DEV: vuelca al log el estado de cada personaje (nombre, cartel visible, controller).
     UFUNCTION(Exec) void PTDumpBots();
+    // Modo audiencia: lee el chat de un canal ("PTChat twitch micanal" / "PTChat kick micanal"; sin canal = apagar).
+    UFUNCTION(Exec) void PTChat(const FString& Platform, const FString& Channel);
 
     // Mapa y GameMode del modo local (editables en BP_GameInstance por si cambian de lugar).
     UPROPERTY(EditAnywhere, Category="LocalParty") FString LocalPartyLevel = TEXT("/Game/Template/levels/Lvl-01");

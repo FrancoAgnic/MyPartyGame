@@ -368,3 +368,16 @@ LP_AUD_HIDE_QR,Ocultar QR,Hide QR,Ocultar QR,QR ausblenden,Masquer le QR,Nascond
 LP_AUD_OPEN_PC,Abrir en esta PC,Open on this PC,Abrir neste PC,Auf diesem PC öffnen,Ouvrir sur ce PC,Apri su questo PC
 LP_AUD_COPY,Copiar link,Copy link,Copiar link,Link kopieren,Copier le lien,Copia link
 LP_AUD_COPIED,¡Copiado!,Copied!,Copiado!,Kopiert!,Copié !,Copiato!
+LP_CHAT_SECTION,Chat del stream (opcional),Stream chat (optional),Chat da live (opcional),Stream-Chat (optional),Chat du stream (facultatif),Chat della live (facoltativo)
+LP_CHAT_HINT,Escribe tu canal: tu chat entra con !unirse y adivina escribiendo.,Type your channel: your chat joins with !join and guesses by typing.,Digite seu canal: seu chat entra com !entrar e adivinha digitando.,Gib deinen Kanal ein: dein Chat macht mit !beitreten mit und rät per Chat.,Entre ta chaîne : ton chat rejoint avec !rejoindre et devine en écrivant.,Scrivi il tuo canale: la chat entra con !unisciti e indovina scrivendo.
+LP_CHAT_CHANNEL_HINT,tu canal,your channel,seu canal,dein Kanal,ta chaîne,il tuo canale
+LP_CHAT_ST_OFF,Sin conectar,Not connected,Não conectado,Nicht verbunden,Non connecté,Non collegato
+LP_CHAT_ST_CONNECTING,Conectando…,Connecting…,Conectando…,Verbinde…,Connexion…,Connessione…
+LP_CHAT_ST_OK,Leyendo el chat ✓,Reading chat ✓,Lendo o chat ✓,Chat wird gelesen ✓,Lecture du chat ✓,Lettura della chat ✓
+LP_CHAT_ST_RETRY,"Sin conexión, reintentando…","No connection, retrying…","Sem conexão, tentando de novo…","Keine Verbindung, neuer Versuch…","Pas de connexion, nouvel essai…","Nessuna connessione, riprovo…"
+LP_CHAT_ST_NOTFOUND,No existe ese canal,That channel doesn't exist,Esse canal não existe,Diesen Kanal gibt es nicht,Cette chaîne n'existe pas,Questo canale non esiste
+LP_CHAT_PLAYERS,{0} jugando desde el chat,{0} playing from chat,{0} jogando pelo chat,{0} spielen über den Chat,{0} jouent depuis le chat,{0} giocano dalla chat
+LP_CHAT_JOIN_TV,o escribe !unirse en el chat,or type !join in chat,ou digite !entrar no chat,oder schreib !beitreten in den Chat,ou écris !rejoindre dans le chat,o scrivi !unisciti in chat
+LP_CHAT_CMD,!unirse,!join,!entrar,!beitreten,!rejoindre,!unisciti
+LP_AUD_LAST_WORD,¡Última palabra: puntos dobles!,Last word: double points!,Última palavra: pontos em dobro!,Letztes Wort: doppelte Punkte!,Dernier mot : points doublés !,Ultima parola: punti doppi!
+CHAT_LAST_WORD_BONUS,¡Última palabra! Vale x{1} puntos,Last word! Worth x{1} points,Última palavra! Vale x{1} pontos,Letztes Wort! Zählt x{1} Punkte,Dernier mot ! Vaut x{1} points,Ultima parola! Vale x{1} punti

@@ -48,6 +48,7 @@ categoría *Input | Gamepad*.
 | Servidor HTTP + WebSocket mínimo (sockets no bloqueantes, game thread, sin dependencias) | `Source/MyPartyGame/LocalParty/PTLocalPartyServer.*` |
 | Subsistema del GameInstance: jugadores del celular, tokens de reconexión y estado por celular | `LocalParty/PTLocalPartySubsystem.*` |
 | Overlay de la TV (QR, lista, "pásale el joystick", ayuda de controles), 100% C++ | `LocalParty/PTLocalPartyTVWidget.*` |
+| Lector del chat de Twitch / Kick (modo audiencia) | `LocalParty/PTStreamChat.*` |
 | Generador de QR (modo byte, ECC M, v1–10; verificado contra la librería `qrcode` de Python) | `LocalParty/PTQRCode.*` |
 | Página del celular (HTML/JS en un solo archivo, 6 idiomas) | `Content/LocalParty/Web/index.html` |
 | Joystick del escultor | `Sculpt/PTSculptPlayerController_Gamepad.cpp` |
@@ -65,6 +66,34 @@ categoría *Input | Gamepad*.
   - De la PC al celular: `welcome`, `error{code}`, `state` (personalizado: solo el escultor recibe
     `choices`/`word`), `chat`, `guessed`, `close` y `buzz`.
 - El puerto por defecto es **8787**; si está ocupado prueba 8788…8791.
+
+## Modo audiencia: chat de Twitch / Kick
+
+En el modo audiencia la gente también puede jugar **desde el chat del stream**, sin celular:
+
+1. En el panel de configuración de la TV, sección *Chat del stream*, el streamer escribe su canal de
+   **Twitch** y/o **Kick** (sirve el nombre o el link entero) y aprieta Enter. Se recuerda para la próxima.
+2. Quien escribe **`!unirse`** en el chat entra como jugador con su nombre del chat (también `!join`,
+   `!entrar`, `!jugar`, `!beitreten`, `!rejoindre`, `!unisciti`… el comando define su idioma).
+   **`!salir`** / `!leave` lo saca.
+3. Mientras se esculpe, cada mensaje suyo es un intento (máximo uno por segundo). Los mensajes comunes
+   no se repiten en el chat de la TV: el stream ya muestra su chat.
+4. Comparten ranking (y personajes) con los que juegan por celular. Tope: 150 jugadores del chat.
+
+**Puntaje en audiencia** (celular y chat): por orden de acierto, 100 · 50 · 25 · 20 · 20… (cada uno la
+mitad del anterior, con piso de 20) y la **última palabra vale doble**. Así nadie se escapa: el que
+copia del chat suma poco, y el final queda abierto. Se ajusta en `BP_SculptGameMode`
+(`AudienceFirstGuessPoints`, `AudienceMinGuessPoints`, `AudienceLastWordMultiplier`).
+
+Cómo funciona: `LocalParty/PTStreamChat.*` **solo lee**, sin cuentas ni contraseñas:
+
+- Twitch: IRC por WebSocket (`wss://irc-ws.chat.twitch.tv`) con un usuario anónimo `justinfanNNNNN`.
+- Kick: busca el chatroom en `https://kick.com/api/v2/channels/<canal>` y escucha el WebSocket público
+  (Pusher) que usa la misma página de kick.com. No es una API oficial: si Kick la cambia, se puede
+  apuntar a otra sin recompilar con `KickApiUrl` / `KickPusherUrl` (y `TwitchIrcUrl`) en
+  `[LocalParty]` de `DefaultGame.ini`, **entre comillas**.
+- Cada persona del chat es un `FPTPhonePlayer` con `ChatPlatform` 1 (Twitch) o 2 (Kick), sin celular.
+- Consola: `PTChat twitch <canal>` / `PTChat kick <canal>` (sin canal = apagar).
 
 ## Menús con joystick (toda la UI)
 

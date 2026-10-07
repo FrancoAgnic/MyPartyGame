@@ -353,6 +353,9 @@ void APTSculptGameMode::StartChoosingPhase()
         PC->Client_ReceiveWordChoices(ChoiceTexts);
     // Modo local: el escultor elige en SU celular (las opciones viajan en su estado) → vibrarle.
     if (UPTLocalPartySubsystem* LP = LocalParty()) LP->NotifyTurnStarted(Sculptor);
+    // Audiencia: avisar que la última palabra vale más (el final queda abierto).
+    if (IsLastAudienceWord() && AudienceLastWordMultiplier > 1)
+        G->Multicast_SystemLine(TEXT("CHAT_LAST_WORD_BONUS"), FString(), AudienceLastWordMultiplier);
 
     UE_LOG(LogTemp, Log, TEXT("[SculptGM] Turno: esculpe '%s'. Eligiendo palabra (%d opciones)."),
            *Sculptor->GetPlayerName(), CurrentChoices.Num());
@@ -517,6 +520,21 @@ int32 APTSculptGameMode::AwardGuessPoints(APTPlayerState* Guesser)
     APTSculptGameState* G = GS();
     if (!G || !Guesser) return 0;
 
+    // Audiencia: por orden de llegada, a la mitad cada vez (con piso). Ver AudienceFirstGuessPoints.
+    if (IsAudienceGame())
+    {
+        int32 Rank = 0; // ya incluye a este (bHasGuessedThisTurn se marca antes)
+        for (APTPlayerState* PT : GetActivePlayers()) if (PT->bHasGuessedThisTurn) ++Rank;
+        int32 Pts = FMath::Max(1, AudienceFirstGuessPoints);
+        for (int32 i = 1; i < Rank && Pts > AudienceMinGuessPoints; ++i) Pts /= 2;
+        Pts = FMath::Max(Pts, AudienceMinGuessPoints);
+        if (IsLastAudienceWord()) Pts *= FMath::Max(1, AudienceLastWordMultiplier);
+        Guesser->GameScore += Pts;
+        UE_LOG(LogTemp, Log, TEXT("[SculptGM] Audiencia: acierto #%d de '%s' +%d (total %d)."),
+               Rank, *Guesser->GetPlayerName(), Pts, Guesser->GameScore);
+        return Pts;
+    }
+
     // Más rápido = más puntos: interpola de Max (todo el tiempo restante) a Min (sin tiempo).
     const float Frac = (TurnDuration > 0.f)
         ? FMath::Clamp(G->GetTurnSecondsRemaining() / TurnDuration, 0.f, 1.f) : 0.f;
@@ -629,7 +647,7 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
         // se enviaba nada.
         if (bEligibleGuesser && IsCloseGuess(Text))
         {
-            G->Multicast_ChatLine(Name, Text, EPTChatType::Normal);
+            if (!bMuteNormalChatLine) G->Multicast_ChatLine(Name, Text, EPTChatType::Normal);
             if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(Sender->GetPawn()))
                 Char->Multicast_ShowChatBubble(Text, false);
             if (APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(Sender->GetOwningController()))
@@ -647,7 +665,7 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
     }
 
     // Mensaje normal → a todos.
-    if (G) G->Multicast_ChatLine(Name, Text, EPTChatType::Normal);
+    if (G && !bMuteNormalChatLine) G->Multicast_ChatLine(Name, Text, EPTChatType::Normal);
 
     // Globo de chat sobre la cabeza del que escribió (mensaje normal, color default).
     if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(Sender->GetPawn()))
@@ -968,6 +986,19 @@ void APTSculptGameMode::LocalParty_ExitToMenu()
 void APTSculptGameMode::LocalParty_Guess(APTPlayerState* PS, const FString& Text)
 {
     if (PS && PS->bIsPhonePlayer) HandleChat(PS, Text);
+}
+
+void APTSculptGameMode::LocalParty_ChatGuess(APTPlayerState* PS, const FString& Text)
+{
+    if (!PS || !PS->bIsPhonePlayer) return;
+    TGuardValue<bool> Mute(bMuteNormalChatLine, true);
+    HandleChat(PS, Text);
+}
+
+bool APTSculptGameMode::IsLastAudienceWord() const
+{
+    const APTSculptGameState* G = GS();
+    return IsAudienceGame() && G && G->TotalRounds > 1 && G->CurrentRound >= G->TotalRounds;
 }
 
 void APTSculptGameMode::LocalParty_Choose(APTPlayerState* PS, int32 ChoiceIndex)

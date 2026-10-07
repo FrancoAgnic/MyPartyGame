@@ -128,6 +128,9 @@ void UPTLocalPartyTVWidget::BuildTree()
         CodeRow = CodeBox;
         AddToCol(CodeBox, 4.f);
     }
+    ChatJoinText = MakeText(BodyFontSize, AccentColor, true);
+    ChatJoinText->SetText(PTText::Get(TEXT("LP_CHAT_JOIN_TV")));
+    AddToCol(ChatJoinText, 12.f);
     RevealHint = MakeText(BodyFontSize - 6, Muted, false);
     RevealHint->SetText(PTText::Get(TEXT("LP_SHOW_IP")));
     AddToCol(RevealHint, 22.f);
@@ -228,6 +231,8 @@ void UPTLocalPartyTVWidget::Refresh()
         if (Step1Text) Step1Text->SetText(PTText::Get(bShowHostQr ? TEXT("LP_AUD_HOST_QR") : TEXT("LP_ONLINE_STEP1")));
         // El streamer se conecta desde SU zona privada del panel de la derecha: acá no se menciona.
         Show(Step2Text, false);
+        // Leyendo el chat de Twitch / Kick: debajo del código, cómo entrar desde el chat.
+        Show(ChatJoinText, LP->IsStreamChatConnected());
         if (UrlText) UrlText->SetText(FText::FromString(LP->GetPublicHost()));
         if (CodeText) CodeText->SetText(FText::FromString(Code));
         Show(CodeRow, !Code.IsEmpty());
@@ -237,6 +242,7 @@ void UPTLocalPartyTVWidget::Refresh()
     {
         if (UrlText) UrlText->SetText(FText::FromString(DisplayAddress(Url, bReveal)));
         Show(CodeRow, false);
+        Show(ChatJoinText, false);
         Show(RevealHint, bMaskJoinAddress && bServerOk && !bReveal);
     }
 
@@ -248,7 +254,7 @@ void UPTLocalPartyTVWidget::Refresh()
     if (Players.Num() > MaxListed) Players.SetNum(MaxListed);
     FString Sig = FString::FromInt(TotalPlayers) + TEXT("#");
     for (const FPTPhonePlayer& P : Players)
-        Sig += FString::Printf(TEXT("%s|%d|%d;"), *P.Name, P.bOnline ? 1 : 0, P.bVip ? 1 : 0);
+        Sig += FString::Printf(TEXT("%s|%d|%d|%d;"), *P.Name, P.bOnline ? 1 : 0, P.bVip ? 1 : 0, (int32)P.ChatPlatform);
     if (Sig != PlayersSig && PlayersBox)
     {
         PlayersSig = Sig;
@@ -268,6 +274,16 @@ void UPTLocalPartyTVWidget::Refresh()
             UTextBlock* N = MakeText(BodyFontSize + 2, P.bOnline ? FLinearColor::White : FLinearColor(1.f, 1.f, 1.f, 0.4f), true);
             N->SetText(FText::FromString(P.bVip ? P.Name + TEXT("  ★") : P.Name));
             if (UHorizontalBoxSlot* S = R->AddChildToHorizontalBox(N)) S->SetVerticalAlignment(VAlign_Center);
+            if (P.ChatPlatform != 0) // entró desde el chat del stream
+            {
+                UTextBlock* Tag = MakeText(BodyFontSize - 6, FLinearColor(1.f, 1.f, 1.f, 0.55f), false);
+                Tag->SetText(FText::FromString(P.ChatPlatform == 2 ? TEXT("Kick") : TEXT("Twitch")));
+                if (UHorizontalBoxSlot* S = R->AddChildToHorizontalBox(Tag))
+                {
+                    S->SetVerticalAlignment(VAlign_Center);
+                    S->SetPadding(FMargin(10.f, 0.f, 0.f, 0.f));
+                }
+            }
             if (UVerticalBoxSlot* S = PlayersBox->AddChildToVerticalBox(R)) S->SetPadding(FMargin(0.f, 3.f));
         }
         if (TotalPlayers > Players.Num())
@@ -308,14 +324,19 @@ void UPTLocalPartyTVWidget::Refresh()
         const FString Name = G->CurrentSculptor->GetPlayerName();
         if (BannerTitle) BannerTitle->SetText(bAudience ? PTText::Get(TEXT("LP_AUD_CHOOSING"))
                                                         : FText::FromString(Fmt(TEXT("LP_PASS_PAD"), Name)));
-        if (BannerSub)   BannerSub->SetText(PTText::Get(bAudience ? TEXT("LP_AUD_GET_READY") : TEXT("LP_CHOOSING")));
+        const bool bLastWord = bAudience && G->TotalRounds > 1 && G->CurrentRound >= G->TotalRounds;
+        if (BannerSub)   BannerSub->SetText(PTText::Get(bLastWord ? TEXT("LP_AUD_LAST_WORD")
+                                                       : bAudience ? TEXT("LP_AUD_GET_READY") : TEXT("LP_CHOOSING")));
         if (const FPTPhonePlayer* Rec = LP->FindByPlayerState(G->CurrentSculptor))
             if (BannerTitle) BannerTitle->SetColorAndOpacity(FSlateColor(Rec->Color));
     }
 
     Show(CornerPanel, !bLobby && bServerOk);
     if (CornerText) CornerText->SetText(FText::FromString(Fmt(TEXT("LP_JOIN_SMALL"),
-        bOnline ? FString::Printf(TEXT("%s  \u00B7  %s"), *LP->GetPublicHost(), *Code) : DisplayAddress(Url, bReveal))));
+        bOnline ? FString::Printf(TEXT("%s  \u00B7  %s%s"), *LP->GetPublicHost(), *Code,
+                                  // Leyendo el chat: tambi\u00E9n el comando para entrar desde ah\u00ED.
+                                  *(LP->IsStreamChatConnected() ? TEXT("  \u00B7  ") + PTText::GetStr(TEXT("LP_CHAT_CMD")) : FString()))
+                : DisplayAddress(Url, bReveal))));
 
 }
 

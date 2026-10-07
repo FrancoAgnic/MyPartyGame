@@ -12,6 +12,7 @@ class UButton;
 class USlider;
 class UTextBlock;
 class UVerticalBox;
+class UEditableTextBox;
 
 UCLASS()
 class MYPARTYGAME_API UPTLocalPartySettingsWidget : public UPTUserWidget
@@ -31,6 +32,9 @@ protected:
 private:
     void BuildTree();
     void BuildStreamerSection(UVerticalBox* Col);
+    void BuildChatSection(UVerticalBox* Col);
+    void UpdateChatSection();
+    UEditableTextBox* AddChannelRow(UVerticalBox* Box, const FText& Platform, const FLinearColor& Color, FName Name, UTextBlock*& OutStatus);
     void RefreshValues();
     // Corre por TIMER (no NativeTick): un widget colapsado no tickea, y el panel tiene que volver a
     // mostrarse solo al cerrar el banco de palabras / el Workshop o al volver a la espera.
@@ -49,6 +53,8 @@ private:
     UFUNCTION() void OnToggleHostQr();
     UFUNCTION() void OnOpenHostOnPC();
     UFUNCTION() void OnCopyHostLink();
+    UFUNCTION() void OnTwitchCommitted(const FText& Text, ETextCommit::Type Method);
+    UFUNCTION() void OnKickCommitted(const FText& Text, ETextCommit::Type Method);
 
     UPROPERTY() USlider*    TimeSlider = nullptr;
     UPROPERTY() USlider*    RoundsSlider = nullptr;
@@ -75,6 +81,13 @@ private:
     UPROPERTY() UTextBlock* CopyText = nullptr;
     UPROPERTY() class UTexture2D* PrivateQrTexture = nullptr;
     FString PrivateQrUrl;
+
+    // ── Audiencia: chat de Twitch / Kick (la gente escribe !unirse) ──
+    UPROPERTY() UEditableTextBox* TwitchInput = nullptr;
+    UPROPERTY() UEditableTextBox* KickInput = nullptr;
+    UPROPERTY() UTextBlock* TwitchStatus = nullptr;
+    UPROPERTY() UTextBlock* KickStatus = nullptr;
+    UPROPERTY() UTextBlock* ChatPlayersText = nullptr;
     // Último título de banco escrito: solo se reescribe si cambia (si no, se pisa con la traducción
     // automática de PTText y el texto alterna "Películas" ↔ "Movies").
     FString ShownPackTitle = TEXT("?");

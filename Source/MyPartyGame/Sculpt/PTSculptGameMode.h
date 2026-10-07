@@ -40,6 +40,12 @@ public:
     UPROPERTY(EditDefaultsOnly, Category="Game") int32 MinGuessPoints     = 25;
     // El escultor gana esto por cada jugador que adivina su escultura.
     UPROPERTY(EditDefaultsOnly, Category="Game") int32 SculptorPointsPerGuess = 25;
+    // Modo audiencia: puntos por ORDEN de acierto. El 1.º se lleva AudienceFirstGuessPoints, cada uno de
+    // los siguientes la mitad del anterior, sin bajar de AudienceMinGuessPoints (100, 50, 25, 20, 20...).
+    // La última palabra vale x AudienceLastWordMultiplier (final abierto: cualquiera puede dar vuelta).
+    UPROPERTY(EditDefaultsOnly, Category="Game|Audience") int32 AudienceFirstGuessPoints = 100;
+    UPROPERTY(EditDefaultsOnly, Category="Game|Audience") int32 AudienceMinGuessPoints = 20;
+    UPROPERTY(EditDefaultsOnly, Category="Game|Audience") int32 AudienceLastWordMultiplier = 2;
     // Fracción de letras a revelar de a poco durante el turno (0.7 = 70% al final).
     UPROPERTY(EditDefaultsOnly, Category="Game") float RevealFraction = 0.7f;
     // Mapa del lobby (para "Volver al lobby" al terminar la partida). En el diseño de lobby
@@ -122,6 +128,11 @@ public:
     void LocalParty_PlayAgain();
     void LocalParty_ExitToMenu();
     void LocalParty_Guess(APTPlayerState* PS, const FString& Text);
+    // Intento desde el chat de Twitch / Kick: como LocalParty_Guess, pero el chat de la TV no repite los
+    // mensajes comunes (el stream ya muestra su chat; con cientos de personas lo taparía todo).
+    void LocalParty_ChatGuess(APTPlayerState* PS, const FString& Text);
+    /** Audiencia: ¿es la última palabra de la partida? (vale más) */
+    bool IsLastAudienceWord() const;
     void LocalParty_Choose(APTPlayerState* PS, int32 ChoiceIndex);
     // Opciones / palabra secreta EN EL IDIOMA del celular. Vacío si ese jugador no es el escultor.
     TArray<FString> LocalParty_GetChoicesFor(const APTPlayerState* PS) const;
@@ -222,6 +233,7 @@ private:
     void AdvanceTurn();         // avanza ronda/turno o termina la partida
     void EndGame();             // fase GameOver: anuncia ganador y espera decisión del host
     int32 AwardGuessPoints(APTPlayerState* Guesser); // suma puntos al que adivina + al escultor; devuelve los del que adivina
+    bool bMuteNormalChatLine = false; // intentos del chat del stream: no se repiten en el chat de la TV
     void GoToWaiting();         // no hay suficientes jugadores
 
     // Máscara de una palabra: sin revelar = todo "_"; con Revealed = esas posiciones en MAYÚSCULA.

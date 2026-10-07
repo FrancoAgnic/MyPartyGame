@@ -17,6 +17,7 @@
 #include "TimerManager.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
+#include "Components/EditableTextBox.h"
 #include "Components/Button.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
@@ -127,6 +128,7 @@ void UPTLocalPartySettingsWidget::BuildTree()
     Title->SetText(PTText::Get(TEXT("LP_SETTINGS_TITLE")));
     if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Title)) S->SetPadding(FMargin(0.f, 0.f, 0.f, 4.f));
     if (IsAudience(this)) BuildStreamerSection(Col);
+    if (IsAudience(this)) BuildChatSection(Col);
 
     TimeSlider   = AddSliderRow(Col, TimeLabel,   30.f, 300.f, 15.f, TimeValue);
     RoundsSlider = AddSliderRow(Col, RoundsLabel, 1.f,  IsAudience(this) ? 20.f : 10.f, 1.f, RoundsValue);
@@ -245,6 +247,129 @@ void UPTLocalPartySettingsWidget::BuildStreamerSection(UVerticalBox* Col)
     Sec->AddChildToVerticalBox(Btns);
 }
 
+UEditableTextBox* UPTLocalPartySettingsWidget::AddChannelRow(UVerticalBox* Box, const FText& Platform, const FLinearColor& Color, FName Name, UTextBlock*& OutStatus)
+{
+    UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>();
+    USizeBox* LabelBox = WidgetTree->ConstructWidget<USizeBox>();
+    LabelBox->SetWidthOverride(72.f);
+    UTextBlock* Label = MakeText(15, Color, true);
+    Label->SetText(Platform);
+    LabelBox->SetContent(Label);
+    if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(LabelBox)) S->SetVerticalAlignment(VAlign_Center);
+
+    UEditableTextBox* Input = WidgetTree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass(), Name);
+    FEditableTextBoxStyle Style = Input->GetWidgetStyle();
+    Style.BackgroundImageNormal  = FSlateRoundedBoxBrush(LPS_ButtonFill, 8.f);
+    Style.BackgroundImageHovered = FSlateRoundedBoxBrush(LPS_ButtonHover, 8.f);
+    Style.BackgroundImageFocused = FSlateRoundedBoxBrush(LPS_ButtonHover, 8.f, Color, 2.f);
+    Style.Padding = FMargin(10.f, 6.f);
+    Style.TextStyle.SetFont(MakeText(15, LPS_Ink, false)->GetFont());
+    Style.TextStyle.SetColorAndOpacity(FSlateColor(LPS_Ink));
+    Style.ForegroundColor = FSlateColor(LPS_Ink);
+    Style.FocusedForegroundColor = FSlateColor(LPS_Ink);
+    Input->SetWidgetStyle(Style);
+    Input->SetHintText(PTText::Get(TEXT("LP_CHAT_CHANNEL_HINT")));
+    if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(Input)) S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+    if (UVerticalBoxSlot* S = Box->AddChildToVerticalBox(Row)) S->SetPadding(FMargin(0.f, 6.f, 0.f, 0.f));
+
+    OutStatus = MakeText(13, LPS_Muted, false);
+    if (UVerticalBoxSlot* S = Box->AddChildToVerticalBox(OutStatus)) S->SetPadding(FMargin(72.f, 2.f, 0.f, 0.f));
+    return Input;
+}
+
+void UPTLocalPartySettingsWidget::BuildChatSection(UVerticalBox* Col)
+{
+    UVerticalBox* Sec = WidgetTree->ConstructWidget<UVerticalBox>();
+    if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Sec)) S->SetPadding(FMargin(0.f, 0.f, 0.f, 8.f));
+
+    UTextBlock* Head = MakeText(17, LPS_Ink, true);
+    Head->SetText(PTText::Get(TEXT("LP_CHAT_SECTION")));
+    Sec->AddChildToVerticalBox(Head);
+    UTextBlock* Hint = MakeText(13, LPS_Muted, false);
+    Hint->SetAutoWrapText(true);
+    Hint->SetText(PTText::Get(TEXT("LP_CHAT_HINT")));
+    Sec->AddChildToVerticalBox(Hint);
+
+    TwitchInput = AddChannelRow(Sec, FText::FromString(TEXT("Twitch")), FLinearColor(0.66f, 0.47f, 1.f, 1.f), TEXT("TwitchChannelInput"), TwitchStatus);
+    KickInput   = AddChannelRow(Sec, FText::FromString(TEXT("Kick")),   FLinearColor(0.33f, 0.98f, 0.36f, 1.f), TEXT("KickChannelInput"), KickStatus);
+    TwitchInput->OnTextCommitted.AddDynamic(this, &UPTLocalPartySettingsWidget::OnTwitchCommitted);
+    KickInput->OnTextCommitted.AddDynamic(this, &UPTLocalPartySettingsWidget::OnKickCommitted);
+
+    ChatPlayersText = MakeText(14, LPS_Accent, true);
+    if (UVerticalBoxSlot* S = Sec->AddChildToVerticalBox(ChatPlayersText)) S->SetPadding(FMargin(0.f, 4.f, 0.f, 0.f));
+
+    if (const UPTLocalPartySubsystem* LP = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLocalPartySubsystem>() : nullptr)
+    {
+        TwitchInput->SetText(FText::FromString(LP->GetStreamChannel(EPTChatPlatform::Twitch)));
+        KickInput->SetText(FText::FromString(LP->GetStreamChannel(EPTChatPlatform::Kick)));
+    }
+}
+
+void UPTLocalPartySettingsWidget::UpdateChatSection()
+{
+    const UPTLocalPartySubsystem* LP = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLocalPartySubsystem>() : nullptr;
+    if (!LP || !TwitchStatus) return;
+    auto SetStatus = [LP](UTextBlock* T, EPTChatPlatform P)
+    {
+        if (!T) return;
+        const bool bHasChannel = !LP->GetStreamChannel(P).IsEmpty();
+        const FPTStreamChat::EStatus St = LP->GetStreamChatStatus(P);
+        const TCHAR* Key = TEXT("LP_CHAT_ST_OFF");
+        FLinearColor C = LPS_Muted;
+        if (bHasChannel && St == FPTStreamChat::EStatus::Connected) { Key = TEXT("LP_CHAT_ST_OK"); C = FLinearColor(0.36f, 0.88f, 0.54f, 1.f); }
+        else if (bHasChannel && St == FPTStreamChat::EStatus::Error)
+        {
+            Key = LP->HasStreamChatGivenUp(P) ? TEXT("LP_CHAT_ST_NOTFOUND") : TEXT("LP_CHAT_ST_RETRY");
+            C = FLinearColor(1.f, 0.45f, 0.4f, 1.f);
+        }
+        else if (bHasChannel) Key = TEXT("LP_CHAT_ST_CONNECTING");
+        // Solo se reescribe si cambió (la traducción automática de PTText la pisa si se escribe cada vez).
+        const FText Want = PTText::Get(Key);
+        if (!T->GetText().EqualTo(Want)) T->SetText(Want);
+        T->SetColorAndOpacity(FSlateColor(C));
+    };
+    SetStatus(TwitchStatus, EPTChatPlatform::Twitch);
+    SetStatus(KickStatus, EPTChatPlatform::Kick);
+
+    // Si el canal cambió por otro lado (consola), mostrarlo; nunca mientras el streamer está escribiendo.
+    auto SyncInput = [LP](UEditableTextBox* In, EPTChatPlatform P)
+    {
+        const FString Saved = LP->GetStreamChannel(P);
+        if (In && !In->HasKeyboardFocus() && In->GetText().ToString() != Saved) In->SetText(FText::FromString(Saved));
+    };
+    SyncInput(TwitchInput, EPTChatPlatform::Twitch);
+    SyncInput(KickInput, EPTChatPlatform::Kick);
+
+    if (ChatPlayersText)
+    {
+        const int32 N = LP->GetChatPlayerCount();
+        ChatPlayersText->SetVisibility(N > 0 ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+        if (N > 0)
+        {
+            const FText Want = PTText::Format(TEXT("LP_CHAT_PLAYERS"), FFormatOrderedArguments{ FFormatArgumentValue(N) });
+            if (!ChatPlayersText->GetText().EqualTo(Want)) ChatPlayersText->SetText(Want);
+        }
+    }
+}
+
+void UPTLocalPartySettingsWidget::OnTwitchCommitted(const FText& Text, ETextCommit::Type Method)
+{
+    if (UPTLocalPartySubsystem* LP = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLocalPartySubsystem>() : nullptr)
+    {
+        LP->SetStreamChannel(EPTChatPlatform::Twitch, Text.ToString());
+        if (TwitchInput) TwitchInput->SetText(FText::FromString(LP->GetStreamChannel(EPTChatPlatform::Twitch)));
+    }
+}
+
+void UPTLocalPartySettingsWidget::OnKickCommitted(const FText& Text, ETextCommit::Type Method)
+{
+    if (UPTLocalPartySubsystem* LP = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLocalPartySubsystem>() : nullptr)
+    {
+        LP->SetStreamChannel(EPTChatPlatform::Kick, Text.ToString());
+        if (KickInput) KickInput->SetText(FText::FromString(LP->GetStreamChannel(EPTChatPlatform::Kick)));
+    }
+}
+
 void UPTLocalPartySettingsWidget::NativeConstruct()
 {
     Super::NativeConstruct();
@@ -355,6 +480,7 @@ void UPTLocalPartySettingsWidget::UpdateState()
     SetVisibility(bShow ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
     if (!bShow) { bHostQrShown = false; return; } // al irse el panel, el QR privado se oculta
     UpdateStreamerSection();
+    UpdateChatSection();
 
     // El banco de palabras puede haber cambiado en su propio panel. Se escribe SOLO si cambió: el
     // subsistema de localización traduce el título en pantalla y reescribirlo lo hacía parpadear.

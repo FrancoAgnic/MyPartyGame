@@ -100,6 +100,12 @@ public:
     void SetGamepadOverride(FName ActionId, const FString& KeyName) { GamepadOverrides.Add(ActionId, KeyName); }
     void ClearGamepadOverrides() { GamepadOverrides.Reset(); }
 
+    // ── Modo audiencia: canales de Twitch / Kick cuyo chat se lee (se recuerdan entre partidas) ──
+    const FString& GetTwitchChannel() const { return TwitchChannel; }
+    void SetTwitchChannel(const FString& V) { TwitchChannel = V; }
+    const FString& GetKickChannel() const { return KickChannel; }
+    void SetKickChannel(const FString& V) { KickChannel = V; }
+
 private:
     UPROPERTY(Config)
     float MasterVolume = 1.0f;
@@ -129,4 +135,6 @@ private:
     UPROPERTY(Config) float GamepadDeadZone = 0.2f;
     UPROPERTY(Config) float GamepadMoveSensitivity = 1.0f; // velocidad máxima al mover con el stick
     UPROPERTY(Config) TMap<FName, FString> GamepadOverrides;
+    UPROPERTY(Config) FString TwitchChannel;
+    UPROPERTY(Config) FString KickChannel;
 };

@@ -53,6 +53,7 @@ private:
     UPROPERTY() UTextBlock*   Step1Text  = nullptr;
     UPROPERTY() UTextBlock*   Step2Text  = nullptr;
     UPROPERTY() UWidget*      CodeRow    = nullptr; // online: "Código de sala: KQZT"
+    UPROPERTY() UTextBlock*   ChatJoinText = nullptr; // audiencia leyendo el chat: "o escribe !unirse en el chat"
     UPROPERTY() UTextBlock*   CodeText   = nullptr;
     UPROPERTY() UTextBlock*   RevealHint = nullptr;
     UPROPERTY() UTextBlock*   PlayersTitle = nullptr;

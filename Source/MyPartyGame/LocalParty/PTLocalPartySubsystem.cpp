@@ -6,6 +6,7 @@
 #include "PTSculptGameState.h"
 #include "../Lobby/PTPlayerState.h"
 #include "../PTGameInstance.h"
+#include "../PTGameUserSettings.h"
 #include "../PTTextTable.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
@@ -124,6 +125,7 @@ bool UPTLocalPartySubsystem::StartServer()
 #endif
         Server = MoveTemp(Relay);
         bOnlineTransport = true;
+        StartStreamChats();
         return true;
     }
 
@@ -152,6 +154,7 @@ bool UPTLocalPartySubsystem::StartServer()
 
 void UPTLocalPartySubsystem::StopServer()
 {
+    StopStreamChats();
     if (Server) Server->Stop();
     Server.Reset();
     bOnlineTransport = false;
@@ -174,6 +177,20 @@ int32 UPTLocalPartySubsystem::GetGuesserCount() const
 {
     int32 N = 0;
     for (const FPTPhonePlayer& P : Players) if (!P.bIsHost) ++N;
+    return N;
+}
+
+int32 UPTLocalPartySubsystem::GetPhoneGuesserCount() const
+{
+    int32 N = 0;
+    for (const FPTPhonePlayer& P : Players) if (!P.bIsHost && P.ChatPlatform == 0) ++N;
+    return N;
+}
+
+int32 UPTLocalPartySubsystem::GetChatPlayerCount() const
+{
+    int32 N = 0;
+    for (const FPTPhonePlayer& P : Players) if (P.ChatPlatform != 0) ++N;
     return N;
 }
 
@@ -483,10 +500,11 @@ void UPTLocalPartySubsystem::HandleJoin(int32 ConnId, const TSharedPtr<FJsonObje
     if (!P)
     {
         // Nombre repetido: si el dueño está offline se lo toma (otro navegador del mismo jugador);
-        // si está conectado, se rechaza.
+        // si está conectado (o es alguien del chat del stream), se rechaza.
         for (FPTPhonePlayer& X : Players)
         {
             if (!X.Name.Equals(Name, ESearchCase::IgnoreCase)) continue;
+            if (X.ChatPlatform != 0) { Reject(TEXT("name")); return; }
             if (X.bOnline && X.ConnId != ConnId) { Reject(TEXT("name")); return; }
             P = &X;
             break;
@@ -495,7 +513,7 @@ void UPTLocalPartySubsystem::HandleJoin(int32 ConnId, const TSharedPtr<FJsonObje
 
     if (!P)
     {
-        if (GetGuesserCount() >= (bOnlineTransport ? MaxPlayersOnline : MaxPlayers)) { Reject(TEXT("full")); return; }
+        if (GetPhoneGuesserCount() >= (bOnlineTransport ? MaxPlayersOnline : MaxPlayers)) { Reject(TEXT("full")); return; }
         FPTPhonePlayer N;
         N.Id = NextPlayerId++;
         N.Name = Name;
@@ -542,6 +560,8 @@ void UPTLocalPartySubsystem::Tick(float DeltaTime)
 {
     if (!Server) return;
     Server->Tick();
+    if (TwitchChat.IsValid()) TwitchChat->Tick();
+    if (KickChat.IsValid())   KickChat->Tick();
 
     // Celulares que no volvieron: sacarlos de la partida.
     const double Now = FPlatformTime::Seconds();
@@ -744,5 +764,152 @@ void UPTLocalPartySubsystem::NotifyTurnStarted(const APTPlayerState* Sculptor)
         O->SetStringField(TEXT("t"), TEXT("buzz"));
         SendTo(*P, O);
     }
+    PushStates(true);
+}
+
+// ── Chat del stream (Twitch / Kick) ─────────────────────────────────────────
+
+namespace
+{
+    // Comandos para entrar / salir desde el chat. El idioma del comando es el idioma del jugador.
+    struct FPTChatCmd { const TCHAR* Cmd; const TCHAR* Lang; };
+    const FPTChatCmd GChatJoinCmds[] = {
+        { TEXT("!unirse"), TEXT("es") }, { TEXT("!unirme"), TEXT("es") }, { TEXT("!jugar"), TEXT("es") },
+        { TEXT("!join"), TEXT("en") },   { TEXT("!play"), TEXT("en") },
+        { TEXT("!entrar"), TEXT("pt") }, { TEXT("!jogar"), TEXT("pt") },
+        { TEXT("!beitreten"), TEXT("de") }, { TEXT("!mitspielen"), TEXT("de") },
+        { TEXT("!rejoindre"), TEXT("fr") }, { TEXT("!jouer"), TEXT("fr") },
+        { TEXT("!unisciti"), TEXT("it") }, { TEXT("!gioca"), TEXT("it") },
+    };
+    const TCHAR* GChatLeaveCmds[] = { TEXT("!salir"), TEXT("!leave"), TEXT("!sair"), TEXT("!verlassen"), TEXT("!quitter"), TEXT("!esci") };
+}
+
+void UPTLocalPartySubsystem::StartStreamChats()
+{
+    if (!bOnlineTransport) return;
+    const UPTGameUserSettings* S = UPTGameUserSettings::Get();
+    auto Ensure = [this](TSharedPtr<FPTStreamChat>& Chat, EPTChatPlatform Platform, const FString& Channel)
+    {
+        if (!Chat.IsValid())
+        {
+            Chat = MakeShared<FPTStreamChat>(Platform);
+            Chat->OnMessage.BindUObject(this, &UPTLocalPartySubsystem::HandleStreamChat);
+        }
+        Chat->Start(Channel);
+    };
+    Ensure(TwitchChat, EPTChatPlatform::Twitch, S ? S->GetTwitchChannel() : FString());
+    Ensure(KickChat,   EPTChatPlatform::Kick,   S ? S->GetKickChannel()   : FString());
+}
+
+void UPTLocalPartySubsystem::StopStreamChats()
+{
+    if (TwitchChat.IsValid()) TwitchChat->Stop();
+    if (KickChat.IsValid())   KickChat->Stop();
+}
+
+void UPTLocalPartySubsystem::SetStreamChannel(EPTChatPlatform Platform, const FString& Channel)
+{
+    const FString Norm = FPTStreamChat::NormalizeChannel(Platform, Channel);
+    if (UPTGameUserSettings* S = UPTGameUserSettings::Get())
+    {
+        if (Platform == EPTChatPlatform::Twitch) S->SetTwitchChannel(Norm); else S->SetKickChannel(Norm);
+        S->SaveSettings();
+    }
+    StartStreamChats();
+}
+
+FString UPTLocalPartySubsystem::GetStreamChannel(EPTChatPlatform Platform) const
+{
+    const UPTGameUserSettings* S = UPTGameUserSettings::Get();
+    if (!S) return FString();
+    return Platform == EPTChatPlatform::Twitch ? S->GetTwitchChannel() : S->GetKickChannel();
+}
+
+FPTStreamChat::EStatus UPTLocalPartySubsystem::GetStreamChatStatus(EPTChatPlatform Platform) const
+{
+    const TSharedPtr<FPTStreamChat>& C = Platform == EPTChatPlatform::Twitch ? TwitchChat : KickChat;
+    return C.IsValid() ? C->GetStatus() : FPTStreamChat::EStatus::Off;
+}
+
+FString UPTLocalPartySubsystem::GetStreamChatError(EPTChatPlatform Platform) const
+{
+    const TSharedPtr<FPTStreamChat>& C = Platform == EPTChatPlatform::Twitch ? TwitchChat : KickChat;
+    return C.IsValid() ? C->GetLastError() : FString();
+}
+
+bool UPTLocalPartySubsystem::HasStreamChatGivenUp(EPTChatPlatform Platform) const
+{
+    const TSharedPtr<FPTStreamChat>& C = Platform == EPTChatPlatform::Twitch ? TwitchChat : KickChat;
+    return C.IsValid() && C->HasGivenUp();
+}
+
+bool UPTLocalPartySubsystem::IsStreamChatConnected() const
+{
+    return GetStreamChatStatus(EPTChatPlatform::Twitch) == FPTStreamChat::EStatus::Connected
+        || GetStreamChatStatus(EPTChatPlatform::Kick) == FPTStreamChat::EStatus::Connected;
+}
+
+void UPTLocalPartySubsystem::HandleStreamChat(const FPTStreamChatMessage& M)
+{
+    if (!bOnlineTransport) return;
+    const FString Text = M.Text.TrimStartAndEnd();
+    if (Text.IsEmpty()) return;
+    const FString Key = FString::Printf(TEXT("%d:%s"), (int32)M.Platform + 1, *M.UserId);
+    FPTPhonePlayer* P = Players.FindByPredicate([&Key](const FPTPhonePlayer& X) { return X.ChatUserId == Key; });
+
+    if (Text.StartsWith(TEXT("!")))
+    {
+        FString Cmd = Text, Rest;
+        Text.Split(TEXT(" "), &Cmd, &Rest);
+        Cmd = Cmd.ToLower();
+        for (const FPTChatCmd& J : GChatJoinCmds)
+            if (Cmd == J.Cmd) { if (!P) JoinFromChat(M, Key, J.Lang); return; }
+        for (const TCHAR* L : GChatLeaveCmds)
+            if (Cmd == L) { if (P) RemovePlayer(P->Id); return; }
+        return; // comandos de otros bots del canal: no son intentos
+    }
+    if (!P) return; // no se unió: es chat normal del stream
+
+    const double Now = FPlatformTime::Seconds();
+    if (Now - P->LastChatAt < ChatGuessCooldown) return;
+    P->LastChatAt = Now;
+    APTSculptGameMode* GM = GameMode.Get();
+    APTPlayerState* PS = P->PlayerState.Get();
+    if (GM && PS) GM->LocalParty_ChatGuess(PS, Text.Left(MaxGuessLen));
+}
+
+void UPTLocalPartySubsystem::JoinFromChat(const FPTStreamChatMessage& M, const FString& Key, const FString& Lang)
+{
+    if (GetChatPlayerCount() >= MaxChatPlayers) return;
+
+    // Nombre del chat (recortado). Si choca con otro jugador, se le agrega un número.
+    FString Base = CleanName(M.UserName);
+    if (Base.IsEmpty()) Base = TEXT("Viewer");
+    FString Name = Base;
+    for (int32 Num = 2; Players.ContainsByPredicate([&Name](const FPTPhonePlayer& X) { return X.Name.Equals(Name, ESearchCase::IgnoreCase); }); ++Num)
+    {
+        const FString Suffix = FString::FromInt(Num);
+        Name = Base.Left(MaxNameLen - Suffix.Len()) + Suffix;
+    }
+
+    FPTPhonePlayer N;
+    N.Id = NextPlayerId++;
+    N.Name = Name;
+    N.Language = Lang;
+    N.ChatPlatform = (uint8)M.Platform + 1;
+    N.ChatUserId = Key;
+    N.bOnline = true; // sin celular: nunca "se desconecta" (sale con !salir o al cerrar la sala)
+    // Su color del chat (si es legible sobre fondo oscuro); si no, uno de la paleta.
+    N.Color = GPartyPalette[N.Id % UE_ARRAY_COUNT(GPartyPalette)];
+    if (M.Color.Len() == 7 && M.Color.StartsWith(TEXT("#")))
+    {
+        const FLinearColor C = FLinearColor::FromSRGBColor(FColor::FromHex(M.Color));
+        if (C.GetLuminance() > 0.12f) N.Color = C;
+    }
+    Players.Add(N);
+    EnsurePlayerState(Players.Last());
+    UE_LOG(LogPTLocalPartySub, Log, TEXT("Entró '%s' desde el chat de %s."), *Name,
+        M.Platform == EPTChatPlatform::Kick ? TEXT("Kick") : TEXT("Twitch"));
+    OnPlayersChanged.Broadcast();
     PushStates(true);
 }

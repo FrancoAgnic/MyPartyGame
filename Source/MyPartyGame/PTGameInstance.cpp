@@ -1146,6 +1146,12 @@ FString UPTGameInstance::ConsumePendingConnectError()
     return Out;
 }
 
+void UPTGameInstance::PTChat(const FString& Platform, const FString& Channel)
+{
+    if (UPTLocalPartySubsystem* LP = GetSubsystem<UPTLocalPartySubsystem>())
+        LP->SetStreamChannel(Platform.Equals(TEXT("kick"), ESearchCase::IgnoreCase) ? EPTChatPlatform::Kick : EPTChatPlatform::Twitch, Channel);
+}
+
 void UPTGameInstance::PTDumpBots()
 {
     UWorld* W = GetWorld();
