@@ -49,6 +49,7 @@ categoría *Input | Gamepad*.
 | Subsistema del GameInstance: jugadores del celular, tokens de reconexión y estado por celular | `LocalParty/PTLocalPartySubsystem.*` |
 | Overlay de la TV (QR, lista, "pásale el joystick", ayuda de controles), 100% C++ | `LocalParty/PTLocalPartyTVWidget.*` |
 | Lector del chat de Twitch / Kick (modo audiencia) | `LocalParty/PTStreamChat.*` |
+| Modal "Links de la partida" (audiencia): separa el link PRIVADO del streamer del link para el chat | `LocalParty/PTStreamerLinkModal.*` |
 | Generador de QR (modo byte, ECC M, v1–10; verificado contra la librería `qrcode` de Python) | `LocalParty/PTQRCode.*` |
 | Página del celular (HTML/JS en un solo archivo, 6 idiomas) | `Content/LocalParty/Web/index.html` |
 | Joystick del escultor | `Sculpt/PTSculptPlayerController_Gamepad.cpp` |
@@ -130,3 +131,14 @@ Se abre desde Ajustes (botón `GamepadButton` o Y) o con el comando `PTJoystick`
 
 **Para probar sin joystick:** lanza con `-PTCmdFile` y escribe comandos en `Saved/PTCommands.txt`,
 por ejemplo `PTPadKey Gamepad_DPad_Down`. Esto queda desactivado en Shipping.
+
+## Links en modo audiencia
+
+- El link del streamer (`?h=CLAVE`) es privado: con él cualquiera entra como streamer. Solo aparece en la
+  zona privada roja del panel de configuración y NUNCA se muestra escrito.
+- "Copiar link" del panel del streamer no copia directo: abre `UPTStreamerLinkModal` (Z 500) con el
+  aviso, "Copiar link para el chat" (`GetJoinUrl()`, recibe el foco del joystick) y "Copiar link del
+  streamer (privado)" (`GetHostJoinUrl()`). B cierra (botón `CloseLinkModalButton`). Se cierra solo si el
+  panel de configuración se oculta (pausa, banco de palabras, Workshop, arranque).
+- Debajo del QR público de la TV hay un botón "Copiar link para el chat" (en modo local: "Copiar link").
+  El overlay de la TV es todo HitTestInvisible salvo ese botón (y sus contenedores, SelfHitTestInvisible).

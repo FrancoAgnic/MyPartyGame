@@ -8,11 +8,11 @@
 #include "../UI/PTWordPackWidget.h"
 #include "../UI/PTWorkshopBrowserWidget.h"
 #include "PTQRCode.h"
+#include "PTStreamerLinkModal.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Components/Image.h"
 #include "Engine/Texture2D.h"
 #include "GameFramework/PlayerController.h"
-#include "HAL/PlatformApplicationMisc.h"
 #include "HAL/PlatformProcess.h"
 #include "TimerManager.h"
 #include "Blueprint/WidgetTree.h"
@@ -228,22 +228,14 @@ void UPTLocalPartySettingsWidget::BuildStreamerSection(UVerticalBox* Col)
     UButton* Toggle = MakeButton(PTText::Get(TEXT("LP_AUD_SHOW_QR")), TEXT("ShowHostQrButton"), 15, &ToggleQrText);
     Toggle->OnClicked.AddDynamic(this, &UPTLocalPartySettingsWidget::OnToggleHostQr);
     if (UVerticalBoxSlot* S = Btns->AddChildToVerticalBox(Toggle)) S->SetPadding(FMargin(0.f, 8.f, 0.f, 4.f));
-    UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>();
+    // Uno debajo del otro (no en fila): en fila, "abajo" con el joystick saltaba directo al slider y
+    // estos dos botones quedaban inalcanzables.
     UButton* Open = MakeButton(PTText::Get(TEXT("LP_AUD_OPEN_PC")), TEXT("OpenHostPcButton"), 14);
     Open->OnClicked.AddDynamic(this, &UPTLocalPartySettingsWidget::OnOpenHostOnPC);
-    if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(Open))
-    {
-        S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-        S->SetPadding(FMargin(0.f, 0.f, 4.f, 0.f));
-    }
-    UButton* Copy = MakeButton(PTText::Get(TEXT("LP_AUD_COPY")), TEXT("CopyHostLinkButton"), 14, &CopyText);
+    if (UVerticalBoxSlot* S = Btns->AddChildToVerticalBox(Open)) S->SetPadding(FMargin(0.f, 0.f, 0.f, 4.f));
+    UButton* Copy = MakeButton(PTText::Get(TEXT("LP_AUD_COPY")), TEXT("CopyHostLinkButton"), 14);
     Copy->OnClicked.AddDynamic(this, &UPTLocalPartySettingsWidget::OnCopyHostLink);
-    if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(Copy))
-    {
-        S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-        S->SetPadding(FMargin(4.f, 0.f, 0.f, 0.f));
-    }
-    Btns->AddChildToVerticalBox(Row);
+    Btns->AddChildToVerticalBox(Copy);
     Sec->AddChildToVerticalBox(Btns);
 }
 
@@ -382,6 +374,7 @@ void UPTLocalPartySettingsWidget::NativeConstruct()
 void UPTLocalPartySettingsWidget::NativeDestruct()
 {
     if (UWorld* W = GetWorld()) W->GetTimerManager().ClearTimer(StateTimer);
+    if (LinkModal) LinkModal->Close();
     Super::NativeDestruct();
 }
 
@@ -419,7 +412,6 @@ void UPTLocalPartySettingsWidget::UpdateStreamerSection()
     Show(PrivateQr, bShowQr && PrivateQrTexture);
     Show(PrivateZoneHint, !(bShowQr && PrivateQrTexture));
     if (ToggleQrText) ToggleQrText->SetText(PTText::Get(bHostQrShown ? TEXT("LP_AUD_HIDE_QR") : TEXT("LP_AUD_SHOW_QR")));
-    if (CopyText) CopyText->SetText(PTText::Get(FPlatformTime::Seconds() < CopiedUntil ? TEXT("LP_AUD_COPIED") : TEXT("LP_AUD_COPY")));
 }
 
 void UPTLocalPartySettingsWidget::OnToggleHostQr()
@@ -437,12 +429,10 @@ void UPTLocalPartySettingsWidget::OnOpenHostOnPC()
 
 void UPTLocalPartySettingsWidget::OnCopyHostLink()
 {
-    const UPTLocalPartySubsystem* LP = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLocalPartySubsystem>() : nullptr;
-    const FString Url = LP ? LP->GetHostJoinUrl() : FString();
-    if (Url.IsEmpty()) return;
-    FPlatformApplicationMisc::ClipboardCopy(*Url);
-    CopiedUntil = FPlatformTime::Seconds() + 2.0;
-    UpdateStreamerSection();
+    // Un streamer pegó el link privado (?h=CLAVE) en el chat creyendo que era el de la audiencia:
+    // ahora "Copiar link" abre un modal que separa los dos links, con el aviso bien visible.
+    if (!LinkModal) LinkModal = CreateWidget<UPTStreamerLinkModal>(GetOwningPlayer(), UPTStreamerLinkModal::StaticClass());
+    if (LinkModal) LinkModal->Open();
 }
 
 void UPTLocalPartySettingsWidget::RefreshValues()
@@ -478,7 +468,14 @@ void UPTLocalPartySettingsWidget::UpdateState()
     }
     const bool bShow = G && G->TurnPhase == EPTTurnPhase::WaitingForPlayers && !(PC && PC->IsEscapeMenuOpen()) && !bOtherPanel;
     SetVisibility(bShow ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
-    if (!bShow) { bHostQrShown = false; return; } // al irse el panel, el QR privado se oculta
+    // Al irse el panel (pausa, banco de palabras, Workshop, empezó la partida), el QR privado se oculta
+    // y el modal de links se cierra con él.
+    if (!bShow)
+    {
+        bHostQrShown = false;
+        if (LinkModal) LinkModal->Close();
+        return;
+    }
     UpdateStreamerSection();
     UpdateChatSection();
 

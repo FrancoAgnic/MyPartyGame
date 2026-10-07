@@ -52,6 +52,7 @@ private:
     UFUNCTION() void OnStartClicked();
     UFUNCTION() void OnToggleHostQr();
     UFUNCTION() void OnOpenHostOnPC();
+    // Abre el modal de links (privado del streamer vs. público para el chat): nunca copia directo.
     UFUNCTION() void OnCopyHostLink();
     UFUNCTION() void OnTwitchCommitted(const FText& Text, ETextCommit::Type Method);
     UFUNCTION() void OnKickCommitted(const FText& Text, ETextCommit::Type Method);
@@ -78,7 +79,7 @@ private:
     UPROPERTY() UTextBlock* PrivateZoneHint = nullptr;
     UPROPERTY() UWidget*    StreamerButtons = nullptr;
     UPROPERTY() UTextBlock* ToggleQrText = nullptr;
-    UPROPERTY() UTextBlock* CopyText = nullptr;
+    UPROPERTY() class UPTStreamerLinkModal* LinkModal = nullptr;
     UPROPERTY() class UTexture2D* PrivateQrTexture = nullptr;
     FString PrivateQrUrl;
 
@@ -92,6 +93,5 @@ private:
     // automática de PTText y el texto alterna "Películas" ↔ "Movies").
     FString ShownPackTitle = TEXT("?");
     bool    bHostQrShown = false;
-    double  CopiedUntil = 0.0;
     FTimerHandle StateTimer;
 };
