@@ -239,7 +239,7 @@ void UPTLocalPartySettingsWidget::BuildStreamerSection(UVerticalBox* Col)
     Sec->AddChildToVerticalBox(Btns);
 }
 
-UEditableTextBox* UPTLocalPartySettingsWidget::AddChannelRow(UVerticalBox* Box, const FText& Platform, const FLinearColor& Color, FName Name, UTextBlock*& OutStatus)
+UEditableTextBox* UPTLocalPartySettingsWidget::AddChannelRow(UVerticalBox* Box, const FText& Platform, const FLinearColor& Color, FName Name, UTextBlock*& OutIcon, UTextBlock*& OutStatus)
 {
     UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>();
     USizeBox* LabelBox = WidgetTree->ConstructWidget<USizeBox>();
@@ -262,9 +262,16 @@ UEditableTextBox* UPTLocalPartySettingsWidget::AddChannelRow(UVerticalBox* Box, 
     Input->SetWidgetStyle(Style);
     Input->SetHintText(PTText::Get(TEXT("LP_CHAT_CHANNEL_HINT")));
     if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(Input)) S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+    USizeBox* IconBox = WidgetTree->ConstructWidget<USizeBox>();
+    IconBox->SetWidthOverride(26.f);
+    OutIcon = MakeText(16, LPS_Muted, true);
+    OutIcon->SetJustification(ETextJustify::Center);
+    IconBox->SetContent(OutIcon);
+    if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(IconBox)) S->SetVerticalAlignment(VAlign_Center);
     if (UVerticalBoxSlot* S = Box->AddChildToVerticalBox(Row)) S->SetPadding(FMargin(0.f, 6.f, 0.f, 0.f));
 
     OutStatus = MakeText(13, LPS_Muted, false);
+    OutStatus->SetVisibility(ESlateVisibility::Collapsed);
     if (UVerticalBoxSlot* S = Box->AddChildToVerticalBox(OutStatus)) S->SetPadding(FMargin(72.f, 2.f, 0.f, 0.f));
     return Input;
 }
@@ -282,8 +289,8 @@ void UPTLocalPartySettingsWidget::BuildChatSection(UVerticalBox* Col)
     Hint->SetText(PTText::Get(TEXT("LP_CHAT_HINT")));
     Sec->AddChildToVerticalBox(Hint);
 
-    TwitchInput = AddChannelRow(Sec, FText::FromString(TEXT("Twitch")), FLinearColor(0.66f, 0.47f, 1.f, 1.f), TEXT("TwitchChannelInput"), TwitchStatus);
-    KickInput   = AddChannelRow(Sec, FText::FromString(TEXT("Kick")),   FLinearColor(0.33f, 0.98f, 0.36f, 1.f), TEXT("KickChannelInput"), KickStatus);
+    TwitchInput = AddChannelRow(Sec, FText::FromString(TEXT("Twitch")), FLinearColor(0.66f, 0.47f, 1.f, 1.f), TEXT("TwitchChannelInput"), TwitchIcon, TwitchStatus);
+    KickInput   = AddChannelRow(Sec, FText::FromString(TEXT("Kick")),   FLinearColor(0.33f, 0.98f, 0.36f, 1.f), TEXT("KickChannelInput"), KickIcon, KickStatus);
     TwitchInput->OnTextCommitted.AddDynamic(this, &UPTLocalPartySettingsWidget::OnTwitchCommitted);
     KickInput->OnTextCommitted.AddDynamic(this, &UPTLocalPartySettingsWidget::OnKickCommitted);
 
@@ -301,9 +308,9 @@ void UPTLocalPartySettingsWidget::UpdateChatSection()
 {
     const UPTLocalPartySubsystem* LP = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLocalPartySubsystem>() : nullptr;
     if (!LP || !TwitchStatus) return;
-    auto SetStatus = [LP](UTextBlock* T, EPTChatPlatform P)
+    auto SetStatus = [LP](UTextBlock* Icon, UTextBlock* T, EPTChatPlatform P)
     {
-        if (!T) return;
+        if (!T || !Icon) return;
         const bool bHasChannel = !LP->GetStreamChannel(P).IsEmpty();
         const FPTStreamChat::EStatus St = LP->GetStreamChatStatus(P);
         const TCHAR* Key = TEXT("LP_CHAT_ST_OFF");
@@ -319,9 +326,16 @@ void UPTLocalPartySettingsWidget::UpdateChatSection()
         const FText Want = PTText::Get(Key);
         if (!T->GetText().EqualTo(Want)) T->SetText(Want);
         T->SetColorAndOpacity(FSlateColor(C));
+        // Al lado del campo, solo un ícono; el texto de abajo aparece únicamente con error (ahorra alto).
+        const bool bError = bHasChannel && St == FPTStreamChat::EStatus::Error;
+        T->SetVisibility(bError ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+        const TCHAR* Sym = !bHasChannel ? TEXT("") : St == FPTStreamChat::EStatus::Connected ? TEXT("✓")
+                         : bError ? TEXT("✕") : TEXT("…");
+        if (Icon->GetText().ToString() != Sym) Icon->SetText(FText::FromString(Sym));
+        Icon->SetColorAndOpacity(FSlateColor(C));
     };
-    SetStatus(TwitchStatus, EPTChatPlatform::Twitch);
-    SetStatus(KickStatus, EPTChatPlatform::Kick);
+    SetStatus(TwitchIcon, TwitchStatus, EPTChatPlatform::Twitch);
+    SetStatus(KickIcon, KickStatus, EPTChatPlatform::Kick);
 
     // Si el canal cambió por otro lado (consola), mostrarlo; nunca mientras el streamer está escribiendo.
     auto SyncInput = [LP](UEditableTextBox* In, EPTChatPlatform P)

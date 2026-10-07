@@ -34,7 +34,7 @@ private:
     void BuildStreamerSection(UVerticalBox* Col);
     void BuildChatSection(UVerticalBox* Col);
     void UpdateChatSection();
-    UEditableTextBox* AddChannelRow(UVerticalBox* Box, const FText& Platform, const FLinearColor& Color, FName Name, UTextBlock*& OutStatus);
+    UEditableTextBox* AddChannelRow(UVerticalBox* Box, const FText& Platform, const FLinearColor& Color, FName Name, UTextBlock*& OutIcon, UTextBlock*& OutStatus);
     void RefreshValues();
     // Corre por TIMER (no NativeTick): un widget colapsado no tickea, y el panel tiene que volver a
     // mostrarse solo al cerrar el banco de palabras / el Workshop o al volver a la espera.
@@ -88,6 +88,8 @@ private:
     UPROPERTY() UEditableTextBox* KickInput = nullptr;
     UPROPERTY() UTextBlock* TwitchStatus = nullptr;
     UPROPERTY() UTextBlock* KickStatus = nullptr;
+    UPROPERTY() UTextBlock* TwitchIcon = nullptr; // ✓ / … / ✕ al lado del campo (el texto de abajo solo si hay error)
+    UPROPERTY() UTextBlock* KickIcon = nullptr;
     UPROPERTY() UTextBlock* ChatPlayersText = nullptr;
     // Último título de banco escrito: solo se reescribe si cambia (si no, se pisa con la traducción
     // automática de PTText y el texto alterna "Películas" ↔ "Movies").
