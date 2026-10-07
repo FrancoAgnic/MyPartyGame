@@ -89,6 +89,8 @@ public:
     UFUNCTION(Exec) void PTJoystick();
     // DEV: simula un botón del joystick (p. ej. "PTPadKey Gamepad_DPad_Down") para probar la navegación sin uno.
     UFUNCTION(Exec) void PTPadKey(const FString& KeyName);
+    // DEV: vuelca al log el estado de cada personaje (nombre, cartel visible, controller).
+    UFUNCTION(Exec) void PTDumpBots();
 
     // Mapa y GameMode del modo local (editables en BP_GameInstance por si cambian de lugar).
     UPROPERTY(EditAnywhere, Category="LocalParty") FString LocalPartyLevel = TEXT("/Game/Template/levels/Lvl-01");

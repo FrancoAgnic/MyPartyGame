@@ -3,6 +3,7 @@
 
 #pragma once
 #include "CoreMinimal.h"
+#include "GameFramework/PlayerController.h"
 #include "GameFramework/Character.h"
 #include "PTHeadSaveGame.h"
 #include "PTLobbyCharacter.generated.h"
@@ -197,6 +198,20 @@ public:
     // Look BASE por defecto: una ESFERA blanca en el HeadSocket (para cuando no hay cabeza custom
     // equipada). Así el personaje default no queda sin cabeza. Radio ajustable en BP_LobbyCharacter.
     void ApplyDefaultSphereHead();
+
+    // "Es MI personaje" (el del humano en esta máquina). En partidas locales Unreal considera
+    // "locally controlled" también a los pawns de IA (bots del modo local/audiencia): sin esto los
+    // bots escondían su nombre y cargaban la skin del Locker del que juega en la PC.
+    // OJO: no alcanza IsPlayerControlled() (en UE5 mira si la PlayerState "es bot", y la de un bot del
+    // modo local es la del celular de un humano). Se mira el CONTROLLER: tiene que ser un PlayerController.
+    bool IsLocalHumanPawn() const { return IsLocallyControlled() && Cast<APlayerController>(GetController()) != nullptr; }
+
+    // Color base del cuerpo en caliente (bots: color del jugador del celular).
+    void SetBodyColor(const FLinearColor& Color);
+
+protected:
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Head") float DefaultHeadRadius = 20.f;
 
     // Persistencia local: guardar/cargar la cabeza (blob completo: geometría + texturas de pintura).

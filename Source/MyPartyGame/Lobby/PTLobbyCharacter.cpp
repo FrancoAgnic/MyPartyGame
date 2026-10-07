@@ -858,7 +858,7 @@ void APTLobbyCharacter::TryApplyReplicatedHead()
         }
 
     // Sin cabeza replicada aún: si es el pawn local, cargar la guardada (disco) y replicarla.
-    if (IsLocallyControlled())
+    if (IsLocalHumanPawn())
         LoadHead();
 }
 
@@ -893,7 +893,7 @@ void APTLobbyCharacter::UpdateSculptBeam()
                                    G->CurrentSculptor && (G->CurrentSculptor->GetPawn() == this);
         // Ocultar si el POV LOCAL es este pawn (el escultor): soy yo el escultor, o soy espectador metido
         // en SU POV. Si estoy en cámara libre o en el POV de otro, sí la veo.
-        bool bLocalViewIsSculptor = IsLocallyControlled();
+        bool bLocalViewIsSculptor = IsLocalHumanPawn();
         if (!bLocalViewIsSculptor)
             if (APTSculptPlayerController* LPC = Cast<APTSculptPlayerController>(GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr))
                 bLocalViewIsSculptor = (LPC->GetSpectatedPovPawn() == this);
@@ -1015,7 +1015,7 @@ void APTLobbyCharacter::UpdateNameTag()
 
     // Tu PROPIO tag: se ve en el LOBBY y en el MENÚ principal, pero NO en gameplay (Lvl-01).
     // bForceFlying solo se activa en gameplay (ApplyGameplayMovementMode), así que sirve de "estoy jugando".
-    if (IsLocallyControlled() && bForceFlying)
+    if (IsLocalHumanPawn() && bForceFlying)
     {
         NameTag->SetVisibility(false);
         return;
@@ -1037,7 +1037,7 @@ void APTLobbyCharacter::UpdateNameTag()
             bReady = PS->bIsReady;
         }
         // Fallback para el menú principal (sin sesión / sin DisplayName): usar el nick local de Steam.
-        if (N.IsEmpty() && IsLocallyControlled())
+        if (N.IsEmpty() && IsLocalHumanPawn())
             if (UMultiplayerSessionsSubsystem* S = GetGameInstance()
                     ? GetGameInstance()->GetSubsystem<UMultiplayerSessionsSubsystem>() : nullptr)
                 N = S->GetLocalPlayerDisplayName();
@@ -1238,7 +1238,7 @@ FVector APTLobbyCharacter::GetSpectateCamLocation() const
 FRotator APTLobbyCharacter::GetSpectateViewRotation() const
 {
     // Yaw del actor (ya replicado) + pitch replicado aparte. Para uno mismo, el control real.
-    if (IsLocallyControlled())
+    if (IsLocalHumanPawn())
         if (const AController* C = GetController()) return C->GetControlRotation();
     return FRotator(ReplViewPitch, GetActorRotation().Yaw, 0.f);
 }
@@ -1264,7 +1264,7 @@ void APTLobbyCharacter::Tick(float DeltaSeconds)
 
     // El dueño manda su PITCH de vista al server ~30 Hz (unreliable), para que los espectadores
     // reproduzcan su POV completo (arriba/abajo). El yaw ya viaja por la rotación del actor.
-    if (IsLocallyControlled() && GetController() && !HasAuthority()) // el host lo setea directo abajo
+    if (IsLocalHumanPawn() && GetController() && !HasAuthority()) // el host lo setea directo abajo
     {
         ViewPitchSendAccum += DeltaSeconds;
         if (ViewPitchSendAccum >= 0.033f)
@@ -1273,7 +1273,7 @@ void APTLobbyCharacter::Tick(float DeltaSeconds)
             Server_ReportViewPitch(GetController()->GetControlRotation().Pitch);
         }
     }
-    else if (IsLocallyControlled() && GetController() && HasAuthority())
+    else if (IsLocalHumanPawn() && GetController() && HasAuthority())
     {
         ReplViewPitch = GetController()->GetControlRotation().Pitch; // host: setear directo (ya es server)
     }
@@ -1902,4 +1902,24 @@ void APTLobbyCharacter::FlushHeadPaint()
         [](uint8* Src, const FUpdateTextureRegion2D* Reg) { FMemory::Free(Src); delete Reg; });
 
     HDirtyMinX = HDirtyMinY = 0; HDirtyMaxX = HDirtyMaxY = -1;
+}
+
+void APTLobbyCharacter::SetBodyColor(const FLinearColor& Color)
+{
+    BodyBaseColor = Color;
+    if (CharPaintMID)
+    {
+        CharPaintMID->SetVectorParameterValue(TEXT("Color"), BodyBaseColor);
+        CharPaintMID->SetVectorParameterValue(BodyBaseColorParam, BodyBaseColor);
+    }
+}
+
+void APTLobbyCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    // Las texturas de pintura se crean con AddToRoot (para que el GC no las borre mientras se pinta):
+    // si no se sueltan acá, CADA personaje destruido dejaba ~8 MB colgados (con los bots del modo local
+    // y audiencia, que entran y salen, se notaba).
+    if (PaintTex && PaintTex->IsRooted())         PaintTex->RemoveFromRoot();
+    if (HeadPaintTex && HeadPaintTex->IsRooted()) HeadPaintTex->RemoveFromRoot();
+    Super::EndPlay(EndPlayReason);
 }

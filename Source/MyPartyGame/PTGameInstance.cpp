@@ -5,6 +5,10 @@
 #include "Misc/CommandLine.h"
 #include "LocalParty/PTLocalPartySubsystem.h"
 #include "UI/PTGamepadUINavigator.h"
+#include "Lobby/PTLobbyCharacter.h"
+#include "Lobby/PTPlayerState.h"
+#include "Components/WidgetComponent.h"
+#include "EngineUtils.h"
 #include "PTTextTable.h"
 #include "PTWordBank.h"
 #include "UI/PTLoadingScreenWidget.h"
@@ -1140,4 +1144,25 @@ FString UPTGameInstance::ConsumePendingConnectError()
     const FString Out = PendingConnectError;
     PendingConnectError.Reset();
     return Out;
+}
+
+void UPTGameInstance::PTDumpBots()
+{
+    UWorld* W = GetWorld();
+    if (!W) return;
+    for (TActorIterator<APTLobbyCharacter> It(W); It; ++It)
+    {
+        APTLobbyCharacter* C = *It;
+        const APTPlayerState* PS = C->GetPlayerState<APTPlayerState>();
+        FString Tags;
+        TArray<UWidgetComponent*> WCs;
+        C->GetComponents<UWidgetComponent>(WCs);
+        for (UWidgetComponent* WC : WCs)
+            Tags += FString::Printf(TEXT(" [%s vis=%d hid=%d w=%d space=%d]"), *WC->GetName(), WC->IsVisible() ? 1 : 0,
+                                    WC->bHiddenInGame ? 1 : 0, WC->GetUserWidgetObject() ? 1 : 0, (int32)WC->GetWidgetSpace());
+        UE_LOG(LogTemp, Log, TEXT("[PTDumpBots] %s ps=%s ctrl=%s human=%d loc=%s%s"),
+            *C->GetName(), PS ? *PS->GetPlayerName() : TEXT("-"),
+            C->GetController() ? *C->GetController()->GetClass()->GetName() : TEXT("-"),
+            C->IsLocalHumanPawn() ? 1 : 0, *C->GetActorLocation().ToString(), *Tags);
+    }
 }

@@ -9,6 +9,7 @@
 #include "../PTTextTable.h"
 #include "../Lobby/PTGameState.h"
 #include "../LocalParty/PTLocalPartySubsystem.h"
+#include "../LocalParty/PTPartyBotController.h"
 #include "GameFramework/PlayerState.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
@@ -913,6 +914,7 @@ APTPlayerState* APTSculptGameMode::LocalParty_AddPlayer(const FString& Name, con
     PS->GameScore      = 0;
 
     UE_LOG(LogTemp, Log, TEXT("[SculptGM] Modo local: jugador de celular '%s' (%s)."), *Name, *Language);
+    EnsurePartyBots();
     return PS;
 }
 
@@ -921,7 +923,9 @@ void APTSculptGameMode::LocalParty_RemovePlayer(APTPlayerState* PS)
     if (!PS) return;
     APTSculptGameState* G = GS();
     const bool bWasSculptor = G && G->CurrentSculptor == PS;
+    DestroyPartyBot(PS);
     PS->Destroy(); // la saca del PlayerArray (APlayerState::Destroyed)
+    EnsurePartyBots(); // en audiencia, el cuerpo que quedó libre pasa al siguiente espectador
 
     if (!G || G->TurnPhase == EPTTurnPhase::WaitingForPlayers || G->TurnPhase == EPTTurnPhase::GameOver) return;
 
@@ -1005,4 +1009,67 @@ void APTSculptGameMode::LocalParty_ChooseAsHost(int32 ChoiceIndex)
 {
     if (IsAudienceGame())
         if (APTPlayerState* TV = GetTVPlayerState()) HandleWordChosen(TV, ChoiceIndex);
+}
+
+// ── Bots del modo local / audiencia ─────────────────────────────────────────
+
+void APTSculptGameMode::EnsurePartyBots()
+{
+    const APTSculptGameState* G = GS();
+    if (!bSpawnPartyBots || !G || !IsLocalPartyGame()) return;
+
+    const int32 Limit = IsAudienceGame() ? FMath::Max(0, MaxAudienceBots) : TNumericLimits<int32>::Max();
+    int32 HaveBody = 0;
+    TArray<APTPlayerState*> Waiting;
+    for (APlayerState* P : G->PlayerArray) // orden de llegada: los primeros tienen cuerpo
+    {
+        APTPlayerState* PT = Cast<APTPlayerState>(P);
+        if (!PT || !PT->bIsPhonePlayer || !IsValid(PT)) continue;
+        if (PT->GetPawn()) ++HaveBody; else Waiting.Add(PT);
+    }
+    for (APTPlayerState* PT : Waiting)
+    {
+        if (HaveBody >= Limit) break;
+        if (SpawnPartyBot(PT)) ++HaveBody;
+    }
+}
+
+APawn* APTSculptGameMode::SpawnPartyBot(APTPlayerState* PS)
+{
+    UWorld* W = GetWorld();
+    if (!W || !PS) return nullptr;
+
+    UClass* CtrlCls = PartyBotControllerClass ? PartyBotControllerClass.Get() : APTPartyBotController::StaticClass();
+    FActorSpawnParameters CP;
+    CP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    APTPartyBotController* Ctrl = W->SpawnActor<APTPartyBotController>(CtrlCls, CP);
+    if (!Ctrl) return nullptr;
+
+    // Aparece YA en su lugar alrededor de la escultura (no en un PlayerStart cruzando el cubo).
+    const FVector Seat = Ctrl->PickSeat();
+    const FTransform Xf(FRotator::ZeroRotator, Seat);
+    UClass* PawnCls = DefaultPawnClass ? DefaultPawnClass.Get() : APTLobbyCharacter::StaticClass();
+    APTLobbyCharacter* C = W->SpawnActorDeferred<APTLobbyCharacter>(PawnCls, Xf, nullptr, nullptr,
+        ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+    if (!C) { Ctrl->Destroy(); return nullptr; }
+    C->BodyBaseColor = PS->PartyColor; // el color del jugador (el mismo que ve en su celular)
+    C->FinishSpawning(Xf);
+
+    Ctrl->Possess(C);
+    Ctrl->SetSeat(Seat);
+    C->SetPlayerState(PS);              // nombre arriba + globos / confeti de SUS mensajes
+    C->ApplyGameplayMovementMode();     // flota como los jugadores de Lvl-01
+    C->ApplyDefaultSphereHead();        // sin skin: la cabeza por defecto
+    C->SetBodyColor(PS->PartyColor);
+    UE_LOG(LogTemp, Log, TEXT("[SculptGM] Bot para '%s'."), *PS->GetPlayerName());
+    return C;
+}
+
+void APTSculptGameMode::DestroyPartyBot(APTPlayerState* PS)
+{
+    APawn* P = PS ? PS->GetPawn() : nullptr;
+    if (!P || !Cast<APTPartyBotController>(P->GetController())) return; // solo los bots, nunca un jugador real
+    AController* C = P->GetController();
+    P->Destroy();
+    if (C) C->Destroy();
 }

@@ -95,6 +95,14 @@ public:
     // en su celular. La partida no arranca sola: la empieza el "VIP" desde su celular.
     UPROPERTY(EditDefaultsOnly, Category="LocalParty") int32 LocalPartyMinPlayers = 2;
 
+    // Bots: cada jugador del celular tiene un personaje en el mapa con su nombre y color, que flota
+    // alrededor de la escultura (los globos de chat y el confeti de sus aciertos salen sobre él).
+    UPROPERTY(EditDefaultsOnly, Category="LocalParty") bool bSpawnPartyBots = true;
+    // En audiencia solo los primeros N espectadores tienen personaje (el resto juega igual, sin cuerpo).
+    UPROPERTY(EditDefaultsOnly, Category="LocalParty") int32 MaxAudienceBots = 25;
+    // Controller de los bots (para ajustar distancia / altura / cada cuánto se mueven en un BP hijo).
+    UPROPERTY(EditDefaultsOnly, Category="LocalParty") TSubclassOf<class APTPartyBotController> PartyBotControllerClass;
+
     // ¿Esta partida corre en modo local? (flag del GameInstance, seteado al entrar desde el menú).
     bool IsLocalPartyGame() const;
     // Modo AUDIENCIA (local por internet, para streamers): siempre esculpe el streamer (la PC / TV),
@@ -144,6 +152,10 @@ private:
     bool         bStartScheduled = false; // evita re-agendar el arranque en cada CheckStart
     bool         bLocalStartRequested = false; // modo local: el VIP tocó "Empezar" en su celular
     int32        NextPhonePlayerId = 1000;     // PlayerId de los jugadores de celular (no chocan con los reales)
+    // Da personaje a los jugadores del celular que no tienen (respetando el tope de audiencia).
+    void EnsurePartyBots();
+    APawn* SpawnPartyBot(APTPlayerState* PS);
+    void DestroyPartyBot(APTPlayerState* PS);
     class UPTLocalPartySubsystem* LocalParty() const; // null si no es modo local
 
     // Estado del turno (solo servidor). La palabra real vive acá (todas sus traducciones), jamás
