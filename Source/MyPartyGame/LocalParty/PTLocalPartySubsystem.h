@@ -46,6 +46,7 @@ struct FPTPhonePlayer
     double  LastChatAt = 0.0; // anti-spam: un intento por segundo
     FString Token;
     int32   ConnId = INDEX_NONE;
+    int32   LastConnId = INDEX_NONE; // audiencia: si el JUEGO se reconecta al relay, el celular sigue con el mismo id
     double  OfflineSince = 0.0;
     TWeakObjectPtr<APTPlayerState> PlayerState;
     FString LastSentState; // para no reenviar el mismo estado

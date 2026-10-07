@@ -364,13 +364,31 @@ void UPTLocalPartySubsystem::ClearPlayers()
 
 void UPTLocalPartySubsystem::HandleConnected(int32 ConnId)
 {
-    // Nada todavía: el celular manda "join" (con su token si ya había entrado).
+    // Normalmente nada: el celular manda "join" (con su token si ya había entrado).
+    // Audiencia: si se cortó la conexión del JUEGO con el relay, los celulares siguieron conectados al
+    // relay con el mismo id y no vuelven a mandar "join". Al retomar la sala el relay los re-anuncia:
+    // se los reconoce por ese id (si no, a los 20 s quedaban afuera, incluso el streamer).
+    if (!bOnlineTransport) return;
+    for (FPTPhonePlayer& P : Players)
+    {
+        if (P.bOnline || P.LastConnId != ConnId) continue;
+        P.ConnId = ConnId;
+        P.bOnline = true;
+        P.OfflineSince = 0.0;
+        P.LastSentState.Reset();
+        UE_LOG(LogPTLocalPartySub, Log, TEXT("'%s' sigue en la sala tras reconectar al relay (conn %d)."), *P.Name, ConnId);
+        EnsureVip();
+        OnPlayersChanged.Broadcast();
+        RequestPush(true);
+        return;
+    }
 }
 
 void UPTLocalPartySubsystem::HandleDisconnected(int32 ConnId)
 {
     if (FPTPhonePlayer* P = FindByConn(ConnId))
     {
+        P->LastConnId = ConnId;
         P->ConnId = INDEX_NONE;
         P->bOnline = false;
         P->OfflineSince = FPlatformTime::Seconds();
