@@ -93,6 +93,8 @@ public:
     UFUNCTION(Exec) void PTDumpBots();
     // Modo audiencia: lee el chat de un canal ("PTChat twitch micanal" / "PTChat kick micanal"; sin canal = apagar).
     UFUNCTION(Exec) void PTChat(const FString& Platform, const FString& Channel);
+    // DEV (prueba de carga): "PTFakeChat 150 40" = 150 espectadores falsos del chat, 40 mensajes/s entre todos.
+    UFUNCTION(Exec) void PTFakeChat(int32 Count, float MsgsPerSec);
 
     // Mapa y GameMode del modo local (editables en BP_GameInstance por si cambian de lugar).
     UPROPERTY(EditAnywhere, Category="LocalParty") FString LocalPartyLevel = TEXT("/Game/Template/levels/Lvl-01");

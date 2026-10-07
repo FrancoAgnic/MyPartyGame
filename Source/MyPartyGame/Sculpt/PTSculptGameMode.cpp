@@ -617,7 +617,7 @@ void APTSculptGameMode::HandlePlayerGuessedCorrectly(APTPlayerState* Guesser)
 void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Message)
 {
     if (!Sender) return;
-    const FString Text = Message.TrimStartAndEnd().Left(200);
+    FString Text = Message.TrimStartAndEnd().Left(200);
     if (Text.IsEmpty()) return;
 
     APTSculptGameState* G = GS();
@@ -647,7 +647,7 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
         // se enviaba nada.
         if (bEligibleGuesser && IsCloseGuess(Text))
         {
-            if (!bMuteNormalChatLine) G->Multicast_ChatLine(Name, Text, EPTChatType::Normal);
+            G->Multicast_ChatLine(Name, Text, EPTChatType::Normal);
             if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(Sender->GetPawn()))
                 Char->Multicast_ShowChatBubble(Text, false);
             if (APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(Sender->GetOwningController()))
@@ -656,16 +656,13 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
             return;
         }
 
-        // Anti-spoiler: no dejar que NINGUNA traducción aparezca en el chat, en ningún idioma
-        // (si no, un jugador podría spoilear a los demás escribiendo la palabra en otro idioma).
-        const FString NT = Normalize(Text);
-        for (const FString& W : CurrentWord.Words)
-            if (!W.IsEmpty() && NT.Contains(Normalize(W)))
-                return; // se descarta silenciosamente
+        // Anti-spoiler: NINGUNA traducción puede aparecer en el chat, en ningún idioma (si no, un jugador
+        // spoilearía escribiéndola en otro idioma). El mensaje se muestra igual, con la palabra tapada.
+        Text = MaskSpoilers(Text);
     }
 
     // Mensaje normal → a todos.
-    if (G && !bMuteNormalChatLine) G->Multicast_ChatLine(Name, Text, EPTChatType::Normal);
+    if (G) G->Multicast_ChatLine(Name, Text, EPTChatType::Normal);
 
     // Globo de chat sobre la cabeza del que escribió (mensaje normal, color default).
     if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(Sender->GetPawn()))
@@ -990,9 +987,52 @@ void APTSculptGameMode::LocalParty_Guess(APTPlayerState* PS, const FString& Text
 
 void APTSculptGameMode::LocalParty_ChatGuess(APTPlayerState* PS, const FString& Text)
 {
-    if (!PS || !PS->bIsPhonePlayer) return;
-    TGuardValue<bool> Mute(bMuteNormalChatLine, true);
-    HandleChat(PS, Text);
+    // Como un intento del celular: el mensaje aparece en el chat de la TV (con la palabra tapada si la
+    // nombra) y, si es la palabra, cuenta como acierto.
+    if (PS && PS->bIsPhonePlayer) HandleChat(PS, Text);
+}
+
+FString APTSculptGameMode::MaskSpoilers(const FString& Text) const
+{
+    if (!CurrentWord.IsValidEntry() || Text.IsEmpty()) return Text;
+    // Normalize es 1 a 1 por carácter (minúsculas / sin tildes), así que las posiciones coinciden con
+    // las del texto original (ya viene sin espacios a los costados).
+    const FString NT = Normalize(Text);
+    if (NT.Len() != Text.Len()) return Text;
+    TArray<bool> Hide;
+    Hide.Init(false, Text.Len());
+    bool bAny = false;
+    for (const FString& W : CurrentWord.Words)
+    {
+        const FString NW = Normalize(W);
+        if (NW.IsEmpty()) continue;
+        for (int32 From = 0;;)
+        {
+            const int32 At = NT.Find(NW, ESearchCase::CaseSensitive, ESearchDir::FromStart, From);
+            if (At == INDEX_NONE) break;
+            From = At + 1;
+            // Palabras cortas ("pie", "sol"): solo sueltas o en plural; si no, "piensa" saldría "•••nsa".
+            int32 End = At + NW.Len();
+            if (NW.Len() <= 4)
+            {
+                auto IsLetter = [&NT](int32 i) { return NT.IsValidIndex(i) && FChar::IsAlnum(NT[i]); };
+                if (IsLetter(At - 1)) continue;
+                if (IsLetter(End) && NT.Mid(End, 1) == TEXT("s") && !IsLetter(End + 1)) End += 1;
+                else if (IsLetter(End) && NT.Mid(End, 2) == TEXT("es") && !IsLetter(End + 2)) End += 2;
+                if (IsLetter(End)) continue;
+            }
+            for (int32 i = At; i < End; ++i) Hide[i] = true;
+            bAny = true;
+        }
+    }
+    if (!bAny) return Text;
+    FString Out;
+    for (int32 i = 0; i < Text.Len(); ++i)
+    {
+        if (!Hide[i]) { Out.AppendChar(Text[i]); continue; }
+        if (i == 0 || !Hide[i - 1]) Out += TEXT("\u2022\u2022\u2022"); // ••• una vez por tramo tapado
+    }
+    return Out;
 }
 
 bool APTSculptGameMode::IsLastAudienceWord() const

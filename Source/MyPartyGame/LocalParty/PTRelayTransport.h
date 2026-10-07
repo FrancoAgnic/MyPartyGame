@@ -46,6 +46,10 @@ private:
     double  ReconnectAt = 0.0;
     int32   Attempts = 0;
     TSet<int32> OpenClients;
+    // Relay v2: los Send del frame se juntan y salen en UN mensaje "_multi" en el próximo Tick.
+    bool bRelayBatches = false;
+    TArray<TPair<int32, FString>> PendingSends;
+    void FlushPending();
 
     void Connect();
     void ScheduleReconnect(const FString& Why);

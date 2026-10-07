@@ -140,7 +140,8 @@ function onHost(ws) {
     }
     room.host = ws;
     room.hostLostAt = 0;
-    ws.send(JSON.stringify({ t: "room", code: room.code, secret: room.secret }));
+    // v2: entiende "_multi" (muchos envíos en un solo mensaje; con 100 celulares, 1 mensaje en vez de 100).
+    ws.send(JSON.stringify({ t: "room", code: room.code, secret: room.secret, v: 2 }));
     // Si retomó, avisarle quiénes siguen conectados.
     for (const id of room.phones.keys()) room.toHost({ t: "_open", c: id });
 
@@ -149,6 +150,11 @@ function onHost(ws) {
       if (x.t === "_send") {
         const p = room.phones.get(x.c);
         if (p && p.readyState === 1) p.send(String(x.d));
+      } else if (x.t === "_multi" && Array.isArray(x.m)) {
+        for (const it of x.m) {
+          const p = Array.isArray(it) && room.phones.get(it[0]);
+          if (p && p.readyState === 1) p.send(String(it[1]));
+        }
       } else if (x.t === "_bcast") {
         const d = String(x.d);
         for (const p of room.phones.values()) if (p.readyState === 1) p.send(d);

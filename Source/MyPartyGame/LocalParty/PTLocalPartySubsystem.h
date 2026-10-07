@@ -166,6 +166,22 @@ private:
     void JoinFromChat(const FPTStreamChatMessage& M, const FString& Key, const FString& Lang);
     int32 GetPhoneGuesserCount() const;
 
+#if !UE_BUILD_SHIPPING
+public:
+    /** DEV (prueba de carga): N espectadores FALSOS del chat que se unen y escriben MsgsPerSec mensajes por
+     *  segundo entre todos (algunos aciertan). Además loguea FPS cada 5 s. Count 0 = apagar. */
+    void DevFakeChat(int32 Count, float MsgsPerSec);
+private:
+    int32  DevFakeCount = 0;
+    float  DevFakeRate = 0.f;
+    float  DevFakeAccum = 0.f;
+    float  DevPerfTime = 0.f;
+    int32  DevPerfFrames = 0;
+    float  DevPerfWorst = 0.f;
+    double DevMsStates = 0.0, DevMsChat = 0.0, DevMsPhone = 0.0, DevMsServer = 0.0; // tiempo gastado (ms) por parte
+    void DevTickLoad(float DeltaTime);
+#endif
+
     FPTPhonePlayer* FindByConn(int32 ConnId);
     FPTPhonePlayer* FindById(int32 Id);
 
@@ -178,6 +194,20 @@ private:
     void RemovePlayer(int32 Id);
     void EnsureVip();
     void PushStates(bool bForce);
+    void RequestPush(bool bForce);
+    bool bPushPending = false;
+    bool bPushForce = false;
+    // Ranking ordenado una vez por PushStates (lo usan todos los BuildStateFor de esa vuelta).
+    TArray<const FPTPhonePlayer*> RankedCache;
+    bool bRankedCacheValid = false;
+    // Audiencia: la parte del estado que es IGUAL para todos los espectadores se arma una vez por vuelta
+    // (por idioma) y cada celular solo agrega lo suyo. Con 100 celulares, armar 100 JSON completos
+    // 5 veces por segundo se comía ~20% del frame.
+    mutable TMap<FString, FString> FastCommonByLang;
+    FString FastTopRows;
+    bool bFastValid = false;
+    FString BuildAudienceStateFast(const FPTPhonePlayer& Me) const;
+    FString PlayerRowJson(const FPTPhonePlayer& P) const;
     FString BuildStateFor(const FPTPhonePlayer& P) const;
     void SendTo(const FPTPhonePlayer& P, const TSharedRef<FJsonObject>& Obj);
     void SendToConn(int32 ConnId, const TSharedRef<FJsonObject>& Obj);

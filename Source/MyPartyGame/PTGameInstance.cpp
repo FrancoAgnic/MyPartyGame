@@ -1152,6 +1152,13 @@ void UPTGameInstance::PTChat(const FString& Platform, const FString& Channel)
         LP->SetStreamChannel(Platform.Equals(TEXT("kick"), ESearchCase::IgnoreCase) ? EPTChatPlatform::Kick : EPTChatPlatform::Twitch, Channel);
 }
 
+void UPTGameInstance::PTFakeChat(int32 Count, float MsgsPerSec)
+{
+#if !UE_BUILD_SHIPPING
+    if (UPTLocalPartySubsystem* LP = GetSubsystem<UPTLocalPartySubsystem>()) LP->DevFakeChat(Count, MsgsPerSec);
+#endif
+}
+
 void UPTGameInstance::PTDumpBots()
 {
     UWorld* W = GetWorld();

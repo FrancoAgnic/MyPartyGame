@@ -13,7 +13,9 @@ APTPartyBotController::APTPartyBotController()
 
 bool APTPartyBotController::GetCanvas(FVector& OutCenter, FVector& OutHalfExtent) const
 {
-    const APTSculptVolume* Vol = Cast<APTSculptVolume>(UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
+    if (!CachedVolume.IsValid())
+        CachedVolume = Cast<APTSculptVolume>(UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
+    const APTSculptVolume* Vol = CachedVolume.Get();
     if (!Vol) return false;
     FTransform X;
     FVector Ext;

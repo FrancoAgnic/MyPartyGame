@@ -77,8 +77,9 @@ En el modo audiencia la gente también puede jugar **desde el chat del stream**,
 2. Quien escribe **`!unirse`** en el chat entra como jugador con su nombre del chat (también `!join`,
    `!entrar`, `!jugar`, `!beitreten`, `!rejoindre`, `!unisciti`… el comando define su idioma).
    **`!salir`** / `!leave` lo saca.
-3. Mientras se esculpe, cada mensaje suyo es un intento (máximo uno por segundo). Los mensajes comunes
-   no se repiten en el chat de la TV: el stream ya muestra su chat.
+3. Mientras se esculpe, cada mensaje suyo es un intento (máximo uno por segundo) y aparece en el chat
+   del juego. Si nombra la palabra (en cualquier idioma) se muestra tapada: "es un ••• gigante".
+   Lo que escribe quien no se unió no aparece.
 4. Comparten ranking (y personajes) con los que juegan por celular. Tope: 150 jugadores del chat.
 
 **Puntaje en audiencia** (celular y chat): por orden de acierto, 100 · 50 · 25 · 20 · 20… (cada uno la
@@ -95,6 +96,15 @@ Cómo funciona: `LocalParty/PTStreamChat.*` **solo lee**, sin cuentas ni contras
   `[LocalParty]` de `DefaultGame.ini`, **entre comillas**.
 - Cada persona del chat es un `FPTPhonePlayer` con `ChatPlatform` 1 (Twitch) o 2 (Kick), sin celular.
 - Consola: `PTChat twitch <canal>` / `PTChat kick <canal>` (sin canal = apagar).
+
+**Rendimiento (prueba de carga, 2026-10-07):** con el máximo (99 celulares + 150 del chat a 30 msj/s,
+26 personajes) el juego queda en ~66 FPS (135 sin carga) en un `-game` desde el editor. Claves:
+- El estado de los celulares se arma por vueltas (cada 0,2 s), con la parte común (por idioma) armada una
+  vez; antes eran ~2.000 estados/s y se comían el 20% del frame.
+- Relay **v2**: el juego le manda todos los estados de la vuelta en UN mensaje `_multi` (antes uno por
+  celular, y con 100 la cola se atrasaba 10+ s). Con un relay viejo el juego vuelve solo al modo anterior.
+- Prueba: `PTFakeChat <cantidad> <msj/s>` (solo desarrollo) mete espectadores falsos del chat y loguea
+  `[Carga] FPS ... ms/s: estados, red, celular, chat` cada 5 s.
 
 ## Menús con joystick (toda la UI)
 

@@ -44,4 +44,6 @@ private:
     float   BobPhase = 0.f;
 
     bool GetCanvas(FVector& OutCenter, FVector& OutHalfExtent) const;
+    // El cubo se busca una vez (GetActorOfClass recorre TODOS los actores: con 25 bots, 50 veces por frame).
+    mutable TWeakObjectPtr<class APTSculptVolume> CachedVolume;
 };

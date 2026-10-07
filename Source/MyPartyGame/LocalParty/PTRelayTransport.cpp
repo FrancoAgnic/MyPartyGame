@@ -88,6 +88,7 @@ void FPTRelayTransport::ScheduleReconnect(const FString& Why)
 
 void FPTRelayTransport::Tick()
 {
+    FlushPending();
     if (!bStopped && Status == EStatus::Error && ReconnectAt > 0.0 && FPlatformTime::Seconds() >= ReconnectAt)
     {
         ReconnectAt = 0.0;
@@ -97,6 +98,7 @@ void FPTRelayTransport::Tick()
 
 void FPTRelayTransport::Stop()
 {
+    FlushPending();
     bStopped = true;
     if (Socket.IsValid())
     {
@@ -134,6 +136,9 @@ void FPTRelayTransport::HandleMessage(const FString& Text)
             UE_LOG(LogPTRelay, Warning, TEXT("El relay no pudo retomar la sala %s: sala nueva %s."), *RoomCode, *NewCode);
         RoomCode = NewCode;
         RoomSecret = M->GetStringField(TEXT("secret"));
+        int32 RelayVersion = 1;
+        M->TryGetNumberField(TEXT("v"), RelayVersion);
+        bRelayBatches = RelayVersion >= 2;
         Status = EStatus::Ready;
         Attempts = 0;
         LastError.Reset();
@@ -168,9 +173,37 @@ void FPTRelayTransport::SendJson(const TSharedRef<FJsonObject>& Obj)
     Socket->Send(Out);
 }
 
+void FPTRelayTransport::FlushPending()
+{
+    if (PendingSends.Num() == 0) return;
+    if (Socket.IsValid() && Socket->IsConnected())
+    {
+        TArray<TSharedPtr<FJsonValue>> Items;
+        Items.Reserve(PendingSends.Num());
+        for (const TPair<int32, FString>& P : PendingSends)
+        {
+            TArray<TSharedPtr<FJsonValue>> Pair;
+            Pair.Add(MakeShared<FJsonValueNumber>(P.Key));
+            Pair.Add(MakeShared<FJsonValueString>(P.Value));
+            Items.Add(MakeShared<FJsonValueArray>(Pair));
+        }
+        TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+        O->SetStringField(TEXT("t"), TEXT("_multi"));
+        O->SetArrayField(TEXT("m"), Items);
+        SendJson(O);
+    }
+    PendingSends.Reset();
+}
+
 void FPTRelayTransport::Send(int32 ClientId, const FString& Text)
 {
     if (!OpenClients.Contains(ClientId)) return;
+    if (bRelayBatches)
+    {
+        // Se manda en el próximo Tick, junto con todo lo demás del frame (en orden).
+        PendingSends.Emplace(ClientId, Text);
+        return;
+    }
     TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
     O->SetStringField(TEXT("t"), TEXT("_send"));
     O->SetNumberField(TEXT("c"), ClientId);

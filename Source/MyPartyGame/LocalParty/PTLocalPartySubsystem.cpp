@@ -13,6 +13,7 @@
 #include "Serialization/JsonWriter.h"
 #include "Serialization/JsonSerializer.h"
 #include "Misc/Guid.h"
+#include "Misc/ScopeExit.h"
 #include "Misc/Paths.h"
 #include "HAL/PlatformTime.h"
 #include "UObject/UObjectGlobals.h"
@@ -275,7 +276,7 @@ void UPTLocalPartySubsystem::BindGameMode(APTSculptGameMode* GM)
     for (FPTPhonePlayer& P : Players) EnsurePlayerState(P);
     EnsureVip();
     OnPlayersChanged.Broadcast();
-    PushStates(true);
+    RequestPush(true);
 }
 
 void UPTLocalPartySubsystem::UnbindGameMode(APTSculptGameMode* GM)
@@ -332,7 +333,7 @@ void UPTLocalPartySubsystem::RemovePlayer(int32 Id)
     UE_LOG(LogPTLocalPartySub, Log, TEXT("Jugador '%s' salió de la partida local."), *P.Name);
     EnsureVip();
     OnPlayersChanged.Broadcast();
-    PushStates(true);
+    RequestPush(true);
 }
 
 void UPTLocalPartySubsystem::EnsureVip()
@@ -377,12 +378,16 @@ void UPTLocalPartySubsystem::HandleDisconnected(int32 ConnId)
         UE_LOG(LogPTLocalPartySub, Log, TEXT("Celular de '%s' desconectado (espera para reconectar)."), *P->Name);
         EnsureVip();
         OnPlayersChanged.Broadcast();
-        PushStates(true);
+        RequestPush(true);
     }
 }
 
 void UPTLocalPartySubsystem::HandleMessage(int32 ConnId, const FString& Text)
 {
+#if !UE_BUILD_SHIPPING
+    const double TM = FPlatformTime::Seconds();
+    ON_SCOPE_EXIT { DevMsPhone += (FPlatformTime::Seconds() - TM) * 1000.0; };
+#endif
     TSharedPtr<FJsonObject> Msg;
     const TSharedRef<TJsonReader<>> R = TJsonReaderFactory<>::Create(Text);
     if (!FJsonSerializer::Deserialize(R, Msg) || !Msg.IsValid()) return;
@@ -431,7 +436,7 @@ void UPTLocalPartySubsystem::HandleMessage(int32 ConnId, const FString& Text)
     {
         if (GM && P->bVip) GM->LocalParty_ExitToMenu();
     }
-    PushStates(false);
+    RequestPush(false);
 }
 
 void UPTLocalPartySubsystem::HandleJoin(int32 ConnId, const TSharedPtr<FJsonObject>& Msg)
@@ -486,7 +491,7 @@ void UPTLocalPartySubsystem::HandleJoin(int32 ConnId, const TSharedPtr<FJsonObje
         W->SetBoolField(TEXT("host"), true);
         SendTo(*H, W);
         OnPlayersChanged.Broadcast();
-        PushStates(true);
+        RequestPush(true);
         return;
     }
 
@@ -551,7 +556,7 @@ void UPTLocalPartySubsystem::HandleJoin(int32 ConnId, const TSharedPtr<FJsonObje
     SendTo(*P, W);
 
     OnPlayersChanged.Broadcast();
-    PushStates(true);
+    RequestPush(true);
 }
 
 // ── Estado → celulares ──────────────────────────────────────────────────────
@@ -559,9 +564,18 @@ void UPTLocalPartySubsystem::HandleJoin(int32 ConnId, const TSharedPtr<FJsonObje
 void UPTLocalPartySubsystem::Tick(float DeltaTime)
 {
     if (!Server) return;
+#if !UE_BUILD_SHIPPING
+    const double TS = FPlatformTime::Seconds();
+#endif
     Server->Tick();
+#if !UE_BUILD_SHIPPING
+    DevMsServer += (FPlatformTime::Seconds() - TS) * 1000.0;
+#endif
     if (TwitchChat.IsValid()) TwitchChat->Tick();
     if (KickChat.IsValid())   KickChat->Tick();
+#if !UE_BUILD_SHIPPING
+    DevTickLoad(DeltaTime);
+#endif
 
     // Celulares que no volvieron: sacarlos de la partida.
     const double Now = FPlatformTime::Seconds();
@@ -573,17 +587,55 @@ void UPTLocalPartySubsystem::Tick(float DeltaTime)
         if (!P.bOnline && P.OfflineSince > 0.0 && Now - P.OfflineSince > Grace) ToRemove.Add(P.Id);
     for (int32 Id : ToRemove) RemovePlayer(Id);
 
+    // Los estados salen juntos: cada 0,2 s, o enseguida (0,05 s) si alguien entró / empezó la partida.
     StateAccum += DeltaTime;
-    if (StateAccum >= 0.2f)
+    if (StateAccum >= 0.2f || (bPushPending && StateAccum >= 0.05f))
     {
         StateAccum = 0.f;
-        PushStates(false);
+#if !UE_BUILD_SHIPPING
+        const double T0 = FPlatformTime::Seconds();
+#endif
+        PushStates(bPushForce);
+        bPushPending = bPushForce = false;
+#if !UE_BUILD_SHIPPING
+        DevMsStates += (FPlatformTime::Seconds() - T0) * 1000.0;
+#endif
     }
+}
+
+void UPTLocalPartySubsystem::RequestPush(bool bForce)
+{
+    // Con 100 celulares, armar los 100 estados por CADA mensaje que llega no escala: se marca y Tick
+    // los manda juntos.
+    bPushPending = true;
+    bPushForce |= bForce;
 }
 
 void UPTLocalPartySubsystem::PushStates(bool bForce)
 {
     if (!Server) return;
+    // Audiencia: el ranking se ordena UNA vez para todos los celulares.
+    RankedCache.Reset();
+    if (bOnlineTransport)
+    {
+        for (const FPTPhonePlayer& P : Players) if (!P.bIsHost) RankedCache.Add(&P);
+        RankedCache.Sort([](const FPTPhonePlayer& A, const FPTPhonePlayer& B)
+        {
+            const int32 SA = A.PlayerState.IsValid() ? A.PlayerState->GameScore : 0;
+            const int32 SB = B.PlayerState.IsValid() ? B.PlayerState->GameScore : 0;
+            return SA > SB;
+        });
+    }
+    bRankedCacheValid = bOnlineTransport;
+    FastCommonByLang.Reset();
+    FastTopRows.Reset();
+    bFastValid = bOnlineTransport;
+    if (bFastValid)
+        for (int32 i = 0; i < RankedCache.Num() && i < AudienceTopN; ++i)
+        {
+            if (i > 0) FastTopRows += TEXT(",");
+            FastTopRows += PlayerRowJson(*RankedCache[i]);
+        }
     for (FPTPhonePlayer& P : Players)
     {
         if (!P.bOnline || P.ConnId == INDEX_NONE) continue;
@@ -592,12 +644,90 @@ void UPTLocalPartySubsystem::PushStates(bool bForce)
         P.LastSentState = S;
         Server->Send(P.ConnId, S);
     }
+    bRankedCacheValid = false;
+    bFastValid = false;
+}
+
+FString UPTLocalPartySubsystem::PlayerRowJson(const FPTPhonePlayer& P) const
+{
+    const APTPlayerState* PS = P.PlayerState.Get();
+    const APTSculptGameState* G = BoundGameState.Get();
+    const bool bDrawing = G && G->TurnPhase == EPTTurnPhase::Drawing;
+    TSharedRef<FJsonObject> J = MakeShared<FJsonObject>();
+    J->SetNumberField(TEXT("id"), P.Id);
+    J->SetStringField(TEXT("name"), P.Name);
+    J->SetNumberField(TEXT("score"), PS ? PS->GameScore : 0);
+    J->SetBoolField(TEXT("guessed"), PS && PS->bHasGuessedThisTurn && bDrawing);
+    J->SetBoolField(TEXT("online"), P.bOnline);
+    J->SetStringField(TEXT("color"), ColorHex(P.Color));
+    return ToJson(J);
+}
+
+FString UPTLocalPartySubsystem::BuildAudienceStateFast(const FPTPhonePlayer& Me) const
+{
+    // Parte común (por idioma, por la máscara): todo menos "you" y "players". Se arma sin las llaves
+    // de cierre para poder pegarle lo de cada celular.
+    FString& Common = FastCommonByLang.FindOrAdd(Me.Language);
+    if (Common.IsEmpty())
+    {
+        const APTSculptGameState* G = BoundGameState.Get();
+        const APTSculptGameMode* GM = GameMode.Get();
+        const EPTTurnPhase Phase = G ? G->TurnPhase : EPTTurnPhase::WaitingForPlayers;
+        TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+        O->SetStringField(TEXT("t"), TEXT("state"));
+        O->SetStringField(TEXT("phase"), PhaseName(Phase));
+        O->SetBoolField(TEXT("audience"), true);
+        O->SetNumberField(TEXT("round"), G ? G->CurrentRound : 0);
+        O->SetNumberField(TEXT("rounds"), G ? G->TotalRounds : 0);
+        O->SetNumberField(TEXT("minPlayers"), GM ? GM->LocalParty_GetMinPlayers() : 2);
+        O->SetBoolField(TEXT("hostOnline"), IsHostConnected());
+        float Secs = 0.f;
+        if (G && Phase == EPTTurnPhase::ChoosingWord) Secs = G->GetPhaseSecondsRemaining();
+        if (G && Phase == EPTTurnPhase::Drawing)      Secs = G->GetTurnSecondsRemaining();
+        O->SetNumberField(TEXT("secs"), FMath::CeilToInt(Secs));
+        if (const APTPlayerState* Sculptor = G ? G->CurrentSculptor : nullptr)
+        {
+            const FPTPhonePlayer* Rec = FindByPlayerState(Sculptor);
+            if (!Rec && Sculptor->bIsLocalPartyTV)
+                Rec = Players.FindByPredicate([](const FPTPhonePlayer& X) { return X.bIsHost; });
+            TSharedRef<FJsonObject> S = MakeShared<FJsonObject>();
+            S->SetNumberField(TEXT("id"), Rec ? Rec->Id : -1);
+            S->SetStringField(TEXT("name"), Rec ? Rec->Name : Sculptor->GetPlayerName());
+            O->SetObjectField(TEXT("sculptor"), S);
+        }
+        if (G)
+        {
+            int32 L = PTText::GetLanguageIndex(Me.Language);
+            if (L == INDEX_NONE) L = 0;
+            O->SetStringField(TEXT("mask"), G->MaskedWords.IsValidIndex(L) ? G->MaskedWords[L]
+                                          : (G->MaskedWords.Num() > 0 ? G->MaskedWords[0] : FString()));
+        }
+        O->SetNumberField(TEXT("count"), RankedCache.Num());
+        Common = ToJson(O);
+        Common.RemoveFromEnd(TEXT("}"));
+    }
+
+    const APTPlayerState* MyPS = Me.PlayerState.Get();
+    const FString You = FString::Printf(TEXT("{\"vip\":%s,\"host\":false,\"sculptor\":false,\"guessed\":%s,\"score\":%d}"),
+        Me.bVip ? TEXT("true") : TEXT("false"), (MyPS && MyPS->bHasGuessedThisTurn) ? TEXT("true") : TEXT("false"),
+        MyPS ? MyPS->GameScore : 0);
+    FString Rows = FastTopRows;
+    const int32 MyRank = RankedCache.IndexOfByKey(&Me);
+    if (MyRank == INDEX_NONE || MyRank >= AudienceTopN)
+    {
+        if (!Rows.IsEmpty()) Rows += TEXT(",");
+        Rows += PlayerRowJson(Me);
+    }
+    return Common + TEXT(",\"you\":") + You + TEXT(",\"players\":[") + Rows + TEXT("]}");
 }
 
 FString UPTLocalPartySubsystem::BuildStateFor(const FPTPhonePlayer& Me) const
 {
     const APTSculptGameState* G = BoundGameState.Get();
     const APTSculptGameMode* GM = GameMode.Get();
+    // Espectador común (no el streamer ni quien esculpe): versión rápida con la parte común armada una vez.
+    if (bFastValid && !Me.bIsHost && Me.PlayerState.IsValid() && !(G && G->CurrentSculptor == Me.PlayerState.Get()))
+        return BuildAudienceStateFast(Me);
     // El celular del streamer "es" la PC (su PlayerState) para opciones / palabra / máscara.
     const APTPlayerState* MyPS = Me.bIsHost ? (GM ? GM->GetTVPlayerState() : nullptr) : Me.PlayerState.Get();
     const EPTTurnPhase Phase = G ? G->TurnPhase : EPTTurnPhase::WaitingForPlayers;
@@ -669,13 +799,15 @@ FString UPTLocalPartySubsystem::BuildStateFor(const FPTPhonePlayer& Me) const
     O->SetNumberField(TEXT("count"), List.Num());
     if (bOnlineTransport)
     {
-        List.Sort([](const FPTPhonePlayer& A, const FPTPhonePlayer& B)
+        if (bRankedCacheValid) List = RankedCache; // ya ordenado en PushStates
+        else List.Sort([](const FPTPhonePlayer& A, const FPTPhonePlayer& B)
         {
             const int32 SA = A.PlayerState.IsValid() ? A.PlayerState->GameScore : 0;
             const int32 SB = B.PlayerState.IsValid() ? B.PlayerState->GameScore : 0;
             return SA > SB;
         });
-        const bool bMeInTop = List.IndexOfByKey(&Me) < AudienceTopN;
+        const int32 MyRank = List.IndexOfByKey(&Me);
+        const bool bMeInTop = MyRank != INDEX_NONE && MyRank < AudienceTopN;
         TArray<const FPTPhonePlayer*> Top;
         for (int32 i = 0; i < List.Num() && Top.Num() < AudienceTopN; ++i) Top.Add(List[i]);
         if (!Me.bIsHost && !bMeInTop) Top.Add(&Me);
@@ -740,7 +872,7 @@ void UPTLocalPartySubsystem::NotifyGuessed(const APTPlayerState* PS, const FStri
         O->SetNumberField(TEXT("pts"), Points);
         SendTo(*P, O);
     }
-    PushStates(false);
+    RequestPush(false);
 }
 
 void UPTLocalPartySubsystem::NotifyCloseGuess(const APTPlayerState* PS)
@@ -764,7 +896,7 @@ void UPTLocalPartySubsystem::NotifyTurnStarted(const APTPlayerState* Sculptor)
         O->SetStringField(TEXT("t"), TEXT("buzz"));
         SendTo(*P, O);
     }
-    PushStates(true);
+    RequestPush(true);
 }
 
 // ── Chat del stream (Twitch / Kick) ─────────────────────────────────────────
@@ -851,6 +983,10 @@ bool UPTLocalPartySubsystem::IsStreamChatConnected() const
 
 void UPTLocalPartySubsystem::HandleStreamChat(const FPTStreamChatMessage& M)
 {
+#if !UE_BUILD_SHIPPING
+    const double TC = FPlatformTime::Seconds();
+    ON_SCOPE_EXIT { DevMsChat += (FPlatformTime::Seconds() - TC) * 1000.0; };
+#endif
     if (!bOnlineTransport) return;
     const FString Text = M.Text.TrimStartAndEnd();
     if (Text.IsEmpty()) return;
@@ -911,5 +1047,64 @@ void UPTLocalPartySubsystem::JoinFromChat(const FPTStreamChatMessage& M, const F
     UE_LOG(LogPTLocalPartySub, Log, TEXT("Entró '%s' desde el chat de %s."), *Name,
         M.Platform == EPTChatPlatform::Kick ? TEXT("Kick") : TEXT("Twitch"));
     OnPlayersChanged.Broadcast();
-    PushStates(true);
+    RequestPush(true);
 }
+
+#if !UE_BUILD_SHIPPING
+void UPTLocalPartySubsystem::DevFakeChat(int32 Count, float MsgsPerSec)
+{
+    DevFakeCount = FMath::Clamp(Count, 0, 1000);
+    DevFakeRate = FMath::Max(0.f, MsgsPerSec);
+    DevPerfTime = 0.f; DevPerfFrames = 0; DevPerfWorst = 0.f;
+    for (int32 i = 0; i < DevFakeCount; ++i)
+    {
+        FPTStreamChatMessage M;
+        M.Platform = (i % 3 == 2) ? EPTChatPlatform::Kick : EPTChatPlatform::Twitch;
+        M.UserId = FString::Printf(TEXT("fake%d"), i);
+        M.UserName = FString::Printf(TEXT("Chat%03d"), i);
+        M.Text = TEXT("!unirse");
+        HandleStreamChat(M);
+    }
+    UE_LOG(LogPTLocalPartySub, Log, TEXT("[Carga] %d espectadores falsos del chat, %.0f msj/s. Jugadores del chat: %d"),
+        DevFakeCount, DevFakeRate, GetChatPlayerCount());
+}
+
+void UPTLocalPartySubsystem::DevTickLoad(float DeltaTime)
+{
+    if (DevFakeCount <= 0) return;
+
+    // Rendimiento: FPS promedio y peor frame cada 5 s.
+    DevPerfTime += DeltaTime;
+    ++DevPerfFrames;
+    DevPerfWorst = FMath::Max(DevPerfWorst, DeltaTime);
+    if (DevPerfTime >= 5.f)
+    {
+        int32 Bots = 0;
+        if (const APTSculptGameState* G = BoundGameState.Get())
+            for (APlayerState* PS : G->PlayerArray) if (PS && PS->GetPawn()) ++Bots;
+        UE_LOG(LogPTLocalPartySub, Log, TEXT("[Carga] FPS %.1f · peor frame %.1f ms · jugadores %d (celular %d, chat %d) · personajes %d · ms/s: estados %.1f, red %.1f, celular %.1f, chat %.1f"),
+            DevPerfFrames / DevPerfTime, DevPerfWorst * 1000.f, GetGuesserCount(), GetPhoneGuesserCount(), GetChatPlayerCount(), Bots,
+            DevMsStates / DevPerfTime, DevMsServer / DevPerfTime, DevMsPhone / DevPerfTime, DevMsChat / DevPerfTime);
+        DevPerfTime = 0.f; DevPerfFrames = 0; DevPerfWorst = 0.f;
+        DevMsStates = DevMsChat = DevMsPhone = DevMsServer = 0.0;
+    }
+
+    // Mensajes del chat falso: casi todo ruido, ~5% la palabra correcta.
+    DevFakeAccum += DeltaTime * DevFakeRate;
+    const APTSculptGameMode* GM = GameMode.Get();
+    const FString Word = GM ? GM->LocalParty_GetSecretWordFor(GM->GetTVPlayerState()) : FString();
+    static const TCHAR* Noise[] = { TEXT("jaja"), TEXT("que es eso"), TEXT("perro"), TEXT("auto"), TEXT("casa"), TEXT("gg"),
+                                    TEXT("un pez?"), TEXT("LUL"), TEXT("pizza"), TEXT("arbol"), TEXT("no se"), TEXT("gato") };
+    while (DevFakeAccum >= 1.f)
+    {
+        DevFakeAccum -= 1.f;
+        const int32 i = FMath::RandRange(0, DevFakeCount - 1);
+        FPTStreamChatMessage M;
+        M.Platform = (i % 3 == 2) ? EPTChatPlatform::Kick : EPTChatPlatform::Twitch;
+        M.UserId = FString::Printf(TEXT("fake%d"), i);
+        M.UserName = FString::Printf(TEXT("Chat%03d"), i);
+        M.Text = (!Word.IsEmpty() && FMath::FRand() < 0.05f) ? Word : Noise[FMath::RandRange(0, UE_ARRAY_COUNT(Noise) - 1)];
+        HandleStreamChat(M);
+    }
+}
+#endif

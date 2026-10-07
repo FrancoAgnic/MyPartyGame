@@ -128,8 +128,8 @@ public:
     void LocalParty_PlayAgain();
     void LocalParty_ExitToMenu();
     void LocalParty_Guess(APTPlayerState* PS, const FString& Text);
-    // Intento desde el chat de Twitch / Kick: como LocalParty_Guess, pero el chat de la TV no repite los
-    // mensajes comunes (el stream ya muestra su chat; con cientos de personas lo taparía todo).
+    // Mensaje de alguien que se unió desde el chat de Twitch / Kick: aparece en el chat de la TV y, si es
+    // la palabra, cuenta como acierto.
     void LocalParty_ChatGuess(APTPlayerState* PS, const FString& Text);
     /** Audiencia: ¿es la última palabra de la partida? (vale más) */
     bool IsLastAudienceWord() const;
@@ -233,7 +233,8 @@ private:
     void AdvanceTurn();         // avanza ronda/turno o termina la partida
     void EndGame();             // fase GameOver: anuncia ganador y espera decisión del host
     int32 AwardGuessPoints(APTPlayerState* Guesser); // suma puntos al que adivina + al escultor; devuelve los del que adivina
-    bool bMuteNormalChatLine = false; // intentos del chat del stream: no se repiten en el chat de la TV
+    // Tapa con ••• cualquier traducción de la palabra actual dentro del texto (anti-spoiler del chat).
+    FString MaskSpoilers(const FString& Text) const;
     void GoToWaiting();         // no hay suficientes jugadores
 
     // Máscara de una palabra: sin revelar = todo "_"; con Revealed = esas posiciones en MAYÚSCULA.
