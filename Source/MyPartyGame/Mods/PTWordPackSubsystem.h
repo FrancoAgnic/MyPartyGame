@@ -100,6 +100,8 @@ public:
     /** Lee el skin.bin de un item del Workshop YA descargado (por su id). false si no está instalado o
      *  no trae skin.bin. Para importar/equipar una skin suscrita sin exponer Steam a la UI. */
     bool GetInstalledSkinBundle(const FString& Id, TArray<uint8>& OutBytes) const;
+    /** Todos los skin.bin de items del Workshop suscritos y ya descargados (para vestir bots al azar). */
+    void GetAllInstalledSkinBundles(TArray<TArray<uint8>>& OutBundles) const;
     /** Suscribir/desuscribir un item por su Id → Steam lo descarga/borra. Al bajarse aparece en GetPacks. */
     void SubscribeItem(const FString& Id);
     void UnsubscribeItem(const FString& Id);

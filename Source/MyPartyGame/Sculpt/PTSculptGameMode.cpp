@@ -10,6 +10,8 @@
 #include "../Lobby/PTGameState.h"
 #include "../LocalParty/PTLocalPartySubsystem.h"
 #include "../LocalParty/PTPartyBotController.h"
+#include "../Lobby/PTLockerSubsystem.h"
+#include "../Mods/PTWordPackSubsystem.h"
 #include "GameFramework/PlayerState.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
@@ -1052,15 +1054,21 @@ APawn* APTSculptGameMode::SpawnPartyBot(APTPlayerState* PS)
     APTLobbyCharacter* C = W->SpawnActorDeferred<APTLobbyCharacter>(PawnCls, Xf, nullptr, nullptr,
         ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
     if (!C) { Ctrl->Destroy(); return nullptr; }
-    C->BodyBaseColor = PS->PartyColor; // el color del jugador (el mismo que ve en su celular)
+    // Skin al azar (Locker / Workshop). Sin skins: cabeza por defecto y el color del jugador.
+    const FBotSkin* Skin = NextBotSkin();
+    C->BodyBaseColor = Skin ? FLinearColor::White : PS->PartyColor;
     C->FinishSpawning(Xf);
 
     Ctrl->Possess(C);
     Ctrl->SetSeat(Seat);
     C->SetPlayerState(PS);              // nombre arriba + globos / confeti de SUS mensajes
     C->ApplyGameplayMovementMode();     // flota como los jugadores de Lvl-01
-    C->ApplyDefaultSphereHead();        // sin skin: la cabeza por defecto
-    C->SetBodyColor(PS->PartyColor);
+    if (Skin) C->ApplySkinLocal(Skin->HeadBaked, Skin->BodyPNG); // como el Locker viste al tuyo
+    else
+    {
+        C->ApplyDefaultSphereHead();    // sin skin: la cabeza por defecto
+        C->SetBodyColor(PS->PartyColor);
+    }
     UE_LOG(LogTemp, Log, TEXT("[SculptGM] Bot para '%s'."), *PS->GetPlayerName());
     return C;
 }
@@ -1072,4 +1080,53 @@ void APTSculptGameMode::DestroyPartyBot(APTPlayerState* PS)
     AController* C = P->GetController();
     P->Destroy();
     if (C) C->Destroy();
+}
+
+void APTSculptGameMode::BuildBotSkinPool()
+{
+    bBotSkinPoolBuilt = true;
+    BotSkinPool.Reset();
+    UGameInstance* GI = GetGameInstance();
+    if (!GI) return;
+
+    if (bBotsUseLockerSkins)
+        if (UPTLockerSubsystem* L = GI->GetSubsystem<UPTLockerSubsystem>())
+            for (int32 i = 0; i < L->NumHeadSlots(); ++i)
+            {
+                // Skin = cabeza y/o cuerpo del mismo índice (Locker de "un solo slot"). Vacía = no cuenta.
+                const TArray<uint8>& Head = L->GetHeadBaked(i);
+                const TArray<uint8>& Body = L->GetBodyPNG(i);
+                if (Head.Num() == 0 && Body.Num() == 0) continue;
+                FBotSkin S;
+                S.HeadBaked = Head;
+                S.BodyPNG = Body;
+                BotSkinPool.Add(MoveTemp(S));
+            }
+    const int32 FromLocker = BotSkinPool.Num();
+
+    if (bBotsUseWorkshopSkins)
+        if (UPTWordPackSubsystem* WP = GI->GetSubsystem<UPTWordPackSubsystem>())
+        {
+            TArray<TArray<uint8>> Bundles;
+            WP->GetAllInstalledSkinBundles(Bundles);
+            for (const TArray<uint8>& B : Bundles)
+            {
+                FBotSkin S;
+                if (UPTLockerSubsystem::ParseSkinBundle(B, S.HeadBaked, S.BodyPNG)) BotSkinPool.Add(MoveTemp(S));
+            }
+        }
+    UE_LOG(LogTemp, Log, TEXT("[SculptGM] Skins para bots: %d del Locker + %d del Workshop."),
+        FromLocker, BotSkinPool.Num() - FromLocker);
+}
+
+const APTSculptGameMode::FBotSkin* APTSculptGameMode::NextBotSkin()
+{
+    if (!bBotSkinPoolBuilt) BuildBotSkinPool();
+    if (BotSkinPool.Num() == 0) return nullptr;
+    if (BotSkinBag.Num() == 0)
+    {
+        for (int32 i = 0; i < BotSkinPool.Num(); ++i) BotSkinBag.Add(i);
+        for (int32 i = BotSkinBag.Num() - 1; i > 0; --i) BotSkinBag.Swap(i, FMath::RandRange(0, i)); // mezclar
+    }
+    return &BotSkinPool[BotSkinBag.Pop()];
 }

@@ -252,3 +252,15 @@ int32 UPTLockerSubsystem::ImportSkinBundle(const TArray<uint8>& InBytes, int32& 
     if (BPNG.Num() > 0) { SaveBodySlot(SkinIdx, BPNG, BThumb); OutBodyIdx = SkinIdx; }
     return SkinIdx;
 }
+
+bool UPTLockerSubsystem::ParseSkinBundle(const TArray<uint8>& InBytes, TArray<uint8>& OutHeadBaked, TArray<uint8>& OutBodyPNG)
+{
+    if (InBytes.Num() == 0) return false;
+    FMemoryReader Ar(InBytes, /*bIsPersistent=*/true);
+    int32 Version = 0;
+    Ar << Version;
+    if (Version != 1) return false;
+    TArray<uint8> HRaw, HThumb, BThumb;
+    Ar << OutHeadBaked << HRaw << HThumb << OutBodyPNG << BThumb;
+    return !Ar.IsError() && (OutHeadBaked.Num() > 0 || OutBodyPNG.Num() > 0);
+}

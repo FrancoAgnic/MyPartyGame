@@ -1923,3 +1923,19 @@ void APTLobbyCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
     if (HeadPaintTex && HeadPaintTex->IsRooted()) HeadPaintTex->RemoveFromRoot();
     Super::EndPlay(EndPlayReason);
 }
+
+void APTLobbyCharacter::ApplySkinLocal(const TArray<uint8>& HeadBaked, const TArray<uint8>& BodyPNG)
+{
+    if (HeadBaked.Num() == 0)
+    {
+        ApplyDefaultSphereHead();
+        if (BodyPNG.Num() > 0) ApplyBodyPaintFromPNG(BodyPNG); else ClearBodyPaint();
+    }
+    else
+    {
+        TArray<uint8> Blob;
+        AssembleReplicatedBlob(HeadBaked, BodyPNG, Blob);
+        if (Blob.Num() > 0) ApplyHeadBlobLocal(Blob); else ApplyDefaultSphereHead();
+    }
+    bLocallyBakedHead = true; // no pisarlo con un blob replicado
+}

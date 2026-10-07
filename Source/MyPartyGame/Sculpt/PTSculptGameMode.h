@@ -102,6 +102,9 @@ public:
     UPROPERTY(EditDefaultsOnly, Category="LocalParty") int32 MaxAudienceBots = 25;
     // Controller de los bots (para ajustar distancia / altura / cada cuánto se mueven en un BP hijo).
     UPROPERTY(EditDefaultsOnly, Category="LocalParty") TSubclassOf<class APTPartyBotController> PartyBotControllerClass;
+    // Skins de los bots: al azar entre las del Locker de esta PC y las del Workshop suscritas.
+    UPROPERTY(EditDefaultsOnly, Category="LocalParty") bool bBotsUseLockerSkins = true;
+    UPROPERTY(EditDefaultsOnly, Category="LocalParty") bool bBotsUseWorkshopSkins = true;
 
     // ¿Esta partida corre en modo local? (flag del GameInstance, seteado al entrar desde el menú).
     bool IsLocalPartyGame() const;
@@ -156,6 +159,15 @@ private:
     void EnsurePartyBots();
     APawn* SpawnPartyBot(APTPlayerState* PS);
     void DestroyPartyBot(APTPlayerState* PS);
+
+    // Pool de skins para los bots (cabeza horneada + PNG del cuerpo). Se arma una vez por partida y se
+    // reparte como una "bolsa": no se repite una skin hasta haber usado todas.
+    struct FBotSkin { TArray<uint8> HeadBaked; TArray<uint8> BodyPNG; };
+    TArray<FBotSkin> BotSkinPool;
+    TArray<int32>    BotSkinBag;
+    bool             bBotSkinPoolBuilt = false;
+    void BuildBotSkinPool();
+    const FBotSkin* NextBotSkin();
     class UPTLocalPartySubsystem* LocalParty() const; // null si no es modo local
 
     // Estado del turno (solo servidor). La palabra real vive acá (todas sus traducciones), jamás

@@ -209,6 +209,10 @@ public:
     // Color base del cuerpo en caliente (bots: color del jugador del celular).
     void SetBodyColor(const FLinearColor& Color);
 
+    // Viste al personaje con una skin (Locker / Workshop) igual que LoadHead viste al tuyo: cabeza
+    // esculpida si la trae (si no, la esfera por defecto) + pintura del cuerpo. Para los bots.
+    void ApplySkinLocal(const TArray<uint8>& HeadBaked, const TArray<uint8>& BodyPNG);
+
 protected:
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 public:

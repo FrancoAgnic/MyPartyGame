@@ -75,6 +75,9 @@ public:
     // Importa un paquete de skin a slots LIBRES (cabeza + cuerpo). Devuelve el índice de cabeza importada
     // (-1 = falló / Locker lleno). OutBodyIdx = índice de cuerpo (-1 si la skin no traía cuerpo). NO equipa.
     int32 ImportSkinBundle(const TArray<uint8>& InBytes, int32& OutBodyIdx);
+    /** Lee un paquete de skin (formato de ExportSkinBundle / skin.bin del Workshop) SIN guardarlo en el
+     *  Locker. Lo usan los bots del modo local para vestirse con skins del Workshop. */
+    static bool ParseSkinBundle(const TArray<uint8>& InBytes, TArray<uint8>& OutHeadBaked, TArray<uint8>& OutBodyPNG);
     // Primer slot LIBRE (no usado), salteando el slot 0 "Default". -1 si no hay lugar.
     int32 FirstFreeHeadSlot() const;
     int32 FirstFreeBodySlot() const;

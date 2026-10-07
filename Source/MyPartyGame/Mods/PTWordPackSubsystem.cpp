@@ -969,3 +969,25 @@ void UPTWordPackSubsystem::PublishSkin(const TArray<uint8>& SkinBytes, const FSt
     OnWordPackPublished.Broadcast(false, TEXT("Steamworks no disponible en esta plataforma"));
 #endif
 }
+
+void UPTWordPackSubsystem::GetAllInstalledSkinBundles(TArray<TArray<uint8>>& OutBundles) const
+{
+#if PT_WITH_STEAM
+    if (!SteamUGC()) return;
+    const uint32 Num = SteamUGC()->GetNumSubscribedItems();
+    if (Num == 0) return;
+    TArray<PublishedFileId_t> Ids;
+    Ids.SetNumZeroed(Num);
+    const uint32 Got = SteamUGC()->GetSubscribedItems(Ids.GetData(), Num);
+    for (uint32 i = 0; i < Got; ++i)
+    {
+        if (!(SteamUGC()->GetItemState(Ids[i]) & k_EItemStateInstalled)) continue;
+        uint64 SizeOnDisk = 0; uint32 Timestamp = 0; char FolderBuf[2048] = { 0 };
+        if (!SteamUGC()->GetItemInstallInfo(Ids[i], &SizeOnDisk, FolderBuf, sizeof(FolderBuf), &Timestamp)) continue;
+        const FString Path = FPaths::Combine(FString(UTF8_TO_TCHAR(FolderBuf)), TEXT("skin.bin"));
+        TArray<uint8> Bytes;
+        if (FPaths::FileExists(Path) && FFileHelper::LoadFileToArray(Bytes, *Path) && Bytes.Num() > 0)
+            OutBundles.Add(MoveTemp(Bytes));
+    }
+#endif
+}
