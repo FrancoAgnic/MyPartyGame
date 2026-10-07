@@ -1,5 +1,7 @@
 // Overlay de la TV en el modo local. Se arma 100% en C++ (no necesita WBP), pero se puede reemplazar
 // por un BP hijo desde APTSculptPlayerController::LocalPartyTVClass.
+// No roba el mouse: todo es HitTestInvisible salvo el botón "Copiar link para el chat" debajo del QR
+// (y sus contenedores, SelfHitTestInvisible), que se clickea con el mouse o se alcanza con el joystick.
 //
 //  · Esperando jugadores: panel central con el QR + la URL para entrar desde el celular, la lista de
 //    jugadores conectados y quién tiene que tocar "Empezar".
@@ -13,6 +15,7 @@
 #include "PTLocalPartyTVWidget.generated.h"
 
 class UBorder;
+class UButton;
 class UImage;
 class UTextBlock;
 class UVerticalBox;
@@ -45,6 +48,8 @@ private:
     bool IsRevealHeld() const;
     FString DisplayAddress(const FString& Url, bool bReveal) const;
     UTextBlock* MakeText(int32 Size, const FLinearColor& Color, bool bBold, bool bWrap = false);
+    void MakeOnlyCopyButtonHittable();
+    UFUNCTION() void OnCopyJoinLink();
     UBorder* MakePanel(const FLinearColor& Color, float Radius, const FMargin& InPadding);
 
     UPROPERTY() UBorder*      LobbyPanel = nullptr;
@@ -64,8 +69,13 @@ private:
     UPROPERTY() UBorder*      CornerPanel = nullptr;
     UPROPERTY() UTextBlock*   CornerText = nullptr;
     UPROPERTY() UTexture2D*   QrTexture  = nullptr;
+    // Debajo del QR PÚBLICO: copia GetJoinUrl() (nunca el link privado del streamer).
+    UPROPERTY() UButton*      CopyLinkButton = nullptr;
+    UPROPERTY() UTextBlock*   CopyLinkText = nullptr;
 
     FString QrForUrl = TEXT("?"); // distinto de cualquier URL → el primer Refresh arma el QR
     FString PlayersSig;
     float   RefreshAccum = 1.f;
+    double  CopiedUntil = 0.0;
+    int32   ShownCopyState = -1; // el texto del botón se reescribe solo si cambia (ver PTLocalizationSubsystem)
 };

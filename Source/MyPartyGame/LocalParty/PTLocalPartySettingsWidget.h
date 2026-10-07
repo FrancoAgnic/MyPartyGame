@@ -48,6 +48,7 @@ private:
     UFUNCTION() void OnStartClicked();
     UFUNCTION() void OnToggleHostQr();
     UFUNCTION() void OnOpenHostOnPC();
+    // Abre el modal de links (privado del streamer vs. público para el chat): nunca copia directo.
     UFUNCTION() void OnCopyHostLink();
 
     UPROPERTY() USlider*    TimeSlider = nullptr;
@@ -72,13 +73,12 @@ private:
     UPROPERTY() UTextBlock* PrivateZoneHint = nullptr;
     UPROPERTY() UWidget*    StreamerButtons = nullptr;
     UPROPERTY() UTextBlock* ToggleQrText = nullptr;
-    UPROPERTY() UTextBlock* CopyText = nullptr;
+    UPROPERTY() class UPTStreamerLinkModal* LinkModal = nullptr;
     UPROPERTY() class UTexture2D* PrivateQrTexture = nullptr;
     FString PrivateQrUrl;
     // Último título de banco escrito: solo se reescribe si cambia (si no, se pisa con la traducción
     // automática de PTText y el texto alterna "Películas" ↔ "Movies").
     FString ShownPackTitle = TEXT("?");
     bool    bHostQrShown = false;
-    double  CopiedUntil = 0.0;
     FTimerHandle StateTimer;
 };

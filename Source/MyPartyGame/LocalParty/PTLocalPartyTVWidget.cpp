@@ -8,6 +8,7 @@
 #include "../Lobby/PTPlayerState.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
+#include "Components/Button.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/Image.h"
@@ -23,6 +24,7 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "InputCoreTypes.h"
+#include "HAL/PlatformApplicationMisc.h"
 
 namespace
 {
@@ -86,7 +88,31 @@ void UPTLocalPartyTVWidget::BuildTree()
     QrBox->SetHeightOverride(QrSize);
     QrImage = WidgetTree->ConstructWidget<UImage>();
     QrBox->SetContent(QrImage);
-    if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(QrBox)) S->SetVerticalAlignment(VAlign_Center);
+    UVerticalBox* QrCol = WidgetTree->ConstructWidget<UVerticalBox>();
+    QrCol->AddChildToVerticalBox(QrBox);
+    if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(QrCol)) S->SetVerticalAlignment(VAlign_Center);
+
+    // Botón rápido debajo del QR: copia el link PÚBLICO (el que se puede pegar en el chat).
+    CopyLinkButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("CopyJoinLinkButton"));
+    {
+        FButtonStyle Style = CopyLinkButton->GetStyle();
+        Style.Normal  = FSlateRoundedBoxBrush(FLinearColor(0.1f, 0.34f, 0.2f, 1.f), 10.f);
+        Style.Hovered = FSlateRoundedBoxBrush(FLinearColor(0.17f, 0.52f, 0.32f, 1.f), 10.f, AccentColor, 2.f);
+        Style.Pressed = FSlateRoundedBoxBrush(AccentColor, 10.f);
+        Style.NormalPadding = FMargin(14.f, 8.f);
+        Style.PressedPadding = FMargin(14.f, 8.f);
+        CopyLinkButton->SetStyle(Style);
+    }
+    CopyLinkText = MakeText(BodyFontSize - 4, Ink, true);
+    CopyLinkText->SetJustification(ETextJustify::Center);
+    CopyLinkButton->AddChild(CopyLinkText);
+    CopyLinkButton->OnClicked.AddDynamic(this, &UPTLocalPartyTVWidget::OnCopyJoinLink);
+    if (UVerticalBoxSlot* S = QrCol->AddChildToVerticalBox(CopyLinkButton))
+    {
+        S->SetPadding(FMargin(0.f, 12.f, 0.f, 0.f));
+        S->SetHorizontalAlignment(HAlign_Fill);
+    }
+    CopyLinkButton->SetVisibility(ESlateVisibility::Collapsed);
 
     USpacer* Gap = WidgetTree->ConstructWidget<USpacer>();
     Gap->SetSize(FVector2D(40.f, 1.f));
@@ -173,7 +199,29 @@ void UPTLocalPartyTVWidget::BuildTree()
     CornerText = MakeText(16, Ink, true);
     CornerPanel->SetContent(CornerText);
 
-    SetVisibility(ESlateVisibility::HitTestInvisible); // nunca roba el mouse
+    MakeOnlyCopyButtonHittable();
+}
+
+void UPTLocalPartyTVWidget::MakeOnlyCopyButtonHittable()
+{
+    // Todo HitTestInvisible (nunca roba el mouse)... salvo el botón de copiar: él Visible y la cadena de
+    // contenedores hasta la raíz SelfHitTestInvisible (dejan pasar el click solo hacia ese botón).
+    WidgetTree->ForEachWidget([](UWidget* W) { if (W) W->SetVisibility(ESlateVisibility::HitTestInvisible); });
+    for (UWidget* P = CopyLinkButton ? CopyLinkButton->GetParent() : nullptr; P; P = P->GetParent())
+        P->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+    SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+    if (CopyLinkButton) CopyLinkButton->SetVisibility(ESlateVisibility::Collapsed); // lo muestra Refresh()
+}
+
+void UPTLocalPartyTVWidget::OnCopyJoinLink()
+{
+    UGameInstance* GI = GetGameInstance();
+    const UPTLocalPartySubsystem* LP = GI ? GI->GetSubsystem<UPTLocalPartySubsystem>() : nullptr;
+    const FString Url = LP ? LP->GetJoinUrl() : FString(); // SIEMPRE el público (nunca GetHostJoinUrl)
+    if (Url.IsEmpty()) return;
+    FPlatformApplicationMisc::ClipboardCopy(*Url);
+    CopiedUntil = FPlatformTime::Seconds() + 2.0;
+    Refresh();
 }
 
 void UPTLocalPartyTVWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -299,7 +347,20 @@ void UPTLocalPartyTVWidget::Refresh()
     // Con la pausa abierta, el panel grande no tapa el menú.
     const APTSculptPlayerController* SPC = Cast<APTSculptPlayerController>(GetOwningPlayer());
     const bool bPaused = SPC && SPC->IsEscapeMenuOpen();
-    Show(LobbyPanel, bLobby && !bPaused);
+    // LobbyPanel contiene el botón de copiar: SelfHitTestInvisible (no HitTestInvisible, que lo apagaría).
+    if (LobbyPanel) LobbyPanel->SetVisibility(bLobby && !bPaused ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+    if (CopyLinkButton)
+    {
+        CopyLinkButton->SetVisibility(bServerOk ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+        const int32 CopyState = (FPlatformTime::Seconds() < CopiedUntil ? 1 : 0) | (bOnline ? 2 : 0);
+        if (CopyState != ShownCopyState && CopyLinkText)
+        {
+            ShownCopyState = CopyState;
+            // Audiencia: "Copiar link para el chat". Local: "Copiar link" (el de la red de casa).
+            CopyLinkText->SetText(PTText::Get((CopyState & 1) ? TEXT("LP_AUD_COPIED")
+                                              : (CopyState & 2) ? TEXT("LP_AUD_COPY_CHAT") : TEXT("LP_AUD_COPY")));
+        }
+    }
 
     const bool bChoosing = Phase == EPTTurnPhase::ChoosingWord;
     Show(TurnBanner, bChoosing);
