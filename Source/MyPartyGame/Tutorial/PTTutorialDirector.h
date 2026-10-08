@@ -56,6 +56,7 @@ struct FPTGhost
     UMaterialInstanceDynamic* MID = nullptr;
     FLinearColor Color = FLinearColor(0.3f, 0.75f, 1.f, 1.f);
     bool bVisible = true;
+    bool bAimed = false;       // el pincel está adentro (se ilumina)
     float Fill = 0.f;          // última medición (0..1)
 };
 
@@ -69,6 +70,8 @@ public:
     /** DEV: saltar a una lección (comando PTTutStep N). */
     void DevJumpTo(int32 StepIndex);
     void DevFillGhosts(); // DEV: comando PTTutFill
+    void DevShoot();      // DEV: PTTutShoot (disparar la foto)
+    void DevSave() { OnSavePhoto(); } // DEV: PTTutSave
 
     // ── Editables en un BP hijo (BP_TutorialDirector) si se quiere ajustar ──
     /** Skin de Sculpi (paquete de skin del Workshop, relativo a Content/). */
@@ -93,6 +96,9 @@ public:
     UPROPERTY(EditAnywhere, Category="Tutorial") float WordFill = 0.7f;
     /** Segundos para el perro (la palabra libre). */
     UPROPERTY(EditAnywhere, Category="Tutorial") float PerroSeconds = 90.f;
+    /** Segundos sin avanzar antes del primer consejo de Sculpi, y entre consejos. */
+    UPROPERTY(EditAnywhere, Category="Tutorial") float TipFirstSeconds = 12.f;
+    UPROPERTY(EditAnywhere, Category="Tutorial") float TipRepeatSeconds = 15.f;
 
 protected:
     virtual void BeginPlay() override;
@@ -115,7 +121,31 @@ private:
     void TickStep(float Dt);
     void CompleteStep();
     void Say(const TCHAR* Key);
-    void SetHintsFor(std::initializer_list<FName> Actions);
+    /** bSequential: se marcan en orden; bGate: además la lección no termina hasta completarlas. */
+    void  SetHintsFor(std::initializer_list<FName> Actions, bool bSequential = false, bool bGate = true);
+    void RefreshHints();
+
+    // ── Teclas paso a paso: se marcan en orden a medida que el jugador las usa ──
+    TArray<FName> ChipActions;
+    TArray<bool>  ChipDone;
+    bool  bChipsSequential = false;
+    int32 ActiveChip = -1;
+    float ChipSizeBase = 0.f, ChipYawBase = 0.f, TotalYaw = 0.f, LastTotalYaw = 0.f;
+    int32 UndoCount = 0, SaveCount = 0, ChipUndoBase = 0, ChipSaveBase = 0, ChipEyesBase = 0;
+    void  ActivateNextChip();
+    bool  ChipSatisfied(FName Action) const;
+    bool  bChipsGate = true;
+    bool  ChipsPending() const { return bChipsSequential && bChipsGate && ChipDone.Contains(false); }
+    void  TickChips();
+    /** Puntería: ¿el pincel está dentro de la guía? Si no, qué hacer (acercarse / alejarse / apuntar). */
+    void  TickAim();
+    void  UpdateGhostColor(int32 Idx);
+    float ReadTime() const; // segundos para leer la frase actual
+    bool  bPaintHintSaid = false;
+
+    // Consejos en el globo de Sculpi cuando el jugador se traba.
+    float LastAdvanceTime = 0.f, LastTipTime = 0.f, LastProgress = -1.f;
+    void  TickTips();
     FText KeyText(FName Action) const;
 
     // ── Estado observado del jugador (por lección) ──
@@ -165,7 +195,16 @@ private:
     void  FramePhotoCamera();
     void  SetPhotoHidden(bool bHide);
     void  OnScreenshot(int32 W, int32 H, const TArray<FColor>& Pixels);
-    void  SaveFramedPhoto();
+    void  SaveFramedPhoto(const FText& Name);
+    void  OnSavePhoto();
+    bool  bPhotoSaved = false;
+
+    // Foto: cámara en órbita alrededor del perro (el jugador la mueve dentro de un rango) antes de disparar.
+    bool    bPhotoAiming = false;
+    FVector OrbitCenter = FVector::ZeroVector;
+    float   OrbitDist = 600.f, OrbitDist0 = 600.f, OrbitYaw = 0.f, OrbitYaw0 = 0.f, OrbitPitch = 18.f;
+    void    TickPhotoOrbit(float Dt);
+    void    PlaceOrbitCamera();
 
     void  OnSkip();
     void  OnDonePerro();

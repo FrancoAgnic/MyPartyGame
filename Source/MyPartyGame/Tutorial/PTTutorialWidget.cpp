@@ -17,6 +17,9 @@
 #include "Components/VerticalBoxSlot.h"
 #include "Components/WrapBox.h"
 #include "Components/WrapBoxSlot.h"
+#include "Components/EditableText.h"
+#include "Components/ScaleBox.h"
+#include "Engine/Font.h"
 #include "Engine/Texture2D.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
@@ -51,9 +54,17 @@ TSharedRef<SWidget> UPTTutorialPolaroid::RebuildWidget()
     return Super::RebuildWidget();
 }
 
+UFont* UPTTutorialPolaroid::GameFont()
+{
+    static TWeakObjectPtr<UFont> Cached;
+    if (!Cached.IsValid())
+        Cached = LoadObject<UFont>(nullptr, TEXT("/Game/Template/UI/Fonts/Super_Bouncer_Font.Super_Bouncer_Font"));
+    return Cached.Get();
+}
+
 void UPTTutorialPolaroid::BuildTree()
 {
-    // Marco blanco con borde fino; abajo, más ancho (como una polaroid): "Mi perro" + logo.
+    // Marco blanco con borde fino; abajo, más ancho (como una polaroid): nombre + logo.
     UBorder* Frame = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Root"));
     WidgetTree->RootWidget = Frame;
     Frame->SetBrush(FSlateRoundedBoxBrush(FLinearColor(0.98f, 0.97f, 0.95f, 1.f), 6.f));
@@ -70,21 +81,52 @@ void UPTTutorialPolaroid::BuildTree()
 
     UHorizontalBox* Bottom = WidgetTree->ConstructWidget<UHorizontalBox>();
     if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Bottom)) S->SetPadding(FMargin(6.f, 16.f, 6.f, 4.f));
+
+    // El nombre con la fuente de los menús: fijo (para la foto) o editable (en pantalla).
+    FSlateFontInfo Font = GameFont() ? FSlateFontInfo(GameFont(), 46) : FSlateFontInfo();
+    if (!GameFont()) Font.Size = 44;
     CaptionText = TutText(WidgetTree, 44, TUT_PolaroidInk, true);
+    if (GameFont()) CaptionText->SetFont(Font);
     if (UHorizontalBoxSlot* S = Bottom->AddChildToHorizontalBox(CaptionText))
     {
         S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
         S->SetVerticalAlignment(VAlign_Center);
     }
+    CaptionEdit = WidgetTree->ConstructWidget<UEditableText>(UEditableText::StaticClass(), TEXT("DogNameInput"));
+    {
+        FEditableTextStyle St;
+        St.SetFont(Font);
+        St.SetColorAndOpacity(FSlateColor(TUT_PolaroidInk));
+        CaptionEdit->SetWidgetStyle(St);
+        CaptionEdit->SetFont(Font);
+        CaptionEdit->SetSelectAllTextWhenFocused(true); // al hacer clic se reemplaza "Mi perro" de una
+    }
+    CaptionEdit->SetHintText(PTText::Get(TEXT("TUT_NAME_HINT")));
+    CaptionEdit->OnTextCommitted.AddDynamic(this, &UPTTutorialPolaroid::HandleCaptionCommitted);
+    if (UHorizontalBoxSlot* S = Bottom->AddChildToHorizontalBox(CaptionEdit))
+    {
+        S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+        S->SetVerticalAlignment(VAlign_Center);
+    }
+    CaptionEdit->SetVisibility(ESlateVisibility::Collapsed);
+
+    // Logo: caja de alto fijo + ScaleBox → siempre con su proporción (no se estira).
     USizeBox* LogoBox = WidgetTree->ConstructWidget<USizeBox>();
-    LogoBox->SetHeightOverride(84.f);
-    LogoBox->SetWidthOverride(240.f);
+    LogoBox->SetHeightOverride(90.f);
+    LogoBox->SetMaxDesiredWidth(340.f);
+    UScaleBox* Fit = WidgetTree->ConstructWidget<UScaleBox>();
+    Fit->SetStretch(EStretch::ScaleToFit);
+    LogoBox->SetContent(Fit);
     LogoImage = WidgetTree->ConstructWidget<UImage>();
-    LogoBox->SetContent(LogoImage);
-    if (UHorizontalBoxSlot* S = Bottom->AddChildToHorizontalBox(LogoBox)) S->SetVerticalAlignment(VAlign_Center);
+    Fit->SetContent(LogoImage);
+    if (UHorizontalBoxSlot* S = Bottom->AddChildToHorizontalBox(LogoBox))
+    {
+        S->SetVerticalAlignment(VAlign_Center);
+        S->SetPadding(FMargin(16.f, 0.f, 0.f, 0.f));
+    }
 }
 
-void UPTTutorialPolaroid::Setup(UTexture2D* Photo, const FText& Caption, UTexture2D* Logo, float PhotoWidth)
+void UPTTutorialPolaroid::Setup(UTexture2D* Photo, const FText& Caption, UTexture2D* Logo, float PhotoWidth, bool bEditable)
 {
     if (!WidgetTree || !WidgetTree->RootWidget) BuildTree();
     if (PhotoImage && Photo) PhotoImage->SetBrushFromTexture(Photo, false);
@@ -93,18 +135,35 @@ void UPTTutorialPolaroid::Setup(UTexture2D* Photo, const FText& Caption, UTextur
         PhotoBox->SetWidthOverride(PhotoWidth);
         PhotoBox->SetHeightOverride(PhotoWidth * Photo->GetSizeY() / (float)Photo->GetSizeX());
     }
-    if (CaptionText) CaptionText->SetText(Caption);
+    if (CaptionText) { CaptionText->SetText(Caption); CaptionText->SetVisibility(bEditable ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible); }
+    if (CaptionEdit) { CaptionEdit->SetText(Caption); CaptionEdit->SetVisibility(bEditable ? ESlateVisibility::Visible : ESlateVisibility::Collapsed); }
     if (LogoImage)
     {
         LogoImage->SetVisibility(Logo ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
-        if (Logo)
-        {
-            LogoImage->SetBrushFromTexture(Logo, false);
-            // Mantener la proporción del logo dentro de su caja.
-            if (USizeBox* LB = Cast<USizeBox>(LogoImage->GetParent()))
-                if (Logo->GetSizeY() > 0) LB->SetWidthOverride(84.f * Logo->GetSizeX() / (float)Logo->GetSizeY());
-        }
+        if (Logo) LogoImage->SetBrushFromTexture(Logo, /*bMatchSize=*/true); // tamaño nativo: el ScaleBox lo ajusta sin deformar
     }
+}
+
+void UPTTutorialPolaroid::SetCaption(const FText& T)
+{
+    if (CaptionEdit) CaptionEdit->SetText(T);
+    if (CaptionText) CaptionText->SetText(T);
+}
+
+FText UPTTutorialPolaroid::GetCaption() const
+{
+    if (CaptionEdit && CaptionEdit->GetVisibility() == ESlateVisibility::Visible) return CaptionEdit->GetText();
+    return CaptionText ? CaptionText->GetText() : FText::GetEmpty();
+}
+
+void UPTTutorialPolaroid::FocusCaption()
+{
+    if (CaptionEdit) CaptionEdit->SetKeyboardFocus();
+}
+
+void UPTTutorialPolaroid::HandleCaptionCommitted(const FText& Text, ETextCommit::Type Method)
+{
+    if (Method == ETextCommit::OnEnter) OnCaptionCommitted.Broadcast();
 }
 
 // ── Widget principal ────────────────────────────────────────────────────────
@@ -153,9 +212,10 @@ void UPTTutorialWidget::BuildTree()
         {
             S->SetHorizontalAlignment(HAlign_Center);
             S->SetVerticalAlignment(VAlign_Bottom);
-            S->SetPadding(FMargin(0.f, 0.f, 0.f, 150.f)); // encima del hotbar
+            S->SetPadding(FMargin(0.f, 0.f, 0.f, 18.f)); // abajo, a la izquierda del hotbar
         }
         USizeBox* Width = WidgetTree->ConstructWidget<USizeBox>();
+        DialogWidth = Width;
         Width->SetWidthOverride(900.f);
         Card->SetContent(Width);
         UVerticalBox* Col = WidgetTree->ConstructWidget<UVerticalBox>();
@@ -172,6 +232,10 @@ void UPTTutorialWidget::BuildTree()
         HintsBox = WidgetTree->ConstructWidget<UWrapBox>();
         HintsBox->SetInnerSlotPadding(FVector2D(8.f, 6.f));
         if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(HintsBox)) S->SetPadding(FMargin(0.f, 4.f, 0.f, 0.f));
+
+        AimText = MakeText(18, TUT_Green, true);
+        if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(AimText)) S->SetPadding(FMargin(0.f, 8.f, 0.f, 0.f));
+        AimText->SetVisibility(ESlateVisibility::Collapsed);
 
         UHorizontalBox* PRow = WidgetTree->ConstructWidget<UHorizontalBox>();
         ProgressRow = PRow;
@@ -251,9 +315,14 @@ void UPTTutorialWidget::BuildTree()
             S->SetHorizontalAlignment(HAlign_Center);
             S->SetPadding(FMargin(0.f, 14.f, 0.f, 10.f));
         }
-        UButton* Cont = MakeButton(PTText::Get(TEXT("TUT_CONTINUE")), TEXT("TutorialContinueButton"), 22, FLinearColor(0.08f, 0.3f, 0.16f, 1.f));
-        Cont->OnClicked.AddDynamic(this, &UPTTutorialWidget::HandleContinue);
-        if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Cont)) S->SetHorizontalAlignment(HAlign_Center);
+        SavePhotoButton = MakeButton(PTText::Get(TEXT("TUT_SAVE_PHOTO")), TEXT("TutorialSavePhotoButton"), 22, FLinearColor(0.08f, 0.3f, 0.16f, 1.f));
+        SavePhotoButton->OnClicked.AddDynamic(this, &UPTTutorialWidget::HandleSavePhoto);
+        if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(SavePhotoButton)) S->SetHorizontalAlignment(HAlign_Center);
+        ContinueButton = MakeButton(PTText::Get(TEXT("TUT_CONTINUE")), TEXT("TutorialContinueButton"), 22, FLinearColor(0.08f, 0.3f, 0.16f, 1.f));
+        ContinueButton->OnClicked.AddDynamic(this, &UPTTutorialWidget::HandleContinue);
+        if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(ContinueButton)) S->SetHorizontalAlignment(HAlign_Center);
+        ContinueButton->SetVisibility(ESlateVisibility::Collapsed);
+        BuildKeyboard(Col);
         if (UOverlaySlot* S = Root->AddChildToOverlay(Col))
         {
             S->SetHorizontalAlignment(HAlign_Center);
@@ -301,7 +370,7 @@ void UPTTutorialWidget::SetHints(const TArray<FPTTutHint>& Hints)
     FString Sig;
     for (const FPTTutHint& H : Hints)
     {
-        Sig += H.Key.ToString() + TEXT("|") + H.Label.ToString();
+        Sig += H.Key.ToString() + TEXT("|") + H.Label.ToString() + FString::Printf(TEXT("|%d"), H.State);
         for (const UTexture2D* I : H.Icons) Sig += I ? I->GetName() : TEXT("-");
         Sig += TEXT(";");
     }
@@ -311,7 +380,11 @@ void UPTTutorialWidget::SetHints(const TArray<FPTTutHint>& Hints)
     for (const FPTTutHint& H : Hints)
     {
         UBorder* Chip = WidgetTree->ConstructWidget<UBorder>();
-        Chip->SetBrush(FSlateRoundedBoxBrush(TUT_Chip, 10.f));
+        // Paso a paso: el que toca va con borde; lo hecho, en verde; lo que viene, apagado.
+        if (H.State == 3)      Chip->SetBrush(FSlateRoundedBoxBrush(FLinearColor(0.08f, 0.36f, 0.18f, 1.f), 10.f, TUT_Green, 2.f));
+        else if (H.State == 2) Chip->SetBrush(FSlateRoundedBoxBrush(TUT_Chip, 10.f, TUT_Accent, 3.f));
+        else                   Chip->SetBrush(FSlateRoundedBoxBrush(TUT_Chip, 10.f));
+        if (H.State == 1) Chip->SetRenderOpacity(0.4f);
         Chip->SetPadding(FMargin(10.f, 5.f));
         UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>();
         Chip->SetContent(Row);
@@ -344,8 +417,8 @@ void UPTTutorialWidget::SetHints(const TArray<FPTTutHint>& Hints)
             Cap->SetContent(K);
             if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(Cap)) S->SetVerticalAlignment(VAlign_Center);
         }
-        UTextBlock* L = MakeText(16, TUT_Ink, false);
-        L->SetText(H.Label);
+        UTextBlock* L = MakeText(16, TUT_Ink, H.State == 2);
+        L->SetText(H.State == 3 ? FText::FromString(H.Label.ToString() + TEXT("  \u2713")) : H.Label);
         if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(L))
         {
             S->SetVerticalAlignment(VAlign_Center);
@@ -363,6 +436,26 @@ void UPTTutorialWidget::SetProgress(float Fraction, const FText& Label)
     ProgressRow->SetVisibility(ESlateVisibility::HitTestInvisible);
     if (Progress) Progress->SetPercent(FMath::Clamp(Fraction, 0.f, 1.f));
     if (ProgressLabel && !ProgressLabel->GetText().EqualTo(Label)) ProgressLabel->SetText(Label);
+}
+
+void UPTTutorialWidget::SetDockLeft(bool bLeft)
+{
+    if (bLeft == bDockedLeft || !DialogCard) return;
+    bDockedLeft = bLeft;
+    if (UOverlaySlot* S = Cast<UOverlaySlot>(DialogCard->Slot))
+    {
+        S->SetHorizontalAlignment(bLeft ? HAlign_Left : HAlign_Center);
+        S->SetPadding(bLeft ? FMargin(24.f, 0.f, 0.f, 18.f) : FMargin(0.f, 0.f, 0.f, 18.f));
+    }
+    if (DialogWidth) DialogWidth->SetWidthOverride(bLeft ? 520.f : 900.f);
+}
+
+void UPTTutorialWidget::SetAim(const FText& Text, const FLinearColor& Color)
+{
+    if (!AimText) return;
+    AimText->SetVisibility(Text.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+    if (!AimText->GetText().EqualTo(Text)) AimText->SetText(Text);
+    AimText->SetColorAndOpacity(FSlateColor(Color));
 }
 
 void UPTTutorialWidget::SetDialogVisible(bool bVisible)
@@ -389,12 +482,111 @@ void UPTTutorialWidget::Flash()
     if (FlashOverlay) FlashOverlay->SetVisibility(ESlateVisibility::HitTestInvisible);
 }
 
-void UPTTutorialWidget::ShowPhoto(UTexture2D* Photo, const FText& Caption, const FText& SavedMsg)
+void UPTTutorialWidget::ShowPhoto(UTexture2D* Photo, const FText& DefaultName)
 {
     if (!LoadedLogo) LoadedLogo = LogoTexture.LoadSynchronous();
-    if (Polaroid) Polaroid->Setup(Photo, Caption, LoadedLogo, 900.f);
-    if (SavedText) SavedText->SetText(SavedMsg);
+    if (Polaroid)
+    {
+        Polaroid->Setup(Photo, DefaultName, LoadedLogo, 900.f, /*bEditable=*/true);
+        Polaroid->OnCaptionCommitted.RemoveAll(this);
+        Polaroid->OnCaptionCommitted.AddUObject(this, &UPTTutorialWidget::HandleSavePhoto);
+    }
+    if (SavedText) SavedText->SetText(PTText::Get(TEXT("TUT_NAME_HINT_LONG")));
+    if (SavePhotoButton) SavePhotoButton->SetVisibility(ESlateVisibility::Visible);
+    if (ContinueButton) ContinueButton->SetVisibility(ESlateVisibility::Collapsed);
     if (PhotoPanel) PhotoPanel->SetVisibility(ESlateVisibility::Visible);
+    if (Polaroid) Polaroid->FocusCaption();
+}
+
+void UPTTutKeyButton::HandleClick()
+{
+    if (UPTTutorialWidget* W = Owner.Get()) W->TypeKey(Key);
+}
+
+void UPTTutorialWidget::BuildKeyboard(UVerticalBox* Into)
+{
+    // Teclado en pantalla (para joystick): filas de botones; el navegador de UI del juego los recorre.
+    UVerticalBox* KB = WidgetTree->ConstructWidget<UVerticalBox>();
+    KeyboardPanel = KB;
+    static const TCHAR* Rows[] = { TEXT("1234567890"), TEXT("QWERTYUIOP"), TEXT("ASDFGHJKL\u00D1"), TEXT("ZXCVBNM") };
+    auto AddKey = [this](UHorizontalBox* Row, const FString& Key, const FString& Label, float Width)
+    {
+        UPTTutKeyButton* B = WidgetTree->ConstructWidget<UPTTutKeyButton>(UPTTutKeyButton::StaticClass());
+        FButtonStyle Style = B->GetStyle();
+        Style.Normal  = FSlateRoundedBoxBrush(TUT_Chip, 8.f);
+        Style.Hovered = FSlateRoundedBoxBrush(TUT_Chip * 1.6f, 8.f, TUT_Accent, 2.f);
+        Style.Pressed = FSlateRoundedBoxBrush(TUT_Accent, 8.f);
+        Style.NormalPadding = FMargin(4.f);
+        Style.PressedPadding = FMargin(4.f);
+        B->SetStyle(Style);
+        B->Key = Key;
+        B->Owner = this;
+        B->Bind();
+        USizeBox* Size = WidgetTree->ConstructWidget<USizeBox>();
+        Size->SetWidthOverride(Width);
+        Size->SetHeightOverride(52.f);
+        UTextBlock* T = MakeText(22, TUT_Ink, true);
+        T->SetText(FText::FromString(Label));
+        T->SetJustification(ETextJustify::Center);
+        Size->SetContent(T);
+        B->AddChild(Size);
+        if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(B)) S->SetPadding(FMargin(3.f));
+        if (!FirstKey) FirstKey = B;
+    };
+    for (const TCHAR* R : Rows)
+    {
+        UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>();
+        for (const TCHAR* C = R; *C; ++C) AddKey(Row, FString(1, C), FString(1, C), 52.f);
+        if (UVerticalBoxSlot* S = KB->AddChildToVerticalBox(Row)) S->SetHorizontalAlignment(HAlign_Center);
+    }
+    UHorizontalBox* Last = WidgetTree->ConstructWidget<UHorizontalBox>();
+    AddKey(Last, TEXT(" "), PTText::GetStr(TEXT("TUT_KB_SPACE")), 220.f);
+    AddKey(Last, TEXT("BKSP"), TEXT("\u2190"), 110.f);
+    AddKey(Last, TEXT("OK"), PTText::GetStr(TEXT("TUT_SAVE_PHOTO")), 220.f);
+    if (UVerticalBoxSlot* S = KB->AddChildToVerticalBox(Last)) S->SetHorizontalAlignment(HAlign_Center);
+    if (UVerticalBoxSlot* S = Into->AddChildToVerticalBox(KB))
+    {
+        S->SetHorizontalAlignment(HAlign_Center);
+        S->SetPadding(FMargin(0.f, 10.f, 0.f, 0.f));
+    }
+    KB->SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UPTTutorialWidget::SetOnScreenKeyboard(bool bShow)
+{
+    if (!KeyboardPanel || bShow == bKeyboardShown) return;
+    bKeyboardShown = bShow;
+    KeyboardPanel->SetVisibility(bShow ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+    if (bShow && FirstKey) FirstKey->SetKeyboardFocus(); // el joystick arranca en la primera tecla
+}
+
+void UPTTutorialWidget::TypeKey(const FString& Key)
+{
+    if (!Polaroid) return;
+    if (Key == TEXT("OK")) { HandleSavePhoto(); return; }
+    FString Name = bKeyboardFresh ? FString() : Polaroid->GetCaption().ToString();
+    bKeyboardFresh = false;
+    if (Key == TEXT("BKSP")) Name.LeftChopInline(1);
+    else if (Name.Len() < 24)
+    {
+        // Mayúscula al principio y después de un espacio; el resto en minúscula.
+        const bool bUpper = Name.IsEmpty() || Name.EndsWith(TEXT(" "));
+        Name += bUpper ? Key.ToUpper() : Key.ToLower();
+    }
+    Polaroid->SetCaption(FText::FromString(Name));
+}
+
+void UPTTutorialWidget::ShowPhotoSaved(const FText& SavedMsg)
+{
+    SetOnScreenKeyboard(false);
+    if (SavedText) SavedText->SetText(SavedMsg);
+    if (SavePhotoButton) SavePhotoButton->SetVisibility(ESlateVisibility::Collapsed);
+    if (ContinueButton) ContinueButton->SetVisibility(ESlateVisibility::Visible);
+}
+
+FText UPTTutorialWidget::GetPhotoName() const
+{
+    return Polaroid ? Polaroid->GetCaption() : FText::GetEmpty();
 }
 
 void UPTTutorialWidget::HidePhoto()
@@ -446,3 +638,4 @@ void UPTTutorialWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTim
 void UPTTutorialWidget::HandleSkip()     { OnSkipClicked.Broadcast(); }
 void UPTTutorialWidget::HandleDone()     { OnDoneClicked.Broadcast(); }
 void UPTTutorialWidget::HandleContinue() { OnContinueClicked.Broadcast(); }
+void UPTTutorialWidget::HandleSavePhoto() { OnSavePhotoClicked.Broadcast(); }

@@ -365,6 +365,27 @@ void UPTGameInstance::PTTutStep(int32 Step)
 #endif
 }
 
+void UPTGameInstance::PTLang(const FString& Code)
+{
+    if (UPTGameUserSettings* S = UPTGameUserSettings::Get()) S->SetLanguageCodeTransient(Code.ToLower().Left(2));
+}
+
+void UPTGameInstance::PTTutShoot()
+{
+#if !UE_BUILD_SHIPPING
+    if (UWorld* W = GetWorld())
+        if (APTTutorialDirector* D = Cast<APTTutorialDirector>(UGameplayStatics::GetActorOfClass(W, APTTutorialDirector::StaticClass()))) D->DevShoot();
+#endif
+}
+
+void UPTGameInstance::PTTutSave()
+{
+#if !UE_BUILD_SHIPPING
+    if (UWorld* W = GetWorld())
+        if (APTTutorialDirector* D = Cast<APTTutorialDirector>(UGameplayStatics::GetActorOfClass(W, APTTutorialDirector::StaticClass()))) D->DevSave();
+#endif
+}
+
 void UPTGameInstance::PTTutFill()
 {
 #if !UE_BUILD_SHIPPING

@@ -93,6 +93,8 @@ namespace
         { TEXT("ColorPick"),     TEXT("ColorPick"),      nullptr, TEXT("ColorPick"),   nullptr, TEXT("TUT_K_COLOR") },
         { TEXT("SaveColor"),     TEXT("SaveColor"),      nullptr, nullptr,             nullptr, TEXT("KEY_SAVE_COLOR") },
         { TEXT("Done"),          nullptr,                TEXT("TUT_KEY_ENTER"),  nullptr,          TEXT("TUT_PAD_PAUSE"), TEXT("TUT_DONE_BTN") },
+        { TEXT("PhotoOrbit"),    nullptr,                TEXT("TUT_KEY_WASD"),   nullptr,          TEXT("TUT_STICK_L"), TEXT("TUT_K_ORBIT") },
+        { TEXT("PhotoShoot"),    nullptr,                TEXT("TUT_KEY_ENTER"),  TEXT("FlyUp"),    nullptr, TEXT("TUT_K_SHOOT") },
     };
 
     const FTutAction* FindTutAction(FName Id)
@@ -177,11 +179,12 @@ APTTutorialDirector::APTTutorialDirector()
     SuccessSound   = TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Game/Template/SFX/SFX_TiiinnCorrect.SFX_TiiinnCorrect")));
     CountdownSound = TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Game/Template/SFX/SFX_PerSecondGame.SFX_PerSecondGame")));
     ShutterSound   = TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Game/Template/SFX/SFX_Unlock-03.SFX_Unlock-03")));
-    LogoTexture    = TSoftObjectPtr<UTexture2D>(FSoftObjectPath(TEXT("/Game/LocalParty/Web/assets/logo.logo")));
+    LogoTexture    = TSoftObjectPtr<UTexture2D>(FSoftObjectPath(TEXT("/Game/Template/UI/Titulo-LogoOrange.Titulo-LogoOrange")));
     // Material de las guías: el que armes en Content/Tutorial (instancia o material, con parámetro "Color");
     // si no existe, el brillo de bordes del modo Suavizar (sin color).
-    GhostMaterial  = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Tutorial/MI_TutorialGhost.MI_TutorialGhost")));
+    GhostMaterial  = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Tutorial/M_TutorialGhost_Inst.M_TutorialGhost_Inst")));
     GhostMaterialFallbacks = {
+        TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Tutorial/MI_TutorialGhost.MI_TutorialGhost"))),
         TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Tutorial/M_TutorialGhost.M_TutorialGhost"))),
         TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Template/Materials/M_SmoothPreview.M_SmoothPreview"))),
     };
@@ -243,6 +246,7 @@ bool APTTutorialDirector::SetupWorld()
         Widget->OnSkipClicked.AddUObject(this, &APTTutorialDirector::OnSkip);
         Widget->OnDoneClicked.AddUObject(this, &APTTutorialDirector::OnDonePerro);
         Widget->OnContinueClicked.AddUObject(this, &APTTutorialDirector::OnContinue);
+        Widget->OnSavePhotoClicked.AddUObject(this, &APTTutorialDirector::OnSavePhoto);
     }
     BindPCEvents();
     SpawnSculpi();
@@ -254,9 +258,9 @@ void APTTutorialDirector::BindPCEvents()
 {
     APTSculptPlayerController* P = PC.Get();
     if (!P) return;
-    UndoH  = P->OnLocalUndo.AddLambda([this]() { bUndoDone = true; });
+    UndoH  = P->OnLocalUndo.AddLambda([this]() { bUndoDone = true; ++UndoCount; });
     ClearH = P->OnLocalClearAll.AddLambda([this]() { bClearDone = true; });
-    SaveH  = P->OnLocalColorSaved.AddLambda([this]() { bSawSave = true; });
+    SaveH  = P->OnLocalColorSaved.AddLambda([this]() { bSawSave = true; ++SaveCount; });
 }
 
 void APTTutorialDirector::SpawnSculpi()
@@ -274,10 +278,7 @@ void APTTutorialDirector::SpawnSculpi()
     if (!Sculpi) return;
     Sculpi->SetActorEnableCollision(false); // que no frene al jugador ni al rayo de esculpir
     Sculpi->ApplyGameplayMovementMode();
-    // Sin cartel de nombre (no tiene PlayerState): su nombre va en el cuadro de diálogo.
-    TArray<UWidgetComponent*> WCs;
-    Sculpi->GetComponents<UWidgetComponent>(WCs);
-    for (UWidgetComponent* WC : WCs) WC->SetVisibility(false);
+    Sculpi->SetNameOverride(TEXT("Sculpi")); // cartel con su nombre (no tiene PlayerState)
 
     // Skin "Frank Suit" (Workshop), empaquetada en Content/Tutorial.
     TArray<uint8> Bytes, Head, Body;
@@ -292,10 +293,6 @@ void APTTutorialDirector::TickSculpi(float Dt)
 {
     APTSculptPlayerController* P = PC.Get();
     if (!Sculpi || !P || !P->PlayerCameraManager || Sculpi->IsHidden()) return;
-    // El cartel de nombre del personaje se vuelve a prender solo (sin PlayerState queda vacío): apagarlo siempre.
-    TArray<UWidgetComponent*> WCs;
-    Sculpi->GetComponents<UWidgetComponent>(WCs);
-    for (UWidgetComponent* WC : WCs) if (WC->IsVisible()) WC->SetVisibility(false);
     const FVector CamLoc = P->PlayerCameraManager->GetCameraLocation();
     const FRotator CamRot = P->PlayerCameraManager->GetCameraRotation();
     const FRotationMatrix M(FRotator(0.f, CamRot.Yaw, 0.f));
@@ -433,10 +430,117 @@ float APTTutorialDirector::MeasureFill(int32 Idx)
     for (const FVector& P : G.Samples) if (Volume->SampleWorldDensity(P) > 0.f) ++Solid;
     G.Fill = Solid / (float)G.Samples.Num();
     // La guía se pone verde a medida que se llena.
-    const FLinearColor Now = FMath::Lerp(G.Color, TUTD_Green, FMath::Clamp(G.Fill, 0.f, 1.f));
+    UpdateGhostColor(Idx);
+    return G.Fill;
+}
+
+void APTTutorialDirector::UpdateGhostColor(int32 Idx)
+{
+    if (!Ghosts.IsValidIndex(Idx)) return;
+    FPTGhost& G = Ghosts[Idx];
+    // Se pone verde a medida que se llena; con el pincel adentro, más clara (se "enciende").
+    FLinearColor Now = FMath::Lerp(G.Color, TUTD_Green, FMath::Clamp(G.Fill, 0.f, 1.f));
+    if (G.bAimed) Now = FMath::Lerp(Now, FLinearColor::White, 0.45f);
     if (G.MID) G.MID->SetVectorParameterValue(TEXT("Color"), Now * GhostIntensity);
     if (G.OverlayMID) G.OverlayMID->SetVectorParameterValue(TEXT("Color"), Now);
-    return G.Fill;
+}
+
+void APTTutorialDirector::TickAim()
+{
+    APTSculptPlayerController* P = PC.Get();
+    const AActor* Brush = P ? P->GetBrushPreviewActor() : nullptr;
+    const bool bUsesAim = Step == EPTTutStep::Add || Step == EPTTutStep::Shapes || Step == EPTTutStep::Rotate ||
+                          Step == EPTTutStep::Squash || Step == EPTTutStep::Lines || Step == EPTTutStep::Alt ||
+                          Step == EPTTutStep::Erase || Step == EPTTutStep::Iglu ||
+                          (Step == EPTTutStep::Hongo && LineIndex == 0); // el sombrero no tiene guía visible
+    int32 Best = INDEX_NONE;
+    float BestDist = TNumericLimits<float>::Max();
+    const FPTGhostPart* BestPart = nullptr;
+    FVector S = FVector::ZeroVector;
+    if (bUsesAim && !bStepDone && Brush && !Brush->IsHidden() && P->PlayerCameraManager)
+    {
+        S = Brush->GetActorLocation();
+        for (int32 i = 0; i < Ghosts.Num(); ++i)
+        {
+            if (!Ghosts[i].bVisible) continue;
+            for (const FPTGhostPart& Part : Ghosts[i].Parts)
+            {
+                const float D = (float)FVector::Dist(S, Part.Center);
+                if (D < BestDist) { BestDist = D; Best = i; BestPart = &Part; }
+            }
+        }
+    }
+    bool bInside = false;
+    if (Best != INDEX_NONE)
+        for (const FPTGhostPart& Part : Ghosts[Best].Parts)
+            if (InsidePart(Part, S)) { bInside = true; break; }
+    for (int32 i = 0; i < Ghosts.Num(); ++i)
+    {
+        const bool bAim = (i == Best) && bInside;
+        if (Ghosts[i].bAimed != bAim) { Ghosts[i].bAimed = bAim; UpdateGhostColor(i); }
+    }
+    if (!Widget) return;
+    if (Best == INDEX_NONE || !BestPart) { Widget->SetAim(FText::GetEmpty(), FLinearColor::White); return; }
+    if (bInside) { Widget->SetAim(PTText::Get(TEXT("TUT_AIM_IN")), TUTD_Green); return; }
+
+    // Afuera: ¿más adelante / más atrás de la guía (según la cámara) o corrido al costado?
+    // El pincel va a una distancia fija de la cámara: para corregir la profundidad hay que moverse.
+    const FVector CamFwd = P->PlayerCameraManager->GetCameraRotation().Vector();
+    const FVector Off = S - BestPart->Center;
+    const float Along = (float)FVector::DotProduct(Off, CamFwd);
+    const float Lateral = (float)(Off - CamFwd * Along).Size();
+    const float R = BestPart->Size * 0.5f * (float)BestPart->Scale.GetMax();
+    const FLinearColor Warn(1.f, 0.78f, 0.35f, 1.f);
+    if (Lateral > R * 1.1f)    Widget->SetAim(PTText::Get(TEXT("TUT_AIM_SIDE")), Warn);
+    else if (Along > R * 0.3f) Widget->SetAim(PTText::Get(TEXT("TUT_AIM_BACK")), Warn);
+    else if (Along < -R * 0.3f) Widget->SetAim(PTText::Get(TEXT("TUT_AIM_CLOSER")), Warn);
+    else                       Widget->SetAim(PTText::Get(TEXT("TUT_AIM_IN")), TUTD_Green);
+}
+
+void APTTutorialDirector::TickTips()
+{
+    // Si se traba (sin avanzar un rato), Sculpi le dice qué le falta en su globo de chat.
+    const bool bLesson = Step >= EPTTutStep::Look && Step <= EPTTutStep::Hongo;
+    if (!Sculpi || !bLesson || bStepDone || (Widget && Widget->IsTyping())) return;
+    const float Idle = StepTime - FMath::Max(LastAdvanceTime, LastTipTime);
+    if (Idle < (LastTipTime > 0.f ? TipRepeatSeconds : TipFirstSeconds)) return;
+    LastTipTime = StepTime;
+
+    FText Tip;
+    if (bChipsSequential && ChipActions.IsValidIndex(ActiveChip))
+    {
+        const FName A = ChipActions[ActiveChip];
+        if (const FTutAction* Act = FindTutAction(A))
+        {
+            // Corto (el globo corta textos largos): sin el "(mantener)"; la tecla ya está en el cartel de abajo.
+            FString Label = PTText::GetStr(FName(Act->Label));
+            int32 Paren;
+            if (Label.FindChar(TEXT('('), Paren)) Label = Label.Left(Paren).TrimEnd();
+            Tip = FText::Format(PTText::Get(TEXT("TUT_TIP_CHIP")), FText::FromString(Label), KeyText(A));
+        }
+    }
+    else if (Step == EPTTutStep::Move || Step == EPTTutStep::FlyUp || Step == EPTTutStep::FlyDown)
+        Tip = PTText::Get(TEXT("TUT_TIP_RING"));
+    else if (Step == EPTTutStep::Hongo && LineIndex == 1) // el tallo ya está: falta el sombrero (sin guía)
+        Tip = PTText::Get(TEXT("TUT_TIP_CAP"));
+    else if (Ghosts.Num() > 0)
+    {
+        bool bAimed = false;
+        for (const FPTGhost& G : Ghosts) bAimed |= G.bAimed;
+        if (!bAimed)                 Tip = PTText::Get(TEXT("TUT_TIP_AIM"));
+        else if (LastProgress < 0.05f) Tip = PTText::Get(TEXT("TUT_TIP_CLICK"));
+        else Tip = FText::Format(PTText::Get(TEXT("TUT_TIP_FILL")), FText::AsNumber(FMath::RoundToInt(LastProgress * 100.f)));
+    }
+    if (Tip.IsEmpty()) return;
+    UE_LOG(LogPTTutorial, Log, TEXT("Consejo de Sculpi (lección %d): %s"), (int32)Step, *Tip.ToString());
+    Sculpi->Multicast_ShowChatBubble(Tip.ToString(), false);
+    PlaySfx(VoiceSounds.Num() > 0 ? VoiceSounds[FMath::RandRange(0, VoiceSounds.Num() - 1)] : TSoftObjectPtr<USoundBase>(), 0.4f);
+}
+
+float APTTutorialDirector::ReadTime() const
+{
+    // ~16 letras por segundo para leer tranquilo, entre 1,8 y 6 s.
+    return FMath::Clamp((Widget ? Widget->GetTextLength() : 40) / 16.f, 1.8f, 6.f);
 }
 
 float APTTutorialDirector::MeasurePainted(const FVector& Center, float Radius) const
@@ -489,6 +593,7 @@ void APTTutorialDirector::PlaySfx(const TSoftObjectPtr<USoundBase>& S, float Vol
 
 void APTTutorialDirector::Say(const TCHAR* Key)
 {
+    UE_LOG(LogPTTutorial, Log, TEXT("Sculpi dice: %s"), Key);
     if (Widget) Widget->Say(PTText::Get(FName(Key)));
 }
 
@@ -510,21 +615,89 @@ FText APTTutorialDirector::KeyText(FName Action) const
     return FText::GetEmpty();
 }
 
-void APTTutorialDirector::SetHintsFor(std::initializer_list<FName> Actions)
+void APTTutorialDirector::SetHintsFor(std::initializer_list<FName> Actions, bool bSequential, bool bGate)
+{
+    bChipsGate = bGate;
+    ChipActions.Reset();
+    for (FName A : Actions) if (FindTutAction(A) && !KeyText(A).IsEmpty()) ChipActions.Add(A);
+    ChipDone.Init(false, ChipActions.Num());
+    bChipsSequential = bSequential && ChipActions.Num() > 0;
+    ActiveChip = -1;
+    if (bChipsSequential) ActivateNextChip();
+    RefreshHints();
+}
+
+void APTTutorialDirector::ActivateNextChip()
+{
+    ActiveChip = ChipDone.IndexOfByKey(false);
+    APTSculptPlayerController* P = PC.Get();
+    // Punto de partida para lo que se mide "desde que te toca".
+    ChipSizeBase = P ? P->StampSize : 0.f;
+    ChipYawBase = TotalYaw;
+    ChipUndoBase = UndoCount;
+    ChipSaveBase = SaveCount;
+    ChipEyesBase = Volume.IsValid() ? Volume->GetEyeCount() : 0;
+}
+
+bool APTTutorialDirector::ChipSatisfied(FName A) const
+{
+    const APTSculptPlayerController* P = PC.Get();
+    if (!P) return false;
+    const APawn* Pawn = P->GetPawn();
+    const FVector Vel = Pawn ? Pawn->GetVelocity() : FVector::ZeroVector;
+    if (A == TEXT("Look"))           return TotalYaw - ChipYawBase >= 45.f;
+    if (A == TEXT("Move"))           return FVector2D(Vel.X, Vel.Y).Size() > 60.f;
+    if (A == TEXT("FlyUp"))          return Vel.Z > 60.f;
+    if (A == TEXT("FlyDown"))        return Vel.Z < -60.f;
+    if (A == TEXT("BrushSize"))      return FMath::Abs(P->StampSize - ChipSizeBase) > 1.f || !P->StampScale.Equals(FVector::OneVector, 0.01f);
+    if (A == TEXT("ModeAdd"))        return P->EditMode == EPTEditMode::Add && !P->IsEyesToolActive();
+    if (A == TEXT("ModeErase"))      return P->EditMode == EPTEditMode::Erase && !P->IsEyesToolActive();
+    if (A == TEXT("ModePaint"))      return P->EditMode == EPTEditMode::Paint && !P->IsEyesToolActive();
+    if (A == TEXT("ModeEyes"))       return P->IsEyesToolActive();
+    if (A == TEXT("CycleShape"))     return P->IsShapeRadialOpen();
+    if (A == TEXT("RotateShape"))    return P->IsRotatingShape();
+    if (A == TEXT("AxisVertical"))   return P->IsAxisLockActive() && !P->IsAxisHorizontal();
+    if (A == TEXT("AxisHorizontal")) return P->IsAxisLockActive() && P->IsAxisHorizontal();
+    if (A == TEXT("SurfaceSnap"))    return P->IsSurfaceSnapActive();
+    if (A == TEXT("Undo"))           return UndoCount > ChipUndoBase;
+    if (A == TEXT("ClearAll"))       return P->IsClearHeld() || bClearDone;
+    if (A == TEXT("ColorPick"))      return P->IsColorPickerOpen();
+    if (A == TEXT("SaveColor"))      return SaveCount > ChipSaveBase;
+    if (A == TEXT("PhotoOrbit"))     return bPhotoAiming && FMath::Abs(FMath::FindDeltaAngleDegrees(OrbitYaw0, OrbitYaw)) > 10.f;
+    if (A == TEXT("Sculpt"))
+        return Step == EPTTutStep::Eyes ? (Volume.IsValid() && Volume->GetEyeCount() > ChipEyesBase) : P->IsStamping();
+    return false;
+}
+
+void APTTutorialDirector::TickChips()
+{
+    if (!bChipsSequential || !ChipDone.IsValidIndex(ActiveChip)) return;
+    if (!ChipSatisfied(ChipActions[ActiveChip])) return;
+    ChipDone[ActiveChip] = true;
+    LastAdvanceTime = StepTime; // avanzó: no hace falta consejo
+    if (USoundBase* Snd = VoiceSounds.Num() > 0 ? VoiceSounds[0].LoadSynchronous() : nullptr)
+        UGameplayStatics::PlaySound2D(this, Snd, 0.35f, 1.6f); // "tic" de tecla marcada
+    if (ChipDone.Contains(false)) ActivateNextChip(); else ActiveChip = -1;
+    RefreshHints();
+}
+
+void APTTutorialDirector::RefreshHints()
 {
     if (!Widget) return;
     bool bPad = false;
     if (const UGameInstance* GI = GetGameInstance())
         if (const UPTGamepadUINavigator* Nav = GI->GetSubsystem<UPTGamepadUINavigator>()) bPad = Nav->IsUsingGamepad();
     TArray<FPTTutHint> Hints;
-    for (FName Id : Actions)
+    for (int32 Ci = 0; Ci < ChipActions.Num(); ++Ci)
     {
+        const FName Id = ChipActions[Ci];
         const FTutAction* A = FindTutAction(Id);
         const FText K = KeyText(Id);
         if (!A || K.IsEmpty()) continue;
         FPTTutHint H;
         H.Key = K;
         H.Label = PTText::Get(FName(A->Label));
+        H.State = !bChipsSequential ? 0 : ChipDone[Ci] ? 3 : (Ci == ActiveChip ? 2 : 1);
         // Íconos: casos fijos (WASD, sticks, rueda, LB/RB) o la tecla/botón asignado ahora.
         TArray<FString> Names;
         if (bPad)
@@ -533,6 +706,7 @@ void APTTutorialDirector::SetHintsFor(std::initializer_list<FName> Actions)
             else if (Id == TEXT("Move")) Names = { TEXT("UI_Joystick_L") };
             else if (Id == TEXT("BrushSize")) Names = { PadIconName(PTGamepad::GetKey(TEXT("BrushSmaller"))), PadIconName(PTGamepad::GetKey(TEXT("BrushBigger"))) };
             else if (Id == TEXT("Done")) Names = { TEXT("UI_Joystick_Menu") };
+            else if (Id == TEXT("PhotoOrbit")) Names = { TEXT("UI_Joystick_L") };
             else if (A->Pad) Names = { PadIconName(PTGamepad::GetKey(FName(A->Pad))) };
         }
         else
@@ -541,7 +715,8 @@ void APTTutorialDirector::SetHintsFor(std::initializer_list<FName> Actions)
             else if (Id == TEXT("Move")) Names = { TEXT("W_Key_Dark"), TEXT("A_Key_Dark"), TEXT("S_Key_Dark"), TEXT("D_Key_Dark") };
             else if (Id == TEXT("BrushSize")) Names = { TEXT("Mouse_Middle_Key_Dark") };
             else if (Id == TEXT("SurfaceSnap")) Names = { TEXT("Alt_Key_Dark") };
-            else if (Id == TEXT("Done")) Names = { TEXT("Enter_Key_Dark") };
+            else if (Id == TEXT("Done") || Id == TEXT("PhotoShoot")) Names = { TEXT("Enter_Key_Dark") };
+            else if (Id == TEXT("PhotoOrbit")) Names = { TEXT("W_Key_Dark"), TEXT("A_Key_Dark"), TEXT("S_Key_Dark"), TEXT("D_Key_Dark") };
             else if (A->Kb) Names = { KbIconName(PTInput::GetKey(FName(A->Kb))) };
         }
         bool bAll = Names.Num() > 0;
@@ -566,8 +741,9 @@ void APTTutorialDirector::NextStep()
 
 void APTTutorialDirector::CompleteStep()
 {
-    if (bStepDone) return;
+    if (bStepDone || ChipsPending()) return; // primero las teclas de la secuencia
     bStepDone = true;
+    UE_LOG(LogPTTutorial, Log, TEXT("Lección %d completada en %.1f s"), (int32)Step, StepTime);
     DoneTimer = 0.f;
     PlaySfx(SuccessSound, 0.5f);
     const TCHAR* Line = GPraise[FMath::RandRange(0, UE_ARRAY_COUNT(GPraise) - 1)];
@@ -582,6 +758,9 @@ void APTTutorialDirector::EnterStep(EPTTutStep S)
 {
     Step = S;
     StepTime = 0.f;
+    LastAdvanceTime = 0.f;
+    LastTipTime = 0.f;
+    LastProgress = -1.f;
     bStepDone = false;
     DoneTimer = 0.f;
     LineIndex = 0;
@@ -731,25 +910,26 @@ void APTTutorialDirector::EnterStep(EPTTutStep S)
     // Teclas de cada lección.
     switch (S)
     {
-    case EPTTutStep::Look:    SetHintsFor({ TEXT("Look") }); break;
-    case EPTTutStep::Move:    SetHintsFor({ TEXT("Move"), TEXT("Look") }); break;
-    case EPTTutStep::FlyUp:   SetHintsFor({ TEXT("FlyUp") }); break;
-    case EPTTutStep::FlyDown: SetHintsFor({ TEXT("FlyDown") }); break;
-    case EPTTutStep::Add:     SetHintsFor({ TEXT("ModeAdd"), TEXT("Sculpt") }); break;
-    case EPTTutStep::Size:    SetHintsFor({ TEXT("BrushSize") }); break;
-    case EPTTutStep::Shapes:  SetHintsFor({ TEXT("CycleShape"), TEXT("Sculpt") }); break;
-    case EPTTutStep::Rotate:  SetHintsFor({ TEXT("CycleShape"), TEXT("RotateShape"), TEXT("Sculpt") }); break;
-    case EPTTutStep::Squash:  SetHintsFor({ TEXT("AxisVertical"), TEXT("AxisHorizontal"), TEXT("BrushSize"), TEXT("Sculpt") }); break;
-    case EPTTutStep::Lines:   SetHintsFor({ TEXT("AxisVertical"), TEXT("AxisHorizontal"), TEXT("Sculpt") }); break;
-    case EPTTutStep::Alt:     SetHintsFor({ TEXT("SurfaceSnap"), TEXT("Sculpt") }); break;
-    case EPTTutStep::Erase:   SetHintsFor({ TEXT("ModeErase"), TEXT("Sculpt") }); break;
-    case EPTTutStep::Undo:    SetHintsFor({ TEXT("Undo") }); break;
-    case EPTTutStep::Clear:   SetHintsFor({ TEXT("ClearAll") }); break;
-    case EPTTutStep::Paint:   SetHintsFor({ TEXT("ModePaint"), TEXT("ColorPick"), TEXT("SaveColor"), TEXT("Sculpt") }); break;
-    case EPTTutStep::Eyes:    SetHintsFor({ TEXT("ModeEyes"), TEXT("Sculpt") }); break;
-    case EPTTutStep::Iglu:    SetHintsFor({ TEXT("ModeAdd"), TEXT("CycleShape"), TEXT("RotateShape"), TEXT("BrushSize") }); break;
-    case EPTTutStep::Hongo:   SetHintsFor({ TEXT("CycleShape"), TEXT("AxisVertical"), TEXT("BrushSize"), TEXT("ModePaint") }); break;
+    case EPTTutStep::Look:    SetHintsFor({ TEXT("Look") }, /*bSequential=*/true); break;
+    case EPTTutStep::Move:    SetHintsFor({ TEXT("Move"), TEXT("Look") }, /*bSequential=*/true); break;
+    case EPTTutStep::FlyUp:   SetHintsFor({ TEXT("FlyUp") }, /*bSequential=*/true); break;
+    case EPTTutStep::FlyDown: SetHintsFor({ TEXT("FlyDown") }, /*bSequential=*/true); break;
+    case EPTTutStep::Add:     SetHintsFor({ TEXT("ModeAdd"), TEXT("Sculpt") }, /*bSequential=*/true); break;
+    case EPTTutStep::Size:    SetHintsFor({ TEXT("BrushSize") }, /*bSequential=*/true); break;
+    case EPTTutStep::Shapes:  SetHintsFor({ TEXT("CycleShape"), TEXT("Sculpt") }, /*bSequential=*/true); break;
+    case EPTTutStep::Rotate:  SetHintsFor({ TEXT("CycleShape"), TEXT("RotateShape"), TEXT("Sculpt") }, /*bSequential=*/true); break;
+    case EPTTutStep::Squash:  SetHintsFor({ TEXT("AxisVertical"), TEXT("AxisHorizontal"), TEXT("BrushSize"), TEXT("Sculpt") }, /*bSequential=*/true); break;
+    case EPTTutStep::Lines:   SetHintsFor({ TEXT("AxisVertical"), TEXT("AxisHorizontal"), TEXT("Sculpt") }, /*bSequential=*/true); break;
+    case EPTTutStep::Alt:     SetHintsFor({ TEXT("SurfaceSnap"), TEXT("Sculpt") }, /*bSequential=*/true); break;
+    case EPTTutStep::Erase:   SetHintsFor({ TEXT("ModeErase"), TEXT("Sculpt") }, /*bSequential=*/true); break;
+    case EPTTutStep::Undo:    SetHintsFor({ TEXT("Undo") }, /*bSequential=*/true); break;
+    case EPTTutStep::Clear:   SetHintsFor({ TEXT("ClearAll") }, /*bSequential=*/true); break;
+    case EPTTutStep::Paint:   SetHintsFor({ TEXT("ModePaint"), TEXT("ColorPick"), TEXT("Sculpt") }, /*bSequential=*/true); break;
+    case EPTTutStep::Eyes:    SetHintsFor({ TEXT("ModeEyes"), TEXT("Sculpt") }, /*bSequential=*/true); break;
+    case EPTTutStep::Iglu:    SetHintsFor({ TEXT("ModeAdd"), TEXT("CycleShape"), TEXT("RotateShape"), TEXT("BrushSize") }, /*bSequential=*/true, /*bGate=*/false); break;
+    case EPTTutStep::Hongo:   SetHintsFor({ TEXT("CycleShape"), TEXT("AxisVertical"), TEXT("BrushSize"), TEXT("ModePaint") }, /*bSequential=*/true, /*bGate=*/false); break;
     case EPTTutStep::Perro:   SetHintsFor({ TEXT("Done") }); break;
+    case EPTTutStep::Photo:   SetHintsFor({ TEXT("PhotoOrbit"), TEXT("PhotoShoot") }, /*bSequential=*/true, /*bGate=*/false); break;
     default: break;
     }
     UE_LOG(LogPTTutorial, Log, TEXT("Lección %d"), (int32)S);
@@ -770,6 +950,16 @@ void APTTutorialDirector::Tick(float Dt)
     }
     TickSculpi(Dt);
     if (APTSculptPlayerController* P = PC.Get())
+    {
+        const float Yaw = P->GetControlRotation().Yaw;
+        TotalYaw += FMath::Abs(FMath::FindDeltaAngleDegrees(LastTotalYaw, Yaw));
+        LastTotalYaw = Yaw;
+    }
+    TickChips();
+    TickAim();
+    TickTips();
+    if (Widget && PC.IsValid()) Widget->SetDockLeft(PC->IsShapeRadialOpen() || PC->IsColorPickerOpen());
+    if (APTSculptPlayerController* P = PC.Get())
         if (Widget) Widget->SetPauseOptions(P->IsEscapeMenuOpen() && Step < EPTTutStep::Photo, Step == EPTTutStep::Perro);
     TickStep(Dt);
 }
@@ -782,8 +972,9 @@ void APTTutorialDirector::TickStep(float Dt)
 
     if (bStepDone)
     {
-        DoneTimer += Dt;
-        if (DoneTimer > 2.0f && !(Widget && Widget->IsTyping())) NextStep();
+        // Esperar a que termine de escribir y dar tiempo de leer (según el largo de la frase).
+        if (Widget && Widget->IsTyping()) DoneTimer = 0.f; else DoneTimer += Dt;
+        if (DoneTimer > ReadTime()) NextStep();
         return;
     }
 
@@ -793,7 +984,16 @@ void APTTutorialDirector::TickStep(float Dt)
     const bool bMeasure = MeasureAccum >= 0.2f;
     if (bMeasure) MeasureAccum = 0.f;
     auto Pct = [](float F) { return FText::Format(PTText::Get(TEXT("TUT_PCT")), FText::AsNumber(FMath::RoundToInt(FMath::Clamp(F, 0.f, 1.f) * 100.f))); };
-    auto Show = [this](float F, const FText& L) { if (Widget) Widget->SetProgress(F, L); };
+    // Con teclas pendientes, la barra no llega al 100% (y la lección no termina): falta usar los controles.
+    auto Show = [this](float F, const FText& L)
+    {
+        if (FMath::Abs(F - LastProgress) > 0.02f) { LastProgress = F; LastAdvanceTime = StepTime; }
+        if (!Widget) return;
+        if (ChipsPending() && F >= 0.95f)
+            Widget->SetProgress(0.95f, FText::Format(PTText::Get(TEXT("TUT_PCT")), FText::AsNumber(95)));
+        else
+            Widget->SetProgress(F, L);
+    };
 
     switch (Step)
     {
@@ -802,7 +1002,7 @@ void APTTutorialDirector::TickStep(float Dt)
         if (Widget && !Widget->IsTyping())
         {
             LineWait += Dt;
-            if (LineWait > 2.6f)
+            if (LineWait > ReadTime())
             {
                 LineWait = 0.f;
                 if (++LineIndex == 1) Say(TEXT("TUT_INTRO_2"));
@@ -931,9 +1131,16 @@ void APTTutorialDirector::TickStep(float Dt)
         if (bMeasure)
         {
             const float Painted = MeasurePainted(FVector(CanvasCenter.X, CanvasCenter.Y, FloorZ + 170.f), 160.f);
-            const float F = (bSawPicker ? 0.2f : 0.f) + (bSawSave ? 0.2f : 0.f) + 0.6f * FMath::Min(1.f, Painted / 0.35f);
+            // El color se guarda solo al elegirlo: alcanza con elegir uno y pintar.
+            const float F = (bSawPicker ? 0.3f : 0.f) + 0.7f * FMath::Min(1.f, Painted / 0.35f);
             Show(F, Pct(F));
-            if (bSawPicker && bSawSave && Painted >= 0.35f) CompleteStep();
+            if (bSawPicker && Painted >= 0.35f) CompleteStep();
+            // Ya pintó pero no eligió color: Sculpi se lo recuerda una vez.
+            if (!bPaintHintSaid && Painted >= 0.35f && !bSawPicker && !(Widget && Widget->IsTyping()))
+            {
+                bPaintHintSaid = true;
+                Say(TEXT("TUT_PAINT_SAVE_HINT"));
+            }
         }
         break;
     case EPTTutStep::Eyes:
@@ -948,7 +1155,7 @@ void APTTutorialDirector::TickStep(float Dt)
         if (LineIndex == 0 && Widget && !Widget->IsTyping())
         {
             LineWait += Dt;
-            if (LineWait > 2.2f) { LineIndex = 1; Say(TEXT("TUT_IGLU")); }
+            if (LineWait > ReadTime()) { LineIndex = 1; Say(TEXT("TUT_IGLU")); }
         }
         if (bMeasure)
         {
@@ -978,12 +1185,18 @@ void APTTutorialDirector::TickStep(float Dt)
     }
     case EPTTutStep::Photo:
     {
-        if (CountdownN == 0 && !bShotRequested)
+        if (bPhotoAiming)
         {
-            if (Widget && !Widget->IsTyping())
+            // Encuadre: girar alrededor del perro; Enter / clic / A para disparar.
+            TickPhotoOrbit(Dt);
+            const bool bShoot = StepTime > 1.2f && (P->WasInputKeyJustPressed(EKeys::Enter) || P->WasInputKeyJustPressed(EKeys::LeftMouseButton) ||
+                                                    P->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Bottom) || P->WasInputKeyJustPressed(EKeys::Gamepad_RightTrigger));
+            if (bShoot)
             {
-                LineWait += Dt;
-                if (LineWait > 0.7f) { CountdownN = 3; CountdownT = 0.f; Widget->ShowCountdown(3); PlaySfx(CountdownSound); }
+                bPhotoAiming = false;
+                CountdownN = 3; CountdownT = 0.f;
+                if (Widget) { Widget->ShowCountdown(3); Widget->SetHints(TArray<FPTTutHint>()); }
+                PlaySfx(CountdownSound);
             }
         }
         else if (CountdownN > 0)
@@ -997,8 +1210,7 @@ void APTTutorialDirector::TickStep(float Dt)
                 if (CountdownN > 0) PlaySfx(CountdownSound);
                 else
                 {
-                    // ¡Foto! Cámara encuadrada, sin Sculpi, sin interfaz; la captura llega en OnScreenshot.
-                    FramePhotoCamera();
+                    // ¡Foto! Sin Sculpi ni interfaz; la captura llega en OnScreenshot.
                     SetPhotoHidden(true);
                     bShotRequested = true;
                     LineWait = 0.f;
@@ -1008,7 +1220,7 @@ void APTTutorialDirector::TickStep(float Dt)
         else if (bShotRequested && !ShotDelegate.IsValid())
         {
             LineWait += Dt;
-            if (LineWait > 0.35f) // un par de frames para que la cámara y lo oculto ya estén en pantalla
+            if (LineWait > 0.35f) // un par de frames para que lo oculto ya no esté en pantalla
             {
                 ShotDelegate = UGameViewportClient::OnScreenshotCaptured().AddUObject(this, &APTTutorialDirector::OnScreenshot);
                 FScreenshotRequest::RequestScreenshot(/*bShowUI=*/false);
@@ -1017,8 +1229,12 @@ void APTTutorialDirector::TickStep(float Dt)
         break;
     }
     case EPTTutStep::End:
-        // "Continuar" (botón, navegable con joystick) o Enter; con un respiro para no saltarlo sin querer.
-        if (StepTime > 1.5f && P->WasInputKeyJustPressed(EKeys::Enter)) OnContinue();
+        // Con joystick, teclado en pantalla para el nombre (hasta guardar).
+        if (Widget && !bPhotoSaved)
+            if (const UPTGamepadUINavigator* Nav = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTGamepadUINavigator>() : nullptr)
+                if (Nav->IsUsingGamepad()) Widget->SetOnScreenKeyboard(true);
+        // Ya guardada: "Continuar" (botón) o Enter. Antes de guardar, Enter confirma el nombre (lo maneja el cuadro).
+        if (bPhotoSaved && StepTime > 1.5f && P->WasInputKeyJustPressed(EKeys::Enter)) OnContinue();
         break;
     }
 }
@@ -1039,6 +1255,14 @@ void APTTutorialDirector::DevJumpTo(int32 StepIndex)
             PlaceClay(EPTStampShape::Cylinder, C + Right * Off + FVector(0, 0, 60.f), 70.f, FVector(1.f, 1.f, 1.6f));
     }
     EnterStep(S);
+}
+
+void APTTutorialDirector::DevShoot()
+{
+    if (Step != EPTTutStep::Photo || !bPhotoAiming) return;
+    bPhotoAiming = false;
+    CountdownN = 3; CountdownT = 0.f;
+    if (Widget) { Widget->ShowCountdown(3); Widget->SetHints(TArray<FPTTutHint>()); }
 }
 
 void APTTutorialDirector::DevFillGhosts()
@@ -1069,10 +1293,22 @@ void APTTutorialDirector::OnDonePerro()
 void APTTutorialDirector::StartPhoto()
 {
     ClearGhosts(); // que en la foto solo salga la escultura
-    Say(TEXT("TUT_PHOTO"));
     CountdownN = 0;
     bShotRequested = false;
+    bPhotoSaved = false;
     LineWait = 0.f;
+    // Ya no se esculpe (el clic es para disparar) ni se mueve el personaje: la cámara es de la foto.
+    if (APTSculptGameState* G = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr)
+        G->TurnPhase = EPTTurnPhase::TurnEnd;
+    if (APTSculptPlayerController* P = PC.Get())
+    {
+        P->SetIgnoreLookInput(true);
+        P->SetIgnoreMoveInput(true);
+        if (AActor* Prev = P->GetBrushPreviewActor()) Prev->SetActorHiddenInGame(true);
+    }
+    FramePhotoCamera();
+    bPhotoAiming = true;
+    Say(TEXT("TUT_PHOTO"));
 }
 
 void APTTutorialDirector::FramePhotoCamera()
@@ -1092,26 +1328,55 @@ void APTTutorialDirector::FramePhotoCamera()
                 if (Volume->SampleWorldDensity(Pt) > 0.f) Clay += Pt;
             }
     if (!Clay.IsValid) Clay = FBox(CanvasCenter - FVector(150.f), CanvasCenter + FVector(150.f));
-    const FVector Center = Clay.GetCenter();
+    OrbitCenter = Clay.GetCenter();
     const float Radius = FMath::Max(120.f, (float)Clay.GetExtent().Size());
 
-    // Desde donde miraba el jugador (horizontal), un poco arriba, a la distancia justa para que entre.
-    const FVector CamLoc = P->PlayerCameraManager ? P->PlayerCameraManager->GetCameraLocation() : Center - FVector(600, 0, 0);
-    FVector Dir = Center - CamLoc; Dir.Z = 0.f;
+    // Arranca desde donde miraba el jugador (horizontal), un poco arriba, a la distancia justa.
+    const FVector CamLoc = P->PlayerCameraManager ? P->PlayerCameraManager->GetCameraLocation() : OrbitCenter - FVector(600, 0, 0);
+    FVector Dir = OrbitCenter - CamLoc; Dir.Z = 0.f;
     Dir = Dir.IsNearlyZero() ? FVector::ForwardVector : Dir.GetSafeNormal();
-    const float HalfFov = FMath::DegreesToRadians(25.f);
-    const float Dist = Radius / FMath::Tan(HalfFov) * 1.4f + 80.f;
-    const FVector Loc = Center - Dir * Dist + FVector(0.f, 0.f, Radius * 0.45f);
+    OrbitYaw = OrbitYaw0 = Dir.Rotation().Yaw;
+    OrbitPitch = 18.f;
+    OrbitDist = OrbitDist0 = Radius / FMath::Tan(FMath::DegreesToRadians(25.f)) * 1.35f + 80.f;
 
     FActorSpawnParameters SP;
     SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-    PhotoCam = W->SpawnActor<ACameraActor>(Loc, (Center - Loc).Rotation(), SP);
+    PhotoCam = W->SpawnActor<ACameraActor>(OrbitCenter, FRotator::ZeroRotator, SP);
     if (PhotoCam)
     {
         PhotoCam->GetCameraComponent()->SetFieldOfView(50.f);
         PhotoCam->GetCameraComponent()->bConstrainAspectRatio = false;
-        P->SetViewTargetWithBlend(PhotoCam, 0.f);
+        PlaceOrbitCamera();
+        P->SetViewTargetWithBlend(PhotoCam, 0.8f, VTBlend_Cubic);
     }
+}
+
+void APTTutorialDirector::PlaceOrbitCamera()
+{
+    if (!PhotoCam) return;
+    const FRotator R(-OrbitPitch, OrbitYaw, 0.f);
+    PhotoCam->SetActorLocationAndRotation(OrbitCenter - R.Vector() * OrbitDist, R);
+}
+
+void APTTutorialDirector::TickPhotoOrbit(float Dt)
+{
+    APTSculptPlayerController* P = PC.Get();
+    if (!P || !PhotoCam) return;
+    // Riel en anillo alrededor del perro: A/D (o stick izquierdo) dan la vuelta; W/S suben o bajan la cámara.
+    float Side = P->GetInputAnalogKeyState(EKeys::Gamepad_LeftX);
+    float Up   = P->GetInputAnalogKeyState(EKeys::Gamepad_LeftY);
+    if (P->IsInputKeyDown(EKeys::D)) Side += 1.f;
+    if (P->IsInputKeyDown(EKeys::A)) Side -= 1.f;
+    if (P->IsInputKeyDown(EKeys::W)) Up += 1.f;
+    if (P->IsInputKeyDown(EKeys::S)) Up -= 1.f;
+    OrbitYaw   = FRotator::NormalizeAxis(OrbitYaw - FMath::Clamp(Side, -1.f, 1.f) * 75.f * Dt);
+    OrbitPitch = FMath::Clamp(OrbitPitch + FMath::Clamp(Up, -1.f, 1.f) * 35.f * Dt, 2.f, 55.f);
+    // Rueda / gatillos: acercar o alejar un poco.
+    if (P->WasInputKeyJustPressed(EKeys::MouseScrollUp))   OrbitDist *= 0.92f;
+    if (P->WasInputKeyJustPressed(EKeys::MouseScrollDown)) OrbitDist *= 1.08f;
+    OrbitDist += (P->GetInputAnalogKeyState(EKeys::Gamepad_LeftTriggerAxis)) * OrbitDist0 * 0.6f * Dt;
+    OrbitDist = FMath::Clamp(OrbitDist, OrbitDist0 * 0.7f, OrbitDist0 * 1.5f);
+    PlaceOrbitCamera();
 }
 
 void APTTutorialDirector::SetPhotoHidden(bool bHide)
@@ -1120,7 +1385,7 @@ void APTTutorialDirector::SetPhotoHidden(bool bHide)
     if (APTSculptPlayerController* P = PC.Get())
     {
         if (APawn* Pawn = P->GetPawn()) Pawn->SetActorHiddenInGame(bHide);
-        if (AActor* Prev = P->GetBrushPreviewActor()) Prev->SetActorHiddenInGame(bHide);
+        if (AActor* Prev = P->GetBrushPreviewActor()) Prev->SetActorHiddenInGame(true);
         P->SetGameplayHUDVisible(!bHide);
     }
     if (Widget)
@@ -1136,51 +1401,78 @@ void APTTutorialDirector::OnScreenshot(int32 W, int32 H, const TArray<FColor>& P
     ShotDelegate.Reset();
     if (W <= 0 || H <= 0 || Pixels.Num() != W * H) { EnterStep(EPTTutStep::End); return; }
 
-    // La foto en una textura (BGRA, opaca) para mostrarla y para el marco.
+    // La foto en una textura (BGRA, opaca) con VIÑETA: los bordes se oscurecen suave hacia negro.
     PhotoTex = UTexture2D::CreateTransient(W, H, PF_B8G8R8A8);
     if (PhotoTex)
     {
         FTexture2DMipMap& Mip = PhotoTex->GetPlatformData()->Mips[0];
         FColor* Dst = static_cast<FColor*>(Mip.BulkData.Lock(LOCK_READ_WRITE));
-        for (int32 i = 0; i < Pixels.Num(); ++i) { Dst[i] = Pixels[i]; Dst[i].A = 255; }
+        const float Cx = W * 0.5f, Cy = H * 0.5f;
+        for (int32 y = 0; y < H; ++y)
+            for (int32 x = 0; x < W; ++x)
+            {
+                const float Dx = (x - Cx) / Cx, Dy = (y - Cy) / Cy;
+                const float D = FMath::Sqrt(Dx * Dx * 0.85f + Dy * Dy * 0.6f); // elipse: más en los costados
+                const float K = 1.f - 0.75f * FMath::SmoothStep(0.55f, 1.15f, D);
+                const FColor& S = Pixels[y * W + x];
+                Dst[y * W + x] = FColor(uint8(S.R * K), uint8(S.G * K), uint8(S.B * K), 255);
+            }
         Mip.BulkData.Unlock();
         PhotoTex->UpdateResource();
     }
 
     PlaySfx(ShutterSound, 0.7f);
     if (Sculpi) Sculpi->SetActorHiddenInGame(false);
-    if (APTSculptPlayerController* P = PC.Get())
-        if (APawn* Pawn = P->GetPawn()) Pawn->SetActorHiddenInGame(false);
     if (Widget) Widget->Flash();
 
-    // Mostrar la polaroid y guardarla (Steam o PNG). El HUD de juego queda oculto hasta salir.
+    // Ponerle nombre y guardar (Steam). El HUD de juego queda oculto hasta salir.
     Step = EPTTutStep::End;
     StepTime = 0.f;
-    SaveFramedPhoto();
     if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>()) GI->bTutorialWantsCursor = true;
+    if (Widget)
+    {
+        Widget->SetHints(TArray<FPTTutHint>());
+        Widget->SetProgress(-1.f, FText::GetEmpty());
+        Widget->SetAim(FText::GetEmpty(), FLinearColor::White);
+        Widget->SetDialogVisible(true);
+        Widget->ShowPhoto(PhotoTex, PTText::Get(TEXT("TUT_MY_DOG")));
+        Widget->Say(PTText::Get(TEXT("TUT_NAME_DOG")));
+    }
 }
 
-void APTTutorialDirector::SaveFramedPhoto()
+void APTTutorialDirector::OnSavePhoto()
+{
+    if (Step != EPTTutStep::End || bPhotoSaved || !Widget) return;
+    FText Name = FText::TrimPrecedingAndTrailing(Widget->GetPhotoName());
+    if (Name.IsEmpty()) Name = PTText::Get(TEXT("TUT_MY_DOG"));
+    SaveFramedPhoto(Name);
+}
+
+void APTTutorialDirector::SaveFramedPhoto(const FText& Caption)
 {
     APTSculptPlayerController* P = PC.Get();
-    const FText Caption = PTText::Get(TEXT("TUT_MY_DOG"));
     FText SavedMsg = PTText::Get(TEXT("TUT_PHOTO_FAIL"));
 
-    // El marco se dibuja a una textura con el mismo widget que se ve en pantalla.
+    // Logo: forzarlo entero en memoria antes de dibujar (si no, puede faltar en la foto).
+    UTexture2D* Logo = LogoTexture.LoadSynchronous();
+    if (Logo) { Logo->SetForceMipLevelsToBeResident(30.f); Logo->WaitForStreaming(); }
+
+    // El marco se dibuja a una textura con el mismo widget que se ve en pantalla (texto fijo, no editable).
     TArray<FColor> Px;
     int32 W = 0, H = 0;
     if (P && PhotoTex)
     {
         UPTTutorialPolaroid* Card = CreateWidget<UPTTutorialPolaroid>(P, UPTTutorialPolaroid::StaticClass());
-        Card->Setup(PhotoTex, Caption, LogoTexture.LoadSynchronous(), 1280.f);
+        Card->Setup(PhotoTex, Caption, Logo, 1280.f, /*bEditable=*/false);
         TSharedRef<SWidget> Slate = Card->TakeWidget();
         Slate->SlatePrepass(1.f);
         const FVector2D Size = Slate->GetDesiredSize();
         W = FMath::RoundToInt(Size.X); H = FMath::RoundToInt(Size.Y);
         if (W > 16 && H > 16)
         {
-            FWidgetRenderer* Renderer = new FWidgetRenderer(/*bUseGammaCorrection=*/true, /*bInClearTarget=*/true);
-            UTextureRenderTarget2D* RT = FWidgetRenderer::CreateTargetFor(Size, TF_Bilinear, /*bUseGammaCorrection=*/true);
+            // Sin corrección de gamma: con ella la foto salía lavada (blanquecina).
+            FWidgetRenderer* Renderer = new FWidgetRenderer(/*bUseGammaCorrection=*/false, /*bInClearTarget=*/true);
+            UTextureRenderTarget2D* RT = FWidgetRenderer::CreateTargetFor(Size, TF_Bilinear, /*bUseGammaCorrection=*/true); // destino sRGB: la lectura sale con los colores de pantalla
             if (RT)
             {
                 RT->ClearColor = FLinearColor::Black;
@@ -1196,6 +1488,7 @@ void APTTutorialDirector::SaveFramedPhoto()
 
     if (Px.Num() == W * H && W > 0)
     {
+        for (FColor& C : Px) C.A = 255;
         bool bSteam = false;
 #if PT_WITH_STEAM
         if (SteamAPI_IsSteamRunning() && SteamScreenshots())
@@ -1212,12 +1505,15 @@ void APTTutorialDirector::SaveFramedPhoto()
             }
         }
 #endif
-        if (!bSteam)
+        // Sin Steam: PNG en la carpeta de capturas. En desarrollo, siempre una copia (para revisarla).
+        bool bWritePng = !bSteam;
+#if !UE_BUILD_SHIPPING
+        bWritePng = true;
+#endif
+        if (bWritePng)
         {
-            // Sin Steam (editor / build sin Steam): PNG en la carpeta de capturas del juego.
             IImageWrapperModule& IWM = FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
             TSharedPtr<IImageWrapper> Png = IWM.CreateImageWrapper(EImageFormat::PNG);
-            for (FColor& C : Px) C.A = 255;
             if (Png.IsValid() && Png->SetRaw(Px.GetData(), Px.Num() * sizeof(FColor), W, H, ERGBFormat::BGRA, 8))
             {
                 const FString Dir = FPaths::ScreenShotDir();
@@ -1226,19 +1522,18 @@ void APTTutorialDirector::SaveFramedPhoto()
                 const TArray64<uint8>& Data = Png->GetCompressed(100);
                 if (FFileHelper::SaveArrayToFile(Data, *File))
                 {
-                    SavedMsg = FText::Format(PTText::Get(TEXT("TUT_PHOTO_FILE")), FText::FromString(FPaths::ConvertRelativePathToFull(File)));
-                    UE_LOG(LogPTTutorial, Log, TEXT("Foto del perro guardada: %s"), *File);
+                    if (!bSteam) SavedMsg = FText::Format(PTText::Get(TEXT("TUT_PHOTO_FILE")), FText::FromString(FPaths::ConvertRelativePathToFull(File)));
+                    UE_LOG(LogPTTutorial, Log, TEXT("Foto del perro (\"%s\") guardada: %s"), *Caption.ToString(), *File);
                 }
             }
         }
     }
 
+    bPhotoSaved = true;
+    StepTime = 0.f;
     if (Widget)
     {
-        Widget->SetHints(TArray<FPTTutHint>());
-        Widget->SetProgress(-1.f, FText::GetEmpty());
-        Widget->ShowPhoto(PhotoTex, Caption, SavedMsg);
-        Widget->SetDialogVisible(true);
+        Widget->ShowPhotoSaved(SavedMsg);
         Widget->Say(PTText::Get(TEXT("TUT_END")));
     }
 }
@@ -1246,7 +1541,7 @@ void APTTutorialDirector::SaveFramedPhoto()
 // ── Salir ───────────────────────────────────────────────────────────────────
 
 void APTTutorialDirector::OnSkip()     { Finish(); }
-void APTTutorialDirector::OnContinue() { if (Step == EPTTutStep::End && StepTime > 1.f) Finish(); }
+void APTTutorialDirector::OnContinue() { if (Step == EPTTutStep::End && bPhotoSaved && StepTime > 1.f) Finish(); }
 
 void APTTutorialDirector::Finish()
 {
