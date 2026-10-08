@@ -199,6 +199,8 @@ private:
     void  OnScreenshot(int32 W, int32 H, const TArray<FColor>& Pixels);
     void  SaveFramedPhoto(const FText& Name);
     void  OnSavePhoto();
+    void  OnSharePhoto();
+    bool  bSavedToSteam = false;
     bool  bPhotoSaved = false;
 
     // Foto: cámara en órbita alrededor del perro (el jugador la mueve dentro de un rango) antes de disparar.

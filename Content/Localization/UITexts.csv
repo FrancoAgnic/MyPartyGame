@@ -407,7 +407,7 @@ TUT_DONE_MARK,¡Hecho!,Done!,Feito!,Geschafft!,Réussi !,Fatto!
 TUT_W_IGLU,Iglú,Igloo,Iglu,Iglu,Igloo,Igloo
 TUT_W_HONGO,Hongo,Mushroom,Cogumelo,Pilz,Champignon,Fungo
 TUT_MY_DOG,Mi perro,My dog,Meu cachorro,Mein Hund,Mon chien,Il mio cane
-TUT_PHOTO_STEAM,¡Foto guardada en tus capturas de Steam!,Photo saved to your Steam screenshots!,Foto salva nas suas capturas do Steam!,Foto in deinen Steam-Screenshots gespeichert!,Photo enregistrée dans tes captures Steam !,Foto salvata nei tuoi screenshot di Steam!
+TUT_PHOTO_STEAM,¡Foto guardada en tus capturas de Steam! Súbela a la comunidad para que todos vean a tu perro.,Photo saved to your Steam screenshots! Upload it to the community so everyone can see your dog.,Foto salva nas suas capturas do Steam! Envie para a comunidade para todos verem seu cachorro.,"Foto in deinen Steam-Screenshots gespeichert! Lade es in die Community hoch, damit alle deinen Hund sehen.",Photo enregistrée dans tes captures Steam ! Publie-la dans la communauté pour que tout le monde voie ton chien.,Foto salvata nei tuoi screenshot di Steam! Caricala nella community così tutti vedono il tuo cane.
 TUT_PHOTO_FILE,Foto guardada en: {0},Photo saved to: {0},Foto salva em: {0},Foto gespeichert unter: {0},Photo enregistrée dans : {0},Foto salvata in: {0}
 TUT_PHOTO_FAIL,"No se pudo guardar la foto, ¡pero quedó genial!","Couldn't save the photo, but it looks great!","Não deu para salvar a foto, mas ficou ótima!","Das Foto konnte nicht gespeichert werden, aber es sieht super aus!","Impossible d'enregistrer la photo, mais elle est super !","Non è stato possibile salvare la foto, ma è venuta benissimo!"
 TUT_MOUSE_L,Clic izq.,Left click,Clique esq.,Linksklick,Clic gauche,Clic sin.
@@ -486,3 +486,4 @@ TUT_KB_SPACE,Espacio,Space,Espaço,Leerzeichen,Espace,Spazio
 TUT_K_FINISH,Sacar la foto,Take the photo,Tirar a foto,Foto machen,Prendre la photo,Scatta la foto
 TUT_TIP_SCULPT_FIRST,¡Primero esculpe tu perro!,Sculpt your dog first!,Primeiro esculpa seu cachorro!,Forme zuerst deinen Hund!,Sculpte d’abord ton chien !,Prima scolpisci il tuo cane!
 TUT_PERRO_TIME,¡Tiempo! Pulsa Enter para sacarle una foto a tu perro.,Time! Press Enter to take a photo of your dog.,Tempo! Aperte Enter para tirar uma foto do seu cachorro.,"Zeit! Drück Enter, um deinen Hund zu fotografieren.",Temps écoulé ! Appuie sur Entrée pour photographier ton chien.,Tempo! Premi Invio per fotografare il tuo cane.
+TUT_SHARE_STEAM,Compartir en la comunidad de Steam,Share to the Steam community,Compartilhar na comunidade Steam,In der Steam-Community teilen,Partager dans la communauté Steam,Condividi nella community di Steam

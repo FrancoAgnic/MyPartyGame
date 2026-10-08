@@ -58,6 +58,8 @@ public:
     FText GetCaption() const;
     void FocusCaption();
     void SetCaption(const FText& T);
+    /** Ya guardada: el nombre queda fijo (sin cuadro de texto ni selección). */
+    void LockCaption();
     /** Fuente de los menús del juego. */
     static class UFont* GameFont();
     FPTTutorialUIEvent OnCaptionCommitted;
@@ -103,7 +105,7 @@ public:
     /** La foto en su marco con el nombre editable + "Guardar foto". */
     void ShowPhoto(UTexture2D* Photo, const FText& DefaultName);
     /** Ya guardada: mensaje (dónde quedó) y "Continuar" en lugar de "Guardar". */
-    void ShowPhotoSaved(const FText& SavedMsg);
+    void ShowPhotoSaved(const FText& SavedMsg, bool bCanShare = false);
     FText GetPhotoName() const;
     /** Joystick: teclado en pantalla para escribir el nombre (se navega como los menús). */
     void SetOnScreenKeyboard(bool bShow);
@@ -120,6 +122,7 @@ public:
     FPTTutorialUIEvent OnDoneClicked;
     FPTTutorialUIEvent OnContinueClicked;
     FPTTutorialUIEvent OnSavePhotoClicked;
+    FPTTutorialUIEvent OnShareClicked;
 
     /** La polaroid de la foto (para dibujarla a textura). */
     UPTTutorialPolaroid* GetPolaroid() const { return Polaroid; }
@@ -138,6 +141,7 @@ private:
     UFUNCTION() void HandleDone();
     UFUNCTION() void HandleContinue();
     UFUNCTION() void HandleSavePhoto();
+    UFUNCTION() void HandleShare();
 
     UPROPERTY() UWidget*      DialogCard = nullptr;
     UPROPERTY() class USizeBox* DialogWidth = nullptr;
@@ -157,6 +161,7 @@ private:
     UPROPERTY() UTextBlock*   SavedText = nullptr;
     UPROPERTY() UButton*      SavePhotoButton = nullptr;
     UPROPERTY() UButton*      ContinueButton = nullptr;
+    UPROPERTY() UButton*      ShareButton = nullptr;
     UPROPERTY() UWidget*      KeyboardPanel = nullptr;
     UPROPERTY() UButton*      FirstKey = nullptr;
     bool bKeyboardShown = false;

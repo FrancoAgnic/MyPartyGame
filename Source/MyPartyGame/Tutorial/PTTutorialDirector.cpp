@@ -24,6 +24,7 @@
 #include "Engine/World.h"
 #include "GameFramework/GameModeBase.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformProcess.h"
 #include "IImageWrapper.h"
 #include "IImageWrapperModule.h"
 #include "Kismet/GameplayStatics.h"
@@ -40,6 +41,7 @@
 #if PT_WITH_STEAM
 #include "steam/steam_api.h"
 #include "steam/isteamscreenshots.h"
+#include "steam/isteamutils.h"
 #endif
 
 DEFINE_LOG_CATEGORY_STATIC(LogPTTutorial, Log, All);
@@ -248,6 +250,7 @@ bool APTTutorialDirector::SetupWorld()
         Widget->OnDoneClicked.AddUObject(this, &APTTutorialDirector::OnDonePerro);
         Widget->OnContinueClicked.AddUObject(this, &APTTutorialDirector::OnContinue);
         Widget->OnSavePhotoClicked.AddUObject(this, &APTTutorialDirector::OnSavePhoto);
+        Widget->OnShareClicked.AddUObject(this, &APTTutorialDirector::OnSharePhoto);
     }
     BindPCEvents();
     SpawnSculpi();
@@ -1170,7 +1173,7 @@ void APTTutorialDirector::TickStep(float Dt)
         if (bMeasure)
         {
             const float Stem = FMath::Min(1.f, MeasureFill(0) / 0.55f);
-            const float Cap = FMath::Min(1.f, MeasureFill(1) / 0.4f);
+            const float Cap = FMath::Min(1.f, MeasureFill(1) / 0.25f); // cualquier sombrero ancho encima del tallo
             if (Stem >= 1.f && LineIndex == 0) { LineIndex = 1; Say(TEXT("TUT_HONGO_CAP")); }
             const float F = 0.5f * Stem + 0.5f * Cap;
             Show(F, FText::Format(PTText::Get(TEXT("TUT_WORD_PCT")), PTText::Get(TEXT("TUT_W_HONGO")), FText::AsNumber(FMath::RoundToInt(F * 100.f))));
@@ -1341,7 +1344,9 @@ void APTTutorialDirector::StartPhoto()
         P->SetIgnoreLookInput(true);
         P->SetIgnoreMoveInput(true);
         if (AActor* Prev = P->GetBrushPreviewActor()) Prev->SetActorHiddenInGame(true);
+        if (APawn* Pawn = P->GetPawn()) Pawn->SetActorHiddenInGame(true); // tu personaje no sale en la foto
     }
+    if (Sculpi) Sculpi->SetActorHiddenInGame(true); // Sculpi tampoco (sigue hablando en el cuadro de diálogo)
     FramePhotoCamera();
     bPhotoAiming = true;
     Say(TEXT("TUT_PHOTO"));
@@ -1458,7 +1463,6 @@ void APTTutorialDirector::OnScreenshot(int32 W, int32 H, const TArray<FColor>& P
     }
 
     PlaySfx(ShutterSound, 0.7f);
-    if (Sculpi) Sculpi->SetActorHiddenInGame(false);
     if (Widget) Widget->Flash();
 
     // Ponerle nombre y guardar (Steam). El HUD de juego queda oculto hasta salir.
@@ -1537,6 +1541,7 @@ void APTTutorialDirector::SaveFramedPhoto(const FText& Caption)
             {
                 SteamScreenshots()->SetLocation(Shot, TCHAR_TO_UTF8(*Caption.ToString()));
                 bSteam = true;
+                bSavedToSteam = true;
                 SavedMsg = PTText::Get(TEXT("TUT_PHOTO_STEAM"));
             }
         }
@@ -1569,9 +1574,21 @@ void APTTutorialDirector::SaveFramedPhoto(const FText& Caption)
     StepTime = 0.f;
     if (Widget)
     {
-        Widget->ShowPhotoSaved(SavedMsg);
+        Widget->ShowPhotoSaved(SavedMsg, bSavedToSteam);
         Widget->Say(PTText::Get(TEXT("TUT_END")));
     }
+}
+
+void APTTutorialDirector::OnSharePhoto()
+{
+    // El administrador de capturas de Steam del juego: desde ahí se sube a la comunidad con un clic.
+    uint32 AppId = 5114580;
+#if PT_WITH_STEAM
+    if (SteamAPI_IsSteamRunning() && SteamUtils()) AppId = SteamUtils()->GetAppID();
+#endif
+    const FString Url = FString::Printf(TEXT("steam://open/screenshots/%u"), AppId);
+    UE_LOG(LogPTTutorial, Log, TEXT("Compartir foto: %s"), *Url);
+    FPlatformProcess::LaunchURL(*Url, nullptr, nullptr);
 }
 
 // ── Salir ───────────────────────────────────────────────────────────────────

@@ -144,6 +144,13 @@ void UPTTutorialPolaroid::Setup(UTexture2D* Photo, const FText& Caption, UTextur
     }
 }
 
+void UPTTutorialPolaroid::LockCaption()
+{
+    const FText T = GetCaption();
+    if (CaptionText) { CaptionText->SetText(T); CaptionText->SetVisibility(ESlateVisibility::HitTestInvisible); }
+    if (CaptionEdit) CaptionEdit->SetVisibility(ESlateVisibility::Collapsed);
+}
+
 void UPTTutorialPolaroid::SetCaption(const FText& T)
 {
     if (CaptionEdit) CaptionEdit->SetText(T);
@@ -318,6 +325,10 @@ void UPTTutorialWidget::BuildTree()
         SavePhotoButton = MakeButton(PTText::Get(TEXT("TUT_SAVE_PHOTO")), TEXT("TutorialSavePhotoButton"), 22, FLinearColor(0.08f, 0.3f, 0.16f, 1.f));
         SavePhotoButton->OnClicked.AddDynamic(this, &UPTTutorialWidget::HandleSavePhoto);
         if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(SavePhotoButton)) S->SetHorizontalAlignment(HAlign_Center);
+        ShareButton = MakeButton(PTText::Get(TEXT("TUT_SHARE_STEAM")), TEXT("TutorialShareButton"), 22, FLinearColor(0.09f, 0.16f, 0.32f, 1.f));
+        ShareButton->OnClicked.AddDynamic(this, &UPTTutorialWidget::HandleShare);
+        if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(ShareButton)) { S->SetHorizontalAlignment(HAlign_Center); S->SetPadding(FMargin(0.f, 0.f, 0.f, 8.f)); }
+        ShareButton->SetVisibility(ESlateVisibility::Collapsed);
         ContinueButton = MakeButton(PTText::Get(TEXT("TUT_CONTINUE")), TEXT("TutorialContinueButton"), 22, FLinearColor(0.08f, 0.3f, 0.16f, 1.f));
         ContinueButton->OnClicked.AddDynamic(this, &UPTTutorialWidget::HandleContinue);
         if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(ContinueButton)) S->SetHorizontalAlignment(HAlign_Center);
@@ -487,7 +498,7 @@ void UPTTutorialWidget::ShowPhoto(UTexture2D* Photo, const FText& DefaultName)
     if (!LoadedLogo) LoadedLogo = LogoTexture.LoadSynchronous();
     if (Polaroid)
     {
-        Polaroid->Setup(Photo, DefaultName, LoadedLogo, 900.f, /*bEditable=*/true);
+        Polaroid->Setup(Photo, DefaultName, LoadedLogo, 760.f, /*bEditable=*/true); // entra en 900p con los botones
         Polaroid->OnCaptionCommitted.RemoveAll(this);
         Polaroid->OnCaptionCommitted.AddUObject(this, &UPTTutorialWidget::HandleSavePhoto);
     }
@@ -576,8 +587,10 @@ void UPTTutorialWidget::TypeKey(const FString& Key)
     Polaroid->SetCaption(FText::FromString(Name));
 }
 
-void UPTTutorialWidget::ShowPhotoSaved(const FText& SavedMsg)
+void UPTTutorialWidget::ShowPhotoSaved(const FText& SavedMsg, bool bCanShare)
 {
+    if (ShareButton) ShareButton->SetVisibility(bCanShare ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+    if (Polaroid) Polaroid->LockCaption();
     SetOnScreenKeyboard(false);
     if (SavedText) SavedText->SetText(SavedMsg);
     if (SavePhotoButton) SavePhotoButton->SetVisibility(ESlateVisibility::Collapsed);
@@ -639,3 +652,4 @@ void UPTTutorialWidget::HandleSkip()     { OnSkipClicked.Broadcast(); }
 void UPTTutorialWidget::HandleDone()     { OnDoneClicked.Broadcast(); }
 void UPTTutorialWidget::HandleContinue() { OnContinueClicked.Broadcast(); }
 void UPTTutorialWidget::HandleSavePhoto() { OnSavePhotoClicked.Broadcast(); }
+void UPTTutorialWidget::HandleShare() { OnShareClicked.Broadcast(); }
