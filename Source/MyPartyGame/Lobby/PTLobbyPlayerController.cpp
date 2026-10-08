@@ -44,6 +44,9 @@
 #include "Serialization/MemoryWriter.h"
 #include "Serialization/MemoryReader.h"
 #include "Misc/FileHelper.h" // P4: leer el sculpt.bin del host para mandarlo por chunks
+#include "HAL/FileManager.h"  // PTExportSkin: crear DefaultSkins/ y guardar el .bin
+#include "Misc/Paths.h"       // PTExportSkin: ProjectDir/Combine
+#include "Engine/Engine.h"    // PTExportSkin: GEngine->AddOnScreenDebugMessage
 #include "Framework/Application/SlateApplication.h" // devolver el foco al viewport tras el chat
 
 // Magic del blob de estado CRUDO de la cabeza (RawState del Locker, para re-editar): campo SDF del
@@ -497,6 +500,32 @@ void APTLobbyPlayerController::PTMapMod(int32 Index)
     UE_LOG(LogTemp, Log, TEXT("[PTMapMod] Montado '%s' → viajando a '%s'."), *Id, *Map);
     if (APTLobbyGameMode* GM = GetWorld()->GetAuthGameMode<APTLobbyGameMode>())
         GM->TravelToModMap(Map);
+}
+
+void APTLobbyPlayerController::PTExportSkin(int32 N)
+{
+    // DEV: exporta la SKIN EQUIPADA (cabeza + cuerpo) al MISMO formato del Workshop de skins, a
+    // <Proyecto>/DefaultSkins/default_skin_<N>.bin. Con eso se crean las "skins default": esculpís/pintás
+    // una skin, la equipás, corrés PTExportSkin 1..5, y me pasás los 5 .bin para dejarlos como default.
+    UPTLockerSubsystem* L = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLockerSubsystem>() : nullptr;
+    if (!L) { UE_LOG(LogTemp, Warning, TEXT("[PTExportSkin] Sin Locker.")); return; }
+    TArray<uint8> Bytes;
+    if (!L->ExportSkinBundle(L->GetEquippedHead(), L->GetEquippedBody(), Bytes) || Bytes.Num() == 0)
+    {
+        const FString E = TEXT("[PTExportSkin] La skin equipada no tiene cabeza custom: equipá la skin a exportar primero.");
+        UE_LOG(LogTemp, Warning, TEXT("%s"), *E);
+        if (GEngine) GEngine->AddOnScreenDebugMessage(771001, 8.f, FColor::Red, E);
+        return;
+    }
+    const FString Dir  = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("DefaultSkins"));
+    IFileManager::Get().MakeDirectory(*Dir, /*Tree=*/true);
+    const FString Path = FPaths::Combine(Dir, FString::Printf(TEXT("default_skin_%d.bin"), N));
+    const bool bOk = FFileHelper::SaveArrayToFile(Bytes, *Path);
+    const FString Msg = bOk
+        ? FString::Printf(TEXT("[PTExportSkin] Skin #%d exportada (%d bytes) -> %s"), N, Bytes.Num(), *Path)
+        : FString::Printf(TEXT("[PTExportSkin] FALLO al guardar en %s"), *Path);
+    UE_LOG(LogTemp, Log, TEXT("%s"), *Msg);
+    if (GEngine) GEngine->AddOnScreenDebugMessage(771001, 10.f, bOk ? FColor::Green : FColor::Red, Msg);
 }
 
 void APTLobbyPlayerController::RestoreLobbyMovementFocus()

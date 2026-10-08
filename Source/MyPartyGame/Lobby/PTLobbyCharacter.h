@@ -152,6 +152,11 @@ public:
     bool CaptureLookThumbnailPNG(TArray<uint8>& OutPNG, bool bHeadFocus, int32 Size = 256, bool bFullSkin = false);
     // Crea una UTexture2D desde un PNG (para mostrar la miniatura en el Locker). Outer = dueño (GC).
     static UTexture2D* MakeTextureFromPNG(UObject* Outer, const TArray<uint8>& PNG);
+    // Tiñe un BUNDLE de skin (mismo formato del Workshop/ExportSkinBundle) multiplicando TODOS sus colores
+    // por Tint (blanco × Tint = Tint): vertex-colors de la cabeza horneada + PNG de cabeza/cuerpo + miniaturas.
+    // NO toca el RawState (SVO): para los templates DEFAULT blancos alcanza el horneado (es lo que se ve y se
+    // replica). Para las skins default con color random. static: no necesita instancia (corre en primer arranque).
+    static bool TintSkinBundle(const TArray<uint8>& In, const FLinearColor& Tint, TArray<uint8>& Out);
     // Parámetros de encuadre de la miniatura (frente al personaje).
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Locker") float ThumbDistance = 220.f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Locker") float ThumbHeight   = 70.f;

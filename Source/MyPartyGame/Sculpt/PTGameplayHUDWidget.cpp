@@ -455,6 +455,12 @@ void UPTGameplayHUDWidget::RefreshToolbar()
             return S;
         };
 
+        // Scroll del mouse = TAMAÑO de brocha (siempre disponible al esculpir; con mouse, no joystick).
+        // Va PRIMERO y FUERA de HintSlots (es solo informativo) para no correr los índices del resaltado
+        // de abajo. Con la rueda de color abierta el scroll cambia el BRILLO, así que ahí no se muestra.
+        if (!bPicker && !bToolbarGamepad)
+            CreateSlotIn(HintsBox, IconBrushSize, FText::FromString(TEXT("Scroll")), PTText::Get(TEXT("HINT_BRUSH_SIZE")));
+
         if (bPicker)
         {
             // Con la rueda de color abierta: E guarda el color donde tenés el puntero.

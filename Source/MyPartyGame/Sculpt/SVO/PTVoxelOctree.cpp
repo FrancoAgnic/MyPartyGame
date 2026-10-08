@@ -1326,3 +1326,12 @@ int32 FPTVoxelOctree::CountNodesRec(const FPTOctreeNode* N)
 
 int32 FPTVoxelOctree::CountLeaves() const { return CountLeavesRec(Root.Get()); }
 int32 FPTVoxelOctree::CountNodes()  const { return CountNodesRec(Root.Get()); }
+
+static void PT_SetAllColorsRec(FPTOctreeNode* N, const FColor& C)
+{
+    if (!N) return;
+    for (int32 k = 0; k < 8; ++k) N->Col[k] = C;
+    if (!N->IsLeaf())
+        for (int32 i = 0; i < 8; ++i) PT_SetAllColorsRec(N->Children[i].Get(), C);
+}
+void FPTVoxelOctree::SetAllColors(const FColor& C) { PT_SetAllColorsRec(Root.Get(), C); }

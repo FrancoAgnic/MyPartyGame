@@ -24,7 +24,16 @@ void UPTFriendRowWidget::Init(const FPTFriendInfo& InFriend)
         Sessions = GI->GetSubsystem<UMultiplayerSessionsSubsystem>();
 
     if (NameText)
+    {
         NameText->SetText(FText::FromString(Friend.DisplayName));
+        // Resaltar en color los que están jugando este juego → saltan a la vista en listas largas.
+        NameText->SetColorAndOpacity(FSlateColor(Friend.bPlayingThisGame ? PlayingNameColor : NormalNameColor));
+    }
+
+    // Badge "en el juego" (opcional en el WBP): visible solo para los que juegan este juego.
+    if (PlayingBadge)
+        PlayingBadge->SetVisibility(Friend.bPlayingThisGame ? ESlateVisibility::HitTestInvisible
+                                                            : ESlateVisibility::Collapsed);
 
     if (StatusText)
     {

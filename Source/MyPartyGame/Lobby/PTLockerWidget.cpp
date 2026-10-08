@@ -208,6 +208,15 @@ void UPTLockerWidget::EndHoverPreview()
 void UPTLockerWidget::CreateSlotNow(int32 Index, bool bHead)
 {
     // Click en slot VACÍO → entra directo a crearlo (sin pasar por un botón Crear).
+    // Modo SKIN: cargar un template DEFAULT al azar como BASE para editar (en vez de arrancar en blanco).
+    // Lo importamos al slot (su RawState) y el editor lo carga al entrar. Sin teñir el horneado: en el
+    // editor igual se re-malla desde el SVO, y el jugador lo pinta/edita como quiera.
+    if (bSkinMode)
+        if (UPTLockerSubsystem* L = Locker())
+        {
+            FColor Tint;
+            L->AssignRandomDefaultSkin(Index, /*bTintBaked=*/false, Tint);
+        }
     SelectSlot(Index, bHead);
     EditSelected(); // skin: EnterSkinEditForSlot; clásico: EnterHeadSculptForSlot / EnterBodyPaintForSlot
 }

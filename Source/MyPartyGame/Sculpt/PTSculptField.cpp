@@ -136,6 +136,13 @@ void FPTSculptField::SerializeState(FArchive& Ar)
     }
 }
 
+void FPTSculptField::SetAllColors(const FColor& C)
+{
+    for (TPair<FPTBrickKey, TSharedPtr<FPTBrick>>& It : Bricks)
+        if (It.Value.IsValid())
+            for (FColor& Px : It.Value->Color) Px = C;
+}
+
 int32 FPTSculptField::SectionIndex(const FPTBrickKey& Key)
 {
     if (int32* Found = SectionOf.Find(Key)) return *Found;

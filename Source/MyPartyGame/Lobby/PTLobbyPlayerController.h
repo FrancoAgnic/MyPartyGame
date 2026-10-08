@@ -73,6 +73,7 @@ public:
     UFUNCTION(Exec) void PTLocal();             // DEV: entrar al modo local (celulares + joystick) sin el botón
     UFUNCTION(Exec) void PTSolo();              // DEV: jugar solo → marca solo y arranca la partida ya
     UFUNCTION(Exec) void PTMapMod(int32 Index); // DEV (mapas M1): monta el mod local #Index y viaja a su mapa
+    UFUNCTION(Exec) void PTExportSkin(int32 N);  // DEV: exporta la SKIN equipada a DefaultSkins/default_skin_<N>.bin (para las skins default)
 
     // El cliente le avisa al server que entra/sale de espectador (para sacarlo de la partida).
     UFUNCTION(Server, Reliable) void Server_SetSpectator(bool bInSpectator);

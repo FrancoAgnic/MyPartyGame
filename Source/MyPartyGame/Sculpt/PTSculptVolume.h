@@ -56,6 +56,11 @@ public:
     // OFF (default) = campo clásico FPTSculptField. SVO soporta pintura y capas; Smooth se ignora.
     UPROPERTY(EditAnywhere, Category="Sculpt|SVO") bool bUseSVO = false;
 
+    // Tiñe el color de un estado de campo SVO (el blob de SaveFieldState) poniéndolo TODO del color dado.
+    // Para las skins DEFAULT: que el color sobreviva al re-editar (vive en el SVO, no "por encima"). Devuelve
+    // false si el blob no es un campo SVO válido (no lo toca). static: utilitario, no necesita instancia.
+    static bool TintFieldState(const TArray<uint8>& In, const FColor& C, TArray<uint8>& Out);
+
     // Refinamiento en banda de superficie al sellar (ver FPTVoxelOctree::bNarrowBandEdit): abarata muchísimo
     // los sellos de brocha grande. true por defecto; se puede togglear en runtime con el comando dev PTNarrowBand
     // para comparar/descartar si alguna vez dejara huecos.

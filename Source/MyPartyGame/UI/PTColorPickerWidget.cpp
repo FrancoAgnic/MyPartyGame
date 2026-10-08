@@ -41,11 +41,10 @@ void UPTColorPickerWidget::NativeConstruct()
     LoadPalette();
     RefreshRing();
 
-    // Inicializar con el color de pintura actual del controller.
-    if (APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(GetOwningPlayer()))
-        SetColor(PC->CurrentPaintColor);
-    else
-        RefreshUI();
+    // Arrancar SIEMPRE en BLANCO a brillo MÁXIMO (Val=1), no heredar el color de pintura actual: venía
+    // oscuro/negro y confundía ("¿por qué el color por defecto es negro?"). Así el default es blanco y con
+    // solo mover el mouse por la rueda ya elegís color (el brillo ya está al tope).
+    SetColor(FLinearColor::White);
 
     // El cursor custom arranca oculto (se muestra/posiciona en el primer QuickPickTick).
     if (CursorIcon) CursorIcon->SetVisibility(ESlateVisibility::Collapsed);
@@ -277,6 +276,16 @@ void UPTColorPickerWidget::RecomputeColor()
 void UPTColorPickerWidget::RefreshUI()
 {
     if (PreviewSwatch) PreviewSwatch->SetBrushColor(CurrentColor);
+
+    // La RUEDA se oscurece/aclara según el BRILLO (Value) elegido. La textura HSV de la rueda está a
+    // brillo máximo (Value=1); multiplicarla por un gris plano = exactamente el Value de HSV. Así, al
+    // subir/bajar el brillo (rueda del mouse o slider), se VE qué tan oscuro es el color que vas a elegir,
+    // en el lobby, el gameplay y el level creator (el mismo widget en todos lados).
+    if (Wheel)
+    {
+        const float VUsed = FMath::Max(Val, FMath::Clamp(MinPickValue, 0.f, 1.f));
+        Wheel->SetColorAndOpacity(FLinearColor(VUsed, VUsed, VUsed, 1.f));
+    }
 }
 
 void UPTColorPickerWidget::PushLiveColorToPC()

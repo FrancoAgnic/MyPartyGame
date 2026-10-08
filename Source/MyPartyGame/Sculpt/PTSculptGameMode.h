@@ -83,9 +83,12 @@ public:
     // difunde las líneas visibles a todos. Llamado por Server_SendChat del PC.
     void HandleChat(APTPlayerState* Sender, const FString& Message);
 
-    // ¿El texto coincide con la palabra secreta del turno? (normaliza mayúsc./tildes).
+    // ¿El texto coincide con la palabra secreta del turno? (normaliza mayúsc./tildes). Devuelve el ÍNDICE
+    // de idioma de la traducción que coincidió (0=ES,1=EN,...), o INDEX_NONE si no coincide ninguna. Así
+    // sabemos EN QUÉ IDIOMA adivinó (para mostrar la bandera). Si coincide con el idioma preferido
+    // (PreferLang, el del que escribe), se devuelve ESE (evita falsos "otro idioma" con palabras iguales).
     // Server-only: la palabra real nunca sale de acá.
-    bool DoesGuessMatch(const FString& Guess) const;
+    int32 DoesGuessMatch(const FString& Guess, int32 PreferLang = INDEX_NONE) const;
 
     // ¿El texto está CERCA de alguna traducción (plural / 1-2 letras de diferencia) sin ser exacto?
     // Para avisarle "¡casi!" al que escribió. Server-only.

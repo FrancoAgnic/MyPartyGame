@@ -2243,6 +2243,68 @@ void APTSculptVolume::ClearAll()
     UploadColorField();
 }
 
+bool APTSculptVolume::TintFieldState(const TArray<uint8>& In, const FColor& C, TArray<uint8>& Out)
+{
+    if (In.Num() < (int32)sizeof(int32)) return false;
+
+    // El FieldBytes puede venir en DOS formatos (según cómo se guardó la cabeza):
+    //  • CLÁSICO (FPTSculptField::SerializeState): arranca con int32 Version = 1.
+    //  • SVO    (SaveFieldState modo SVO): arranca con la LONGITUD del array Base (siempre ≫ 1).
+    // Distinguimos espiando el primer int32. (Las skins viejas/template son CLÁSICAS → antes el tinte
+    // del SVO fallaba silenciosamente y al re-editar la cabeza volvía al blanco.)
+    int32 First = 0; FMemory::Memcpy(&First, In.GetData(), sizeof(int32));
+    if (First == 1)
+    {
+        // CLÁSICO: base + (NumLayers + capas). Cargar, teñir TODO el color, re-serializar (mismo formato).
+        FMemoryReader R(In, /*bIsPersistent=*/true);
+        FPTSculptField BaseF; BaseF.SerializeState(R);
+        if (R.IsError()) return false;
+        BaseF.SetAllColors(C);
+
+        Out.Reset();
+        FMemoryWriter W(Out, /*bIsPersistent=*/true);
+        BaseF.SerializeState(W);
+        if (!R.AtEnd())
+        {
+            int32 NumLayers = 0; R << NumLayers;
+            W << NumLayers;
+            for (int32 i = 0; i < NumLayers && !R.IsError(); ++i)
+            {
+                FPTSculptField L; L.SerializeState(R);
+                L.SetAllColors(C);
+                L.SerializeState(W);
+            }
+        }
+        return Out.Num() > 0;
+    }
+
+    FMemoryReader Ar(In, /*bIsPersistent=*/true);
+    TArray<uint8> Base; Ar << Base;
+    if (Ar.IsError() || Base.Num() == 0) return false;
+    FPTVoxelOctree Oct;
+    if (!Oct.LoadFromBytes(Base)) return false; // no es un campo SVO válido
+    Oct.SetAllColors(C);
+    TArray<uint8> NewBase; Oct.Serialize(NewBase);
+
+    Out.Reset();
+    FMemoryWriter W(Out, /*bIsPersistent=*/true);
+    W << NewBase;
+    // Capas de detalle (mismo formato que SaveFieldState): también teñirlas.
+    if (!Ar.AtEnd())
+    {
+        int32 NumLayers = 0; Ar << NumLayers;
+        W << NumLayers;
+        for (int32 i = 0; i < NumLayers && !Ar.IsError(); ++i)
+        {
+            TArray<uint8> B; Ar << B;
+            FPTVoxelOctree L;
+            if (B.Num() > 0 && L.LoadFromBytes(B)) { L.SetAllColors(C); TArray<uint8> NB; L.Serialize(NB); W << NB; }
+            else W << B;
+        }
+    }
+    return true;
+}
+
 void APTSculptVolume::SaveFieldState(TArray<uint8>& Out)
 {
     // Modo SVO: el estado es el octree serializado (geometría + color). El flag es igual en server y

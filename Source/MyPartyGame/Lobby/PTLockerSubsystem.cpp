@@ -2,11 +2,31 @@
 
 #include "PTLockerSubsystem.h"
 #include "PTHeadSaveGame.h"          // migración del save viejo (una sola cabeza)
+#include "PTLobbyCharacter.h"        // APTLobbyCharacter::TintSkinBundle (teñir las skins default)
 #include "Kismet/GameplayStatics.h"
 #include "Serialization/MemoryWriter.h" // empaquetar/leer el bundle de skin (Workshop)
 #include "Serialization/MemoryReader.h"
+#include "Misc/FileHelper.h"         // leer los templates default del disco
+#include "Misc/Paths.h"
+#include "HAL/FileManager.h"
 
-namespace { const TCHAR* PTLockerSaveSlot = TEXT("PTLocker"); }
+namespace
+{
+    const TCHAR* PTLockerSaveSlot = TEXT("PTLocker");
+
+    // Rutas de los templates default existentes (Content/DefaultSkins/default_skin_N.bin). Probamos por
+    // nombre (1..8) en vez de FindFiles con comodín, que no siempre enumera archivos dentro del pak.
+    void PT_CollectDefaultSkinPaths(TArray<FString>& Out)
+    {
+        Out.Reset();
+        const FString Dir = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("DefaultSkins"));
+        for (int32 i = 1; i <= 8; ++i)
+        {
+            const FString P = FPaths::Combine(Dir, FString::Printf(TEXT("default_skin_%d.bin"), i));
+            if (FPaths::FileExists(P)) Out.Add(P);
+        }
+    }
+}
 
 const TArray<uint8> UPTLockerSubsystem::Empty;
 
@@ -41,9 +61,24 @@ void UPTLockerSubsystem::EnsureLoaded()
             }
     }
 
-    // Slot 0 = "Default" siempre disponible (look base del personaje). Si nadie lo llenó con una
-    // creación propia, queda marcado como usado con blob vacío = equiparlo aplica el look por defecto.
-    if (!Save->HeadSlots[0].bUsed) { Save->HeadSlots[0].bUsed = true; if (Save->EquippedHead < 0) Save->EquippedHead = 0; }
+    // Slot 0 = look inicial. PRIMER ARRANQUE (slot 0 sin usar): asignar una SKIN DEFAULT al azar (template
+    // teñido con un color random) y equiparla. Jugadores que ya venían jugando tienen el slot 0 marcado de
+    // la versión anterior → este bloque NO corre para ellos: no se les cambia ni borra nada (migración segura).
+    if (!Save->HeadSlots[0].bUsed)
+    {
+        FColor Tint;
+        if (AssignRandomDefaultSkin(0, /*bTintBaked=*/true, Tint))
+        {
+            Save->EquippedHead = 0;
+            Save->EquippedBody = 0;
+        }
+        else
+        {
+            // Sin templates (no se encontró ninguno): look base vacío como antes.
+            Save->HeadSlots[0].bUsed = true;
+            if (Save->EquippedHead < 0) Save->EquippedHead = 0;
+        }
+    }
     if (!Save->BodySlots[0].bUsed) { Save->BodySlots[0].bUsed = true; if (Save->EquippedBody < 0) Save->EquippedBody = 0; }
     SaveToDisk();
 }
@@ -251,6 +286,52 @@ int32 UPTLockerSubsystem::ImportSkinBundle(const TArray<uint8>& InBytes, int32& 
     SaveHeadSlot(SkinIdx, HBaked, HRaw, HThumb);
     if (BPNG.Num() > 0) { SaveBodySlot(SkinIdx, BPNG, BThumb); OutBodyIdx = SkinIdx; }
     return SkinIdx;
+}
+
+bool UPTLockerSubsystem::ImportSkinBundleToSlot(int32 Slot, const TArray<uint8>& InBytes)
+{
+    EnsureLoaded();
+    if (!Save || !Save->HeadSlots.IsValidIndex(Slot) || InBytes.Num() == 0) return false;
+    FMemoryReader Ar(InBytes, /*bIsPersistent=*/true);
+    int32 Version = 0; Ar << Version;
+    if (Version != 1) return false;
+    TArray<uint8> HBaked, HRaw, HThumb, BPNG, BThumb;
+    Ar << HBaked << HRaw << HThumb << BPNG << BThumb;
+    if (HBaked.Num() == 0) return false;
+    SaveHeadSlot(Slot, HBaked, HRaw, HThumb);
+    if (BPNG.Num() > 0) SaveBodySlot(Slot, BPNG, BThumb);
+    return true;
+}
+
+bool UPTLockerSubsystem::HasDefaultSkins() const
+{
+    TArray<FString> Paths; PT_CollectDefaultSkinPaths(Paths);
+    return Paths.Num() > 0;
+}
+
+bool UPTLockerSubsystem::AssignRandomDefaultSkin(int32 Slot, bool bTintBaked, FColor& OutTint)
+{
+    // Color random: hue al azar, saturación ALTA (intenso, no pálido) y brillo medio (profundo/oscuro).
+    // Se arma como FLinearColor; TintSkinBundle lo aplica en el espacio correcto para cabeza y cuerpo (así
+    // quedan del MISMO tono). OutTint se devuelve en sRGB para mostrar/pincel.
+    const uint8 Hue = (uint8)FMath::RandRange(0, 255);
+    const uint8 Sat = (uint8)FMath::RandRange(200, 235); // ~78-92%: intenso
+    const uint8 Val = (uint8)FMath::RandRange(155, 185); // ~61-73%: profundo
+    const FLinearColor Lin = FLinearColor::MakeFromHSV8(Hue, Sat, Val);
+    OutTint = Lin.ToFColor(/*bSRGB=*/true);
+
+    TArray<FString> Paths; PT_CollectDefaultSkinPaths(Paths);
+    if (Paths.Num() == 0) return false;
+    const FString Pick = Paths[FMath::RandRange(0, Paths.Num() - 1)];
+    TArray<uint8> Raw;
+    if (!FFileHelper::LoadFileToArray(Raw, *Pick) || Raw.Num() == 0) return false;
+
+    const TArray<uint8>* Use = &Raw;
+    TArray<uint8> Tinted;
+    if (bTintBaked && APTLobbyCharacter::TintSkinBundle(Raw, Lin, Tinted) && Tinted.Num() > 0)
+        Use = &Tinted;
+
+    return ImportSkinBundleToSlot(Slot, *Use);
 }
 
 bool UPTLockerSubsystem::ParseSkinBundle(const TArray<uint8>& InBytes, TArray<uint8>& OutHeadBaked, TArray<uint8>& OutBodyPNG)

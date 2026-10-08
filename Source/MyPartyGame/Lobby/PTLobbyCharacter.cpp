@@ -45,6 +45,7 @@
 // Forward-decls de helpers estáticos (definidos más abajo en este archivo).
 static bool PT_EncodePNG_BGRA(const TArray<FColor>& Px, int32 N, TArray<uint8>& Out);
 static bool PT_DecodePNG_BGRA(const TArray<uint8>& In, TArray<FColor>& OutPx, int32& OutN);
+static const uint32 PT_HEADBLOB_MAGIC = 0x50544832; // 'PTH2' (definido acá arriba: lo usan TintSkinBundle y ParseHeadBlob)
 static void PT_SerializeHeadBlob(const TArray<uint8>& Geo, const FVector& Center,
                                  const TArray<uint8>& HeadPNG, const TArray<uint8>& BodyPNG, TArray<uint8>& Out);
 #include "Kismet/GameplayStatics.h"
@@ -430,6 +431,119 @@ UTexture2D* APTLobbyCharacter::MakeTextureFromPNG(UObject* Outer, const TArray<u
     return T;
 }
 
+bool APTLobbyCharacter::TintSkinBundle(const TArray<uint8>& In, const FLinearColor& Lin, TArray<uint8>& Out)
+{
+    if (In.Num() == 0) return false;
+
+    // CLAVE para unificar cabeza y cuerpo: el vertex-color de la cabeza (y el color del SVO) lo lee el
+    // material como LINEAL, mientras que la textura del cuerpo se samplea como sRGB. Para que den EL MISMO
+    // color en pantalla hay que guardar la cabeza en bytes LINEALES y el cuerpo en bytes sRGB.
+    const FColor VByte = Lin.ToFColor(/*bSRGB=*/false); // vertex-colors + SVO (lineal)
+    const FColor Tint  = Lin.ToFColor(/*bSRGB=*/true);  // texturas de pintura / miniaturas (sRGB)
+
+    // Multiplicación byte a byte (blanco 255 × Tint = Tint); alpha intacto. Para miniaturas/pintura de cabeza.
+    auto Mul = [](uint8 A, uint8 B) -> uint8 { return (uint8)(((int32)A * (int32)B) / 255); };
+    auto TintCol = [&](const FColor& C) { return FColor(Mul(C.R, Tint.R), Mul(C.G, Tint.G), Mul(C.B, Tint.B), C.A); };
+    auto TintPNG = [&](TArray<uint8>& PNG)
+    {
+        if (PNG.Num() == 0) return;
+        TArray<FColor> Px; int32 N = 0;
+        if (!PT_DecodePNG_BGRA(PNG, Px, N) || N <= 0) return;
+        for (FColor& C : Px) C = TintCol(C);
+        TArray<uint8> Enc;
+        if (PT_EncodePNG_BGRA(Px, N, Enc)) PNG = MoveTemp(Enc);
+    };
+    // El CUERPO se colorea por un color base de material (blanco) + la pintura ENCIMA (arranca transparente),
+    // y ese color base NO está en el bundle (no se replica). Así que para que el cuerpo quede del color,
+    // RELLENAMOS su textura de pintura con el color SÓLIDO y OPACO (tapa el blanco base). Conserva el tamaño
+    // de la textura del template si existe; si no, 256.
+    auto SolidFillPNG = [&](TArray<uint8>& PNG)
+    {
+        int32 N = 256;
+        if (PNG.Num() > 0) { TArray<FColor> Tmp; int32 TN = 0; if (PT_DecodePNG_BGRA(PNG, Tmp, TN) && TN > 0) N = TN; }
+        TArray<FColor> Px; Px.Init(FColor(Tint.R, Tint.G, Tint.B, 255), N * N);
+        TArray<uint8> Enc;
+        if (PT_EncodePNG_BGRA(Px, N, Enc)) PNG = MoveTemp(Enc);
+    };
+
+    // Bundle (ExportSkinBundle): int32 Version=1; HBaked, HRaw, HThumb, BPNG, BThumb.
+    FMemoryReader Ar(In, /*bIsPersistent=*/true);
+    int32 Version = 0; Ar << Version;
+    if (Version != 1) return false;
+    TArray<uint8> HBaked, HRaw, HThumb, BPNG, BThumb;
+    Ar << HBaked << HRaw << HThumb << BPNG << BThumb;
+
+    // HBaked = head-blob (Magic, Geo, Center, HeadPNG, BodyPNG). Teñir vertex-colors + PNGs internos.
+    if (HBaked.Num() >= (int32)sizeof(uint32))
+    {
+        uint32 Magic = 0; FMemory::Memcpy(&Magic, HBaked.GetData(), sizeof(uint32));
+        TArray<FPTHeadSection> Secs; FVector Center = FVector::ZeroVector; TArray<uint8> HeadPNG, BodyPNG;
+        bool bParsed = false;
+        if (Magic == PT_HEADBLOB_MAGIC)
+        {
+            FMemoryReader HR(HBaked); uint32 M = 0; HR << M;
+            int32 GN = 0; HR << GN; TArray<uint8> Geo; Geo.SetNumUninitialized(GN); if (GN) HR.Serialize(Geo.GetData(), GN);
+            HR << Center;
+            int32 HN = 0; HR << HN; HeadPNG.SetNumUninitialized(HN); if (HN) HR.Serialize(HeadPNG.GetData(), HN);
+            int32 BN = 0; HR << BN; BodyPNG.SetNumUninitialized(BN); if (BN) HR.Serialize(BodyPNG.GetData(), BN);
+            bParsed = BlobToSections(Geo, Secs);
+        }
+        else
+        {
+            bParsed = BlobToSections(HBaked, Secs); // blob viejo: solo geometría
+        }
+        if (bParsed && Secs.Num() > 0)
+        {
+            // Cabeza: SETEAR el vertex-color al tint (no multiplicar) → queda parejo aunque el template no sea
+            // blanco puro (las zonas sin pintar del SVO traen un beige por defecto). Los ojos usan EyeMaterial
+            // (ignoran el vertex-color), así que no se ven afectados.
+            for (FPTHeadSection& S : Secs)
+                for (FColor& C : S.Colors) C = FColor(VByte.R, VByte.G, VByte.B, C.A);
+            TintPNG(HeadPNG);     // detalles pintados en la cabeza (si los hay) también al tint; transparente queda igual
+            SolidFillPNG(BodyPNG); // cuerpo dentro del head-blob → sólido del color
+            TArray<uint8> Geo2; SectionsToBlob(Secs, Geo2);
+            TArray<uint8> NewBaked; PT_SerializeHeadBlob(Geo2, Center, HeadPNG, BodyPNG, NewBaked);
+            HBaked = MoveTemp(NewBaked);
+        }
+    }
+
+    SolidFillPNG(BPNG); // textura de pintura del cuerpo (slot) → sólido del color (tapa el blanco base del material)
+    TintPNG(HThumb);    // miniaturas (para que el tile del slot salga con el color)
+    TintPNG(BThumb);
+
+    // HRaw = Magic(PTR2) + FieldBytes(SVO) + HeadEyes. Teñir el COLOR del SVO con el MISMO byte lineal que el
+    // vertex-color → al RE-EDITAR la cabeza conserva el color (no vuelve a blanco). HeadEyes queda intacto.
+    if (HRaw.Num() >= (int32)sizeof(uint32))
+    {
+        FMemoryReader RR(HRaw, /*bIsPersistent=*/true);
+        uint32 RMagic = 0; RR << RMagic;
+        if (RMagic == 0x50545232 /*'PTR2' = PT_HEADRAW_MAGIC*/)
+        {
+            TArray<uint8> FieldBytes; RR << FieldBytes;
+            const int64 Pos = RR.Tell();
+            const int32 RestNum = HRaw.Num() - (int32)Pos; // HeadEyes (lo que queda) → se copia tal cual
+            TArray<uint8> Rest;
+            if (RestNum > 0) { Rest.SetNumUninitialized(RestNum); FMemory::Memcpy(Rest.GetData(), HRaw.GetData() + Pos, RestNum); }
+            TArray<uint8> NewField;
+            if (APTSculptVolume::TintFieldState(FieldBytes, VByte, NewField))
+            {
+                TArray<uint8> NewRaw;
+                FMemoryWriter RW(NewRaw, /*bIsPersistent=*/true);
+                uint32 M = 0x50545232; RW << M;
+                RW << NewField;
+                if (Rest.Num() > 0) RW.Serialize(Rest.GetData(), Rest.Num());
+                HRaw = MoveTemp(NewRaw);
+            }
+        }
+    }
+
+    Out.Reset();
+    FMemoryWriter W(Out, /*bIsPersistent=*/true);
+    int32 V = 1; W << V;
+    W << HBaked << HRaw << HThumb << BPNG << BThumb;
+    return true;
+}
+
 void APTLobbyCharacter::AssembleReplicatedBlob(const TArray<uint8>& HeadBlob, const TArray<uint8>& BodyPNG, TArray<uint8>& Out)
 {
     Out.Reset();
@@ -721,7 +835,6 @@ static bool PT_DecodePNG_BGRA(const TArray<uint8>& In, TArray<FColor>& OutPx, in
 }
 
 // ── Blob combinado: geometría + centro + PNG cabeza + PNG cuerpo ───────────────
-static const uint32 PT_HEADBLOB_MAGIC = 0x50544832; // 'PTH2'
 
 // Serializador de bajo nivel del blob combinado (reusado por BuildHeadBlob y AssembleReplicatedBlob).
 static void PT_SerializeHeadBlob(const TArray<uint8>& Geo, const FVector& Center,

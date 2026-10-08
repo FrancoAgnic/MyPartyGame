@@ -202,6 +202,7 @@ protected:
     UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconSaveColor = nullptr;
     UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconClearAll  = nullptr;
     UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconDetail    = nullptr; // ALT (detalle)
+    UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconBrushSize = nullptr; // rueda del mouse = tamaño de brocha
     UPROPERTY(EditAnywhere, Category="UI|Icons") UTexture2D* IconColorPicker = nullptr; // icono del slot "abrir color" (RMB)
 
     // ── Iconos de KEYCAP (para teclas de nombre largo: se muestran EN VEZ del texto de la tecla) ──

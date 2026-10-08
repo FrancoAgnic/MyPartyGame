@@ -56,3 +56,26 @@ UButton* PTWidgetUtils::CloneButtonAfter(UUserWidget* Owner, UButton* Src, FName
     CopySlot<UHorizontalBoxSlot>(NewSlot, Src->Slot);
     return Btn;
 }
+
+namespace
+{
+    // Busca el PRIMER UTextBlock dentro de un widget (él mismo o descendiente). El label de un botón
+    // suele ser su hijo directo, pero a veces el WBP lo envuelve en una caja (icono + texto).
+    UTextBlock* FindFirstTextBlock(UWidget* W)
+    {
+        if (!W) return nullptr;
+        if (UTextBlock* T = Cast<UTextBlock>(W)) return T;
+        if (UPanelWidget* P = Cast<UPanelWidget>(W))
+            for (int32 i = 0; i < P->GetChildrenCount(); ++i)
+                if (UTextBlock* Found = FindFirstTextBlock(P->GetChildAt(i)))
+                    return Found;
+        return nullptr;
+    }
+}
+
+void PTWidgetUtils::SetButtonLabel(UButton* Btn, const FText& Label)
+{
+    if (!Btn) return;
+    if (UTextBlock* Text = FindFirstTextBlock(Btn->GetChildAt(0)))
+        Text->SetText(Label);
+}

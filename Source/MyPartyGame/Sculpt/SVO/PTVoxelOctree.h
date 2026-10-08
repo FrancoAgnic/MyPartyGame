@@ -126,6 +126,10 @@ public:
     int32 UndoDepth() const { return UndoStack.Num(); }
     int32 MaxUndo = 20;
 
+    // Pinta TODO el octree de un color (todas las esquinas de todos los nodos). Para las skins DEFAULT:
+    // así, al RE-EDITAR, la arcilla conserva el color teñido (el color vive en el SVO, no "por encima").
+    void SetAllColors(const FColor& C);
+
     // ── Métricas / debug ────────────────────────────────────────────────────
     int32 CountLeaves() const;   // hojas allocadas (≈ cuánto detalle hay)
     int32 CountNodes()  const;   // nodos totales

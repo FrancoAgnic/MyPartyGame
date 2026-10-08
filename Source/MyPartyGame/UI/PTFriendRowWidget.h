@@ -34,6 +34,13 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* StatusText;
     UPROPERTY(meta = (BindWidget))         UButton*    InviteButton;
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* InviteButtonText;
+    // Distintivo opcional para los amigos que están jugando ESTE juego (se muestra solo para ellos). Poné
+    // lo que quieras en el WBP (un borde, un ícono verde, etc.) y nombralo EXACTO "PlayingBadge".
+    UPROPERTY(meta = (BindWidgetOptional)) class UWidget* PlayingBadge;
+    // Color del nombre: resaltado para los que están en el juego, normal para el resto (así saltan a la vista
+    // en una lista larga, además de ir ordenados arriba de todo).
+    UPROPERTY(EditAnywhere, Category="Friends") FLinearColor PlayingNameColor = FLinearColor(0.35f, 1.f, 0.45f, 1.f);
+    UPROPERTY(EditAnywhere, Category="Friends") FLinearColor NormalNameColor  = FLinearColor::White;
 
     UFUNCTION() void OnInviteClicked();
 

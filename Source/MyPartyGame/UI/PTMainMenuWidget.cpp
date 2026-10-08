@@ -51,6 +51,11 @@ bool UPTMainMenuWidget::Initialize()
         OnlinePartyButton = PTWidgetUtils::CloneButtonAfter(this, LocalModeButton, TEXT("OnlinePartyButton"), PTText::Get(TEXT("MENU_ONLINE_MODE")));
     if (OnlinePartyButton) OnlinePartyButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnOnlinePartyClicked);
 
+    // Traducir el label de los botones de modo local/audiencia: si vienen del WBP (tu amigo los agregó
+    // ahí) traen texto HARDCODEADO y nunca pasaban por PTText → no se traducían. Se los forzamos acá.
+    if (LocalModeButton)   PTWidgetUtils::SetButtonLabel(LocalModeButton,   PTText::Get(TEXT("MENU_LOCAL_MODE")));
+    if (OnlinePartyButton) PTWidgetUtils::SetButtonLabel(OnlinePartyButton, PTText::Get(TEXT("MENU_ONLINE_MODE")));
+
     // Si hay un PlayButton, arrancar en la pantalla principal (submenú Host/Find/EnterCode oculto).
     // Si el WBP todavía no tiene PlayButton, no se toca nada (comportamiento previo, todo visible).
     if (PlayButton) SetPlaySubmenuVisible(false);

@@ -129,6 +129,10 @@ public:
     // undo vacío y marca todos los bricks dirty para que el volumen los vuelva a mallar.
     void SerializeState(FArchive& Ar);
 
+    // Tiñe TODO el color del campo (todas las muestras de todos los bricks) a C. Se usa para
+    // re-colorear una skin template clásica (mismo propósito que FPTVoxelOctree::SetAllColors).
+    void SetAllColors(const FColor& C);
+
     // ── Surface Nets (estático, corre en ThreadPool) ───────────────────────
     static void MeshBrick(const FBrickSnapshot& Snap, FPTBrickMesh& Out);
 

@@ -628,12 +628,16 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
     {
         const bool bEligibleGuesser = (Sender != G->CurrentSculptor && !Sender->bHasGuessedThisTurn && !Sender->bIsDevSpectator);
 
-        if (bEligibleGuesser && DoesGuessMatch(Text))
+        const int32 GuessLang = bEligibleGuesser ? DoesGuessMatch(Text, Sender->GetLanguageIndex()) : INDEX_NONE;
+        if (bEligibleGuesser && GuessLang != INDEX_NONE)
         {
-            // Acierto: anunciar SIN la palabra (anti-spoiler), pero SÍ con el IDIOMA en que adivinó
-            // (el código va en el campo Message; el HUD lo muestra como "[ES]" al lado). La palabra se
-            // revela recién al final del turno.
-            G->Multicast_ChatLine(Name, Sender->Language, EPTChatType::Correct);
+            // Acierto: anunciar SIN la palabra (anti-spoiler), pero SÍ con el IDIOMA EN QUE TIPEÓ la palabra
+            // (no el idioma configurado del jugador): si jugás en español y escribís "apple", muestra la
+            // bandera de INGLÉS. El código va en Message; el HUD lo renderiza como <img id="EN"/>. La palabra
+            // se revela recién al final del turno.
+            const TArray<FPTLanguage>& Langs = PTText::GetAvailableLanguages();
+            const FString LangCode = Langs.IsValidIndex(GuessLang) ? Langs[GuessLang].Code : Sender->Language;
+            G->Multicast_ChatLine(Name, LangCode, EPTChatType::Correct);
             // Globo VERDE "adivinó la palabra" (nunca la palabra) + confetti sobre su cabeza.
             if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(Sender->GetPawn()))
                 // Texto vacío a propósito: con bGuess=true cada cliente pone el suyo traducido.
@@ -669,14 +673,19 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
         Char->Multicast_ShowChatBubble(Text, false);
 }
 
-bool APTSculptGameMode::DoesGuessMatch(const FString& Guess) const
+int32 APTSculptGameMode::DoesGuessMatch(const FString& Guess, int32 PreferLang) const
 {
-    if (!CurrentWord.IsValidEntry()) return false;
+    if (!CurrentWord.IsValidEntry()) return INDEX_NONE;
     // Cuenta como acierto si coincide con CUALQUIER traducción: escribís "Auto", "Car" o "Carro".
     const FString G = Normalize(Guess);
-    for (const FString& W : CurrentWord.Words)
-        if (!W.IsEmpty() && G == Normalize(W)) return true;
-    return false;
+    // Primero el idioma preferido (el del que escribe): si una palabra es igual en varios idiomas
+    // (ej. "Pizza"), no marcamos "otro idioma" de gusto.
+    if (CurrentWord.Words.IsValidIndex(PreferLang) && !CurrentWord.Words[PreferLang].IsEmpty()
+        && G == Normalize(CurrentWord.Words[PreferLang]))
+        return PreferLang;
+    for (int32 i = 0; i < CurrentWord.Words.Num(); ++i)
+        if (!CurrentWord.Words[i].IsEmpty() && G == Normalize(CurrentWord.Words[i])) return i;
+    return INDEX_NONE;
 }
 
 // Distancia de edición (Levenshtein) entre dos strings ya normalizados.

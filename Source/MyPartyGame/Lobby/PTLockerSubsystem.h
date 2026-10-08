@@ -82,6 +82,18 @@ public:
     int32 FirstFreeHeadSlot() const;
     int32 FirstFreeBodySlot() const;
 
+    // ── Skins DEFAULT (templates blancos + color random) ──────────────────────
+    // Importa un bundle a un SLOT ESPECÍFICO (cabeza + cuerpo del mismo índice). true si ok. La usan las
+    // skins default (importar a un slot dado) y el flujo de "slot nuevo".
+    bool ImportSkinBundleToSlot(int32 Slot, const TArray<uint8>& InBytes);
+    // Elige un template default (Content/DefaultSkins/default_skin_N.bin) al AZAR y lo importa al Slot.
+    // Siempre elige un color random y lo devuelve en OutTint (para poder setear el pincel). Si bTintBaked,
+    // además tiñe el horneado con ese color (para que el look equipado/miniatura salga del color). false si
+    // no hay templates. NO toca otros slots: migración segura (los slots ya usados no se tocan).
+    bool AssignRandomDefaultSkin(int32 Slot, bool bTintBaked, FColor& OutTint);
+    // ¿Hay al menos un template default disponible?
+    bool HasDefaultSkins() const;
+
 private:
     UPROPERTY() UPTLockerSaveGame* Save = nullptr;
     void EnsureLoaded();
