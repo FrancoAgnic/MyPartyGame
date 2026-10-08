@@ -185,6 +185,8 @@ private:
 
     // ── Perro + foto ──
     float PerroLeft = 0.f;
+    bool  bPerroTimeUp = false;    // se acabó el tiempo: recién ahí "Enter — sacar la foto"
+    bool  HasAnyClay() const;
     int32 CountdownN = 0;
     float CountdownT = 0.f;
     bool  bShotRequested = false;

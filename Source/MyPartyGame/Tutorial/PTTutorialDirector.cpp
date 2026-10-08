@@ -93,6 +93,7 @@ namespace
         { TEXT("ColorPick"),     TEXT("ColorPick"),      nullptr, TEXT("ColorPick"),   nullptr, TEXT("TUT_K_COLOR") },
         { TEXT("SaveColor"),     TEXT("SaveColor"),      nullptr, nullptr,             nullptr, TEXT("KEY_SAVE_COLOR") },
         { TEXT("Done"),          nullptr,                TEXT("TUT_KEY_ENTER"),  nullptr,          TEXT("TUT_PAD_PAUSE"), TEXT("TUT_DONE_BTN") },
+        { TEXT("Finish"),        nullptr,                TEXT("TUT_KEY_ENTER"),  nullptr,          TEXT("TUT_PAD_PAUSE"), TEXT("TUT_K_FINISH") },
         { TEXT("PhotoOrbit"),    nullptr,                TEXT("TUT_KEY_WASD"),   nullptr,          TEXT("TUT_STICK_L"), TEXT("TUT_K_ORBIT") },
         { TEXT("PhotoShoot"),    nullptr,                TEXT("TUT_KEY_ENTER"),  TEXT("FlyUp"),    nullptr, TEXT("TUT_K_SHOOT") },
     };
@@ -705,7 +706,7 @@ void APTTutorialDirector::RefreshHints()
             if (Id == TEXT("Look")) Names = { TEXT("UI_Joystick_R") };
             else if (Id == TEXT("Move")) Names = { TEXT("UI_Joystick_L") };
             else if (Id == TEXT("BrushSize")) Names = { PadIconName(PTGamepad::GetKey(TEXT("BrushSmaller"))), PadIconName(PTGamepad::GetKey(TEXT("BrushBigger"))) };
-            else if (Id == TEXT("Done")) Names = { TEXT("UI_Joystick_Menu") };
+            else if (Id == TEXT("Done") || Id == TEXT("Finish")) Names = { TEXT("UI_Joystick_Menu") };
             else if (Id == TEXT("PhotoOrbit")) Names = { TEXT("UI_Joystick_L") };
             else if (A->Pad) Names = { PadIconName(PTGamepad::GetKey(FName(A->Pad))) };
         }
@@ -715,7 +716,7 @@ void APTTutorialDirector::RefreshHints()
             else if (Id == TEXT("Move")) Names = { TEXT("W_Key_Dark"), TEXT("A_Key_Dark"), TEXT("S_Key_Dark"), TEXT("D_Key_Dark") };
             else if (Id == TEXT("BrushSize")) Names = { TEXT("Mouse_Middle_Key_Dark") };
             else if (Id == TEXT("SurfaceSnap")) Names = { TEXT("Alt_Key_Dark") };
-            else if (Id == TEXT("Done") || Id == TEXT("PhotoShoot")) Names = { TEXT("Enter_Key_Dark") };
+            else if (Id == TEXT("Done") || Id == TEXT("PhotoShoot") || Id == TEXT("Finish")) Names = { TEXT("Enter_Key_Dark") };
             else if (Id == TEXT("PhotoOrbit")) Names = { TEXT("W_Key_Dark"), TEXT("A_Key_Dark"), TEXT("S_Key_Dark"), TEXT("D_Key_Dark") };
             else if (A->Kb) Names = { KbIconName(PTInput::GetKey(FName(A->Kb))) };
         }
@@ -899,6 +900,7 @@ void APTTutorialDirector::EnterStep(EPTTutStep S)
         Say(TEXT("TUT_PERRO"));
         ClearGhosts(); ClearClay();
         PerroLeft = PerroSeconds;
+        bPerroTimeUp = false;
         break;
     case EPTTutStep::Photo:
         StartPhoto();
@@ -928,7 +930,7 @@ void APTTutorialDirector::EnterStep(EPTTutStep S)
     case EPTTutStep::Eyes:    SetHintsFor({ TEXT("ModeEyes"), TEXT("Sculpt") }, /*bSequential=*/true); break;
     case EPTTutStep::Iglu:    SetHintsFor({ TEXT("ModeAdd"), TEXT("CycleShape"), TEXT("RotateShape"), TEXT("BrushSize") }, /*bSequential=*/true, /*bGate=*/false); break;
     case EPTTutStep::Hongo:   SetHintsFor({ TEXT("CycleShape"), TEXT("AxisVertical"), TEXT("BrushSize"), TEXT("ModePaint") }, /*bSequential=*/true, /*bGate=*/false); break;
-    case EPTTutStep::Perro:   SetHintsFor({ TEXT("Done") }); break;
+    case EPTTutStep::Perro:   SetHintsFor({}); break; // "Enter — sacar la foto" aparece al terminar el tiempo
     case EPTTutStep::Photo:   SetHintsFor({ TEXT("PhotoOrbit"), TEXT("PhotoShoot") }, /*bSequential=*/true, /*bGate=*/false); break;
     default: break;
     }
@@ -960,7 +962,7 @@ void APTTutorialDirector::Tick(float Dt)
     TickTips();
     if (Widget && PC.IsValid()) Widget->SetDockLeft(PC->IsShapeRadialOpen() || PC->IsColorPickerOpen());
     if (APTSculptPlayerController* P = PC.Get())
-        if (Widget) Widget->SetPauseOptions(P->IsEscapeMenuOpen() && Step < EPTTutStep::Photo, Step == EPTTutStep::Perro);
+        if (Widget) Widget->SetPauseOptions(P->IsEscapeMenuOpen() && Step < EPTTutStep::Photo, Step == EPTTutStep::Perro && bPerroTimeUp);
     TickStep(Dt);
 }
 
@@ -1180,7 +1182,26 @@ void APTTutorialDirector::TickStep(float Dt)
         PerroLeft -= Dt;
         Show(FMath::Clamp(PerroLeft / PerroSeconds, 0.f, 1.f),
              FText::Format(PTText::Get(TEXT("TUT_SECONDS")), FText::AsNumber(FMath::Max(0, FMath::CeilToInt(PerroLeft)))));
-        if (PerroLeft <= 0.f || (StepTime > 3.f && P->WasInputKeyJustPressed(EKeys::Enter))) OnDonePerro();
+        // Como en una partida: se esculpe hasta que termina el tiempo. Recién ahí "Enter — sacar la foto".
+        if (!bPerroTimeUp && PerroLeft <= 0.f)
+        {
+            if (!HasAnyClay())
+            {
+                // Sin nada esculpido: 30 s más (no tiene sentido sacarle foto a un cubo vacío).
+                PerroLeft = 30.f;
+                if (Sculpi) Sculpi->Multicast_ShowChatBubble(PTText::GetStr(TEXT("TUT_TIP_SCULPT_FIRST")), false);
+            }
+            else
+            {
+                bPerroTimeUp = true;
+                if (APTSculptGameState* G = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr)
+                    G->TurnPhase = EPTTurnPhase::TurnEnd; // ¡tiempo! ya no se esculpe
+                PlaySfx(SuccessSound, 0.5f);
+                Say(TEXT("TUT_PERRO_TIME"));
+                SetHintsFor({ TEXT("Finish") }, /*bSequential=*/true, /*bGate=*/false);
+            }
+        }
+        if (bPerroTimeUp && P->WasInputKeyJustPressed(EKeys::Enter)) OnDonePerro();
         break;
     }
     case EPTTutStep::Photo:
@@ -1280,9 +1301,24 @@ void APTTutorialDirector::DevFillGhosts()
 
 // ── Perro + foto ────────────────────────────────────────────────────────────
 
+bool APTTutorialDirector::HasAnyClay() const
+{
+    if (!Volume.IsValid()) return false;
+    const int32 N = 12;
+    for (int32 i = 0; i < N; ++i)
+        for (int32 j = 0; j < N; ++j)
+            for (int32 k = 0; k < N; ++k)
+            {
+                const FVector Pt = CanvasCenter + FVector((i + 0.5f) / N * 2.f - 1.f, (j + 0.5f) / N * 2.f - 1.f, (k + 0.5f) / N * 2.f - 1.f) * CanvasExt;
+                if (Volume->SampleWorldDensity(Pt) > 0.f) return true;
+            }
+    return false;
+}
+
 void APTTutorialDirector::OnDonePerro()
 {
     if (Step != EPTTutStep::Perro) return;
+    if (!bPerroTimeUp) return; // la foto es al terminar el tiempo
     // Cerrar el menú de pausa si se terminó desde ahí.
     if (APTSculptPlayerController* P = PC.Get())
         if (P->IsEscapeMenuOpen()) P->ConsoleCommand(TEXT(""), false);
