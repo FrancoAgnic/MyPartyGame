@@ -377,6 +377,11 @@ private:
     void OnDescendPressed()  { bDescend = true;  }
     void OnDescendReleased() { bDescend = false; }
     void ToggleFly();
+public:
+    // Volar arriba/abajo manejado por APTSculptPlayerController (teclas rebindeables en Controles).
+    void SetAscending(bool b)  { bAscend = b; }
+    void SetDescending(bool b) { bDescend = b; }
+private:
 
     bool  bFlying   = false;
     bool  bAscend   = false;

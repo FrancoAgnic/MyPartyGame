@@ -34,6 +34,12 @@ struct FPTKeyBinding
 
     /** false = viene de Enhanced Input (WASD/cámara/volar): se muestra pero todavía no se rebindea. */
     UPROPERTY(BlueprintReadOnly, Category="Input") bool bRebindable = true;
+
+    /** Clave de localización de una NOTA de uso (ej. "Mantener", "Doble clic reinicia"). Vacía = sin nota. */
+    UPROPERTY(BlueprintReadOnly, Category="Input") FName NoteKey;
+
+    /** Nota ya traducida (la rellena GetBindings, como Label). Vacía si no hay NoteKey. */
+    UPROPERTY(BlueprintReadOnly, Category="Input") FText Note;
 };
 
 namespace PTInput

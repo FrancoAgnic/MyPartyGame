@@ -185,13 +185,14 @@ void APTSculptPlayerController::BeginPlay()
         PaintRing->RegisterComponent();
         PaintRing->SetVisibility(false);
 
-        // Overlay X-ray: capa extra encima del preview de la ARCILLA (material base intacto). El gizmo de
-        // ejes (grilla indicadora) queda FUERA: no debe verse a través de la geometría.
-        if (PreviewOverlayMaterial)
+        // Overlay X-ray/punteado: capa extra encima del preview de la ARCILLA (material base intacto). El
+        // gizmo de ejes (grilla indicadora) queda FUERA: no debe verse a través de la geometría. Usamos un
+        // MID para poder pasarle el Color del pincel (el contorno punteado sale del color elegido).
+        if (UMaterialInstanceDynamic* OvMID = GetPreviewOverlayMID())
         {
-            PreviewMesh->SetOverlayMaterial(PreviewOverlayMaterial);
-            PreviewStaticMesh->SetOverlayMaterial(PreviewOverlayMaterial);
-            PaintRing->SetOverlayMaterial(PreviewOverlayMaterial);
+            PreviewMesh->SetOverlayMaterial(OvMID);
+            PreviewStaticMesh->SetOverlayMaterial(OvMID);
+            PaintRing->SetOverlayMaterial(OvMID);
         }
 
         // Sombra falsa: decal que se proyecta en el piso justo debajo del cursor.
@@ -621,9 +622,19 @@ void APTSculptPlayerController::SetupInputComponent()
     InputComponent->BindAction("Sculpt", IE_Pressed,  this, &APTSculptPlayerController::OnStampPressed);
     InputComponent->BindAction("Sculpt", IE_Released, this, &APTSculptPlayerController::OnStampReleased);
 
-    // El resto de las teclas salen de PTInput (fuente de verdad única, compartida con la UI del
-    // HUD). Nada de EKeys hardcodeados acá: si el jugador rebindea, con RefreshFromSettings +
-    // volver a llamar a esto alcanza, y la UI ya lo refleja sola.
+    SetupKeyboardInput(); // teclas de teclado/ratón (PTInput)
+
+    // Joystick: mismo set de acciones (ver PTSculptPlayerController_Gamepad.cpp).
+    SetupGamepadInput();
+}
+
+void APTSculptPlayerController::SetupKeyboardInput()
+{
+    if (!InputComponent) return;
+
+    // Las teclas salen de PTInput (fuente de verdad única, compartida con la UI del HUD). Nada de EKeys
+    // hardcodeados sueltos: si el jugador rebindea, con RefreshFromSettings + RebuildKeyboardInput alcanza,
+    // y la UI ya lo refleja sola.
     const auto K = [](const TCHAR* Id) { return PTInput::GetKey(FName(Id)); };
 
     // Tamaño con rueda (la rueda no se rebindea, pero sale de la tabla igual).
@@ -673,8 +684,28 @@ void APTSculptPlayerController::SetupInputComponent()
     InputComponent->BindKey(K(TEXT("Pause")), IE_Pressed, this, &APTSculptPlayerController::OnPausePressed);
     InputComponent->BindKey(K(TEXT("Chat")),  IE_Pressed, this, &APTSculptPlayerController::OnOpenChat);
 
-    // Joystick: mismo set de acciones (ver PTSculptPlayerController_Gamepad.cpp).
-    SetupGamepadInput();
+    // Volar arriba/abajo (mantener). Rebindeables: manejan el ascenso/descenso del pawn en vuelo.
+    InputComponent->BindKey(K(TEXT("FlyUp")),   IE_Pressed,  this, &APTSculptPlayerController::OnFlyUpPressed);
+    InputComponent->BindKey(K(TEXT("FlyUp")),   IE_Released, this, &APTSculptPlayerController::OnFlyUpReleased);
+    InputComponent->BindKey(K(TEXT("FlyDown")), IE_Pressed,  this, &APTSculptPlayerController::OnFlyDownPressed);
+    InputComponent->BindKey(K(TEXT("FlyDown")), IE_Released, this, &APTSculptPlayerController::OnFlyDownReleased);
+}
+
+void APTSculptPlayerController::OnFlyUpPressed()    { if (APTLobbyCharacter* C = Cast<APTLobbyCharacter>(GetPawn())) C->SetAscending(true); }
+void APTSculptPlayerController::OnFlyUpReleased()   { if (APTLobbyCharacter* C = Cast<APTLobbyCharacter>(GetPawn())) C->SetAscending(false); }
+void APTSculptPlayerController::OnFlyDownPressed()  { if (APTLobbyCharacter* C = Cast<APTLobbyCharacter>(GetPawn())) C->SetDescending(true); }
+void APTSculptPlayerController::OnFlyDownReleased() { if (APTLobbyCharacter* C = Cast<APTLobbyCharacter>(GetPawn())) C->SetDescending(false); }
+
+void APTSculptPlayerController::RebuildKeyboardInput()
+{
+    if (!InputComponent) return;
+    // Sacar TODOS los binds de teclado/ratón (no joystick) y rearmarlos con la tabla actual de PTInput.
+    // La acción "Sculpt" (click izquierdo) es un ActionBinding, no un KeyBinding → no se toca acá.
+    PTInput::RefreshFromSettings();
+    InputComponent->KeyBindings.RemoveAll([](const FInputKeyBinding& B) { return !B.Chord.Key.IsGamepadKey(); });
+    SetupKeyboardInput();
+    // Refrescar los keycaps del hotbar/hints (gameplay y level creator usan este HUD).
+    if (GameplayHUD) GameplayHUD->BuildToolbar();
 }
 
 void APTSculptPlayerController::OnOpenChat()
@@ -1175,11 +1206,19 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
     TickAuthorProps(DeltaTime);
 }
 
+UMaterialInstanceDynamic* APTSculptPlayerController::GetPreviewOverlayMID()
+{
+    if (!PreviewOverlayMaterial) return nullptr;
+    if (!PreviewOverlayMID || PreviewOverlayMID->Parent != PreviewOverlayMaterial)
+        PreviewOverlayMID = UMaterialInstanceDynamic::Create(PreviewOverlayMaterial, this);
+    return PreviewOverlayMID;
+}
+
 void APTSculptPlayerController::SetPreviewXrayEnabled(bool bOn)
 {
     if (bOn == bXrayOverlayOn) return; // sin cambios → no re-setear
     bXrayOverlayOn = bOn;
-    UMaterialInterface* Ov = bOn ? PreviewOverlayMaterial : nullptr;
+    UMaterialInterface* Ov = bOn ? GetPreviewOverlayMID() : nullptr;
     if (PreviewMesh)       PreviewMesh->SetOverlayMaterial(Ov);
     if (PreviewStaticMesh) PreviewStaticMesh->SetOverlayMaterial(Ov);
     if (PaintRing)         PaintRing->SetOverlayMaterial(Ov);
@@ -1722,6 +1761,10 @@ void APTSculptPlayerController::UpdatePreviewBrightness(float Dt)
         PreviewStaticMID->SetVectorParameterValue(TEXT("Color"), CurrentPaintColor);
         PreviewStaticMID->SetScalarParameterValue(TEXT("Glow"), PreviewGlowAmt);
     }
+    // Overlay punteado: el material decide negro/blanco por la luminancia de este color (contraste con lo
+    // que tapa). Le pasamos el color REAL del pincel; el oscurecido lo maneja el RingBrightness del material.
+    if (PreviewOverlayMID)
+        PreviewOverlayMID->SetVectorParameterValue(TEXT("Color"), CurrentPaintColor);
 }
 
 // Elige el mesh de preview: override por tool > override por stamp > procedural.
@@ -1934,7 +1977,7 @@ void APTSculptPlayerController::UpdatePreviewVisual()
 
     // Re-aplicar el overlay X-ray al componente que quedó visible, según el estado actual (así las formas
     // que van por procedural también intentan mostrar el xray tras el rebuild, no solo las de mesh estático).
-    UMaterialInterface* Ov = bXrayOverlayOn ? PreviewOverlayMaterial : nullptr;
+    UMaterialInterface* Ov = bXrayOverlayOn ? GetPreviewOverlayMID() : nullptr;
     if (PreviewMesh)       PreviewMesh->SetOverlayMaterial(Ov);
     if (PreviewStaticMesh) PreviewStaticMesh->SetOverlayMaterial(Ov);
 }

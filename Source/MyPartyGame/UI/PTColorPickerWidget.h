@@ -75,6 +75,9 @@ protected:
     UPROPERTY(meta=(BindWidget))          UImage*      Wheel         = nullptr;
     UPROPERTY(meta=(BindWidgetOptional))  USlider*     ValueSlider   = nullptr;
     UPROPERTY(meta=(BindWidgetOptional))  UBorder*     PreviewSwatch = nullptr;
+    /** Barra de muestra del color elegido (se crea en C++ si hay un Canvas; útil cuando no se ve el
+     *  preview de la brocha). Se actualiza en RefreshUI junto con PreviewSwatch. */
+    UPROPERTY()                           UBorder*     ColorPreviewBar = nullptr;
     /** Fondo/panel que contiene TODO el picker. Estar sobre él cuenta como "dentro" (el gotero no se
      *  activa a través del fondo). Nombrá el Border así en el WBP. */
     UPROPERTY(meta=(BindWidgetOptional))  UBorder*     Border        = nullptr;

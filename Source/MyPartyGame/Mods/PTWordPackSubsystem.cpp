@@ -32,7 +32,7 @@ struct FPTWorkshopPublish
     TFunction<void(bool, FString)> Cb;
     FString ContentFolder, PreviewPath, Title, Desc, Diag;
     FString BaseTag = TEXT("WordBank"); // tag principal del item: "WordBank" o "Map"
-    FString ChangeNote = TEXT("Banco de palabras"); // nota de cambio del SubmitItemUpdate
+    FString ChangeNote = TEXT("Temáticas"); // nota de cambio del SubmitItemUpdate
     TArray<FString> LangTags; // idiomas del banco ("ES","EN"...) → tags de Steam además del BaseTag
     PublishedFileId_t ItemId = 0;
     CCallResult<FPTWorkshopPublish, CreateItemResult_t>       CreateCR;

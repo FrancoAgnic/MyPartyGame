@@ -15,6 +15,7 @@
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/ComboBoxString.h"
 #include "Components/Image.h"
+#include "PTWidgetUtils.h"
 #include "ImageUtils.h"              // ImportFileAsTexture2D (preview de la miniatura)
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
@@ -54,6 +55,10 @@ void UPTWorkshopBrowserWidget::NativeConstruct()
     if (SearchBox)          SearchBox->OnTextCommitted.AddDynamic(this, &UPTWorkshopBrowserWidget::OnSearchCommitted);
 
     if (TitleText) TitleText->SetText(PTText::Get(TEXT("WORKSHOP_TITLE")));
+    // Labels de las pestañas por CÓDIGO (el texto del WBP "WordBanks" ya no se traduce por reverse-lookup
+    // tras renombrar "banco de palabras" → "temáticas").
+    PTWidgetUtils::SetButtonLabel(WordBanksTabButton, PTText::Get(TEXT("TAB_WORD_BANKS"))); // "Temáticas"
+    PTWidgetUtils::SetButtonLabel(MapsTabButton,      PTText::Get(TEXT("TAB_MAPS")));       // "Mapas"
 
     if (UPTWordPackSubsystem* P = Packs())
     {

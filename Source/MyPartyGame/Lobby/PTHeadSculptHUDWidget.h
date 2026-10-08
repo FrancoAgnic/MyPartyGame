@@ -39,6 +39,8 @@ public:
     void Refresh(APTLobbyPlayerController* PC);
     /** Muestra/oculta el popup "¿Guardar los cambios?" (Sí = guardar, No = descartar). */
     void ShowDiscardPopup(bool bShow);
+    /** Reescribe los keycaps rebindeables con la tecla actual de PTInput (tras reasignar en Controles). */
+    void RebuildKeys();
 
 protected:
     UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* ToolsBox;
@@ -130,6 +132,7 @@ protected:
 
 private:
     void BuildOnce();          // arma tools + shapes + slots contextuales (una sola vez)
+    void ApplyKeyLabels();     // keycaps rebindeables ← PTInput (llamado por BuildOnce y RebuildKeys)
     void RefreshControlsText();
 
     UPROPERTY() TArray<UPTToolSlotWidget*> ToolSlots;

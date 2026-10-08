@@ -10,6 +10,7 @@
 #include "Components/PanelWidget.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
+#include "PTWidgetUtils.h"
 
 UPTWordPackSubsystem* UPTWordPackWidget::Packs() const
 {
@@ -34,6 +35,10 @@ void UPTWordPackWidget::NativeConstruct()
 
     if (TitleText)      TitleText->SetText(PTText::Get(TEXT("WORKSHOP_LIBRARY"))); // #6: "Biblioteca del Workshop"
     if (MapsLockedText) MapsLockedText->SetText(PTText::Get(TEXT("MAPS_SOON")));
+    // Labels de las pestañas por CÓDIGO (antes el texto del WBP se traducía por reverse-lookup; al
+    // renombrar "banco de palabras" → "temáticas" ese texto viejo del WBP dejaría de matchear).
+    PTWidgetUtils::SetButtonLabel(WordsTabButton, PTText::Get(TEXT("TAB_WORD_BANKS"))); // "Temáticas"
+    PTWidgetUtils::SetButtonLabel(MapsTabButton,  PTText::Get(TEXT("TAB_MAPS")));       // "Mapas"
     if (MapsBox)        MapsBox->ClearChildren(); // mapas bloqueados: lista vacía por ahora
 
     if (UPTWordPackSubsystem* P = Packs())

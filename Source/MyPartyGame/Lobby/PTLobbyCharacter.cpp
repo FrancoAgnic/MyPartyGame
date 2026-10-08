@@ -2,6 +2,7 @@
 
 #include "PTLobbyCharacter.h"
 #include "PTPlayerState.h"
+#include "../PTGameUserSettings.h" // sensibilidad de cámara con mouse
 #include "PTNameTagWidget.h"
 #include "PTChatShoutWidget.h"
 #include "../PTTextTable.h"
@@ -1219,8 +1220,11 @@ void APTLobbyCharacter::Move(const FInputActionValue& Value)
 void APTLobbyCharacter::Look(const FInputActionValue& Value)
 {
     const FVector2D Axis = Value.Get<FVector2D>();
-    AddControllerYawInput(Axis.X);
-    AddControllerPitchInput(-Axis.Y); // no invertido (default, igual que Lvl-01)
+    // Sensibilidad de cámara con mouse (ajustable en Controles → Teclado y ratón).
+    float Sens = 1.f;
+    if (const UPTGameUserSettings* S = UPTGameUserSettings::Get()) Sens = S->GetMouseLookSensitivity();
+    AddControllerYawInput(Axis.X * Sens);
+    AddControllerPitchInput(-Axis.Y * Sens); // no invertido (default, igual que Lvl-01)
 }
 
 void APTLobbyCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -1240,19 +1244,17 @@ void APTLobbyCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
         }
     }
 
-    // Descenso en vuelo: Ctrl izquierdo (tecla legacy, no interfiere con Enhanced Input).
-    PlayerInputComponent->BindKey(EKeys::LeftControl, IE_Pressed,  this, &APTLobbyCharacter::OnDescendPressed);
-    PlayerInputComponent->BindKey(EKeys::LeftControl, IE_Released, this, &APTLobbyCharacter::OnDescendReleased);
+    // Ascender/descender en vuelo los bindea APTSculptPlayerController con las teclas "FlyUp"/"FlyDown"
+    // (rebindeables en Controles) → acá ya no se hardcodea Ctrl.
 }
 
 // ── Vuelo (modo creativo Minecraft) ─────────────────────────────────────────
 
 void APTLobbyCharacter::OnJumpPressed()
 {
-    // Ya NO hay doble-toque para alternar vuelo: el modo lo decide el nivel. En Lvl-01 siempre se
-    // vuela (bForceFlying, lo pone el gameplay) y en el lobby/menú siempre se camina.
-    if (bFlying) bAscend = true;
-    else
+    // Ascender en vuelo lo maneja ahora APTSculptPlayerController (tecla "FlyUp" rebindeable). Acá
+    // JumpAction solo SALTA cuando se camina (lobby). En Lvl-01 siempre se vuela → no salta.
+    if (!bFlying)
     {
         Jump();
         if (JumpMontage) Server_PlayJump(); // reproducir la anim de salto en todos
@@ -1271,7 +1273,6 @@ void APTLobbyCharacter::Multicast_PlayJump_Implementation()
 
 void APTLobbyCharacter::OnJumpReleased()
 {
-    bAscend = false;
     if (!bFlying) StopJumping();
 }
 

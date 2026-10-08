@@ -28,6 +28,7 @@
 #include "../Multiplayer/MultiplayerSessionsSubsystem.h"
 #include "../PTGameInstance.h"
 #include "../PTGamepad.h"
+#include "../PTInputBindings.h"
 #include "../PTTextTable.h"
 #include "Blueprint/UserWidget.h"
 #include "Kismet/GameplayStatics.h"
@@ -719,42 +720,61 @@ void APTLobbyPlayerController::SetupInputComponent()
     // Tecla G: entrar/salir del modo esculpir tu cabeza custom.
     // (La tecla G quedó reemplazada por el botón "Locker" del menú principal.)
 
-    // Esculpido de la cabeza (solo hace algo en modo cabeza; los handlers gatean con bHeadSculptMode).
-    // Mismos inputs que el gameplay: LMB esculpe en el modo actual, 1/2/3 = Add/Erase/Paint, rueda = tamaño.
+    SetupHeadSculptKeys(); // esculpido de la cabeza (usa PTInput, igual que el gameplay → rebindeable)
+}
+
+void APTLobbyPlayerController::SetupHeadSculptKeys()
+{
+    if (!InputComponent) return;
+
+    // Las acciones de esculpido salen de PTInput (misma tabla rebindeable que el gameplay), así reasignar
+    // una tecla en Controles vale TAMBIÉN acá. Las teclas propias del modo cabeza (confirmar/volver/pintar
+    // cuerpo/detalle) se quedan fijas porque no tienen equivalente en la tabla.
+    const auto K = [](const TCHAR* Id) { return PTInput::GetKey(FName(Id)); };
+
+    // LMB esculpe en el modo actual; rueda = tamaño (no rebindeables, igual que el gameplay).
     InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed,  this, &APTLobbyPlayerController::OnHeadStampPressed);
     InputComponent->BindKey(EKeys::LeftMouseButton, IE_Released, this, &APTLobbyPlayerController::OnHeadStampReleased);
     InputComponent->BindKey(EKeys::MouseScrollUp,   IE_Pressed,  this, &APTLobbyPlayerController::OnHeadScrollUp);
     InputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed,  this, &APTLobbyPlayerController::OnHeadScrollDown);
-    InputComponent->BindKey(EKeys::One,   IE_Pressed, this, &APTLobbyPlayerController::OnHeadModeAdd);
-    InputComponent->BindKey(EKeys::Two,   IE_Pressed, this, &APTLobbyPlayerController::OnHeadModeErase);
-    InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &APTLobbyPlayerController::OnHeadModePaint);
-    InputComponent->BindKey(EKeys::Four,  IE_Pressed, this, &APTLobbyPlayerController::OnHeadModeEyes);
-    // ALT (mantener) en Add: pegar el sello a la superficie de la cabeza (detallar de cerca), igual que el gameplay.
+
+    InputComponent->BindKey(K(TEXT("ModeAdd")),   IE_Pressed, this, &APTLobbyPlayerController::OnHeadModeAdd);
+    InputComponent->BindKey(K(TEXT("ModeErase")), IE_Pressed, this, &APTLobbyPlayerController::OnHeadModeErase);
+    InputComponent->BindKey(K(TEXT("ModePaint")), IE_Pressed, this, &APTLobbyPlayerController::OnHeadModePaint);
+    InputComponent->BindKey(K(TEXT("ModeEyes")),  IE_Pressed, this, &APTLobbyPlayerController::OnHeadModeEyes);
+
+    // ALT (mantener) = pegar a la superficie (detallar). Fijo.
     InputComponent->BindKey(EKeys::LeftAlt,  IE_Pressed,  this, &APTLobbyPlayerController::OnHeadSurfaceSnapPressed);
     InputComponent->BindKey(EKeys::LeftAlt,  IE_Released, this, &APTLobbyPlayerController::OnHeadSurfaceSnapReleased);
     InputComponent->BindKey(EKeys::RightAlt, IE_Pressed,  this, &APTLobbyPlayerController::OnHeadSurfaceSnapPressed);
     InputComponent->BindKey(EKeys::RightAlt, IE_Released, this, &APTLobbyPlayerController::OnHeadSurfaceSnapReleased);
-    // Enter = confirmar la edición (guarda + equipa + vuelve al Locker). Escape = popup guardar/descartar.
+
+    // Enter = confirmar; Escape = popup guardar/descartar. Fijas (propias del modo cabeza).
     InputComponent->BindKey(EKeys::Enter,  IE_Pressed, this, &APTLobbyPlayerController::OnLobbyEnter);
     InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &APTLobbyPlayerController::RequestHeadBack);
-    // TAB = ciclar la forma del sello (esfera/cubo/cilindro/cono), igual que el gameplay.
-    // MANTENER TAB → menú radial de formas (como el gameplay); al soltar aplica la forma del hover.
-    InputComponent->BindKey(EKeys::Tab,   IE_Pressed,  this, &APTLobbyPlayerController::OnHeadShapeRadialPressed);
-    InputComponent->BindKey(EKeys::Tab,   IE_Released, this, &APTLobbyPlayerController::OnHeadShapeRadialReleased);
-    // Rueda del mouse mantenida = rotar el shape (doble click = reset). Igual que el gameplay.
-    InputComponent->BindKey(EKeys::MiddleMouseButton, IE_Pressed,  this, &APTLobbyPlayerController::OnHeadRotatePressed);
-    InputComponent->BindKey(EKeys::MiddleMouseButton, IE_Released, this, &APTLobbyPlayerController::OnHeadRotateReleased);
-    // Backspace: toque = undo; mantenido = resetear. Por EVENTOS (IsInputKeyDown no sirve con Backspace
-    // en este modo). El acumulado y la confirmación de soltada (con debounce anti auto-repeat) van en PlayerTick.
-    InputComponent->BindKey(EKeys::BackSpace, IE_Pressed,  this, &APTLobbyPlayerController::OnHeadClearPressed);
-    InputComponent->BindKey(EKeys::BackSpace, IE_Released, this, &APTLobbyPlayerController::OnHeadClearReleased);
-    // SHIFT = (solo en Paint) alternar entre pintar la cabeza (arcilla) y el cuerpo (piel).
+
+    // Formas (mantener → radial), rotar (rueda), borrar (mantener), color picker, guardar color: todas rebindeables.
+    InputComponent->BindKey(K(TEXT("CycleShape")), IE_Pressed,  this, &APTLobbyPlayerController::OnHeadShapeRadialPressed);
+    InputComponent->BindKey(K(TEXT("CycleShape")), IE_Released, this, &APTLobbyPlayerController::OnHeadShapeRadialReleased);
+    InputComponent->BindKey(K(TEXT("RotateShape")), IE_Pressed,  this, &APTLobbyPlayerController::OnHeadRotatePressed);
+    InputComponent->BindKey(K(TEXT("RotateShape")), IE_Released, this, &APTLobbyPlayerController::OnHeadRotateReleased);
+    InputComponent->BindKey(K(TEXT("ClearAll")), IE_Pressed,  this, &APTLobbyPlayerController::OnHeadClearPressed);
+    InputComponent->BindKey(K(TEXT("ClearAll")), IE_Released, this, &APTLobbyPlayerController::OnHeadClearReleased);
+    InputComponent->BindKey(K(TEXT("ColorPick")), IE_Pressed,  this, &APTLobbyPlayerController::OnHeadColorPickPressed);
+    InputComponent->BindKey(K(TEXT("ColorPick")), IE_Released, this, &APTLobbyPlayerController::OnHeadColorPickReleased);
+    InputComponent->BindKey(K(TEXT("SaveColor")), IE_Pressed, this, &APTLobbyPlayerController::OnHeadColorSave);
+
+    // SHIFT = (en Paint) alternar pintar cabeza/cuerpo. Fijo.
     InputComponent->BindKey(EKeys::LeftShift, IE_Pressed, this, &APTLobbyPlayerController::OnHeadToggleBodyPaint);
-    // RMB mantenido = color picker (igual que el gameplay).
-    InputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed,  this, &APTLobbyPlayerController::OnHeadColorPickPressed);
-    InputComponent->BindKey(EKeys::RightMouseButton, IE_Released, this, &APTLobbyPlayerController::OnHeadColorPickReleased);
-    // E: guardar el color actual en el anillo del color picker (igual que el gameplay).
-    InputComponent->BindKey(EKeys::E, IE_Pressed, this, &APTLobbyPlayerController::OnHeadColorSave);
+}
+
+void APTLobbyPlayerController::RebuildHeadSculptInput()
+{
+    if (!InputComponent) return;
+    PTInput::RefreshFromSettings();
+    InputComponent->KeyBindings.RemoveAll([](const FInputKeyBinding& B) { return !B.Chord.Key.IsGamepadKey(); });
+    SetupHeadSculptKeys();
+    if (HeadHUD) HeadHUD->RebuildKeys(); // refrescar las teclas mostradas en el hotbar de la cabeza
 }
 
 void APTLobbyPlayerController::PlayerTick(float DeltaTime)
@@ -986,15 +1006,6 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
     if (HeadPaintMID && GetWorld())
         HeadPaintMID->SetScalarParameterValue(TEXT("NowTime"), GetWorld()->GetTimeSeconds());
 
-    // ALT + Add: congelar el plano de esculpido en el 1er sello del trazo (a la profundidad de la
-    // superficie donde apoyaste), para que el resto del trazo vaya a profundidad constante (no trepa).
-    if (HeadVolume && bHeadStamping && bHavePt && bHeadStrokeIsDetail && !bHeadStrokePlaneLocked)
-    {
-        HeadStrokePlaneOrigin  = Pt;
-        HeadStrokePlaneNormal  = HeadCam ? HeadCam->GetActorForwardVector() : FVector::ForwardVector;
-        bHeadStrokePlaneLocked = true;
-    }
-
     // Stamp continuo mientras se mantiene el LMB.
     if (HeadVolume && bHeadStamping && bHavePt)
     {
@@ -1113,6 +1124,9 @@ void APTLobbyPlayerController::UpdateHeadPreview(const FVector* At, const FVecto
             default: break;
             }
             if (!ToolMesh) ToolMesh = HeadPreviewMeshAdd; // fallback general (si lo asignaste)
+            // El preview de Add usa HeadPreviewMatAdd. Asignale en el BP tu material de CONTORNO PUNTEADO
+            // (interior transparente): así el preview NO tapa nada (no hay relleno sólido) y solo se ve el
+            // anillo de puntos, visible también a través de la malla cuando está detrás.
             Mat = HeadPreviewMatAdd;
             break;
         }
@@ -1169,19 +1183,34 @@ void APTLobbyPlayerController::UpdateHeadPreview(const FVector* At, const FVecto
     {
         HeadPreviewMID->SetVectorParameterValue(TEXT("Color"), HeadPaintColor);
         HeadPreviewMID->SetScalarParameterValue(TEXT("Glow"),  HeadPreviewGlow);
+        // El preview NO tiene el dato de "tiempo agregado" por vóxel, así que el glow por-tiempo de la
+        // arcilla nueva (default 1 en el material del volumen) hay que APAGARLO; si no, el preview se ve
+        // siempre brillante y no coincide con el color elegido. (Igual que el preview del gameplay.)
+        HeadPreviewMID->SetScalarParameterValue(TEXT("GlowEnable"), 0.f);
     }
 
-    // Overlay X-ray: ON mientras posicionás (se ve más oscuro detrás/dentro de la geometría); OFF mientras
-    // estás agregando arcilla en Add (para no tapar el color), igual que en gameplay.
-    const bool bWantXray = !(bHeadStamping && !bEyes && HeadEditMode == EPTEditMode::Add);
-    SetHeadPreviewXray(bWantXray);
+    // Overlay punteado (contorno X-ray): se ve el CONTORNO del preview a través de la malla SOLO cuando
+    // está detrás (el material lo gatea por profundidad + silueta). Por eso lo dejamos SIEMPRE activo
+    // mientras hay preview: adelante no aporta nada (se ve el sólido de la base), detrás muestra el anillo.
+    SetHeadPreviewXray(true);
+    // El material del anillo decide negro/blanco según la LUMINANCIA de este color (contraste con lo que
+    // tapa, que es ~la arcilla del mismo color). Le pasamos el color REAL; el oscurecido lo hace RingBrightness.
+    if (HeadPreviewOverlayMID)
+        HeadPreviewOverlayMID->SetVectorParameterValue(TEXT("Color"), HeadPaintColor);
 }
 
 void APTLobbyPlayerController::SetHeadPreviewXray(bool bOn)
 {
     if (bOn == bHeadXrayOn) return; // sin cambios → no re-setear (evita marcar el render state sucio)
     bHeadXrayOn = bOn;
-    UMaterialInterface* Ov = bOn ? HeadPreviewOverlayMaterial : nullptr;
+    UMaterialInterface* Ov = nullptr;
+    if (bOn && HeadPreviewOverlayMaterial)
+    {
+        // MID del overlay → le podemos pasar el Color del pincel (el contorno punteado sale del color elegido).
+        if (!HeadPreviewOverlayMID || HeadPreviewOverlayMID->Parent != HeadPreviewOverlayMaterial)
+            HeadPreviewOverlayMID = UMaterialInstanceDynamic::Create(HeadPreviewOverlayMaterial, this);
+        Ov = HeadPreviewOverlayMID;
+    }
     if (HeadPreviewStatic) HeadPreviewStatic->SetOverlayMaterial(Ov);
     if (HeadPreviewMesh)   HeadPreviewMesh->SetOverlayMaterial(Ov);
 }
@@ -1644,48 +1673,42 @@ bool APTLobbyPlayerController::GetHeadStampPoint(FVector& OutWorld, FVector& Out
     }
     else if (!Self->DeprojectMousePositionToWorld(Origin, Dir)) return false;
 
-    // ADD + ALT DURANTE el trazo: dibujar sobre el PLANO CONGELADO (fijado al 1er sello), para hacer
-    // trazos laterales sin que la arcilla trepe hacia la cámara (igual que el gameplay).
-    if (HeadEditMode == EPTEditMode::Add && bHeadStrokeIsDetail && bHeadStrokePlaneLocked)
-    {
-        const float denom = FVector::DotProduct(Dir, HeadStrokePlaneNormal);
-        FVector Pf = HeadStrokePlaneOrigin;
-        if (FMath::Abs(denom) > 1e-4f)
-        {
-            const float t = FVector::DotProduct(HeadStrokePlaneOrigin - Origin, HeadStrokePlaneNormal) / denom;
-            if (t > 0.f) Pf = Origin + Dir * t;
-        }
-        OutNormal = -Dir;
-        OutWorld  = HeadVolume->ClampInsideCanvas(Pf, 0.f);
-        return true;
-    }
-
     // PAINT y OJOS: pegar el cursor a la SUPERFICIE (raymarch). ADD lo hace SOLO con ALT (detallar de
-    // cerca sobre la cabeza). Devuelve la normal (para apoyar el preview en el mesh).
+    // cerca SOBRE la malla, siguiendo su superficie — sin plano congelado). Devuelve la normal.
     if (HeadEditMode == EPTEditMode::Paint || bHeadEyesTool
         || (HeadEditMode == EPTEditMode::Add && bHeadSurfaceSnap))
     {
+        // ALT+Add DURANTE el trazo: muestrear la superficie EXCLUYENDO la capa de detalle que estás
+        // agregando (si no, el raymarch pega a la arcilla nueva y el sello "trepa" hacia la cámara en
+        // cada sello). Al posicionar (sin apretar) usa la unión completa. Paint/Ojos: unión completa.
+        const bool bExcludeActive = (HeadEditMode == EPTEditMode::Add && bHeadSurfaceSnap && bHeadStamping);
+        auto SampleD = [this, bExcludeActive](const FVector& P) -> float
+        {
+            return bExcludeActive ? HeadVolume->SampleWorldDensityExceptActiveDetail(P)
+                                  : HeadVolume->SampleWorldDensity(P);
+        };
+
         constexpr float StepSize = 6.f;
         constexpr int32 MaxSteps = 500;
-        float prevD = HeadVolume->SampleWorldDensity(Origin);
+        float prevD = SampleD(Origin);
         for (int32 i = 1; i <= MaxSteps; ++i)
         {
             const FVector P = Origin + Dir * (StepSize * i);
-            const float   d = HeadVolume->SampleWorldDensity(P);
+            const float   d = SampleD(P);
             if (prevD <= 0.f && d > 0.f) // cruce aire→sólido
             {
                 FVector lo = P - Dir * StepSize, hi = P;
                 for (int32 j = 0; j < 5; ++j)
                 {
                     const FVector mid = (lo + hi) * 0.5f;
-                    (HeadVolume->SampleWorldDensity(mid) > 0.f ? hi : lo) = mid;
+                    (SampleD(mid) > 0.f ? hi : lo) = mid;
                 }
                 const FVector Surf = (lo + hi) * 0.5f;
                 const float E = HeadVolume->VoxelSize * 0.5f;
                 FVector Nn(
-                    HeadVolume->SampleWorldDensity(Surf + FVector(E,0,0)) - HeadVolume->SampleWorldDensity(Surf - FVector(E,0,0)),
-                    HeadVolume->SampleWorldDensity(Surf + FVector(0,E,0)) - HeadVolume->SampleWorldDensity(Surf - FVector(0,E,0)),
-                    HeadVolume->SampleWorldDensity(Surf + FVector(0,0,E)) - HeadVolume->SampleWorldDensity(Surf - FVector(0,0,E)));
+                    SampleD(Surf + FVector(E,0,0)) - SampleD(Surf - FVector(E,0,0)),
+                    SampleD(Surf + FVector(0,E,0)) - SampleD(Surf - FVector(0,E,0)),
+                    SampleD(Surf + FVector(0,0,E)) - SampleD(Surf - FVector(0,0,E)));
                 Nn = (-Nn).GetSafeNormal();
                 OutNormal = Nn.IsNearlyZero() ? -Dir : Nn;
                 OutWorld  = Surf;

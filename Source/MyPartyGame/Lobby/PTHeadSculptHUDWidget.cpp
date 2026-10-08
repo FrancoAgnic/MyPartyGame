@@ -4,6 +4,20 @@
 #include "PTLobbyPlayerController.h"
 #include "../UI/PTToolSlotWidget.h"
 #include "../PTTextTable.h"
+#include "../PTInputBindings.h"
+
+namespace
+{
+    // Nombre corto de una tecla de PTInput para el keycap del hotbar de la cabeza.
+    FText PT_HeadKeyLabel(const TCHAR* Id)
+    {
+        const FKey K = PTInput::GetKey(FName(Id));
+        if (K == EKeys::RightMouseButton)  return FText::FromString(TEXT("RMB"));
+        if (K == EKeys::LeftMouseButton)   return FText::FromString(TEXT("LMB"));
+        if (K == EKeys::MiddleMouseButton) return FText::FromString(TEXT("MMB"));
+        return K.GetDisplayName(/*bLongDisplayName=*/false);
+    }
+}
 #include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
 #include "Components/Image.h"
@@ -93,7 +107,40 @@ void UPTHeadSculptHUDWidget::BuildOnce()
     if (PopupDiscardButton && !PopupDiscardButton->OnClicked.IsAlreadyBound(this, &UPTHeadSculptHUDWidget::OnPopupDiscardClicked))
         PopupDiscardButton->OnClicked.AddDynamic(this, &UPTHeadSculptHUDWidget::OnPopupDiscardClicked);
 
+    ApplyKeyLabels(); // teclas reales desde PTInput (rebindeables) en los keycaps de las herramientas
+
     ShowDiscardPopup(false); // arranca oculto
+}
+
+void UPTHeadSculptHUDWidget::ApplyKeyLabels()
+{
+    // Sobrescribe los keycaps de los slots rebindeables con la tecla ACTUAL de PTInput (misma tabla que el
+    // gameplay). Los slots fijos (Enter/Esc/Shift/Alt/G) no se tocan.
+    if (ToolSlots.IsValidIndex(0) && ToolSlots[0]) ToolSlots[0]->SetSlot(IconAdd,   PT_HeadKeyLabel(TEXT("ModeAdd")),   PTText::Get(TEXT("TOOL_ADD")));
+    if (ToolSlots.IsValidIndex(1) && ToolSlots[1]) ToolSlots[1]->SetSlot(IconErase, PT_HeadKeyLabel(TEXT("ModeErase")), PTText::Get(TEXT("TOOL_ERASE")));
+    if (ToolSlots.IsValidIndex(2) && ToolSlots[2]) ToolSlots[2]->SetSlot(IconPaint, PT_HeadKeyLabel(TEXT("ModePaint")), PTText::Get(TEXT("TOOL_PAINT")));
+    if (ToolSlots.IsValidIndex(3) && ToolSlots[3]) ToolSlots[3]->SetSlot(IconEyes,  PT_HeadKeyLabel(TEXT("ModeEyes")),  PTText::Get(TEXT("TOOL_EYES")));
+
+    if (ShapeHintSlot)
+        ShapeHintSlot->SetSlot(IconShapesHint ? IconShapesHint : IconSphere,
+                               PT_HeadKeyLabel(TEXT("CycleShape")), PTText::Get(TEXT("SHAPE_HINT")));
+    if (ColorSlot)
+    {
+        const FKey CK = PTInput::GetKey(TEXT("ColorPick"));
+        ColorSlot->SetSlot(IconColor, PT_HeadKeyLabel(TEXT("ColorPick")), PTText::Get(TEXT("KEY_COLOR_PICK")),
+                           CK == EKeys::RightMouseButton ? IconKeyRMB : nullptr);
+    }
+    if (ClearSlot)
+    {
+        const FKey ClK = PTInput::GetKey(TEXT("ClearAll"));
+        ClearSlot->SetSlot(IconClear, PT_HeadKeyLabel(TEXT("ClearAll")), PTText::Get(TEXT("SCULPT_CLEAR")),
+                           ClK == EKeys::BackSpace ? IconKeyBackspace : nullptr);
+    }
+}
+
+void UPTHeadSculptHUDWidget::RebuildKeys()
+{
+    ApplyKeyLabels();
 }
 
 void UPTHeadSculptHUDWidget::OnPopupApplyClicked()

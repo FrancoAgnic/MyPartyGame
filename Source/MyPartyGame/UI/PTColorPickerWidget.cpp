@@ -18,7 +18,9 @@
 #include "TimerManager.h" // SetTimerForNextTick para reintentar el centrado del cursor
 #include "UnrealClient.h" // FViewport::ReadPixels (gotero)
 #include "GameFramework/PlayerController.h"
+#include "Components/CanvasPanel.h"     // barra de preview de color (fallback en C++)
 #include "Components/CanvasPanelSlot.h" // posicionar el cursor custom
+#include "Blueprint/WidgetTree.h"       // ConstructWidget de la barra de preview
 #include "Engine/Texture2D.h"
 
 void UPTColorPickerWidget::NativeConstruct()
@@ -48,6 +50,26 @@ void UPTColorPickerWidget::NativeConstruct()
 
     // El cursor custom arranca oculto (se muestra/posiciona en el primer QuickPickTick).
     if (CursorIcon) CursorIcon->SetVisibility(ESlateVisibility::Collapsed);
+
+    // Barra de muestra del color elegido: una franja grande abajo del picker. A veces el preview de la
+    // brocha no se ve (tapado por la geometría/UI), así que esta barra siempre muestra el color actual.
+    // Se crea en el mismo Canvas donde vive el cursor custom (si existe), sin tocar el WBP.
+    if (!ColorPreviewBar && CursorIcon)
+    {
+        if (UCanvasPanel* Canvas = Cast<UCanvasPanel>(CursorIcon->GetParent()))
+        {
+            ColorPreviewBar = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("ColorPreviewBar"));
+            ColorPreviewBar->SetVisibility(ESlateVisibility::HitTestInvisible); // no robar clicks a la rueda
+            ColorPreviewBar->SetBrushColor(CurrentColor);
+            if (UCanvasPanelSlot* CS = Canvas->AddChildToCanvas(ColorPreviewBar))
+            {
+                // Franja horizontal pegada abajo (80% del ancho).
+                CS->SetAnchors(FAnchors(0.10f, 0.955f, 0.90f, 0.995f));
+                CS->SetOffsets(FMargin(0.f));
+                CS->SetZOrder(50);
+            }
+        }
+    }
 }
 
 void UPTColorPickerWidget::NativeDestruct()
@@ -179,7 +201,8 @@ void UPTColorPickerWidget::QuickPickTick()
                 // brillo), lo que lo "opacaba" un poco → dos assets con el "mismo" color no quedaban idénticos.
                 // Piso el negro puro (para el overlay X-ray) pero sin tocar el color en sí.
                 CurrentColor = Exact; CurrentColor.A = 1.f;
-                if (PreviewSwatch) PreviewSwatch->SetBrushColor(CurrentColor);
+                if (PreviewSwatch)   PreviewSwatch->SetBrushColor(CurrentColor);
+                if (ColorPreviewBar) ColorPreviewBar->SetBrushColor(CurrentColor);
                 PushLiveColorToPC();
                 return;
             }
@@ -275,7 +298,8 @@ void UPTColorPickerWidget::RecomputeColor()
 
 void UPTColorPickerWidget::RefreshUI()
 {
-    if (PreviewSwatch) PreviewSwatch->SetBrushColor(CurrentColor);
+    if (PreviewSwatch)   PreviewSwatch->SetBrushColor(CurrentColor);
+    if (ColorPreviewBar) ColorPreviewBar->SetBrushColor(CurrentColor);
 
     // La RUEDA se oscurece/aclara según el BRILLO (Value) elegido. La textura HSV de la rueda está a
     // brillo máximo (Value=1); multiplicarla por un gris plano = exactamente el Value de HSV. Así, al

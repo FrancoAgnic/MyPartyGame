@@ -62,7 +62,7 @@ LOBBY_DIFF_MEDIUM,Media,Medium,Média,Mittel,Moyenne,Media
 LOBBY_DIFF_HARD,Difícil,Hard,Difícil,Schwer,Difficile,Difficile
 LOBBY_CATEGORIES,Categorías,Categories,Categorias,Kategorien,Catégories,Categorie
 LOBBY_LOAD_CSV,Cargar CSV propio,Load Custom CSV,Carregar CSV próprio,Eigene CSV laden,Charger un CSV,Carica CSV
-LOBBY_CSV_DEFAULT,Banco default,Default Word Bank,Banco padrão,Standard-Wortbank,Banque par défaut,Banca predefinita
+LOBBY_CSV_DEFAULT,Temática default,Default theme,Temática padrão,Standard-Thema,Thème par défaut,Tematica predefinita
 LOBBY_CSV_CUSTOM,CSV propio: {0} palabras,Custom CSV: {0} words,CSV próprio: {0} palavras,Eigene CSV: {0} Wörter,CSV : {0} mots,CSV: {0} parole
 HUD_ROUND,Ronda,Round,Rodada,Runde,Manche,Round
 HUD_SECONDS_SHORT,seg,sec,seg,Sek,s,sec
@@ -100,7 +100,7 @@ HINT_COLOR,Color,Color,Cor,Farbe,Couleur,Colore
 PIVOT_HINT,Acomoda el pivote — Click: confirmar · Rueda: subir/bajar · Retroceso: cancelar,Place the pivot — Click: confirm · Wheel: up/down · Backspace: cancel,Posicione o pivô — Clique: confirmar · Roda: subir/descer · Backspace: cancelar,Pivot setzen — Klick: bestätigen · Rad: hoch/runter · Rücktaste: abbrechen,Placez le pivot — Clic : confirmer · Molette : monter/descendre · Retour arrière : annuler,Posiziona il pivot — Clic: conferma · Rotella: su/giù · Backspace: annulla
 THEME_TITLE,¡A jugar!,Let's play!,Vamos jogar!,Auf geht's!,C'est parti !,Si gioca!
 THEME_MAP,Mapa: {0},Map: {0},Mapa: {0},Karte: {0},Carte : {0},Mappa: {0}
-THEME_WORDPACK,Palabras: {0},Word pack: {0},Palavras: {0},Wortpaket: {0},Mots : {0},Parole: {0}
+THEME_WORDPACK,Temática: {0},Theme: {0},Temática: {0},Thema: {0},Thème : {0},Tematica: {0}
 SCULPT_MODE,Modo Escultura,Sculpt mode,Modo Escultura,Skulptur-Modus,Mode Sculpture,Modalità Scultura
 MODE_LEVEL_EDIT,Modo Edición de Nivel,Level Edit mode,Modo Edição de Nível,Level-Bearbeitung,Mode Édition,Modifica Livello
 MODE_CHANGING,Cambiando modo...,Switching mode...,Mudando de modo...,Modus wechselt...,Changement de mode...,Cambio modalità...
@@ -189,20 +189,20 @@ CREATE_FRIENDS_ONLY,Solo amigos,Friends only,Só amigos,Nur Freunde,Amis seuleme
 INVITE_POPUP_MSG,{0} te invitó a jugar,{0} invited you to play,{0} convidou você para jogar,{0} hat dich zum Spielen eingeladen,{0} t'a invité à jouer,{0} ti ha invitato a giocare
 INVITE_ACCEPT,Aceptar,Accept,Aceitar,Annehmen,Accepter,Accetta
 INVITE_REJECT,Rechazar,Decline,Recusar,Ablehnen,Refuser,Rifiuta
-WORDPACK_TITLE,Bancos de palabras,Word banks,Bancos de palavras,Wortbänke,Banques de mots,Banche di parole
+WORDPACK_TITLE,Temáticas,Themes,Temáticas,Themen,Thèmes,Tematiche
 WORDPACK_USE,Usar,Use,Usar,Verwenden,Utiliser,Usa
 WORDPACK_INUSE,En uso,In use,Em uso,In Verwendung,Utilisé,In uso
 WORDPACK_PUBLISH,Publicar CSV,Publish CSV,Publicar CSV,CSV veröffentlichen,Publier CSV,Pubblica CSV
 WORDPACK_REFRESH,Actualizar,Refresh,Atualizar,Aktualisieren,Actualiser,Aggiorna
-WORDPACK_DEFAULT,Banco por defecto,Default bank,Banco padrão,Standardbank,Banque par défaut,Banca predefinita
-WORDPACK_EMPTY,No hay bancos (suscribite a alguno en el Workshop),No banks (subscribe to some on the Workshop),Nenhum banco (inscreva-se em algum no Workshop),Keine Bänke (im Workshop abonnieren),Aucune banque (abonnez-vous sur le Workshop),Nessuna banca (iscriviti nel Workshop)
+WORDPACK_DEFAULT,Temática por defecto,Default theme,Temática padrão,Standard-Thema,Thème par défaut,Tematica predefinita
+WORDPACK_EMPTY,No hay temáticas (suscribite a alguna en el Workshop),No themes (subscribe to some on the Workshop),Nenhuma temática (inscreva-se em alguma no Workshop),Keine Themen (im Workshop abonnieren),Aucun thème (abonnez-vous sur le Workshop),Nessuna tematica (iscriviti nel Workshop)
 WORDPACK_BY,por {0},by {0},por {0},von {0},par {0},di {0}
 WORDPACK_SELECTED,En uso: {0},In use: {0},Em uso: {0},In Verwendung: {0},Utilisé : {0},In uso: {0}
-WORDPACK_PUB_OK,¡Banco publicado al Workshop!,Bank published to Workshop!,Banco publicado no Workshop!,Bank im Workshop veröffentlicht!,Banque publiée sur le Workshop !,Banca pubblicata nel Workshop!
+WORDPACK_PUB_OK,¡Temática publicada al Workshop!,Theme published to Workshop!,Temática publicada no Workshop!,Thema im Workshop veröffentlicht!,Thème publié sur le Workshop !,Tematica pubblicata nel Workshop!
 WORDPACK_PUB_FAIL,No se pudo publicar: {0},Could not publish: {0},Não foi possível publicar: {0},Veröffentlichung fehlgeschlagen: {0},Échec de la publication : {0},Impossibile pubblicare: {0}
 WORDPACK_UPLOADING,Subiendo archivo,Uploading file,Enviando arquivo,Datei wird hochgeladen,Envoi du fichier,Caricamento file
-WORDPACK_NO_CSV,Elegí un banco (CSV) primero,Choose a bank (CSV) first,Escolha um banco (CSV) primeiro,Wähle zuerst eine Bank (CSV),Choisis d'abord une banque (CSV),Scegli prima una banca (CSV)
-WORDPACK_CHOOSE_CSV,Elegir banco (CSV),Choose bank (CSV),Escolher banco (CSV),Bank wählen (CSV),Choisir banque (CSV),Scegli banca (CSV)
+WORDPACK_NO_CSV,Elegí una temática (CSV) primero,Choose a theme (CSV) first,Escolha uma temática (CSV) primeiro,Wähle zuerst ein Thema (CSV),Choisis d'abord un thème (CSV),Scegli prima una tematica (CSV)
+WORDPACK_CHOOSE_CSV,Elegir temática (CSV),Choose theme (CSV),Escolher temática (CSV),Thema wählen (CSV),Choisir thème (CSV),Scegli tematica (CSV)
 WORDPACK_CHOOSE_MAP,Elegir mapa (.pak),Choose map (.pak),Escolher mapa (.pak),Karte wählen (.pak),Choisir carte (.pak),Scegli mappa (.pak)
 WORDPACK_LOAD_THUMB,Cargar miniatura,Load thumbnail,Carregar miniatura,Miniatur laden,Charger vignette,Carica miniatura
 WORDPACK_APPLY,Aplicar,Apply,Aplicar,Anwenden,Appliquer,Applica
@@ -210,14 +210,14 @@ WORDPACK_MISSING,Faltan: {0},Missing: {0},Faltam: {0},Fehlt: {0},Manquant : {0},
 WORDPACK_F_TITLE,título,title,título,Titel,titre,titolo
 WORDPACK_F_THUMB,miniatura,thumbnail,miniatura,Miniatur,vignette,miniatura
 WORDPACK_F_DESC,descripción,description,descrição,Beschreibung,description,descrizione
-WORDPACK_F_CSV,banco (CSV),bank (CSV),banco (CSV),Bank (CSV),banque (CSV),banca (CSV)
+WORDPACK_F_CSV,temática (CSV),theme (CSV),temática (CSV),Thema (CSV),thème (CSV),tematica (CSV)
 WORDPACK_F_MAP,mapa (.pak),map (.pak),mapa (.pak),Karte (.pak),carte (.pak),mappa (.pak)
 WORKSHOP_TITLE,Workshop,Workshop,Workshop,Workshop,Workshop,Workshop
 WORKSHOP_ADD,Añadir,Add,Adicionar,Hinzufügen,Ajouter,Aggiungi
 WORKSHOP_ADDED,Añadido,Added,Adicionado,Hinzugefügt,Ajouté,Aggiunto
 WORKSHOP_SEARCHING,Buscando...,Searching...,Procurando...,Suche...,Recherche...,Ricerca...
 WORKSHOP_EMPTY,No se encontraron mods,No mods found,Nenhum mod encontrado,Keine Mods gefunden,Aucun mod trouvé,Nessun mod trovato
-WORKSHOP_TAG_WORDBANK,Banco de palabras,Word bank,Banco de palavras,Wortbank,Banque de mots,Banca di parole
+WORKSHOP_TAG_WORDBANK,Temática,Theme,Temática,Thema,Thème,Tematica
 WORKSHOP_TAG_MAP,Mapa,Map,Mapa,Karte,Carte,Mappa
 MAPS_SOON,Mapas — Próximamente,Maps — Coming soon,Mapas — Em breve,Karten — Demnächst,Cartes — Bientôt,Mappe — Prossimamente
 LIBRARY_TITLE,Biblioteca,Library,Biblioteca,Bibliothek,Bibliothèque,Libreria
@@ -230,7 +230,7 @@ SV_PRIVATE,Sala privada: {0},Private room: {0},Sala privada: {0},Privater Raum: 
 SV_TURNTIME,Tiempo de turno: {0} s,Turn time: {0} s,Tempo do turno: {0} s,Zugzeit: {0} s,Temps du tour : {0} s,Tempo turno: {0} s
 SV_ROUNDS,Rondas: {0},Rounds: {0},Rodadas: {0},Runden: {0},Manches : {0},Round: {0}
 SV_REVEAL,Revelado: {0}%,Reveal: {0}%,Revelação: {0}%,Aufdeckung: {0}%,Révélation : {0}%,Rivelazione: {0}%
-SV_LIBRARY,Biblioteca: {0},Library: {0},Biblioteca: {0},Bibliothek: {0},Bibliothèque : {0},Libreria: {0}
+SV_LIBRARY,Temática: {0},Theme: {0},Temática: {0},Thema: {0},Thème : {0},Tematica: {0}
 SV_MAP,Mapa: {0},Map: {0},Mapa: {0},Karte: {0},Carte : {0},Mappa: {0}
 SV_MAP_OFFICIAL,Oficial,Official,Oficial,Offiziell,Officiel,Ufficiale
 MAP_CUSTOM,Mapa personalizado,Custom map,Mapa personalizado,Eigene Karte,Carte personnalisée,Mappa personalizzata
@@ -250,9 +250,9 @@ LOBBY_TURNTIME_LABEL,Tiempo por turno,TurnTime,Tempo por turno,Zugzeit,Temps par
 LOBBY_REVEAL_WORD,Revelar palabra,Reveal Word,Revelar palavra,Wort aufdecken,Révéler le mot,Rivela parola
 LOBBY_LIBRARY_MODS,Mods de biblioteca,Librery Mods,Mods da biblioteca,Bibliotheks-Mods,Mods de bibliothèque,Mod libreria
 GUIDE_BUTTON,Guía,Guide,Guia,Anleitung,Guide,Guida
-WORDPACK_TITLE_HINT,Título del banco,Bank title,Título do banco,Bank-Titel,Titre de la banque,Titolo della banca
+WORDPACK_TITLE_HINT,Título de la temática,Theme title,Título da temática,Thema-Titel,Titre du thème,Titolo della tematica
 FIND_SESSION_TITLE,Buscar partida,Find Session,Procurar partida,Spiel suchen,Rechercher une partie,Cerca partita
-TAB_WORD_BANKS,Bancos de palabras,Words Banks,Bancos de palavras,Wortbänke,Banques de mots,Banche di parole
+TAB_WORD_BANKS,Temáticas,Themes,Temáticas,Themen,Thèmes,Tematiche
 TAB_MAPS,Mapas,Maps,Mapas,Karten,Cartes,Mappe
 WORDPACK_OFFICIAL_VERBOS,Verbos,Verbs,Verbos,Verben,Verbes,Verbi
 WORDPACK_OFFICIAL_VARIADO,Variado,Varied,Variado,Gemischt,Varié,Vario
@@ -260,7 +260,7 @@ WORDPACK_OFFICIAL_PELICULAS,Películas,Movies,Filmes,Filme,Films,Film
 WORDPACK_DESC_VERBOS,"200 verbos para actuar y esculpir.","200 verbs to act out and sculpt.","200 verbos para atuar e esculpir.","200 Verben zum Nachspielen und Formen.","200 verbes à mimer et sculpter.","200 verbi da mimare e scolpire."
 WORDPACK_DESC_VARIADO,"200 palabras variadas: objetos, animales, comidas y acciones.","200 varied words: objects, animals, food and actions.","200 palavras variadas: objetos, animais, comidas e ações.","200 gemischte Wörter: Gegenstände, Tiere, Essen und Aktionen.","200 mots variés : objets, animaux, nourriture et actions.","200 parole varie: oggetti, animali, cibi e azioni."
 WORDPACK_DESC_PELICULAS,"200 títulos de películas famosas para adivinar.","200 famous movie titles to guess.","200 títulos de filmes famosos para adivinhar.","200 berühmte Filmtitel zum Erraten.","200 titres de films célèbres à deviner.","200 titoli di film famosi da indovinare."
-WORDPACK_DESC_DEFAULT,El banco de palabras oficial del juego.,The game's official word bank.,O banco de palavras oficial do jogo.,Die offizielle Wortbank des Spiels.,La banque de mots officielle du jeu.,La banca di parole ufficiale del gioco.
+WORDPACK_DESC_DEFAULT,Las temáticas oficiales del juego.,The game's official themes.,As temáticas oficiais do jogo.,Die offiziellen Themen des Spiels.,Les thèmes officiels du jeu.,Le tematiche ufficiali del gioco.
 UI_ENTER_TO_CHAT,Enter para chatear,Enter to Chat,Enter para conversar,Enter zum Chatten,Entrée pour discuter,Invio per chattare
 UI_RETURN_TO_GAME,Volver al juego,Return to Game,Voltar ao jogo,Zurück zum Spiel,Retour au jeu,Torna al gioco
 UI_LEAVE_GAME,Salir de la partida,Leave Game,Sair do jogo,Spiel verlassen,Quitter la partie,Esci dalla partita
@@ -273,9 +273,9 @@ UI_CREATE_NEW_MAP,Crear mapa nuevo,Create New Map,Criar novo mapa,Neue Karte ers
 UI_EDIT_MAP,Editar mapa,Edit Map,Editar mapa,Karte bearbeiten,Modifier la carte,Modifica mappa
 UI_LEVEL_CREATOR,Creador de niveles,Level Creator,Criador de níveis,Level-Editor,Créateur de niveaux,Creatore di livelli
 UI_PUBLISH_BTN,Publicar,Publish,Publicar,Veröffentlichen,Publier,Pubblica
-UI_TAB_BANKS,Bancos,Banks,Bancos,Bänke,Banques,Banche
-UI_TAB_WORDBANKS,Bancos de palabras,Word Banks,Bancos de palavras,Wortbänke,Banques de mots,Banche di parole
-UI_TAB_WORDBANKS2,Bancos de palabras,WordBanks,Bancos de palavras,Wortbänke,Banques de mots,Banche di parole
+UI_TAB_BANKS,Temáticas,Themes,Temáticas,Themen,Thèmes,Tematiche
+UI_TAB_WORDBANKS,Temáticas,Themes,Temáticas,Themen,Thèmes,Tematiche
+UI_TAB_WORDBANKS2,Temáticas,Themes,Temáticas,Themen,Thèmes,Tematiche
 UI_NAME,Nombre,Name,Nome,Name,Nom,Nome
 WORKSHOP_LIBRARY,Biblioteca del Workshop,Workshop Library,Biblioteca do Workshop,Workshop-Bibliothek,Bibliothèque du Workshop,Libreria del Workshop
 UI_HINT_TITLE,Título,Title,Título,Titel,Titre,Titolo
@@ -298,7 +298,7 @@ SKIN_WS_PUBLISH_FAIL,No se pudo publicar: {0},Couldn't publish: {0},Não foi pos
 LOCKER_EMPTY_SLOT,Vaciar slot,Empty slot,Esvaziar slot,Slot leeren,Vider l'emplacement,Svuota slot
 LOCKER_CLEAR_CONFIRM,¿Vaciar este slot y borrar la skin?,Empty this slot and delete the skin?,Esvaziar este slot e apagar a skin?,Diesen Slot leeren und die Skin löschen?,Vider cet emplacement et supprimer la skin ?,Svuotare questo slot ed eliminare la skin?
 LOCKER_CLEAR_YES,Vaciar,Empty,Esvaziar,Leeren,Vider,Svuota
-MENU_LOCAL_MODE,Modo local (celulares),Local mode (phones),Modo local (celulares),Lokaler Modus (Handys),Mode local (téléphones),Modalità locale (telefoni)
+MENU_LOCAL_MODE,Modo local,Local mode,Modo local,Lokaler Modus,Mode local,Modalità locale
 LP_JOIN_TITLE,¡Únete desde tu celular!,Join from your phone!,Entre pelo celular!,Mach mit deinem Handy mit!,Rejoins avec ton téléphone !,Unisciti dal tuo telefono!
 LP_JOIN_STEP1,1. Conéctate al mismo WiFi que esta PC,1. Connect to the same WiFi as this PC,1. Conecte-se ao mesmo WiFi deste PC,1. Verbinde dich mit demselben WLAN wie dieser PC,1. Connecte-toi au même WiFi que ce PC,1. Connettiti allo stesso WiFi di questo PC
 LP_JOIN_STEP2,2. Escanea el código o abre esta dirección:,2. Scan the code or open this address:,2. Escaneie o código ou abra este endereço:,2. Scanne den Code oder öffne diese Adresse:,2. Scanne le code ou ouvre cette adresse :,2. Scansiona il codice o apri questo indirizzo:
@@ -340,7 +340,7 @@ GPA_UNDO,Deshacer,Undo,Desfazer,Rückgängig,Annuler,Annulla
 GPA_PAUSE,Pausa,Pause,Pausa,Pause,Pause,Pausa
 GP_ON,Sí,On,Sim,An,Oui,Sì
 GP_OFF,No,Off,Não,Aus,Non,No
-MENU_ONLINE_MODE,Modo audiencia (stream),Audience mode (stream),Modo audiência (live),Publikumsmodus (Stream),Mode public (stream),Modalità pubblico (stream)
+MENU_ONLINE_MODE,Modo audiencia,Audience mode,Modo audiência,Publikumsmodus,Mode public,Modalità pubblico
 LP_ONLINE_STEP1,"Desde cualquier celular o PC, entra a:","From any phone or PC, go to:","De qualquer celular ou PC, entre em:",Öffne auf einem Handy oder PC:,"Depuis un téléphone ou un PC, va sur :","Da qualsiasi telefono o PC, vai su:"
 LP_ONLINE_CODE,Código de sala:,Room code:,Código da sala:,Raumcode:,Code de la salle :,Codice stanza:
 LP_ONLINE_CONNECTING,Conectando al servidor online…,Connecting to the online server…,Conectando ao servidor online…,Verbinde mit dem Online-Server…,Connexion au serveur en ligne…,Connessione al server online…
@@ -350,7 +350,7 @@ LP_SET_TIME,Tiempo por turno,Time per turn,Tempo por turno,Zeit pro Zug,Temps pa
 LP_SET_ROUNDS,Rondas,Rounds,Rodadas,Runden,Manches,Round
 LP_SET_WORDS_COUNT,Palabras a esculpir,Words to sculpt,Palavras para esculpir,Wörter zum Formen,Mots à sculpter,Parole da scolpire
 LP_SET_REVEAL,Letras reveladas,Revealed letters,Letras reveladas,Aufgedeckte Buchstaben,Lettres révélées,Lettere rivelate
-LP_SET_PACK,Banco de palabras,Word pack,Banco de palavras,Wortpaket,Pack de mots,Pacchetto di parole
+LP_SET_PACK,Temática,Theme,Temática,Thema,Thème,Tematica
 LP_SET_CHANGE,Cambiar,Change,Trocar,Ändern,Changer,Cambia
 LP_START,Empezar partida,Start game,Começar partida,Spiel starten,Lancer la partie,Inizia partita
 LP_AUD_HOST_OK,✓ Streamer conectado,✓ Streamer connected,✓ Streamer conectado,✓ Streamer verbunden,✓ Streamer connecté,✓ Streamer connesso
@@ -387,3 +387,11 @@ LP_AUD_CHAT_HINT,Para tu audiencia (este sí puedes compartirlo):,For your audie
 LP_AUD_COPY_CHAT,Copiar link para el chat,Copy link for chat,Copiar link para o chat,Link für den Chat kopieren,Copier le lien pour le chat,Copia link per la chat
 LP_AUD_PRIVATE_WARN,Este link es SOLO para ti (streamer). NO lo pegues en el chat: con él cualquiera entra como streamer.,This link is ONLY for you (the streamer). DO NOT paste it in chat: anyone who has it joins as the streamer.,Este link é SÓ para você (streamer). NÃO cole no chat: com ele qualquer um entra como streamer.,"Dieser Link ist NUR für dich (Streamer). NICHT in den Chat posten: Wer ihn hat, kommt als Streamer rein.","Ce lien est UNIQUEMENT pour toi (streamer). NE le colle PAS dans le chat : avec lui, n'importe qui entre comme streamer.",Questo link è SOLO per te (streamer). NON incollarlo in chat: con questo chiunque entra come streamer.
 LP_AUD_COPY_PRIVATE,Copiar link del streamer (privado),Copy streamer link (private),Copiar link do streamer (privado),Streamer-Link kopieren (privat),Copier le lien du streamer (privé),Copia link dello streamer (privato)
+CTRL_TITLE,Controles,Controls,Controles,Steuerung,Commandes,Controlli
+CTRL_TAB_KB,Teclado y ratón,Keyboard & mouse,Teclado e mouse,Tastatur & Maus,Clavier & souris,Tastiera e mouse
+CTRL_TAB_PAD,Joystick,Controller,Controle,Controller,Manette,Controller
+CTRL_KB_HEADER,Teclas,Keys,Teclas,Tasten,Touches,Tasti
+KEY_NOTE_HOLD,Mantener,Hold,Segurar,Halten,Maintenir,Tieni premuto
+KEY_NOTE_HOLD3S,Mantener 3 s,Hold 3s,Segurar 3 s,3 s halten,Maintenir 3 s,Tieni 3 s
+KEY_NOTE_ROTATE,Mantener · doble clic reinicia,Hold · double-click resets,Segurar · clique duplo reinicia,Halten · Doppelklick setzt zurück,Maintenir · double-clic réinitialise,Tieni · doppio clic azzera
+CTRL_MOUSE_SENS,Sensibilidad de cámara,Camera sensitivity,Sensibilidade da câmera,Kameraempfindlichkeit,Sensibilité de la caméra,Sensibilità telecamera

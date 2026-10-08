@@ -495,6 +495,9 @@ private:
     UPROPERTY() class UPTLobbyEscapeMenuWidget* EscapeMenu = nullptr;
     void OnPausePressed();
     void OnOpenChat();
+    // Volar arriba/abajo (teclas rebindeables): mueven el ascenso/descenso del pawn en vuelo.
+    void OnFlyUpPressed();   void OnFlyUpReleased();
+    void OnFlyDownPressed(); void OnFlyDownReleased();
 
     // Snapshot de la escultura (envío troceado server→cliente al (re)conectar).
     TArray<uint8> SnapOut;              // SERVER: bytes COMPRIMIDOS pendientes de enviar (con int32 tamaño crudo al inicio)
@@ -538,6 +541,8 @@ private:
     // esculpís (Add) sin reconstruir el mesh cada frame.
     UPROPERTY() class UMaterialInstanceDynamic* PreviewMID       = nullptr;
     UPROPERTY() class UMaterialInstanceDynamic* PreviewStaticMID = nullptr;
+    UPROPERTY() class UMaterialInstanceDynamic* PreviewOverlayMID = nullptr; // overlay punteado con color del pincel
+    class UMaterialInstanceDynamic* GetPreviewOverlayMID();                  // MID del overlay (lazy)
     /** Multiplicador de brillo del preview mientras mantenés el sello en Agregar. */
     UPROPERTY(EditAnywhere, Category="Sculpt") float PreviewSculptBrightness = 2.f;
     // Cuánto brillo tiene el preview AHORA (0..1). Sube al apretar, baja suave al soltar (fade).
@@ -845,6 +850,13 @@ private:
     bool bEyesTool = false;
     void SetModeEyes();   // tecla 4: activar la herramienta de ojos
     void PlaceEyeAtCursor(); // coloca un ojo (sobre la superficie) → Volume->Server_AddEye
+
+    // ── Teclado/ratón ──
+    void SetupKeyboardInput(); // bindea las teclas de PTInput (teclado + ratón)
+public:
+    /** Rearma los bindings de teclado/ratón (después de reasignar teclas en el panel "Controles"). */
+    void RebuildKeyboardInput();
+private:
 
     // ── Joystick (PTSculptPlayerController_Gamepad.cpp) ──
     void SetupGamepadInput();

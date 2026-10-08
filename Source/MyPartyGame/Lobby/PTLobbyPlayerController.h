@@ -147,6 +147,11 @@ public:
 protected:
     virtual void BeginPlay() override;
     virtual void SetupInputComponent() override;
+    void SetupHeadSculptKeys(); // bindea las teclas del esculpido de cabeza (usa PTInput → rebindeable)
+public:
+    /** Rearma las teclas del esculpido de cabeza tras reasignar en Controles (y refresca el hotbar). */
+    void RebuildHeadSculptInput();
+protected:
     virtual void PlayerTick(float DeltaTime) override; // aplica stamps mientras se mantiene el click en modo cabeza
     // La posesión del pawn (sobre todo en clientes, que la reciben por replicación después del
     // BeginPlay) fija la vista al personaje; re-asegurar acá la cámara diorama.
@@ -532,6 +537,7 @@ protected:
     TArray<FVector4> HeadEyes;                  // ojos colocados (local al volumen: XYZ centro, W radio)
     UPROPERTY() UProceduralMeshComponent* HeadEyesLiveMesh = nullptr; // muestra los ojos ya colocados
     UPROPERTY() UMaterialInstanceDynamic* HeadPreviewMID   = nullptr; // preview con color en vivo
+    UPROPERTY() UMaterialInstanceDynamic* HeadPreviewOverlayMID = nullptr; // overlay punteado (contorno X-ray) con color
     bool bHeadPreviewEyesCached = false;        // cache para reconstruir el preview al togglear ojos
     void PlaceEyeAtCursor();                    // coloca un ojo donde apunta el cursor (sobre la malla)
     void RebuildEyesLiveMesh();                 // reconstruye la malla viva de ojos colocados

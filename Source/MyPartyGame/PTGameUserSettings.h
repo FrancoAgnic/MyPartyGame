@@ -95,6 +95,10 @@ public:
     void  SetGamepadDeadZone(float V) { GamepadDeadZone = FMath::Clamp(V, 0.05f, 0.5f); }
     float GetGamepadMoveSensitivity() const { return GamepadMoveSensitivity; }
     void  SetGamepadMoveSensitivity(float V) { GamepadMoveSensitivity = FMath::Clamp(V, 0.3f, 1.f); }
+
+    // ── Cámara con MOUSE (panel "Controles" → Teclado y ratón) ──
+    float GetMouseLookSensitivity() const { return MouseLookSensitivity; }
+    void  SetMouseLookSensitivity(float V) { MouseLookSensitivity = FMath::Clamp(V, 0.2f, 3.f); }
     // Botón por acción (Id → nombre de FKey). Solo las que el usuario cambió.
     const TMap<FName, FString>& GetGamepadOverrides() const { return GamepadOverrides; }
     void SetGamepadOverride(FName ActionId, const FString& KeyName) { GamepadOverrides.Add(ActionId, KeyName); }
@@ -134,6 +138,7 @@ private:
     UPROPERTY(Config) bool  bGamepadInvertY = false;
     UPROPERTY(Config) float GamepadDeadZone = 0.2f;
     UPROPERTY(Config) float GamepadMoveSensitivity = 1.0f; // velocidad máxima al mover con el stick
+    UPROPERTY(Config) float MouseLookSensitivity   = 1.0f; // multiplica la velocidad de cámara con el mouse
     UPROPERTY(Config) TMap<FName, FString> GamepadOverrides;
     UPROPERTY(Config) FString TwitchChannel;
     UPROPERTY(Config) FString KickChannel;

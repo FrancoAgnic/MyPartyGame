@@ -1,9 +1,11 @@
 #include "PTGamepadSettingsWidget.h"
 #include "PTGamepadUINavigator.h"
 #include "../PTGamepad.h"
+#include "../PTInputBindings.h"
 #include "../PTGameUserSettings.h"
 #include "../PTTextTable.h"
 #include "../Sculpt/PTSculptPlayerController.h"
+#include "../Lobby/PTLobbyPlayerController.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
@@ -135,12 +137,79 @@ void UPTGamepadSettingsWidget::BuildTree()
     CardSize->SetContent(Col);
 
     UTextBlock* Title = MakeText(32, GPS_Accent, true);
-    Title->SetText(PTText::Get(TEXT("GP_TITLE")));
-    if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Title)) S->SetPadding(FMargin(0.f, 0.f, 0.f, 12.f));
+    Title->SetText(PTText::Get(TEXT("CTRL_TITLE")));
+    if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Title)) S->SetPadding(FMargin(0.f, 0.f, 0.f, 10.f));
 
-    LookSlider = AddSliderRow(Col, PTText::Get(TEXT("GP_LOOK_SENS")), 0.2f, 3.f, 0.1f, LookValue);
-    MoveSlider = AddSliderRow(Col, PTText::Get(TEXT("GP_MOVE_SENS")), 0.3f, 1.f, 0.05f, MoveValue);
-    DeadSlider = AddSliderRow(Col, PTText::Get(TEXT("GP_DEADZONE")), 0.05f, 0.5f, 0.01f, DeadValue);
+    // Barra de pestañas: Teclado y ratón / Joystick.
+    UHorizontalBox* Tabs = WidgetTree->ConstructWidget<UHorizontalBox>();
+    KbTabButton  = MakeButton(PTText::Get(TEXT("CTRL_TAB_KB")),  TEXT("KbTab"));
+    PadTabButton = MakeButton(PTText::Get(TEXT("CTRL_TAB_PAD")), TEXT("PadTab"));
+    KbTabButton->OnClicked.AddDynamic(this, &UPTGamepadSettingsWidget::OnKbTabClicked);
+    PadTabButton->OnClicked.AddDynamic(this, &UPTGamepadSettingsWidget::OnPadTabClicked);
+    if (UHorizontalBoxSlot* S = Tabs->AddChildToHorizontalBox(KbTabButton))  { S->SetSize(FSlateChildSize(ESlateSizeRule::Fill)); S->SetPadding(FMargin(0.f, 0.f, 6.f, 0.f)); }
+    if (UHorizontalBoxSlot* S = Tabs->AddChildToHorizontalBox(PadTabButton)) { S->SetSize(FSlateChildSize(ESlateSizeRule::Fill)); S->SetPadding(FMargin(6.f, 0.f, 0.f, 0.f)); }
+    if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Tabs)) S->SetPadding(FMargin(0.f, 0.f, 0.f, 12.f));
+
+    // Cuerpo (se rearma al cambiar de pestaña).
+    BodyBox = WidgetTree->ConstructWidget<UVerticalBox>();
+    if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(BodyBox)) S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+
+    // Abajo (compartido): restaurar / volver.
+    UHorizontalBox* Bottom = WidgetTree->ConstructWidget<UHorizontalBox>();
+    UButton* Reset = MakeButton(PTText::Get(TEXT("GP_RESET")), TEXT("ResetButton"));
+    Reset->OnClicked.AddDynamic(this, &UPTGamepadSettingsWidget::OnResetClicked);
+    UButton* Back = MakeButton(PTText::Get(TEXT("GP_BACK")), TEXT("BackButton")); // "Back" → B lo encuentra solo
+    Back->OnClicked.AddDynamic(this, &UPTGamepadSettingsWidget::OnBackClicked);
+    if (UHorizontalBoxSlot* S = Bottom->AddChildToHorizontalBox(Reset)) S->SetPadding(FMargin(0.f, 0.f, 12.f, 0.f));
+    UTextBlock* Hint = MakeText(14, GPS_Muted, false);
+    Hint->SetText(PTText::Get(TEXT("GP_HINT")));
+    if (UHorizontalBoxSlot* S = Bottom->AddChildToHorizontalBox(Hint))
+    {
+        S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+        S->SetVerticalAlignment(VAlign_Center);
+        S->SetHorizontalAlignment(HAlign_Center);
+    }
+    Bottom->AddChildToHorizontalBox(Back);
+    if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Bottom)) S->SetPadding(FMargin(0.f, 16.f, 0.f, 0.f));
+
+    ShowTab(ActiveTab);
+}
+
+void UPTGamepadSettingsWidget::ShowTab(EPTControlsTab Tab)
+{
+    ActiveTab   = Tab;
+    RebindingId = NAME_None;
+    // Los widgets del cuerpo anterior se destruyen: invalidar los punteros para que RefreshValues no los toque.
+    LookSlider = MoveSlider = DeadSlider = MouseSensSlider = nullptr;
+    LookValue  = MoveValue  = DeadValue  = InvertText = MouseSensValue = nullptr;
+    KeyTexts.Reset();
+    Handlers.Reset();
+    if (BodyBox) BodyBox->ClearChildren();
+
+    if (Tab == EPTControlsTab::Gamepad) BuildGamepadBody(BodyBox);
+    else                                BuildKeyboardBody(BodyBox);
+
+    ApplyTabVisual();
+    RefreshValues();
+}
+
+void UPTGamepadSettingsWidget::ApplyTabVisual()
+{
+    const bool bKb = (ActiveTab == EPTControlsTab::Keyboard);
+    if (KbTabButton)  KbTabButton->SetBackgroundColor(bKb ? GPS_Accent : GPS_ButtonFill);
+    if (PadTabButton) PadTabButton->SetBackgroundColor(bKb ? GPS_ButtonFill : GPS_Accent);
+}
+
+void UPTGamepadSettingsWidget::OnKbTabClicked()  { ShowTab(EPTControlsTab::Keyboard); }
+void UPTGamepadSettingsWidget::OnPadTabClicked() { ShowTab(EPTControlsTab::Gamepad); }
+
+void UPTGamepadSettingsWidget::BuildGamepadBody(UVerticalBox* Body)
+{
+    if (!Body) return;
+
+    LookSlider = AddSliderRow(Body, PTText::Get(TEXT("GP_LOOK_SENS")), 0.2f, 3.f, 0.1f, LookValue);
+    MoveSlider = AddSliderRow(Body, PTText::Get(TEXT("GP_MOVE_SENS")), 0.3f, 1.f, 0.05f, MoveValue);
+    DeadSlider = AddSliderRow(Body, PTText::Get(TEXT("GP_DEADZONE")), 0.05f, 0.5f, 0.01f, DeadValue);
     LookSlider->OnValueChanged.AddDynamic(this, &UPTGamepadSettingsWidget::OnLookChanged);
     MoveSlider->OnValueChanged.AddDynamic(this, &UPTGamepadSettingsWidget::OnMoveChanged);
     DeadSlider->OnValueChanged.AddDynamic(this, &UPTGamepadSettingsWidget::OnDeadZoneChanged);
@@ -161,16 +230,16 @@ void UPTGamepadSettingsWidget::BuildTree()
         Toggle->OnClicked.AddDynamic(this, &UPTGamepadSettingsWidget::OnInvertClicked);
         ToggleBox->SetContent(Toggle);
         if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(ToggleBox)) S->SetVerticalAlignment(VAlign_Center);
-        if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Row)) S->SetPadding(FMargin(0.f, 6.f));
+        if (UVerticalBoxSlot* S = Body->AddChildToVerticalBox(Row)) S->SetPadding(FMargin(0.f, 6.f));
     }
 
     UTextBlock* ButtonsTitle = MakeText(22, GPS_Accent, true);
     ButtonsTitle->SetText(PTText::Get(TEXT("GP_BUTTONS")));
-    if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(ButtonsTitle)) S->SetPadding(FMargin(0.f, 14.f, 0.f, 6.f));
+    if (UVerticalBoxSlot* S = Body->AddChildToVerticalBox(ButtonsTitle)) S->SetPadding(FMargin(0.f, 14.f, 0.f, 6.f));
 
     // Lista de acciones (con scroll: son muchas).
     UScrollBox* Scroll = WidgetTree->ConstructWidget<UScrollBox>();
-    if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Scroll)) S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+    if (UVerticalBoxSlot* S = Body->AddChildToVerticalBox(Scroll)) S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
     for (const FPTGamepadAction& A : PTGamepad::GetActions())
     {
         UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>();
@@ -198,29 +267,78 @@ void UPTGamepadSettingsWidget::BuildTree()
         Scroll->AddChild(Row);
         if (UScrollBoxSlot* S = Cast<UScrollBoxSlot>(Row->Slot)) S->SetPadding(FMargin(0.f, 3.f));
     }
+}
 
-    // Abajo: restaurar / volver.
-    UHorizontalBox* Bottom = WidgetTree->ConstructWidget<UHorizontalBox>();
-    UButton* Reset = MakeButton(PTText::Get(TEXT("GP_RESET")), TEXT("ResetButton"));
-    Reset->OnClicked.AddDynamic(this, &UPTGamepadSettingsWidget::OnResetClicked);
-    UButton* Back = MakeButton(PTText::Get(TEXT("GP_BACK")), TEXT("BackButton")); // "Back" → B lo encuentra solo
-    Back->OnClicked.AddDynamic(this, &UPTGamepadSettingsWidget::OnBackClicked);
-    if (UHorizontalBoxSlot* S = Bottom->AddChildToHorizontalBox(Reset)) S->SetPadding(FMargin(0.f, 0.f, 12.f, 0.f));
-    UTextBlock* Hint = MakeText(14, GPS_Muted, false);
-    Hint->SetText(PTText::Get(TEXT("GP_HINT")));
-    if (UHorizontalBoxSlot* S = Bottom->AddChildToHorizontalBox(Hint))
+void UPTGamepadSettingsWidget::BuildKeyboardBody(UVerticalBox* Body)
+{
+    if (!Body) return;
+
+    // Sensibilidad de la cámara con MOUSE (reemplaza las filas de "Mover" y "Cámara").
+    MouseSensSlider = AddSliderRow(Body, PTText::Get(TEXT("CTRL_MOUSE_SENS")), 0.2f, 3.f, 0.1f, MouseSensValue);
+    MouseSensSlider->OnValueChanged.AddDynamic(this, &UPTGamepadSettingsWidget::OnMouseSensChanged);
+
+    UTextBlock* Hdr = MakeText(22, GPS_Accent, true);
+    Hdr->SetText(PTText::Get(TEXT("CTRL_KB_HEADER")));
+    if (UVerticalBoxSlot* S = Body->AddChildToVerticalBox(Hdr)) S->SetPadding(FMargin(0.f, 12.f, 0.f, 6.f));
+
+    UScrollBox* Scroll = WidgetTree->ConstructWidget<UScrollBox>();
+    if (UVerticalBoxSlot* S = Body->AddChildToVerticalBox(Scroll)) S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+    for (const FPTKeyBinding& Bn : PTInput::GetBindings())
     {
-        S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-        S->SetVerticalAlignment(VAlign_Center);
-        S->SetHorizontalAlignment(HAlign_Center);
+        // "Mover" y "Cámara" se sacan de la lista (el mouse se ajusta con el slider de arriba).
+        if (Bn.Id == FName(TEXT("Move")) || Bn.Id == FName(TEXT("Look"))) continue;
+        UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>();
+
+        // Nombre + (si tiene) una nota de uso debajo: "Mantener", "Doble clic reinicia"...
+        UVerticalBox* NameCol = WidgetTree->ConstructWidget<UVerticalBox>();
+        UTextBlock* L = MakeText(17, Bn.bRebindable ? GPS_Ink : GPS_Muted, false);
+        L->SetText(Bn.Label);
+        NameCol->AddChildToVerticalBox(L);
+        if (!Bn.Note.IsEmpty())
+        {
+            UTextBlock* NoteT = MakeText(12, GPS_Muted, false);
+            NoteT->SetText(Bn.Note);
+            NameCol->AddChildToVerticalBox(NoteT);
+        }
+        if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(NameCol))
+        {
+            S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+            S->SetVerticalAlignment(VAlign_Center);
+        }
+        USizeBox* KeyBox = WidgetTree->ConstructWidget<USizeBox>();
+        KeyBox->SetWidthOverride(220.f);
+        if (Bn.bRebindable)
+        {
+            UTextBlock* KeyText = nullptr;
+            UButton* B = MakeButton(FText::GetEmpty(), *FString::Printf(TEXT("KbRebind_%s"), *Bn.Id.ToString()), &KeyText);
+            KeyBox->SetContent(B);
+            KeyTexts.Add(Bn.Id, KeyText);
+
+            UPTGamepadRebindHandler* H = NewObject<UPTGamepadRebindHandler>(this);
+            H->ActionId = Bn.Id;
+            H->Owner = this;
+            B->OnClicked.AddDynamic(H, &UPTGamepadRebindHandler::HandleClicked);
+            Handlers.Add(H);
+        }
+        else
+        {
+            // Teclas fijas (WASD/cámara/volar/esculpir): se muestran como info, sin botón.
+            UTextBlock* KeyText = MakeText(17, GPS_Muted, true);
+            KeyText->SetJustification(ETextJustify::Center);
+            KeyBox->SetContent(KeyText);
+            KeyTexts.Add(Bn.Id, KeyText);
+        }
+        if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(KeyBox)) S->SetVerticalAlignment(VAlign_Center);
+
+        Scroll->AddChild(Row);
+        if (UScrollBoxSlot* S = Cast<UScrollBoxSlot>(Row->Slot)) S->SetPadding(FMargin(0.f, 3.f));
     }
-    Bottom->AddChildToHorizontalBox(Back);
-    if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Bottom)) S->SetPadding(FMargin(0.f, 16.f, 0.f, 0.f));
 }
 
 void UPTGamepadSettingsWidget::NativeConstruct()
 {
     Super::NativeConstruct();
+    SetIsFocusable(true); // para recibir las teclas al reasignar (captura de teclado en el widget)
     RefreshValues();
     PlayPopIn();
 
@@ -248,16 +366,39 @@ void UPTGamepadSettingsWidget::NativeDestruct()
 
 void UPTGamepadSettingsWidget::RefreshValues()
 {
-    if (LookSlider) LookSlider->SetValue(PTGamepad::LookSensitivity());
-    if (MoveSlider) MoveSlider->SetValue(PTGamepad::MoveSensitivity());
-    if (DeadSlider) DeadSlider->SetValue(PTGamepad::DeadZone());
-    if (LookValue)  LookValue->SetText(FText::FromString(FString::Printf(TEXT("%.1fx"), PTGamepad::LookSensitivity())));
-    if (MoveValue)  MoveValue->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::RoundToInt(PTGamepad::MoveSensitivity() * 100.f))));
-    if (DeadValue)  DeadValue->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::RoundToInt(PTGamepad::DeadZone() * 100.f))));
-    if (InvertText) InvertText->SetText(PTText::Get(PTGamepad::InvertY() ? TEXT("GP_ON") : TEXT("GP_OFF")));
-    for (const FPTGamepadAction& A : PTGamepad::GetActions())
-        if (UTextBlock** T = KeyTexts.Find(A.Id))
-            if (*T) (*T)->SetText(A.Id == RebindingId ? PTText::Get(TEXT("GP_PRESS")) : FText::FromString(PTGamepad::KeyLabel(A.Key)));
+    if (ActiveTab == EPTControlsTab::Gamepad)
+    {
+        if (LookSlider) LookSlider->SetValue(PTGamepad::LookSensitivity());
+        if (MoveSlider) MoveSlider->SetValue(PTGamepad::MoveSensitivity());
+        if (DeadSlider) DeadSlider->SetValue(PTGamepad::DeadZone());
+        if (LookValue)  LookValue->SetText(FText::FromString(FString::Printf(TEXT("%.1fx"), PTGamepad::LookSensitivity())));
+        if (MoveValue)  MoveValue->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::RoundToInt(PTGamepad::MoveSensitivity() * 100.f))));
+        if (DeadValue)  DeadValue->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::RoundToInt(PTGamepad::DeadZone() * 100.f))));
+        if (InvertText) InvertText->SetText(PTText::Get(PTGamepad::InvertY() ? TEXT("GP_ON") : TEXT("GP_OFF")));
+        for (const FPTGamepadAction& A : PTGamepad::GetActions())
+            if (UTextBlock** T = KeyTexts.Find(A.Id))
+                if (*T) (*T)->SetText(A.Id == RebindingId ? PTText::Get(TEXT("GP_PRESS")) : FText::FromString(PTGamepad::KeyLabel(A.Key)));
+    }
+    else // Teclado + ratón
+    {
+        if (const UPTGameUserSettings* S = UPTGameUserSettings::Get())
+        {
+            const float MS = S->GetMouseLookSensitivity();
+            if (MouseSensSlider) MouseSensSlider->SetValue(MS);
+            if (MouseSensValue)  MouseSensValue->SetText(FText::FromString(FString::Printf(TEXT("%.1fx"), MS)));
+        }
+        for (const FPTKeyBinding& Bn : PTInput::GetBindings())
+            if (UTextBlock** T = KeyTexts.Find(Bn.Id))
+                if (*T) (*T)->SetText((Bn.bRebindable && Bn.Id == RebindingId)
+                    ? PTText::Get(TEXT("GP_PRESS"))
+                    : Bn.Key.GetDisplayName(/*bLongDisplayName=*/false));
+    }
+}
+
+void UPTGamepadSettingsWidget::OnMouseSensChanged(float V)
+{
+    if (UPTGameUserSettings* S = UPTGameUserSettings::Get()) { S->SetMouseLookSensitivity(V); S->SaveSettings(); }
+    if (MouseSensValue) MouseSensValue->SetText(FText::FromString(FString::Printf(TEXT("%.1fx"), V)));
 }
 
 void UPTGamepadSettingsWidget::OnLookChanged(float V)
@@ -286,6 +427,15 @@ void UPTGamepadSettingsWidget::OnInvertClicked()
 
 void UPTGamepadSettingsWidget::StartRebind(FName ActionId)
 {
+    // TECLADO/RATÓN: capturamos en el propio widget (tiene foco). El preprocessor del joystick no
+    // entrega las teclas del teclado en este estado de UI, por eso no alcanzaba con BeginKeyCapture.
+    if (ActiveTab == EPTControlsTab::Keyboard)
+    {
+        BeginKeyboardCapture(ActionId);
+        return;
+    }
+
+    // JOYSTICK: el próximo botón del joystick (vía el navegador/preprocessor).
     UPTGamepadUINavigator* Nav = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTGamepadUINavigator>() : nullptr;
     if (!Nav) return;
     RebindingId = ActionId;
@@ -305,18 +455,76 @@ void UPTGamepadSettingsWidget::StartRebind(FName ActionId)
     });
 }
 
+void UPTGamepadSettingsWidget::BeginKeyboardCapture(FName ActionId)
+{
+    bCapturingKb = true;
+    KbCaptureId  = ActionId;
+    RebindingId  = ActionId;
+    RefreshValues(); // muestra "Presiona una tecla…" en esa fila
+    // Asegurar que el widget reciba las teclas (los Preview* se enrutan por el widget con foco).
+    SetKeyboardFocus();
+}
+
+bool UPTGamepadSettingsWidget::FinishKeyboardCapture(const FKey& Key)
+{
+    if (!bCapturingKb) return false;
+    const FName ActionId = KbCaptureId;
+    bCapturingKb = false;
+    KbCaptureId  = NAME_None;
+    RebindingId  = NAME_None;
+
+    // Escape (o tecla inválida) = cancelar, sin cambiar nada.
+    if (Key.IsValid() && Key != EKeys::Escape)
+    {
+        PTInput::SetKey(ActionId, Key);
+        ApplyKeyboardToControllers();
+    }
+    RefreshValues();
+    return true;
+}
+
+FReply UPTGamepadSettingsWidget::NativeOnPreviewKeyDown(const FGeometry& G, const FKeyEvent& E)
+{
+    if (bCapturingKb && FinishKeyboardCapture(E.GetKey()))
+        return FReply::Handled();
+    return Super::NativeOnPreviewKeyDown(G, E);
+}
+
+FReply UPTGamepadSettingsWidget::NativeOnPreviewMouseButtonDown(const FGeometry& G, const FPointerEvent& E)
+{
+    // Permitir asignar botones del ratón (incluido click sobre un botón de la lista): Preview corre ANTES
+    // que el hijo, así que consumimos el click y lo usamos como la tecla a asignar.
+    if (bCapturingKb && FinishKeyboardCapture(E.GetEffectingButton()))
+        return FReply::Handled();
+    return Super::NativeOnPreviewMouseButtonDown(G, E);
+}
+
 void UPTGamepadSettingsWidget::OnResetClicked()
 {
-    PTGamepad::ResetToDefaults();
-    if (UPTGameUserSettings* S = UPTGameUserSettings::Get())
+    if (ActiveTab == EPTControlsTab::Gamepad)
     {
-        S->SetGamepadLookSensitivity(1.f);
-        S->SetGamepadMoveSensitivity(1.f);
-        S->SetGamepadDeadZone(0.2f);
-        S->SetGamepadInvertY(false);
-        S->SaveSettings();
+        PTGamepad::ResetToDefaults();
+        if (UPTGameUserSettings* S = UPTGameUserSettings::Get())
+        {
+            S->SetGamepadLookSensitivity(1.f);
+            S->SetGamepadMoveSensitivity(1.f);
+            S->SetGamepadDeadZone(0.2f);
+            S->SetGamepadInvertY(false);
+            S->SaveSettings();
+        }
+        ApplyToControllers();
     }
-    ApplyToControllers();
+    else // Teclado + ratón: borrar los overrides, resetear la sensibilidad y volver a los defaults.
+    {
+        if (UPTGameUserSettings* S = UPTGameUserSettings::Get())
+        {
+            S->ClearKeyOverrides();
+            S->SetMouseLookSensitivity(1.f);
+            S->SaveSettings();
+        }
+        PTInput::RefreshFromSettings();
+        ApplyKeyboardToControllers();
+    }
     RefreshValues();
 }
 
@@ -327,6 +535,20 @@ void UPTGamepadSettingsWidget::ApplyToControllers()
         for (FConstPlayerControllerIterator It = W->GetPlayerControllerIterator(); It; ++It)
             if (APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(It->Get()))
                 if (PC->IsLocalController()) PC->RebuildGamepadInput();
+}
+
+void UPTGamepadSettingsWidget::ApplyKeyboardToControllers()
+{
+    // El rebind de teclado/ratón vale en TODOS los modos de esculpido: gameplay y level creator
+    // (APTSculptPlayerController) y el esculpido de cabeza del Locker (APTLobbyPlayerController).
+    if (UWorld* W = GetWorld())
+        for (FConstPlayerControllerIterator It = W->GetPlayerControllerIterator(); It; ++It)
+        {
+            APlayerController* PC = It->Get();
+            if (!PC || !PC->IsLocalController()) continue;
+            if (APTSculptPlayerController* S = Cast<APTSculptPlayerController>(PC)) S->RebuildKeyboardInput();
+            else if (APTLobbyPlayerController* L = Cast<APTLobbyPlayerController>(PC)) L->RebuildHeadSculptInput();
+        }
 }
 
 void UPTGamepadSettingsWidget::OnBackClicked()

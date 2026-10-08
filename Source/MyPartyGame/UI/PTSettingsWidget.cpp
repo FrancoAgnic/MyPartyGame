@@ -47,7 +47,8 @@ bool UPTSettingsWidget::Initialize()
     if (HighButton)    HighButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnHighClicked);
     if (ApplyButton)   ApplyButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnApplyClicked);
     if (BackButton)    BackButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnBackClicked);
-    if (!GamepadButton) GamepadButton = PTWidgetUtils::CloneButtonAfter(this, ApplyButton, TEXT("GamepadButton"), PTText::Get(TEXT("GP_TITLE")));
+    if (!GamepadButton) GamepadButton = PTWidgetUtils::CloneButtonAfter(this, ApplyButton, TEXT("GamepadButton"), PTText::Get(TEXT("CTRL_TITLE")));
+    if (GamepadButton) PTWidgetUtils::SetButtonLabel(GamepadButton, PTText::Get(TEXT("CTRL_TITLE"))); // "Controles" (aunque venga del WBP)
     if (GamepadButton) GamepadButton->OnClicked.AddDynamic(this, &UPTSettingsWidget::OnGamepadClicked);
     if (VSyncCheckBox) VSyncCheckBox->OnCheckStateChanged.AddDynamic(this, &UPTSettingsWidget::OnVSyncChanged);
     if (TypingSoundCheckBox) TypingSoundCheckBox->OnCheckStateChanged.AddDynamic(this, &UPTSettingsWidget::OnTypingSoundChanged);

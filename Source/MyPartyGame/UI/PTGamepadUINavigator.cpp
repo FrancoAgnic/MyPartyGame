@@ -52,9 +52,15 @@ public:
             if (UPTGamepadUINavigator* O = Owner.Get()) O->HandleMouseActivity();
         return false;
     }
-    virtual bool HandleMouseButtonDownEvent(FSlateApplication&, const FPointerEvent&) override
+    virtual bool HandleMouseButtonDownEvent(FSlateApplication&, const FPointerEvent& E) override
     {
-        if (UPTGamepadUINavigator* O = Owner.Get()) O->HandleMouseActivity();
+        if (UPTGamepadUINavigator* O = Owner.Get())
+        {
+            // Si estamos capturando una tecla de TECLADO/RATÓN (rebind), el botón del mouse se asigna.
+            if (O->IsCapturingKeyboardMouse())
+                return O->HandleKey(E.GetEffectingButton(), true, false);
+            O->HandleMouseActivity();
+        }
         return false;
     }
     virtual const TCHAR* GetDebugName() const override { return TEXT("PTGamepadUINavigator"); }
@@ -152,10 +158,13 @@ void UPTGamepadUINavigator::HandleAnalog(const FKey& Key, float Value)
 
 bool UPTGamepadUINavigator::HandleKey(const FKey& Key, bool bDown, bool bRepeat)
 {
-    // Captura para reasignar: el próximo botón del joystick (o Esc para cancelar).
+    // Captura para reasignar: el próximo botón (o Esc para cancelar). Según el modo, se aceptan botones
+    // del joystick O teclas de teclado/ratón.
     if (CaptureCallback && bDown && !bRepeat)
     {
-        if (IsGamepadButton(Key) || Key == EKeys::Escape)
+        const bool bAccept = (Key == EKeys::Escape) ||
+            (bCaptureKeyboardMouse ? (!Key.IsGamepadKey() && Key.IsValid()) : IsGamepadButton(Key));
+        if (bAccept)
         {
             TFunction<void(const FKey&)> Cb = MoveTemp(CaptureCallback);
             CaptureCallback = nullptr;
@@ -555,9 +564,10 @@ void UPTGamepadUINavigator::UpdateHighlight(float DeltaTime)
 
 // ── Reasignación / panel de configuración ───────────────────────────────────
 
-void UPTGamepadUINavigator::BeginKeyCapture(TFunction<void(const FKey&)> OnKey)
+void UPTGamepadUINavigator::BeginKeyCapture(TFunction<void(const FKey&)> OnKey, bool bKeyboardMouse)
 {
     CaptureCallback = MoveTemp(OnKey);
+    bCaptureKeyboardMouse = bKeyboardMouse;
     CaptureStart = FPlatformTime::Seconds();
 }
 

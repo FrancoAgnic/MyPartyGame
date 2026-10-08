@@ -12,35 +12,38 @@ namespace PTInput
     // Defaults. El ORDEN es el que se ve en la UI.
     static void BuildDefaults(TArray<FPTKeyBinding>& Out)
     {
-        auto Add = [&Out](const TCHAR* Id, const TCHAR* LabelKey, const FKey& K, bool bRebind = true)
+        auto Add = [&Out](const TCHAR* Id, const TCHAR* LabelKey, const FKey& K, bool bRebind = true,
+                          const TCHAR* NoteKey = nullptr)
         {
             FPTKeyBinding B;
             B.Id          = FName(Id);
             B.LabelKey    = FName(LabelKey); // el texto se resuelve en GetBindings (idioma actual)
             B.Key         = K;
             B.bRebindable = bRebind;
+            B.NoteKey     = NoteKey ? FName(NoteKey) : FName();
             Out.Add(B);
         };
 
-        // Movimiento/cámara: vienen de Enhanced Input (mapping contexts), se muestran como info.
-        Add(TEXT("Move"),   TEXT("KEY_MOVE"),     EKeys::W, /*bRebindable=*/false);
+        // Movimiento/cámara: Move/Look vienen de Enhanced Input (no rebindeables acá).
+        Add(TEXT("Move"),   TEXT("KEY_MOVE"),     EKeys::W, /*bRebindable=*/false, TEXT("KEY_NOTE_HOLD"));
         Add(TEXT("Look"),   TEXT("KEY_LOOK"),     EKeys::Mouse2D, false);
-        Add(TEXT("FlyUp"),  TEXT("KEY_FLY_UP"),   EKeys::SpaceBar, false);
-        Add(TEXT("FlyDown"),TEXT("KEY_FLY_DOWN"), EKeys::LeftControl, false);
+        // Volar arriba/abajo: ahora SÍ se pueden reasignar (los bindea APTSculptPlayerController).
+        Add(TEXT("FlyUp"),  TEXT("KEY_FLY_UP"),   EKeys::SpaceBar, true, TEXT("KEY_NOTE_HOLD"));
+        Add(TEXT("FlyDown"),TEXT("KEY_FLY_DOWN"), EKeys::LeftControl, true, TEXT("KEY_NOTE_HOLD"));
 
         // Esculpido (estas sí se bindean por BindKey → rebindeables).
-        Add(TEXT("Sculpt"),         TEXT("KEY_SCULPT"),      EKeys::LeftMouseButton, false); // Action Mapping "Sculpt"
+        Add(TEXT("Sculpt"),         TEXT("KEY_SCULPT"),      EKeys::LeftMouseButton, false, TEXT("KEY_NOTE_HOLD"));
         Add(TEXT("BrushSize"),      TEXT("KEY_BRUSH_SIZE"),  EKeys::MouseWheelAxis,  false);
         Add(TEXT("ModeAdd"),        TEXT("KEY_MODE_ADD"),    EKeys::One);
         Add(TEXT("ModeErase"),      TEXT("KEY_MODE_ERASE"),  EKeys::Two);
         Add(TEXT("ModePaint"),      TEXT("KEY_MODE_PAINT"),  EKeys::Three);
         Add(TEXT("ModeEyes"),       TEXT("KEY_MODE_EYES"),   EKeys::Four);
-        Add(TEXT("CycleShape"),     TEXT("KEY_CYCLE_SHAPE"), EKeys::Tab);
-        Add(TEXT("AxisVertical"),   TEXT("KEY_AXIS_VERT"),   EKeys::Z);
-        Add(TEXT("AxisHorizontal"), TEXT("KEY_AXIS_HORIZ"),  EKeys::X);
-        Add(TEXT("RotateShape"),    TEXT("KEY_ROTATE_SHAPE"),EKeys::MiddleMouseButton);
-        Add(TEXT("ClearAll"),       TEXT("KEY_CLEAR_ALL"),   EKeys::BackSpace);
-        Add(TEXT("ColorPick"),      TEXT("KEY_COLOR_PICK"),  EKeys::RightMouseButton);
+        Add(TEXT("CycleShape"),     TEXT("KEY_CYCLE_SHAPE"), EKeys::Tab, true, TEXT("KEY_NOTE_HOLD"));
+        Add(TEXT("AxisVertical"),   TEXT("KEY_AXIS_VERT"),   EKeys::Z, true, TEXT("KEY_NOTE_HOLD"));
+        Add(TEXT("AxisHorizontal"), TEXT("KEY_AXIS_HORIZ"),  EKeys::X, true, TEXT("KEY_NOTE_HOLD"));
+        Add(TEXT("RotateShape"),    TEXT("KEY_ROTATE_SHAPE"),EKeys::MiddleMouseButton, true, TEXT("KEY_NOTE_ROTATE"));
+        Add(TEXT("ClearAll"),       TEXT("KEY_CLEAR_ALL"),   EKeys::BackSpace, true, TEXT("KEY_NOTE_HOLD3S"));
+        Add(TEXT("ColorPick"),      TEXT("KEY_COLOR_PICK"),  EKeys::RightMouseButton, true, TEXT("KEY_NOTE_HOLD"));
         Add(TEXT("SaveColor"),      TEXT("KEY_SAVE_COLOR"),  EKeys::E);
         Add(TEXT("Chat"),           TEXT("KEY_CHAT"),        EKeys::Enter);
         Add(TEXT("SkyPanel"),       TEXT("KEY_SKY_PANEL"),   EKeys::F); // editor de mapas: abrir panel de ambiente
@@ -75,7 +78,10 @@ namespace PTInput
         // Los nombres visibles se resuelven acá y no en la caché: si el jugador cambia el idioma,
         // la próxima lectura ya sale traducida sin invalidar los rebinds.
         for (FPTKeyBinding& B : GCached)
+        {
             B.Label = PTText::Get(B.LabelKey);
+            B.Note  = B.NoteKey.IsNone() ? FText::GetEmpty() : PTText::Get(B.NoteKey);
+        }
         return GCached;
     }
 

@@ -43,9 +43,11 @@ public:
     bool IsMenuActive() const { return bMenuActive; }
     bool IsUsingGamepad() const { return bUsingGamepad; }
 
-    /** Reasignar botones: el PRÓXIMO botón del joystick se entrega al callback (Esc / 6 s cancelan → EKeys::Invalid). */
-    void BeginKeyCapture(TFunction<void(const FKey&)> OnKey);
+    /** Reasignar botones: el PRÓXIMO botón se entrega al callback (Esc / 6 s cancelan → EKeys::Invalid).
+     *  bKeyboardMouse=true → captura teclas de TECLADO y botones del RATÓN (en vez de botones del joystick). */
+    void BeginKeyCapture(TFunction<void(const FKey&)> OnKey, bool bKeyboardMouse = false);
     bool IsCapturingKey() const { return (bool)CaptureCallback; }
+    bool IsCapturingKeyboardMouse() const { return (bool)CaptureCallback && bCaptureKeyboardMouse; }
 
     /** Abre el panel de configuración del joystick (lo usan el botón de Ajustes, Y en Ajustes y "PTGamepad"). */
     void OpenGamepadSettings();
@@ -79,6 +81,7 @@ private:
 
     TFunction<void(const FKey&)> CaptureCallback;
     double CaptureStart = 0.0;
+    bool   bCaptureKeyboardMouse = false; // la captura actual espera teclado/ratón (no joystick)
 
     UWorld* GetGameWorld() const;
     bool ComputeMenuContext() const;
