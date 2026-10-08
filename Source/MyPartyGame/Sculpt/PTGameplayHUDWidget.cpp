@@ -758,6 +758,22 @@ void UPTGameplayHUDWidget::RefreshTick()
 
     if (!G) return;
 
+    // Tutorial de Sculpi: solo herramientas; lo demás (palabra, reloj, marcador, chat) lo maneja Sculpi.
+    if (const UPTGameInstance* TGI = GetGameInstance<UPTGameInstance>())
+        if (TGI->bTutorialMode)
+        {
+            RefreshToolbar();
+            auto HideT = [](UWidget* W){ if (W && W->GetVisibility() != ESlateVisibility::Collapsed) W->SetVisibility(ESlateVisibility::Collapsed); };
+            HideT(TxtSculptor); HideT(TxtWord); HideT(TxtTimer); HideT(TxtRound);
+            HideT(WordPickPanel); HideT(ScoreboardBox); HideT(ResultsPanel);
+            HideT(GuessPopup); HideT(AllGuessedPopup); HideT(ThemePanel);
+            HideT(TxtChat); HideT(ChatInput); HideT(ChatScroll); HideT(ChatPanel);
+            // Cursor solo con la pausa, la rueda de color o cuando el tutorial lo pide (la foto final).
+            const APTSculptPlayerController* TPC = GetSculptPC();
+            ApplyInputMode(!((TPC && (TPC->IsEscapeMenuOpen() || TPC->IsColorPickerOpen())) || TGI->bTutorialWantsCursor));
+            return;
+        }
+
     // Sonidos (tick por segundo, countdown, pista, fin de turno). Va ANTES de resetear bLocalGuessed,
     // porque el sonido de "se acabó el tiempo" depende de si adivinaste en este turno.
     UpdateGameplaySounds(G);

@@ -78,6 +78,8 @@ public:
     // bGuess=true, va en verde ("adivinó la palabra") y spawnea el confetti. Lo llama
     // el GameMode (servidor). El mensaje NO es la palabra (anti-spoiler).
     UFUNCTION(NetMulticast, Reliable) void Multicast_ShowChatBubble(const FString& Text, bool bGuess);
+    /** Nombre fijo en el cartel (personajes sin jugador, ej. Sculpi del tutorial). Vacío = el del PlayerState. */
+    void SetNameOverride(const FString& InName) { NameOverride = InName; }
 
     // ── Estado del globo de chat (para el indicador off-screen del HUD de gameplay) ──
     // true mientras el globo sigue visible (no expiró). El HUD lo consulta por frame. ExtraSeconds extiende
@@ -410,6 +412,7 @@ private:
     // Cartel del nombre: actualizado throttled desde Tick.
     void  UpdateNameTag();
     float NameTagAccum = 0.f;
+    FString NameOverride;
     float ChatBubbleUntil = 0.f; // tiempo (world) hasta el que se muestra el globo de chat
     FString ChatBubbleText;      // texto mostrado (para el indicador off-screen del HUD)
     bool    bChatBubbleGuess = false; // el globo actual es de "adivinó"

@@ -54,6 +54,12 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void ResetLanguageChosen();
 
+    /** Tutorial de Sculpi: true cuando lo terminó o lo saltó (no se vuelve a lanzar solo; se repite
+     *  desde el botón "Tutorial" del menú Jugar). PT.ResetTutorial lo vuelve a false. */
+    UFUNCTION(BlueprintCallable, Category = "Settings")
+    bool HasDoneTutorial() const { return bTutorialDone; }
+    void SetTutorialDone(bool bDone) { bTutorialDone = bDone; SaveSettings(); }
+
     /** "en" o "es". Cambia la cultura activa de inmediato. */
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void SetLanguageCode(const FString& InLanguageCode);
@@ -126,6 +132,9 @@ private:
 
     UPROPERTY(Config)
     bool bLanguageChosen = false;
+
+    UPROPERTY(Config)
+    bool bTutorialDone = false;
 
     // true = seguir la resolución del escritorio (recomendada). false = el usuario fijó una manual.
     UPROPERTY(Config)

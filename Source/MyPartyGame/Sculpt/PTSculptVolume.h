@@ -174,6 +174,7 @@ public:
     // propio Server RPC, porque el volumen no tiene owner por jugador y sus Server RPC se descartan).
     // Se replica a todos via la propiedad Eyes → la escultura con ojos se ve igual en todos.
     void AddEye(FVector WorldPos, float Radius);
+    int32 GetEyeCount() const { return Eyes.Num(); }
 
     // Acceso al ProceduralMesh (para hornear la escultura a otro componente, ej: la cabeza custom).
     UProceduralMeshComponent* GetMeshComponent() const { return Mesh; }

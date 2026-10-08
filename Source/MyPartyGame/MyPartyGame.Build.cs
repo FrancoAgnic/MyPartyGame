@@ -90,7 +90,8 @@ public class MyPartyGame : ModuleRules
 			"MyPartyGame/Variant_SideScrolling/UI",
 			"MyPartyGame/Sculpt",
 			"MyPartyGame/Sculpt/SVO",
-			"MyPartyGame/LocalParty"
+			"MyPartyGame/LocalParty",
+			"MyPartyGame/Tutorial"
 		});
 	}
 }

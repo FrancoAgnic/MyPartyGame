@@ -1127,6 +1127,19 @@ void APTLobbyCharacter::UpdateNameTag()
     // (El mensaje de chat ya NO reemplaza el nombre: va como "grito" aparte sobre la boca. El nombre
     //  se mantiene siempre.)
 
+    // Personaje sin jugador con nombre fijo (Sculpi): siempre visible con ese nombre.
+    if (!NameOverride.IsEmpty())
+    {
+        NameTag->SetVisibility(true);
+        if (UPTNameTagWidget* W = Cast<UPTNameTagWidget>(NameTag->GetUserWidgetObject()))
+        {
+            W->SetPlayerName(NameOverride);
+            W->SetHost(false);
+            W->SetReadyState(false);
+        }
+        return;
+    }
+
     // Tu PROPIO tag: se ve en el LOBBY y en el MENÚ principal, pero NO en gameplay (Lvl-01).
     // bForceFlying solo se activa en gameplay (ApplyGameplayMovementMode), así que sirve de "estoy jugando".
     if (IsLocalHumanPawn() && bForceFlying)

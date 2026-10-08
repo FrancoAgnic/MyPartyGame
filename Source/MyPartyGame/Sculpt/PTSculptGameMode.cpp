@@ -10,6 +10,7 @@
 #include "../Lobby/PTGameState.h"
 #include "../LocalParty/PTLocalPartySubsystem.h"
 #include "../LocalParty/PTPartyBotController.h"
+#include "../Tutorial/PTTutorialDirector.h"
 #include "../Lobby/PTLockerSubsystem.h"
 #include "../Mods/PTWordPackSubsystem.h"
 #include "GameFramework/PlayerState.h"
@@ -46,6 +47,14 @@ void APTSculptGameMode::BeginPlay()
     // Modo local: levantar/enganchar el servidor de celulares. Los jugadores que ya habían entrado
     // desde el celular reciben acá su PlayerState.
     if (UPTLocalPartySubsystem* LP = LocalParty()) LP->BindGameMode(this);
+
+    // Tutorial de Sculpi: un director lleva las lecciones (ver PTTutorialDirector).
+    if (IsTutorialGame())
+        if (UWorld* W = GetWorld())
+        {
+            UClass* Cls = TutorialDirectorClass ? TutorialDirectorClass.Get() : APTTutorialDirector::StaticClass();
+            W->SpawnActor<APTTutorialDirector>(Cls);
+        }
 
     // Publicar el mapa de props elegido en el GameState (replicado) → cada máquina (host y clientes)
     // carga su propia copia local del sculpt.bin en su entorno (el PlayerController lo hace). Así NO se
@@ -89,6 +98,7 @@ void APTSculptGameMode::PostLogin(APlayerController* NewPlayer)
 {
     Super::PostLogin(NewPlayer); // el lobby hace RestartPlayer acá → ya hay pawn
     StartPawnFlying(NewPlayer);
+    if (IsTutorialGame()) { Tutorial_BeginFreeSculpt(NewPlayer); return; }
 
     // Modo local: la PC es la "TV" (esculpe con el joystick por el escultor de turno, no juega).
     if (IsLocalPartyGame() && NewPlayer && NewPlayer->IsLocalController())
@@ -1070,6 +1080,25 @@ FString APTSculptGameMode::LocalParty_GetSecretWordFor(const APTPlayerState* PS)
     const APTSculptGameState* G = GS();
     if (!PS || !G || G->CurrentSculptor != PS || G->TurnPhase != EPTTurnPhase::Drawing) return FString();
     return CurrentWord.ForLang(PS->GetLanguageIndex());
+}
+
+bool APTSculptGameMode::IsTutorialGame() const
+{
+    const UPTGameInstance* GI = GetGameInstance<UPTGameInstance>();
+    return GI && GI->bTutorialMode && GetNetMode() != NM_Client;
+}
+
+void APTSculptGameMode::Tutorial_BeginFreeSculpt(APlayerController* PC)
+{
+    APTSculptGameState* G = GS();
+    if (!G || !PC) return;
+    G->CurrentSculptor = PC->GetPlayerState<APTPlayerState>();
+    G->TurnPhase = EPTTurnPhase::Drawing;
+    G->TurnEndServerTime = 0.0; // sin reloj (con 0 el HUD no hace tic-tac)
+    G->MaskedWords.Reset();
+    G->RefreshLocalMasked();
+    G->OnTurnPhaseChanged.Broadcast();
+    ResetSculpture(); // el cubo aparece (crece) como al empezar un turno
 }
 
 bool APTSculptGameMode::IsAudienceGame() const
