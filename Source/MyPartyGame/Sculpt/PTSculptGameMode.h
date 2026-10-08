@@ -111,6 +111,11 @@ public:
     UPROPERTY(EditDefaultsOnly, Category="LocalParty") int32 MaxAudienceBots = 25;
     // Controller de los bots (para ajustar distancia / altura / cada cuánto se mueven en un BP hijo).
     UPROPERTY(EditDefaultsOnly, Category="LocalParty") TSubclassOf<class APTPartyBotController> PartyBotControllerClass;
+    // Tutorial de Sculpi: el actor que lo dirige (lecciones, fantasmas, foto). Editable en BP.
+    UPROPERTY(EditDefaultsOnly, Category="Tutorial") TSubclassOf<class APTTutorialDirector> TutorialDirectorClass;
+    bool IsTutorialGame() const;
+    /** Tutorial: el jugador esculpe sin turnos ni reloj (fase Drawing fija, él es el escultor). */
+    void Tutorial_BeginFreeSculpt(APlayerController* PC);
     // Skins de los bots: al azar entre las del Locker de esta PC y las del Workshop suscritas.
     UPROPERTY(EditDefaultsOnly, Category="LocalParty") bool bBotsUseLockerSkins = true;
     UPROPERTY(EditDefaultsOnly, Category="LocalParty") bool bBotsUseWorkshopSkins = true;

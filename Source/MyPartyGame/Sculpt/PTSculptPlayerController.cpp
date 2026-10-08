@@ -708,6 +708,11 @@ void APTSculptPlayerController::RebuildKeyboardInput()
     if (GameplayHUD) GameplayHUD->BuildToolbar();
 }
 
+void APTSculptPlayerController::SetGameplayHUDVisible(bool bVisible)
+{
+    if (GameplayHUD) GameplayHUD->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+}
+
 void APTSculptPlayerController::OnOpenChat()
 {
     // En modo autoría de mapa NO hay chat de texto (además Enter se usa para hornear). Ignorar.
@@ -715,6 +720,9 @@ void APTSculptPlayerController::OnOpenChat()
     // Modo local: en la TV nadie escribe (se adivina desde el celular). Enter no abre el chat.
     if (const APTSculptGameState* G = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr)
         if (G->IsLocalPartyMode()) return;
+    // Tutorial: no hay chat (Enter es "¡Listo!" en la última palabra).
+    if (const UPTGameInstance* TGI = GetGameInstance<UPTGameInstance>())
+        if (TGI->bTutorialMode) return;
     if (GameplayHUD) GameplayHUD->FocusChat();
 }
 
@@ -955,6 +963,7 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
             bClearHeld    = false; // consumido: soltar después ya no dispara el "deshacer"
             ClearHoldTime = 0.f;
             Server_ClearSculpture();
+            OnLocalClearAll.Broadcast();
             if (SculptSounds) SculptSounds->PlayUndoClearAll(Volume ? Volume->GetActorLocation()
                                                                      : (GetPawn() ? GetPawn()->GetActorLocation() : FVector::ZeroVector));
         }
@@ -2059,6 +2068,7 @@ void APTSculptPlayerController::OnClearAllReleased()
         else if (CanLocalPlayerSculpt())
         {
             Server_Undo();
+            OnLocalUndo.Broadcast();
             if (SculptSounds) SculptSounds->PlayUndoSimple(Volume ? Volume->GetActorLocation()
                                                                    : (GetPawn() ? GetPawn()->GetActorLocation() : FVector::ZeroVector));
             if (GEngine) GEngine->AddOnScreenDebugMessage(987723, 1.2f, FColor(150, 220, 255),
@@ -2495,7 +2505,10 @@ void APTSculptPlayerController::OnColorSavePressed()
 {
     if (!bQuickColorActive) return;
     if (UPTColorPickerWidget* CP = Cast<UPTColorPickerWidget>(ColorPicker))
+    {
         CP->SaveCurrentColor();
+        OnLocalColorSaved.Broadcast();
+    }
 }
 
 void APTSculptPlayerController::OnColorPickReleased()

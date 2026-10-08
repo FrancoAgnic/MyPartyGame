@@ -4,6 +4,7 @@
 #include "Containers/Ticker.h"
 #include "Misc/CommandLine.h"
 #include "LocalParty/PTLocalPartySubsystem.h"
+#include "Tutorial/PTTutorialDirector.h"
 #include "UI/PTGamepadUINavigator.h"
 #include "Lobby/PTLobbyCharacter.h"
 #include "Lobby/PTPlayerState.h"
@@ -318,6 +319,59 @@ void UPTGameInstance::DoEnterLocalPartyTravel()
     const FString Options = FString::Printf(TEXT("game=%s"), *LocalPartyGameMode);
     UE_LOG(LogTemp, Log, TEXT("[LocalParty] Entrando al modo local: %s (%s)"), *LocalPartyLevel, *Options);
     UGameplayStatics::OpenLevel(this, FName(*LocalPartyLevel), /*bAbsolute=*/true, Options);
+}
+
+void UPTGameInstance::EnterTutorial()
+{
+    bTutorialMode = true;
+    bLocalPartyMode = false;
+    bLocalPartyOnline = false;
+    bSoloTest = false;
+    if (LoadingScreenClass)
+        if (UPTLoadingScreenWidget* LS = CreateLoadingScreen(/*bStartAtLoop=*/false))
+        {
+            LS->OnCovered.AddDynamic(this, &UPTGameInstance::DoEnterTutorialTravel);
+            if (UWorld* W = GetWorld())
+                W->GetTimerManager().SetTimer(TransitionSafetyTimer, this, &UPTGameInstance::DoEnterTutorialTravel, 2.0f, false);
+            return;
+        }
+    DoEnterTutorialTravel();
+}
+
+void UPTGameInstance::DoEnterTutorialTravel()
+{
+    if (bTransitionCovering) return;
+    bTransitionCovering = true;
+    if (UWorld* W = GetWorld()) W->GetTimerManager().ClearTimer(TransitionSafetyTimer);
+    // Mismo mapa y GameMode que el modo local: el GameMode ve bTutorialMode y arma la práctica.
+    const FString Options = FString::Printf(TEXT("game=%s"), *LocalPartyGameMode);
+    UE_LOG(LogTemp, Log, TEXT("[Tutorial] Entrando al tutorial: %s (%s)"), *LocalPartyLevel, *Options);
+    UGameplayStatics::OpenLevel(this, FName(*LocalPartyLevel), /*bAbsolute=*/true, Options);
+}
+
+void UPTGameInstance::ExitTutorial()
+{
+    bTutorialMode = false;
+    if (UPTGameUserSettings* S = UPTGameUserSettings::Get()) S->SetTutorialDone(true);
+    UGameplayStatics::OpenLevel(this, FName(*LocalPartyMenuLevel), /*bAbsolute=*/true);
+}
+
+void UPTGameInstance::PTTutStep(int32 Step)
+{
+#if !UE_BUILD_SHIPPING
+    if (UWorld* W = GetWorld())
+        if (APTTutorialDirector* D = Cast<APTTutorialDirector>(UGameplayStatics::GetActorOfClass(W, APTTutorialDirector::StaticClass())))
+            D->DevJumpTo(Step);
+#endif
+}
+
+void UPTGameInstance::PTTutFill()
+{
+#if !UE_BUILD_SHIPPING
+    if (UWorld* W = GetWorld())
+        if (APTTutorialDirector* D = Cast<APTTutorialDirector>(UGameplayStatics::GetActorOfClass(W, APTTutorialDirector::StaticClass())))
+            D->DevFillGhosts();
+#endif
 }
 
 void UPTGameInstance::PTJoystick()

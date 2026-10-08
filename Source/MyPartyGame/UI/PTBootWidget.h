@@ -37,4 +37,6 @@ private:
     void StartTitleSequence();
     void GoToMainMenu();
     FTimerHandle TitleTimer;
+    // Primer arranque (se mostró la elección de idioma): al terminar el título va al tutorial.
+    bool bFirstRun = false;
 };

@@ -85,6 +85,19 @@ public:
     UFUNCTION(BlueprintCallable, Category="LocalParty") void ExitLocalParty();
     UFUNCTION() void DoEnterLocalPartyTravel();
 
+    // ── Tutorial de Sculpi (práctica de esculpido, sin conexión, en el mismo mapa de juego) ──
+    UPROPERTY(BlueprintReadOnly, Category="Tutorial")
+    bool bTutorialMode = false;
+    /** Abre el tutorial (lo llama el boot la primera vez y el botón "Tutorial" del menú Jugar). */
+    UFUNCTION(BlueprintCallable, Category="Tutorial") void EnterTutorial();
+    /** Vuelve al menú principal (terminado o saltado: queda marcado como hecho). */
+    UFUNCTION(BlueprintCallable, Category="Tutorial") void ExitTutorial();
+    UFUNCTION() void DoEnterTutorialTravel();
+    UFUNCTION(Exec) void PTTutorial() { EnterTutorial(); }
+    UFUNCTION(Exec) void PTTutStep(int32 Step); // DEV: saltar a una lección del tutorial
+    UFUNCTION(Exec) void PTTutFill();          // DEV: rellenar las guías por código (probar la medición)
+    bool bTutorialWantsCursor = false; // el director lo prende en la pantalla de la foto (botones)
+
     // Consola: abre el panel de configuración del joystick (sensibilidad / botones).
     UFUNCTION(Exec) void PTJoystick();
     // DEV: simula un botón del joystick (p. ej. "PTPadKey Gamepad_DPad_Down") para probar la navegación sin uno.

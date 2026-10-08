@@ -456,6 +456,16 @@ public:
     UFUNCTION(BlueprintPure, Category="Sculpt") bool IsAxisLockActive() const   { return bAxisLock; }
     UFUNCTION(BlueprintPure, Category="Sculpt") bool IsAxisHorizontal() const   { return bAxisHorizontal; }
 
+    // ── Para el tutorial de Sculpi (APTTutorialDirector) ──
+    bool IsStamping() const { return bIsStamping; }            // click de esculpir mantenido
+    bool IsRotatingShape() const { return bRotatingShape; }    // rueda mantenida (rotando la forma)
+    AActor* GetBrushPreviewActor() const { return PreviewActor; }
+    void SetGameplayHUDVisible(bool bVisible); // ocultar el HUD (foto del tutorial)
+    UMaterialInterface* GetGhostMaterial() const { return PreviewMatAdd ? PreviewMatAdd : PreviewMeshMaterial; }
+    FSimpleMulticastDelegate OnLocalUndo;      // toque corto de deshacer
+    FSimpleMulticastDelegate OnLocalClearAll;  // mantener 3 s: borrar todo
+    FSimpleMulticastDelegate OnLocalColorSaved;// guardó un color en la paleta
+
     /** ¿El punto donde apuntás cae FUERA de la zona de modelado? El HUD muestra el ícono de
      *  "prohibido construir" en el centro cuando esto es true. */
     UFUNCTION(BlueprintPure, Category="Sculpt") bool IsStampOutsideCanvas() const { return bStampOutsideCanvas; }

@@ -11,6 +11,14 @@
 // DEV: comando de consola para volver a probar la pantalla de idioma sin cerrar el editor.
 // Abrir la consola con ~ y tipear:  PT.ResetLanguage
 // Resetea el flag y, en el próximo arranque del boot (BootLVl), vuelve a pedir idioma.
+static FAutoConsoleCommand GPTResetTutorialCmd(
+    TEXT("PT.ResetTutorial"),
+    TEXT("Vuelve a marcar el tutorial de Sculpi como NO hecho (se lanza en el próximo primer arranque)."),
+    FConsoleCommandDelegate::CreateLambda([]()
+    {
+        if (UPTGameUserSettings* S = UPTGameUserSettings::Get()) S->SetTutorialDone(false);
+    }));
+
 static FAutoConsoleCommand GPTResetLanguageCmd(
     TEXT("PT.ResetLanguage"),
     TEXT("Resetea el flag de idioma elegido (bLanguageChosen=false) para volver a ver la pantalla de selección de idioma en el próximo arranque del boot."),

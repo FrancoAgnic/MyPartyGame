@@ -3,6 +3,7 @@
 #include "PTBootWidget.h"
 #include "PTLanguageSelectWidget.h"
 #include "../PTGameUserSettings.h"
+#include "../PTGameInstance.h"
 #include "Animation/WidgetAnimation.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
@@ -21,6 +22,7 @@ void UPTBootWidget::NativeConstruct()
     if (bNeedPick && LanguageSelectPanel)
     {
         // PRIMER arranque: primero el idioma. Al confirmar arranca la secuencia del título.
+        bFirstRun = true;
         LanguageSelectPanel->OnLanguageChosen.AddUObject(this, &UPTBootWidget::StartTitleSequence);
         LanguageSelectPanel->Refresh();
         LanguageSelectPanel->SetVisibility(ESlateVisibility::Visible);
@@ -61,6 +63,14 @@ void UPTBootWidget::OnTitleFinished()
 
 void UPTBootWidget::GoToMainMenu()
 {
+    // Primera vez (recién eligió idioma) y sin tutorial hecho → el tutorial de Sculpi.
+    const UPTGameUserSettings* S = UPTGameUserSettings::Get();
+    if (bFirstRun && S && !S->HasDoneTutorial())
+        if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
+        {
+            GI->EnterTutorial();
+            return;
+        }
     // Carga el lobby/MainMenu. Su widget reproduce su animación de entrada (SpawnMainMenu).
     UGameplayStatics::OpenLevel(this, FName(*MainMenuMap));
 }

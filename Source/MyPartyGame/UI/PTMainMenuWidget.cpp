@@ -50,10 +50,15 @@ bool UPTMainMenuWidget::Initialize()
     if (!OnlinePartyButton && LocalModeButton)
         OnlinePartyButton = PTWidgetUtils::CloneButtonAfter(this, LocalModeButton, TEXT("OnlinePartyButton"), PTText::Get(TEXT("MENU_ONLINE_MODE")));
     if (OnlinePartyButton) OnlinePartyButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnOnlinePartyClicked);
+    // Tutorial: si el WBP no trae TutorialButton, se clona debajo del de audiencia (como los otros).
+    if (!TutorialButton && OnlinePartyButton)
+        TutorialButton = PTWidgetUtils::CloneButtonAfter(this, OnlinePartyButton, TEXT("TutorialButton"), PTText::Get(TEXT("MENU_TUTORIAL")));
+    if (TutorialButton)    TutorialButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnTutorialClicked);
 
     // Traducir el label de los botones de modo local/audiencia: si vienen del WBP (tu amigo los agregó
     // ahí) traen texto HARDCODEADO y nunca pasaban por PTText → no se traducían. Se los forzamos acá.
     if (LocalModeButton)   PTWidgetUtils::SetButtonLabel(LocalModeButton,   PTText::Get(TEXT("MENU_LOCAL_MODE")));
+    if (TutorialButton)    PTWidgetUtils::SetButtonLabel(TutorialButton,    PTText::Get(TEXT("MENU_TUTORIAL")));
     if (OnlinePartyButton) PTWidgetUtils::SetButtonLabel(OnlinePartyButton, PTText::Get(TEXT("MENU_ONLINE_MODE")));
 
     // Si hay un PlayButton, arrancar en la pantalla principal (submenú Host/Find/EnterCode oculto).
@@ -189,6 +194,7 @@ void UPTMainMenuWidget::SetPlaySubmenuVisible(bool bVisible)
     if (HostButton)             HostButton->SetVisibility(bVisible ? Shown : Hidden);
     if (FindButton)             FindButton->SetVisibility(bVisible ? Shown : Hidden);
     if (LocalModeButton)        LocalModeButton->SetVisibility(bVisible ? Shown : Hidden);
+    if (TutorialButton)         TutorialButton->SetVisibility(bVisible ? Shown : Hidden);
     if (OnlinePartyButton)      OnlinePartyButton->SetVisibility(bVisible ? Shown : Hidden);
     if (EnterCodeButton)        EnterCodeButton->SetVisibility(bVisible ? Shown : Hidden);
     if (PlayBackButton)         PlayBackButton->SetVisibility(bVisible ? Shown : Hidden);
@@ -439,6 +445,11 @@ void UPTMainMenuWidget::OnLocalModeClicked()
 {
     // No necesita Steam ni sesión: abre el mapa de juego standalone y los celulares se conectan por WiFi.
     if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>()) GI->EnterLocalParty();
+}
+
+void UPTMainMenuWidget::OnTutorialClicked()
+{
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>()) GI->EnterTutorial();
 }
 
 void UPTMainMenuWidget::OnOnlinePartyClicked()
