@@ -16,7 +16,11 @@ static FAutoConsoleCommand GPTResetTutorialCmd(
     TEXT("Vuelve a marcar el tutorial de Sculpi como NO hecho (se lanza en el próximo primer arranque)."),
     FConsoleCommandDelegate::CreateLambda([]()
     {
-        if (UPTGameUserSettings* S = UPTGameUserSettings::Get()) S->SetTutorialDone(false);
+        if (UPTGameUserSettings* S = UPTGameUserSettings::Get())
+        {
+            S->SetTutorialDone(false);
+            S->SetQuickTutorialDone(false); // también el rápido (se lanza en el próximo primer arranque)
+        }
     }));
 
 static FAutoConsoleCommand GPTResetLanguageCmd(

@@ -257,6 +257,10 @@ public:
     UPROPERTY(BlueprintReadOnly, Category="Sculpt")
     EPTEditMode EditMode = EPTEditMode::Add;
 
+    /** Tutorial: mientras Sculpi explica/esculpe, se BLOQUEA el esculpido y las herramientas (solo podés
+     *  moverte). Lo prende/apaga APTTutorialDirector. */
+    bool bTutorialLockSculpt = false;
+
     /** Forma activa. Leer desde Blueprint para mostrar HUD. */
     UPROPERTY(BlueprintReadOnly, Category="Sculpt")
     EPTStampShape StampShape = EPTStampShape::Sphere;
@@ -465,6 +469,8 @@ public:
     FSimpleMulticastDelegate OnLocalUndo;      // toque corto de deshacer
     FSimpleMulticastDelegate OnLocalClearAll;  // mantener 3 s: borrar todo
     FSimpleMulticastDelegate OnLocalColorSaved;// guardó un color en la paleta
+    DECLARE_MULTICAST_DELEGATE_OneParam(FPTLocalChat, const FString&);
+    FPTLocalChat OnLocalChat;                  // el jugador escribió en el chat (lo usa el tutorial)
 
     /** ¿El punto donde apuntás cae FUERA de la zona de modelado? El HUD muestra el ícono de
      *  "prohibido construir" en el centro cuando esto es true. */

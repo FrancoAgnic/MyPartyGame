@@ -60,6 +60,11 @@ public:
     bool HasDoneTutorial() const { return bTutorialDone; }
     void SetTutorialDone(bool bDone) { bTutorialDone = bDone; SaveSettings(); }
 
+    /** Tutorial RÁPIDO (imitá a Sculpi): obligatorio solo la 1.ª vez que se abre el juego (tras elegir
+     *  idioma). Flag aparte del avanzado. PT.ResetTutorial también lo resetea. */
+    bool HasDoneQuickTutorial() const { return bQuickTutorialDone; }
+    void SetQuickTutorialDone(bool bDone) { bQuickTutorialDone = bDone; SaveSettings(); }
+
     /** "en" o "es". Cambia la cultura activa de inmediato. */
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void SetLanguageCode(const FString& InLanguageCode);
@@ -135,6 +140,9 @@ private:
 
     UPROPERTY(Config)
     bool bTutorialDone = false;
+
+    UPROPERTY(Config)
+    bool bQuickTutorialDone = false;
 
     // true = seguir la resolución del escritorio (recomendada). false = el usuario fijó una manual.
     UPROPERTY(Config)

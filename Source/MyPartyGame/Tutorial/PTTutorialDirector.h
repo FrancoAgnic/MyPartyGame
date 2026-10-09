@@ -216,4 +216,84 @@ private:
     void  Finish();
     void  BindPCEvents();
     FDelegateHandle UndoH, ClearH, SaveH;
+
+    // ── Tutorial RÁPIDO ("imitá a Sculpi"): guía para hacer una JIRAFA enseñando las herramientas ──
+    // Flujo aparte (gateado por bQuickMode). Por lección: Sculpi ESCULPE la parte como un jugador — su
+    // preview (brocha) se mueve y el trazo se forma progresivamente en AMARILLO; después se vuelve
+    // TRANSPARENTE (guía) y el jugador lo copia con la herramienta que toca (keycaps en pantalla). La
+    // arcilla del jugador se ACUMULA → se construye la jirafa. La foto final reusa el flujo del avanzado.
+    //
+    // Lecciones: 0 color amarillo, 1 patas, 2 torso (escala brocha), 3 cuello (cilindro), 4 cabeza+ojos.
+    // Luego: experimentación libre (lista opcional) → Enter → foto (nombre: tu jirafa).
+    bool bQuickMode = false;
+    enum class EPTQuick : uint8 { Guess, Intro, Lesson, Free, Photo, Idle };
+    EPTQuick QState = EPTQuick::Guess;
+    int32    QLesson = 0;
+    enum class EPTQPhase : uint8 { Demo, Copy };
+    EPTQPhase QPhase = EPTQPhase::Demo;
+    float    QTime = 0.f;
+    int32    QGhost = INDEX_NONE;
+    int32    QReveal = 0;        // partes del trazo ya reveladas (animación del demo)
+    float    QRevealT = 0.f;
+    TArray<FPTGhostPart> QParts; // partes del trazo de la lección actual
+    FVector  QHeadCenter = FVector::ZeroVector;
+    int32    QEyesBase = 0;
+    bool     bQSawPicker = false; // abrió el color picker (lección del color)
+    // Reproducción GRABADA: si hay una grabación para la lección, Sculpi la reproduce con arcilla REAL
+    // (snapshot antes / restore después) y después se arma la guía desde los sellos grabados.
+    bool     bQRecorded = false;
+    TArray<FPTTutRecStamp> QRec;
+    int32    QRepIdx = 0;
+    TArray<uint8> QSnapshot;
+    int32    QEyesSnapshot = 0;   // nº de ojos antes del demo (para quitar los del demo tras restaurar)
+    FVector  QOrigin = FVector::ZeroVector; // centro del cubo del tutorial (para ubicar los sellos grabados)
+    bool     QuickLoadRecording(int32 Lesson);   // true si hay .rec para esa lección
+    void     QuickBuildGhostFromRec();            // arma la guía (ghost) desde los sellos ADD grabados
+    UPROPERTY() UProceduralMeshComponent* QBrush = nullptr; // preview de la brocha de Sculpi (se mueve)
+    UPROPERTY() UMaterialInstanceDynamic* QBrushMID = nullptr; // material del preview (color de la escultura)
+    UPROPERTY() TArray<UProceduralMeshComponent*> QDots; // línea punteada de la cara de Sculpi al trazo
+    bool bQSculpiAtWork = false; // durante el demo: Sculpi se pone frente al trazo que "esculpe"
+    UPROPERTY() class UPTTutorialChoiceWidget* ChoiceWidget = nullptr;
+    void QuickLockSculpt(bool bLock); // bloquea/desbloquea el esculpido del jugador
+    void QuickDemoVisual();           // Sculpi mirando el trazo + línea punteada hasta la brocha
+    void QuickHideDots();
+    void QuickTick(float Dt);
+    void QuickBeginLesson(int32 Idx);
+    void QuickBuildParts(int32 Lesson, TArray<FPTGhostPart>& Out, FLinearColor& OutColor) const;
+    void QuickStartCopy();
+    bool QuickCopyDone();
+    void QuickSetGhostColor(const FLinearColor& C);
+    void QuickShowBrushAt(const FVector& P, float Size, const FLinearColor& Col);
+    void QuickBeginFree();
+    void QuickToPhoto();
+    /** Relleno MÍNIMO entre las 4 patas (cuadrantes XY): evita completar con solo 3 patas. */
+    float QuickLegsMinFill() const;
+    /** Resalta (agranda + tiñe) la esfera-guía que toca el preview de la brocha, para dar profundidad. */
+    void QuickTickGhostHighlight();
+    UPROPERTY() UMaterialInstanceDynamic* QHiliteMID = nullptr;
+    // ── Intro "adiviná la palabra" (Sculpi modela un ÁRBOL grabado y vos escribís en el chat) ──
+    // Reusa la UI de juego: el director pone el GameState en fase Drawing con la palabra enmascarada, el
+    // reloj de 30 s y deja el chat abierto; el HUD muestra todo igual que una ronda real (palabra arriba,
+    // animación de letras cayendo al centro, reloj). Fases en QGPhase: 0 entrada+saludo, 1 adivinando,
+    // 2 adivinó, 3 se acabó el tiempo.
+    FString  QWord;
+    int32    QGPhase = 0;
+    int32    QRevealCount = 0;
+    float    QRevealTimer = 0.f;
+    float    QGReminderT = 0.f;  // recordatorio periódico de escribir en el chat
+    bool     bQGuessed = false;
+    bool     bQTreeDone = false;
+    FDelegateHandle ChatH;
+    void QuickBeginGuess();
+    void QuickTickGuess(float Dt);
+    void QuickSetupGuessState();                      // GameState → ronda "falsa" (palabra+reloj+chat)
+    void QuickPushGuessMask(int32 RevealN, bool bAll); // empuja la máscara (todos los idiomas) al GameState
+    void QuickEndGuessState();                        // restaura el GameState al salir del intro
+    void OnTutorialChat(const FString& Msg);
+    void QuickAfterGuessToGiraffe();
+    void QuickShowChoice();
+    void OnAdvancedYes();
+    void OnAdvancedNo();
+    void QuickMarkDoneAndExit(bool bAdvanced);
+    static constexpr int32 QNumLessons = 5;
 };

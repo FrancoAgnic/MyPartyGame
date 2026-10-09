@@ -759,8 +759,11 @@ void UPTGameplayHUDWidget::RefreshTick()
     if (!G) return;
 
     // Tutorial de Sculpi: solo herramientas; lo demás (palabra, reloj, marcador, chat) lo maneja Sculpi.
+    // EXCEPCIÓN: el intro "adiviná la palabra" (bTutorialGuessPhase) deja correr el flujo NORMAL para
+    // reusar la MISMA UI de juego (palabra arriba, reloj, animación de letras, chat); el director maneja
+    // el GameState como una ronda real. Más abajo se recortan los extras que no van en el intro.
     if (const UPTGameInstance* TGI = GetGameInstance<UPTGameInstance>())
-        if (TGI->bTutorialMode)
+        if (TGI->bTutorialMode && !TGI->bTutorialGuessPhase)
         {
             RefreshToolbar();
             auto HideT = [](UWidget* W){ if (W && W->GetVisibility() != ESlateVisibility::Collapsed) W->SetVisibility(ESlateVisibility::Collapsed); };
@@ -996,6 +999,24 @@ void UPTGameplayHUDWidget::RefreshTick()
         GP_Hide(ScoreboardBox);                                                             // lista de players
     }
 
+    // ── Intro "adiviná la palabra" del tutorial: reusamos la UI de juego, pero SOLO palabra + reloj + chat
+    //    (+ la animación de letras). Ocultamos la hotbar y la lista de players (no aplican: el jugador no
+    //    esculpe, solo adivina). El director maneja el GameState (fase Drawing, máscara, reloj). ──
+    if (const UPTGameInstance* TGI2 = GetGameInstance<UPTGameInstance>())
+        if (TGI2->bTutorialMode && TGI2->bTutorialGuessPhase)
+        {
+            auto TG_Hide = [](UWidget* W){ if (W) W->SetVisibility(ESlateVisibility::Collapsed); };
+            TG_Hide(ControlsBox); TG_Hide(ToolsBox); TG_Hide(ShapesBox);
+            TG_Hide(HintsBox);    TG_Hide(ClearBox);                                            // hotbar
+            TG_Hide(ScoreboardBox); TG_Hide(ResultsPanel);                                      // players / fin
+            // El branch del tutorial (frames previos, antes del intro) dejó estos COLAPSADOS y el flujo
+            // normal solo les setea el TEXTO, no la visibilidad → hay que volver a mostrarlos acá.
+            auto TG_Show = [](UWidget* W){ if (W) W->SetVisibility(ESlateVisibility::HitTestInvisible); };
+            TG_Show(TxtWord); TG_Show(TxtTimer); TG_Show(TxtChat);
+            auto TG_ShowHit = [](UWidget* W){ if (W) W->SetVisibility(ESlateVisibility::Visible); };
+            TG_ShowHit(ChatPanel); TG_ShowHit(ChatScroll);                                      // historial de chat
+        }
+
     // (El chat off-screen se actualiza por FRAME en NativeTick, para que el globito interpole suave.)
 
     // ── Estado de red: iconos arriba a la izquierda, SOLO cuando hay problema (sin texto de debug). ──
@@ -1187,7 +1208,10 @@ void UPTGameplayHUDWidget::OnChatCommitted(const FText& Text, ETextCommit::Type 
         const FString Msg = Text.ToString();
         if (!Msg.IsEmpty())
             if (APTSculptPlayerController* PC = GetSculptPC())
+            {
+                PC->OnLocalChat.Broadcast(Msg); // el tutorial lo escucha (adivinar el árbol)
                 PC->Server_SendChat(Msg);
+            }
     }
     // Enviar (Enter) o perder el foco: limpiar, COLAPSAR (para que Tab no la reenfoque)
     // y devolver el control al juego.

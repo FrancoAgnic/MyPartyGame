@@ -1,7 +1,9 @@
 #include "PTTutorialDirector.h"
 #include "PTTutorialWidget.h"
+#include "PTTutorialChoiceWidget.h"
 #include "../Sculpt/PTSculptPlayerController.h"
 #include "../Sculpt/PTSculptGameState.h"
+#include "../Lobby/PTPlayerState.h"
 #include "../Lobby/PTLobbyCharacter.h"
 #include "../Lobby/PTLockerSubsystem.h"
 #include "../PTGameInstance.h"
@@ -37,6 +39,10 @@
 #include "Sound/SoundBase.h"
 #include "TextureResource.h"
 #include "UnrealClient.h"
+#include "Serialization/MemoryWriter.h"
+#include "Serialization/MemoryReader.h"
+#include "HAL/IConsoleManager.h"
+#include "Engine/Engine.h" // GEngine (mensajes en pantalla de los comandos de grabación)
 
 #if PT_WITH_STEAM
 #include "steam/steam_api.h"
@@ -45,6 +51,88 @@
 #endif
 
 DEFINE_LOG_CATEGORY_STATIC(LogPTTutorial, Log, All);
+
+// ── Grabación de la jirafa (dev): PT.TutRec <1-4> para grabar una parte, PT.TutRecStop para guardarla ──
+static FString QTutRecPath(int32 Lesson)
+{
+    // 1-4 = partes de la jirafa; 5 = el ÁRBOL del intro "adiviná la palabra".
+    if (Lesson == 5) return FPaths::ProjectContentDir() / TEXT("Tutorial") / TEXT("tree.rec");
+    const TCHAR* Name = Lesson == 1 ? TEXT("legs") : Lesson == 2 ? TEXT("torso")
+                      : Lesson == 3 ? TEXT("neck") : Lesson == 4 ? TEXT("head") : TEXT("x");
+    return FPaths::ProjectContentDir() / TEXT("Tutorial") / (FString(TEXT("giraffe_")) + Name + TEXT(".rec"));
+}
+static void QTutRecSerialize(FArchive& Ar, TArray<FPTTutRecStamp>& S)
+{
+    int32 Ver = 1; Ar << Ver;
+    int32 N = S.Num(); Ar << N;
+    if (Ar.IsLoading()) { S.Reset(); S.SetNum(FMath::Max(0, N)); }
+    for (int32 i = 0; i < N; ++i)
+    {
+        FPTTutRecStamp& E = S[i];
+        Ar << E.T; Ar << E.Pos; Ar << E.Shape; Ar << E.Size; Ar << E.Mode; Ar << E.Color; Ar << E.Rot; Ar << E.Scale;
+    }
+}
+// La palabra del intro ("árbol") en el orden de idiomas de GetCurrentLanguageIndex() (ES,EN,PT,DE,FR,IT).
+// La máscara usa la del idioma actual; el guess se acepta si coincide con CUALQUIERA (como en el juego).
+static const TCHAR* const GTreeWords[] = { TEXT("árbol"), TEXT("tree"), TEXT("árvore"), TEXT("Baum"), TEXT("arbre"), TEXT("albero") };
+static FString QTutNorm(const FString& In)
+{
+    FString O;
+    for (TCHAR c : In)
+    {
+        c = FChar::ToLower(c);
+        if      (c==TEXT('á')||c==TEXT('à')||c==TEXT('ä')||c==TEXT('â')) c=TEXT('a');
+        else if (c==TEXT('é')||c==TEXT('è')||c==TEXT('ë')||c==TEXT('ê')) c=TEXT('e');
+        else if (c==TEXT('í')||c==TEXT('ì')||c==TEXT('ï')||c==TEXT('î')) c=TEXT('i');
+        else if (c==TEXT('ó')||c==TEXT('ò')||c==TEXT('ö')||c==TEXT('ô')) c=TEXT('o');
+        else if (c==TEXT('ú')||c==TEXT('ù')||c==TEXT('ü')||c==TEXT('û')) c=TEXT('u');
+        if (FChar::IsAlpha(c)) O.AppendChar(c);
+    }
+    return O;
+}
+
+static int32 GTutRecLesson = 0;
+static FAutoConsoleCommandWithWorldAndArgs GTutRecStartCmd(
+    TEXT("PT.TutRec"),
+    TEXT("Graba los sellos de una parte de la jirafa: PT.TutRec <1=patas,2=torso,3=cuello,4=cabeza>. Esculpí y luego PT.TutRecStop."),
+    FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* W)
+    {
+        const int32 L = Args.Num() > 0 ? FCString::Atoi(*Args[0]) : 0;
+        APTSculptVolume* V = Cast<APTSculptVolume>(UGameplayStatics::GetActorOfClass(W, APTSculptVolume::StaticClass()));
+        auto Scr = [](const FString& Msg, const FColor& Col)
+        { if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 6.f, Col, Msg); };
+        if (L < 1 || L > 5)      { Scr(TEXT("[TutRec] Uso: PT.TutRec <1=patas,2=torso,3=cuello,4=cabeza,5=arbol>"), FColor::Yellow); return; }
+        if (!V)                  { Scr(TEXT("[TutRec] No hay cubo de esculpido. Entrá a esculpir primero."), FColor::Red); return; }
+        if (!PTTutRec::Start(V)) { Scr(TEXT("[TutRec] No se pudo iniciar (el cubo todavía no está listo)."), FColor::Red); return; }
+        GTutRecLesson = L;
+        const TCHAR* Names[] = { TEXT("patas"), TEXT("torso"), TEXT("cuello"), TEXT("cabeza"), TEXT("arbol") };
+        Scr(FString::Printf(TEXT("[TutRec] GRABANDO '%s'. Esculpí y después: PT.TutRecStop"), Names[L - 1]), FColor::Green);
+        UE_LOG(LogPTTutorial, Log, TEXT("[TutRec] Grabando parte %d."), L);
+    }));
+static FAutoConsoleCommand GTutRecStopCmd(
+    TEXT("PT.TutRecStop"),
+    TEXT("Para la grabación y la guarda en Content/Tutorial/giraffe_<parte>.rec"),
+    FConsoleCommandDelegate::CreateLambda([]()
+    {
+        auto Scr = [](const FString& Msg, const FColor& Col)
+        { if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 8.f, Col, Msg); };
+        if (!PTTutRec::IsRecording()) { Scr(TEXT("[TutRec] No se estaba grabando (corré PT.TutRec <1-4> primero)."), FColor::Yellow); return; }
+        PTTutRec::Stop();
+        TArray<FPTTutRecStamp> S = PTTutRec::Get();
+        TArray<uint8> Bytes; FMemoryWriter Ar(Bytes); QTutRecSerialize(Ar, S);
+        const FString Path = QTutRecPath(GTutRecLesson);
+        IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path), /*Tree=*/true);
+        if (FFileHelper::SaveArrayToFile(Bytes, *Path))
+        {
+            Scr(FString::Printf(TEXT("[TutRec] Guardados %d sellos en %s"), S.Num(), *Path), FColor::Green);
+            UE_LOG(LogPTTutorial, Log, TEXT("[TutRec] Guardados %d sellos en %s"), S.Num(), *Path);
+        }
+        else
+        {
+            Scr(FString::Printf(TEXT("[TutRec] NO se pudo guardar: %s"), *Path), FColor::Red);
+            UE_LOG(LogPTTutorial, Warning, TEXT("[TutRec] No se pudo guardar %s"), *Path);
+        }
+    }));
 
 namespace
 {
@@ -208,15 +296,25 @@ void APTTutorialDirector::EndPlay(const EEndPlayReason::Type Reason)
         P->OnLocalUndo.Remove(UndoH);
         P->OnLocalClearAll.Remove(ClearH);
         P->OnLocalColorSaved.Remove(SaveH);
+        P->OnLocalChat.Remove(ChatH);
     }
     // Se fue sin terminar (menú de pausa → Salir): cuenta como saltado.
     if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
     {
         GI->bTutorialWantsCursor = false;
+        GI->bTutorialGuessPhase = false; // por si se sale durante el intro de adivinar
+    }
+    if (APTSculptVolume* V = Volume.Get()) V->SetFrameMeshesHidden(false); // restaurar el marco al salir
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
+    {
         if (!bExiting && GI->bTutorialMode)
         {
             GI->bTutorialMode = false;
-            if (UPTGameUserSettings* S = UPTGameUserSettings::Get()) S->SetTutorialDone(true);
+            if (UPTGameUserSettings* S = UPTGameUserSettings::Get())
+            {
+                if (bQuickMode) S->SetQuickTutorialDone(true); // el rápido marca su propio flag
+                else            S->SetTutorialDone(true);
+            }
         }
     }
     if (Widget) Widget->RemoveFromParent();
@@ -255,6 +353,7 @@ bool APTTutorialDirector::SetupWorld()
     BindPCEvents();
     SpawnSculpi();
     ClearClay();
+    if (const UPTGameInstance* GI = GetGameInstance<UPTGameInstance>()) bQuickMode = GI->bQuickTutorial;
     return true;
 }
 
@@ -265,6 +364,7 @@ void APTTutorialDirector::BindPCEvents()
     UndoH  = P->OnLocalUndo.AddLambda([this]() { bUndoDone = true; ++UndoCount; });
     ClearH = P->OnLocalClearAll.AddLambda([this]() { bClearDone = true; });
     SaveH  = P->OnLocalColorSaved.AddLambda([this]() { bSawSave = true; ++SaveCount; });
+    ChatH  = P->OnLocalChat.AddUObject(this, &APTTutorialDirector::OnTutorialChat);
 }
 
 void APTTutorialDirector::SpawnSculpi()
@@ -300,6 +400,19 @@ void APTTutorialDirector::TickSculpi(float Dt)
     const FVector CamLoc = P->PlayerCameraManager->GetCameraLocation();
     const FRotator CamRot = P->PlayerCameraManager->GetCameraRotation();
     const FRotationMatrix M(FRotator(0.f, CamRot.Yaw, 0.f));
+
+    // Durante el DEMO del tutorial rápido: Sculpi se pone frente al trazo que "esculpe", mirándolo (de su
+    // cara sale la línea punteada hasta la brocha). Así se ve que él es quien esculpe, como un jugador.
+    if (bQSculpiAtWork && QBrush && QBrush->IsVisible())
+    {
+        const FVector BrushLoc = QBrush->GetComponentLocation();
+        const FVector Target = BrushLoc - M.GetUnitAxis(EAxis::X) * 130.f + M.GetUnitAxis(EAxis::Y) * 260.f + FVector(0, 0, 130.f);
+        const FVector NewLoc = FMath::VInterpTo(Sculpi->GetActorLocation(), Target, Dt, 5.f);
+        const FRotator Face = (BrushLoc - NewLoc).Rotation();
+        Sculpi->SetActorLocationAndRotation(NewLoc, FMath::RInterpTo(Sculpi->GetActorRotation(), FRotator(0.f, Face.Yaw, 0.f), Dt, 7.f));
+        return;
+    }
+
     const float Bob = FMath::Sin(GetWorld()->GetTimeSeconds() * (Widget && Widget->IsTyping() ? 9.f : 2.2f)) *
                       (Widget && Widget->IsTyping() ? 6.f : 10.f);
     // Adelante a la derecha de la cámara, un poco abajo: siempre a la vista, sin tapar el centro.
@@ -447,6 +560,72 @@ void APTTutorialDirector::UpdateGhostColor(int32 Idx)
     if (G.bAimed) Now = FMath::Lerp(Now, FLinearColor::White, 0.45f);
     if (G.MID) G.MID->SetVectorParameterValue(TEXT("Color"), Now * GhostIntensity);
     if (G.OverlayMID) G.OverlayMID->SetVectorParameterValue(TEXT("Color"), Now);
+}
+
+float APTTutorialDirector::QuickLegsMinFill() const
+{
+    // Divide los samples de la guía en 4 cuadrantes XY (las 4 patas, en las 4 esquinas) y devuelve el
+    // relleno MÍNIMO entre ellos. Así, si falta una pata, su cuadrante queda vacío → el mínimo es bajo
+    // y la lección NO se completa con 3 patas.
+    if (!Ghosts.IsValidIndex(QGhost) || !Volume.IsValid()) return 0.f;
+    const FPTGhost& G = Ghosts[QGhost];
+    const int32 NS = G.Samples.Num();
+    if (NS == 0) return 0.f;
+    FVector2D C(0.f, 0.f);
+    for (const FVector& P : G.Samples) C += FVector2D(P.X, P.Y);
+    C /= NS;
+    int32 Solid[4] = { 0,0,0,0 }, Tot[4] = { 0,0,0,0 };
+    for (const FVector& P : G.Samples)
+    {
+        const int32 q = (P.X >= C.X ? 1 : 0) + (P.Y >= C.Y ? 2 : 0);
+        ++Tot[q];
+        if (Volume->SampleWorldDensity(P) > 0.f) ++Solid[q];
+    }
+    float MinF = 1.f; int32 Used = 0;
+    const int32 MinSamples = FMath::Max(3, NS / 20); // ignorar cuadrantes casi vacíos (ruido)
+    for (int32 q = 0; q < 4; ++q)
+        if (Tot[q] >= MinSamples) { ++Used; MinF = FMath::Min(MinF, Solid[q] / (float)Tot[q]); }
+    return (Used >= 3) ? MinF : 0.f; // hacen falta ~4 grupos de patas
+}
+
+void APTTutorialDirector::QuickTickGhostHighlight()
+{
+    if (!Ghosts.IsValidIndex(QGhost)) return;
+    FPTGhost& G = Ghosts[QGhost];
+    APTSculptPlayerController* P = PC.Get();
+    const AActor* Brush = P ? P->GetBrushPreviewActor() : nullptr;
+    const bool bShow = Brush && !Brush->IsHidden();
+    const FVector B = bShow ? Brush->GetActorLocation() : FVector::ZeroVector;
+    const float BrushR = P ? FMath::Max(40.f, P->StampSize * 0.5f) : 80.f;
+
+    // Material de resaltado (cian brillante), creado una sola vez a partir del mismo base de la guía.
+    if (!QHiliteMID && G.MID && G.MID->Parent)
+    {
+        QHiliteMID = UMaterialInstanceDynamic::Create(G.MID->Parent, this);
+        if (QHiliteMID)
+        {
+            QHiliteMID->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.15f, 1.f, 1.f) * GhostIntensity);
+            QHiliteMID->SetScalarParameterValue(TEXT("GlowEnable"), 0.f);
+            KeepAlive.Add(QHiliteMID);
+        }
+    }
+
+    for (UPrimitiveComponent* M : G.Meshes)
+    {
+        if (!M) continue;
+        // Radio de la parte más cercana a esta malla (la malla está ubicada en el centro de su parte).
+        const FVector MC = M->GetComponentLocation();
+        float PartR = 80.f; float Best = TNumericLimits<float>::Max();
+        for (const FPTGhostPart& Part : G.Parts)
+        {
+            const float D = (float)FVector::DistSquared(MC, Part.Center);
+            if (D < Best) { Best = D; PartR = Part.Size * 0.5f * (float)Part.Scale.GetMax(); }
+        }
+        const bool bTouch = bShow && FVector::Dist(B, MC) < (PartR + BrushR);
+        M->SetWorldScale3D(FVector(bTouch ? 1.3f : 1.f));
+        if (bTouch && QHiliteMID) M->SetMaterial(0, QHiliteMID);
+        else if (G.MID)          M->SetMaterial(0, G.MID);
+    }
 }
 
 void APTTutorialDirector::TickAim()
@@ -950,10 +1129,14 @@ void APTTutorialDirector::Tick(float Dt)
         StepTime += Dt;
         if (StepTime < 1.2f || !SetupWorld()) return;
         bStarted = true;
-        EnterStep(EPTTutStep::Intro);
+        if (bQuickMode) QuickBeginGuess(); // intro "adiviná la palabra" (árbol) → después la jirafa
+        else            EnterStep(EPTTutStep::Intro);
         return;
     }
     TickSculpi(Dt);
+    // Flujo rápido aparte (no toca la máquina del avanzado). EXCEPTO la foto final: ahí hacemos handoff
+    // y dejamos correr TickStep (maneja Photo y End).
+    if (bQuickMode && QState != EPTQuick::Photo) { TickChips(); QuickTick(Dt); return; }
     if (APTSculptPlayerController* P = PC.Get())
     {
         const float Yaw = P->GetControlRotation().Yaw;
@@ -1347,9 +1530,10 @@ void APTTutorialDirector::StartPhoto()
         if (APawn* Pawn = P->GetPawn()) Pawn->SetActorHiddenInGame(true); // tu personaje no sale en la foto
     }
     if (Sculpi) Sculpi->SetActorHiddenInGame(true); // Sculpi tampoco (sigue hablando en el cuadro de diálogo)
+    if (APTSculptVolume* V = Volume.Get()) V->SetFrameMeshesHidden(true); // la foto ignora el marco de la zona
     FramePhotoCamera();
     bPhotoAiming = true;
-    Say(TEXT("TUT_PHOTO"));
+    Say(bQuickMode ? TEXT("TUT_PHOTO_GIRAFFE") : TEXT("TUT_PHOTO"));
 }
 
 void APTTutorialDirector::FramePhotoCamera()
@@ -1475,8 +1659,8 @@ void APTTutorialDirector::OnScreenshot(int32 W, int32 H, const TArray<FColor>& P
         Widget->SetProgress(-1.f, FText::GetEmpty());
         Widget->SetAim(FText::GetEmpty(), FLinearColor::White);
         Widget->SetDialogVisible(true);
-        Widget->ShowPhoto(PhotoTex, PTText::Get(TEXT("TUT_MY_DOG")));
-        Widget->Say(PTText::Get(TEXT("TUT_NAME_DOG")));
+        Widget->ShowPhoto(PhotoTex, PTText::Get(bQuickMode ? TEXT("TUT_MY_GIRAFFE") : TEXT("TUT_MY_DOG")));
+        Widget->Say(PTText::Get(bQuickMode ? TEXT("TUT_NAME_GIRAFFE") : TEXT("TUT_NAME_DOG")));
     }
 }
 
@@ -1484,7 +1668,7 @@ void APTTutorialDirector::OnSavePhoto()
 {
     if (Step != EPTTutStep::End || bPhotoSaved || !Widget) return;
     FText Name = FText::TrimPrecedingAndTrailing(Widget->GetPhotoName());
-    if (Name.IsEmpty()) Name = PTText::Get(TEXT("TUT_MY_DOG"));
+    if (Name.IsEmpty()) Name = PTText::Get(bQuickMode ? TEXT("TUT_MY_GIRAFFE") : TEXT("TUT_MY_DOG"));
     SaveFramedPhoto(Name);
 }
 
@@ -1563,7 +1747,7 @@ void APTTutorialDirector::SaveFramedPhoto(const FText& Caption)
                 const TArray64<uint8>& Data = Png->GetCompressed(100);
                 if (FFileHelper::SaveArrayToFile(Data, *File))
                 {
-                    if (!bSteam) SavedMsg = FText::Format(PTText::Get(TEXT("TUT_PHOTO_FILE")), FText::FromString(FPaths::ConvertRelativePathToFull(File)));
+                    if (!bSteam) SavedMsg = PTText::Get(TEXT("TUT_PHOTO_SAVED")); // "¡Imagen guardada!" (sin la ruta: queda feo)
                     UE_LOG(LogPTTutorial, Log, TEXT("Foto del perro (\"%s\") guardada: %s"), *Caption.ToString(), *File);
                 }
             }
@@ -1594,7 +1778,14 @@ void APTTutorialDirector::OnSharePhoto()
 // ── Salir ───────────────────────────────────────────────────────────────────
 
 void APTTutorialDirector::OnSkip()     { Finish(); }
-void APTTutorialDirector::OnContinue() { if (Step == EPTTutStep::End && bPhotoSaved && StepTime > 1.f) Finish(); }
+void APTTutorialDirector::OnContinue()
+{
+    if (Step == EPTTutStep::End && bPhotoSaved && StepTime > 1.f)
+    {
+        if (bQuickMode) QuickShowChoice(); // rápido: tras la foto, ofrecer el avanzado (en vez de salir)
+        else            Finish();
+    }
+}
 
 void APTTutorialDirector::Finish()
 {
@@ -1606,4 +1797,620 @@ void APTTutorialDirector::Finish()
         GI->bTutorialWantsCursor = false;
         GI->ExitTutorial();
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tutorial RÁPIDO ("imitá a Sculpi"): guía para hacer una JIRAFA. Sculpi ESCULPE cada parte como un
+// jugador (su preview/brocha se mueve y el trazo se forma en AMARILLO); después el trazo se vuelve
+// TRANSPARENTE (guía) y el jugador lo copia. La arcilla del jugador se ACUMULA → se construye la jirafa.
+// Lecciones: 0 color amarillo, 1 patas, 2 torso (escala brocha), 3 cuello (cilindro), 4 cabeza+ojos.
+// Luego experimentación libre → Enter → foto. Reusa los helpers; no toca la máquina del avanzado.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void APTTutorialDirector::QuickBuildParts(int32 Lesson, TArray<FPTGhostPart>& Out, FLinearColor& OutColor) const
+{
+    Out.Reset();
+    OutColor = FLinearColor(1.0f, 0.82f, 0.08f); // amarillo jirafa
+    const FVector C(CanvasCenter.X, CanvasCenter.Y, FloorZ);
+    const FVector R = Right, F = Fwd;
+    auto Sp = [&](const FVector& P, float S) { Out.Add(FPTGhostPart{ EPTStampShape::Sphere, P, S }); };
+
+    switch (Lesson)
+    {
+    case 1: // 4 patas: cada una 3 bolas (abajo→arriba), en orden de pata
+    {
+        const FVector Legs[4] = { R * 130.f + F * 85.f, R * 130.f - F * 85.f, R * -130.f + F * 85.f, R * -130.f - F * 85.f };
+        for (const FVector& L : Legs)
+            for (int32 z = 0; z < 3; ++z) Sp(C + L + FVector(0, 0, 80.f + z * 95.f), 160.f);
+        break;
+    }
+    case 2: // torso: línea de bolas grandes
+        for (int32 i = 0; i < 4; ++i) Sp(C + R * (-150.f + i * 100.f) + FVector(0, 0, 360.f), 300.f);
+        break;
+    case 3: // cuello: sube hacia adelante (lado derecho)
+        for (int32 i = 0; i < 4; ++i) Sp(C + R * (170.f + i * 48.f) + FVector(0, 0, 430.f + i * 100.f), 180.f);
+        break;
+    case 4: // cabeza: 2 bolas arriba del cuello
+        Sp(C + R * 380.f + FVector(0, 0, 820.f), 210.f);
+        Sp(C + R * 450.f + FVector(0, 0, 835.f), 170.f);
+        break;
+    }
+}
+
+void APTTutorialDirector::QuickShowBrushAt(const FVector& P, float Size, const FLinearColor& Col)
+{
+    if (!QBrush)
+    {
+        QBrush = NewObject<UProceduralMeshComponent>(this);
+        QBrush->SetupAttachment(Root);
+        QBrush->RegisterComponent();
+        QBrush->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        QBrush->SetCastShadow(false);
+        QBrush->SetTranslucentSortPriority(10);
+        TArray<FVector> V, N; TArray<int32> T;
+        APTSculptVolume::BuildStampPreview(EPTStampShape::Sphere, 100.f, 12.f, V, T, N);
+        QBrush->CreateMeshSection(0, V, T, N, {}, {}, {}, false);
+    }
+    // Material del preview = el de las guías, teñido con el COLOR de la escultura (antes salía gris default).
+    if (!QBrushMID)
+    {
+        UMaterialInterface* Base = GhostMaterial.LoadSynchronous();
+        if (!Base && PC.IsValid()) Base = PC->GetGhostMaterial();
+        if (Base) { QBrushMID = UMaterialInstanceDynamic::Create(Base, this); KeepAlive.Add(QBrushMID); }
+    }
+    if (QBrushMID)
+    {
+        QBrushMID->SetVectorParameterValue(TEXT("Color"), Col * 1.7f);
+        QBrushMID->SetScalarParameterValue(TEXT("GlowEnable"), 0.f);
+        QBrush->SetMaterial(0, QBrushMID);
+    }
+    QBrush->SetWorldLocation(P);
+    QBrush->SetWorldScale3D(FVector(FMath::Max(Size, 40.f) / 100.f));
+    QBrush->SetVisibility(true);
+}
+
+void APTTutorialDirector::QuickLockSculpt(bool bLock)
+{
+    if (APTSculptPlayerController* P = PC.Get()) P->bTutorialLockSculpt = bLock;
+    bQSculpiAtWork = bLock; // mientras está bloqueado (demo), Sculpi "trabaja" frente al trazo
+    if (!bLock) QuickHideDots();
+}
+
+void APTTutorialDirector::QuickHideDots()
+{
+    for (UProceduralMeshComponent* D : QDots) if (D) D->SetVisibility(false);
+}
+
+void APTTutorialDirector::QuickDemoVisual()
+{
+    // Línea PUNTEADA de la cara de Sculpi hasta la brocha que "esculpe" (muestra que él es quien esculpe).
+    if (!QBrush || !QBrush->IsVisible() || !Sculpi) { QuickHideDots(); return; }
+    const FVector BrushLoc = QBrush->GetComponentLocation();
+    const FVector Head = Sculpi->GetActorLocation() + FVector(0.f, 0.f, 75.f);
+    const int32 ND = 9;
+    for (int32 i = 0; i < ND; ++i)
+    {
+        if (!QDots.IsValidIndex(i) || !QDots[i])
+        {
+            UProceduralMeshComponent* D = NewObject<UProceduralMeshComponent>(this);
+            D->SetupAttachment(Root); D->RegisterComponent();
+            D->SetCollisionEnabled(ECollisionEnabled::NoCollision); D->SetCastShadow(false);
+            D->SetTranslucentSortPriority(11);
+            TArray<FVector> V, N; TArray<int32> T;
+            APTSculptVolume::BuildStampPreview(EPTStampShape::Sphere, 100.f, 20.f, V, T, N);
+            D->CreateMeshSection(0, V, T, N, {}, {}, {}, false);
+            D->SetWorldScale3D(FVector(0.22f)); // puntito
+            if (QBrushMID) D->SetMaterial(0, QBrushMID);
+            if (QDots.IsValidIndex(i)) QDots[i] = D; else QDots.Add(D);
+            KeepAlive.Add(D);
+        }
+        const float t = (i + 1) / (float)(ND + 1);
+        QDots[i]->SetWorldLocation(FMath::Lerp(Head, BrushLoc, t));
+        QDots[i]->SetVisibility(true);
+    }
+}
+
+void APTTutorialDirector::QuickSetGhostColor(const FLinearColor& Col)
+{
+    if (!Ghosts.IsValidIndex(QGhost)) return;
+    Ghosts[QGhost].Color = Col;
+    if (Ghosts[QGhost].MID)        Ghosts[QGhost].MID->SetVectorParameterValue(TEXT("Color"), Col * GhostIntensity);
+    if (Ghosts[QGhost].OverlayMID) Ghosts[QGhost].OverlayMID->SetVectorParameterValue(TEXT("Color"), Col);
+}
+
+bool APTTutorialDirector::QuickLoadRecording(int32 Lesson)
+{
+    QRec.Reset();
+    TArray<uint8> Bytes;
+    if (!FFileHelper::LoadFileToArray(Bytes, *QTutRecPath(Lesson)) || Bytes.Num() == 0) return false;
+    FMemoryReader Ar(Bytes);
+    QTutRecSerialize(Ar, QRec);
+    return QRec.Num() > 0;
+}
+
+void APTTutorialDirector::QuickBuildGhostFromRec()
+{
+    QParts.Reset();
+    FVector LastC(FLT_MAX, FLT_MAX, FLT_MAX);
+    FLinearColor Col(1.f, 0.82f, 0.08f);
+    for (const FPTTutRecStamp& S : QRec)
+    {
+        if ((EPTEditMode)S.Mode != EPTEditMode::Add) continue; // la guía = geometría agregada
+        const FVector C = QOrigin + S.Pos;
+        if ((C - LastC).SizeSquared() < FMath::Square(FMath::Max(S.Size * 0.5f, 40.f))) continue; // dedup espacial
+        LastC = C;
+        QParts.Add(FPTGhostPart{ (EPTStampShape)S.Shape, C, S.Size, S.Scale, S.Rot });
+        Col = S.Color;
+    }
+    QGhost = AddGhost(QParts, Col);
+    if (QLesson == 4 && QParts.Num() > 0) QHeadCenter = QParts[0].Center;
+}
+
+void APTTutorialDirector::QuickBeginLesson(int32 Idx)
+{
+    QLesson = Idx;
+    QTime = 0.f; QReveal = 0; QRevealT = 0.f; QRepIdx = 0; bQRecorded = false; QRec.Reset();
+    bStepDone = false; DoneTimer = 0.f; QGhost = INDEX_NONE; QParts.Reset();
+    if (Widget) { Widget->SetProgress(-1.f, FText::GetEmpty()); Widget->SetHints(TArray<FPTTutHint>()); }
+    ClearGhosts(); // saca la guía anterior (NO la arcilla: la jirafa se acumula)
+    if (QBrush) QBrush->SetVisibility(false);
+    CaptureOrientation();
+
+    if (Idx >= QNumLessons) { QuickBeginFree(); return; }
+
+    if (Idx == 0) // color amarillo (sin demo): el jugador puede operar (elegir color)
+    {
+        QPhase = EPTQPhase::Copy;
+        bQSawPicker = false;
+        QuickLockSculpt(false);
+        Say(TEXT("TUT_G_COLOR"));
+        SetHintsFor({ TEXT("ColorPick") }, true, false);
+        return;
+    }
+
+    // Al empezar a modelar la jirafa (patas = 1ª parte), LIMPIAR lo que el jugador haya ensuciado antes.
+    if (Idx == 1) ClearClay();
+
+    // Durante el demo (Sculpi explica/esculpe) el jugador NO puede esculpir, solo moverse.
+    QuickLockSculpt(true);
+
+    const TCHAR* Line = TEXT("TUT_G_LEGS");
+    if (Idx == 2) Line = TEXT("TUT_G_TORSO");
+    if (Idx == 3) Line = TEXT("TUT_G_NECK");
+    if (Idx == 4) Line = TEXT("TUT_G_HEAD");
+
+    // ¿Hay una GRABACIÓN para esta parte? → Sculpi la reproduce con arcilla REAL (snapshot antes/restore
+    // después). Si no, cae al trazo SCRIPTED (bolas que se revelan).
+    if (QuickLoadRecording(Idx))
+    {
+        bQRecorded = true;
+        QOrigin = CanvasCenter; // los sellos se grabaron relativos al CENTRO del cubo
+        if (APTSculptVolume* V = Volume.Get()) { V->SaveFieldState(QSnapshot); QEyesSnapshot = V->GetEyeCount(); }
+        QPhase = EPTQPhase::Demo;
+        Say(Line);
+        return;
+    }
+
+    // Lecciones con trazo (scripted): construir el trazo, agregarlo como guía amarilla, ocultar todo y ANIMAR.
+    FLinearColor Color;
+    QuickBuildParts(Idx, QParts, Color);
+    QGhost = AddGhost(QParts, Color);
+    if (Idx == 4 && QParts.Num() > 0) QHeadCenter = QParts[0].Center;
+    if (Ghosts.IsValidIndex(QGhost))
+        for (UPrimitiveComponent* M : Ghosts[QGhost].Meshes) if (M) M->SetVisibility(false);
+    QuickSetGhostColor(Color * 1.7f); // brillante (arcilla amarilla "recién puesta")
+    QPhase = EPTQPhase::Demo;
+    Say(Line);
+}
+
+void APTTutorialDirector::QuickStartCopy()
+{
+    QPhase = EPTQPhase::Copy; QTime = 0.f; bStepDone = false;
+    QuickLockSculpt(false); // ahora te toca a vos: se desbloquea el esculpido
+    if (QBrush) QBrush->SetVisibility(false);
+    // El trazo se vuelve TRANSPARENTE (guía): color tenue. UpdateGhostColor lo pone verde al llenarse.
+    QuickSetGhostColor(FLinearColor(0.95f, 0.8f, 0.2f, 1.f) * 0.5f);
+    Say(TEXT("TUT_G_COPY"));
+    switch (QLesson)
+    {
+    case 1: SetHintsFor({ TEXT("ModeAdd"), TEXT("Sculpt") }, true, false); break;
+    case 2: SetHintsFor({ TEXT("BrushSize"), TEXT("Sculpt") }, true, false); break;
+    case 3: SetHintsFor({ TEXT("CycleShape"), TEXT("Sculpt") }, true, false); break;
+    case 4: SetHintsFor({ TEXT("Sculpt"), TEXT("ModeEyes") }, true, false);
+            QEyesBase = Volume.IsValid() ? Volume->GetEyeCount() : 0; break;
+    }
+}
+
+bool APTTutorialDirector::QuickCopyDone()
+{
+    switch (QLesson)
+    {
+    case 0: // abrió el picker, eligió un AMARILLO y CERRÓ (confirmó): recién ahí cuenta, no al abrir
+    {
+        const APTSculptPlayerController* P = PC.Get();
+        if (!bQSawPicker || !P) return false;
+        if (P->IsColorPickerOpen()) return false; // mientras la rueda está abierta todavía no eligió
+        const FLinearColor HSV = P->CurrentPaintColor.LinearRGBToHSV(); // R=hue(grados), G=sat, B=val
+        return HSV.R >= 38.f && HSV.R <= 75.f && HSV.G > 0.35f && HSV.B > 0.45f;
+    }
+    case 1: return QuickLegsMinFill() >= 0.4f;         // patas: las 4 (mínimo por cuadrante)
+    case 2: return MeasureFill(QGhost) >= 0.45f;       // torso
+    case 3: return MeasureFill(QGhost) >= 0.40f;       // cuello
+    case 4: return MeasureFill(QGhost) >= 0.40f && (Volume.IsValid() ? Volume->GetEyeCount() - QEyesBase : 0) >= 2;
+    }
+    return false;
+}
+
+void APTTutorialDirector::QuickBeginFree()
+{
+    QState = EPTQuick::Free; QTime = 0.f;
+    ClearGhosts();
+    if (QBrush) QBrush->SetVisibility(false);
+    QuickLockSculpt(false);
+    if (Widget) Widget->SetProgress(-1.f, FText::GetEmpty());
+    Say(TEXT("TUT_G_FREE"));
+    // Lista opcional de herramientas para experimentar + Enter para la foto.
+    SetHintsFor({ TEXT("ModeErase"), TEXT("ModePaint"), TEXT("CycleShape"), TEXT("Undo"), TEXT("Finish") }, false, false);
+}
+
+void APTTutorialDirector::QuickTick(float Dt)
+{
+    if (QState == EPTQuick::Guess) { QuickTickGuess(Dt); return; }
+
+    QTime += Dt;
+    APTSculptPlayerController* P = PC.Get();
+
+    if (QState == EPTQuick::Intro)
+    {
+        if (QTime > ReadTime() + 1.0f) { QState = EPTQuick::Lesson; QuickBeginLesson(0); }
+        return;
+    }
+    if (QState == EPTQuick::Free)
+    {
+        if (P && P->WasInputKeyJustPressed(EKeys::Enter)) QuickToPhoto(); // Enter → foto
+        return;
+    }
+    if (QState != EPTQuick::Lesson) return; // Idle (cartel) o Photo (flujo del avanzado)
+
+    // Lección del color (sin demo): el jugador elige AMARILLO con el picker (no se fuerza).
+    if (QLesson == 0)
+    {
+        if (P && P->IsColorPickerOpen()) bQSawPicker = true;
+        if (!bStepDone)
+        {
+            if (QuickCopyDone()) { bStepDone = true; DoneTimer = 0.f; PlaySfx(SuccessSound, 0.5f); Say(TEXT("TUT_Q_GOOD")); }
+            // Abrió el picker pero no es amarillo: recordárselo (una vez cada tanto).
+            else if (bQSawPicker && QTime > 9.f && Widget && !Widget->IsTyping())
+            { QTime = 0.f; Say(TEXT("TUT_G_COLOR")); }
+        }
+        else
+        {
+            if (Widget && Widget->IsTyping()) DoneTimer = 0.f; else DoneTimer += Dt;
+            if (DoneTimer > ReadTime()) QuickBeginLesson(1);
+        }
+        return;
+    }
+
+    if (QPhase == EPTQPhase::Demo) // Sculpi esculpe
+    {
+        if (bQRecorded) // REPRODUCIR la grabación con arcilla REAL (como un jugador), luego borrarla
+        {
+            APTSculptVolume* V = Volume.Get();
+            while (V && QRepIdx < QRec.Num() && QRec[QRepIdx].T <= QTime)
+            {
+                const FPTTutRecStamp& S = QRec[QRepIdx];
+                if (S.Mode == PTTutRecEyeMode)
+                    V->AddEye(QOrigin + S.Pos, S.Size);   // OJO grabado: Sculpi lo coloca (Size = radio)
+                else
+                    V->ApplyStamp(QOrigin + S.Pos, (EPTStampShape)S.Shape, S.Size, (EPTEditMode)S.Mode, S.Color, S.Rot, S.Scale);
+                QuickShowBrushAt(QOrigin + S.Pos, S.Size, S.Color);
+                ++QRepIdx;
+            }
+            QuickDemoVisual(); // Sculpi mirando el trazo + línea punteada
+            const float LastT = QRec.Num() ? QRec.Last().T : 0.f;
+            if (QRepIdx >= QRec.Num() && QTime > LastT + 1.3f)
+            {
+                if (V) { V->LoadFieldState(QSnapshot); V->SetEyeCount(QEyesSnapshot); } // saca arcilla Y ojos del demo
+                QuickBuildGhostFromRec();             // la guía sale de los sellos grabados (los ojos se ignoran)
+                QuickStartCopy();                     // se vuelve transparente + "copialo"
+            }
+            return;
+        }
+
+        // Scripted: revelar el trazo parte por parte + preview.
+        const int32 N = Ghosts.IsValidIndex(QGhost) ? Ghosts[QGhost].Meshes.Num() : 0;
+        if (QReveal < N)
+        {
+            QRevealT += Dt;
+            if (QRevealT >= 0.30f)
+            {
+                QRevealT = 0.f;
+                if (UPrimitiveComponent* M = Ghosts[QGhost].Meshes[QReveal]) M->SetVisibility(true);
+                if (QParts.IsValidIndex(QReveal)) QuickShowBrushAt(QParts[QReveal].Center, QParts[QReveal].Size, FLinearColor(1.f, 0.82f, 0.08f));
+                PlaySfx(VoiceSounds.Num() ? VoiceSounds[0] : TSoftObjectPtr<USoundBase>(), 0.25f);
+                ++QReveal;
+            }
+        }
+        else if (QTime > N * 0.30f + 1.3f) // terminó de dibujar → "ahora copialo"
+        {
+            QuickStartCopy();
+        }
+        QuickDemoVisual();
+        return;
+    }
+
+    // Fase COPIA
+    QuickTickGhostHighlight(); // la esfera-guía bajo la brocha se agranda + se tiñe (ayuda con la profundidad)
+    if (!bStepDone)
+    {
+        const float Fill = MeasureFill(QGhost); // actualiza el verde de la guía a medida que se llena
+        // Patas (lección 1): progreso = mínimo entre las 4 (no 3); el resto por relleno total.
+        const float Prog = (QLesson == 1) ? (QuickLegsMinFill() / 0.4f) : (Fill / 0.45f);
+        if (Widget) Widget->SetProgress(FMath::Clamp(Prog, 0.f, 1.f), FText::GetEmpty());
+        if (QuickCopyDone())
+        {
+            bStepDone = true; DoneTimer = 0.f;
+            PlaySfx(SuccessSound, 0.5f);
+            Say(TEXT("TUT_Q_GOOD"));
+            if (Widget) Widget->SetProgress(1.f, PTText::Get(TEXT("TUT_DONE_MARK")));
+        }
+    }
+    else
+    {
+        if (Widget && Widget->IsTyping()) DoneTimer = 0.f; else DoneTimer += Dt;
+        if (DoneTimer > ReadTime() + 0.6f) QuickBeginLesson(QLesson + 1);
+    }
+}
+
+void APTTutorialDirector::QuickToPhoto()
+{
+    QState = EPTQuick::Photo;
+    ClearGhosts();
+    if (Widget) Widget->SetProgress(-1.f, FText::GetEmpty());
+    Say(TEXT("TUT_AP_PHOTO"));
+    // Handoff al flujo de FOTO del avanzado (cuenta regresiva + polaroid + guardar). El Tick deja de
+    // llamar a QuickTick cuando QState==Photo y corre TickStep (que maneja Photo y End).
+    EnterStep(EPTTutStep::Photo);
+}
+
+// ── Intro "adiviná la palabra": Sculpi modela un ÁRBOL grabado y vos escribís en el chat ──────────────
+void APTTutorialDirector::QuickBeginGuess()
+{
+    // Cargar el árbol grabado; si no hay, saltar directo a la jirafa.
+    QRec.Reset();
+    TArray<uint8> Bytes;
+    const bool bHaveTree = FFileHelper::LoadFileToArray(Bytes, *QTutRecPath(5)) && Bytes.Num() > 0;
+    if (bHaveTree) { FMemoryReader Ar(Bytes); QTutRecSerialize(Ar, QRec); }
+    if (!bHaveTree || QRec.Num() == 0)
+    {
+        QState = EPTQuick::Intro; QTime = 0.f; Say(TEXT("TUT_G_INTRO"));
+        return;
+    }
+
+    // OJO: NO prendemos bTutorialGuessPhase todavía. Durante la presentación de Sculpi (fase 0) el HUD de
+    // juego sigue oculto (solo se ve a Sculpi). Se prende recién cuando empieza a esculpir el árbol (fase 1).
+    QState = EPTQuick::Guess; QGPhase = 0;   // 0 = entrada + saludo
+    QTime = 0.f; QRepIdx = 0; bQTreeDone = false; bQGuessed = false; DoneTimer = 0.f;
+    QRevealCount = 0; QRevealTimer = 0.f; QGReminderT = 0.f;
+    QOrigin = CanvasCenter;
+    ClearClay();
+
+    const int32 Li = FMath::Clamp(PTText::GetCurrentLanguageIndex(), 0, (int32)UE_ARRAY_COUNT(GTreeWords) - 1);
+    QWord = GTreeWords[Li]; // palabra en el idioma del jugador (para medir el largo de la máscara)
+
+    // Sculpi entra DESDE AFUERA (lejos a la derecha): TickSculpi lo trae a cuadro con su interpolación.
+    if (APTSculptPlayerController* P = PC.Get())
+        if (P->PlayerCameraManager && Sculpi)
+        {
+            const FRotationMatrix MR(FRotator(0.f, P->PlayerCameraManager->GetCameraRotation().Yaw, 0.f));
+            const FVector CamLoc = P->PlayerCameraManager->GetCameraLocation();
+            Sculpi->SetActorLocation(CamLoc + MR.GetUnitAxis(EAxis::X) * 520.f
+                                     + MR.GetUnitAxis(EAxis::Y) * 2600.f + FVector(0, 0, -95.f));
+        }
+
+    // Bloquear el esculpido, pero que Sculpi NO vaya al trazo todavía: primero entra y saluda de frente.
+    QuickLockSculpt(true);
+    bQSculpiAtWork = false;
+    Say(TEXT("TUT_GUESS_GREET")); // "¡Hola! soy Sculpi, esto es Sculpturillo. Te doy los primeros pasos…"
+}
+
+// Pone el GameState como una ronda real: fase Drawing + máscara (todos los idiomas) + reloj de 30 s, sin
+// escultor (así el jugador local es "adivinador": ve la máscara, anima las letras y puede chatear).
+void APTTutorialDirector::QuickSetupGuessState()
+{
+    APTSculptGameState* G = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr;
+    if (!G) return;
+    G->bLocalParty = false;         // no es la "TV" de modo local: el jugador adivina normal
+    G->CurrentSculptor = nullptr;   // sin escultor → IsLocalPlayerSculptor()=false
+    G->CurrentRound = 0; G->TotalRounds = 0;  // sin "Ronda x/y"
+    G->bTurnEndedAllGuessed = false;
+    G->TurnPhase = EPTTurnPhase::Drawing;     // dibujando → se ven palabra + reloj
+    G->TurnEndServerTime = G->GetServerWorldTimeSeconds() + 30.0; // 30 s de reloj
+    QuickPushGuessMask(0, /*bAll=*/false);    // todo tapado
+    G->OnTurnPhaseChanged.Broadcast();
+}
+
+void APTTutorialDirector::QuickPushGuessMask(int32 RevealN, bool bAll)
+{
+    APTSculptGameState* G = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr;
+    if (!G) return;
+    const int32 NumLangs = FMath::Max(1, PTText::GetAvailableLanguages().Num());
+    G->MaskedWords.SetNum(NumLangs);
+    for (int32 L = 0; L < NumLangs; ++L)
+    {
+        const FString W = (L < (int32)UE_ARRAY_COUNT(GTreeWords)) ? FString(GTreeWords[L]) : FString(GTreeWords[0]);
+        const int32 Rev = bAll ? W.Len() : RevealN;
+        // Mismo formato que APTSculptGameMode::MaskWord: celdas separadas por espacio, reveladas en mayúscula.
+        FString M;
+        for (int32 i = 0; i < W.Len(); ++i)
+        {
+            const TCHAR C = W[i];
+            if (FChar::IsWhitespace(C))      M += TEXT("   ");
+            else if (i < Rev)              { M.AppendChar(FChar::ToUpper(C)); M += TEXT(" "); }
+            else                             M += TEXT("_ ");
+        }
+        G->MaskedWords[L] = M.TrimStartAndEnd();
+    }
+    G->RefreshLocalMasked(); // recalcula MaskedWord (idioma local) y refresca el HUD (anima la letra nueva)
+}
+
+void APTTutorialDirector::QuickEndGuessState()
+{
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>()) GI->bTutorialGuessPhase = false;
+    APTSculptGameState* G = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr;
+    if (!G) return;
+    // Restaurar el estado NORMAL del tutorial (igual que APTSculptGameMode::Tutorial_BeginFreeSculpt):
+    // VOS sos el escultor y la fase queda en Drawing, para que CanLocalPlayerSculpt() sea true y puedas
+    // esculpir la jirafa. (Antes lo dejaba en WaitingForPlayers y el esculpido quedaba muerto.)
+    APTSculptPlayerController* P = PC.Get();
+    G->CurrentSculptor = P ? P->GetPlayerState<APTPlayerState>() : nullptr;
+    G->TurnPhase = EPTTurnPhase::Drawing;
+    G->TurnEndServerTime = 0.0;   // sin reloj (el HUD del tutorial lo oculta igual)
+    G->MaskedWords.Reset();
+    G->RefreshLocalMasked();
+    G->OnTurnPhaseChanged.Broadcast();
+}
+
+void APTTutorialDirector::OnTutorialChat(const FString& Msg)
+{
+    if (QState != EPTQuick::Guess || QGPhase != 1 || bQGuessed) return;
+    // Aceptar el guess en CUALQUIER idioma (árbol/tree/árvore/Baum/arbre/albero).
+    const FString Gn = QTutNorm(Msg);
+    bool bMatch = false;
+    for (const TCHAR* W : GTreeWords) if (Gn == QTutNorm(W)) { bMatch = true; break; }
+    if (!bMatch) return;
+
+    bQGuessed = true; QGPhase = 2; DoneTimer = 0.f;
+    QuickPushGuessMask(0, /*bAll=*/true); // revelar la palabra completa
+    PlaySfx(SuccessSound, 0.6f);
+    // Popup de juego "¡adivinaste!" (palabra + puntos) + felicitación de Sculpi.
+    if (APTSculptGameState* G = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr)
+        G->OnYouGuessed.Broadcast(QWord, 100);
+    Say(TEXT("TUT_GUESS_OK"));
+}
+
+void APTTutorialDirector::QuickTickGuess(float Dt)
+{
+    QTime += Dt;
+    APTSculptVolume* V = Volume.Get();
+    APTSculptGameState* G = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr;
+
+    // ── Fase 0: entrada + saludo (Sculpi entra de afuera y se presenta, de frente) ──
+    if (QGPhase == 0)
+    {
+        if (QTime > ReadTime() + 1.4f)
+        {
+            QGPhase = 1; QTime = 0.f; QRepIdx = 0; bQTreeDone = false;
+            bQSculpiAtWork = true;       // ahora sí: Sculpi se pone frente al trazo que "esculpe"
+            if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>()) GI->bTutorialGuessPhase = true;
+            QuickSetupGuessState();      // palabra + reloj + chat con la UI de juego (ahora SÍ se ve)
+            Say(TEXT("TUT_GUESS_INTRO")); // "¡mi turno! adiviná qué hago y escribilo en el chat (Enter)"
+        }
+        return;
+    }
+
+    // ── Fases 2/3: resuelto (adivinó o se acabó el tiempo) → leer y pasar a la jirafa ──
+    if (QGPhase >= 2)
+    {
+        DoneTimer += Dt;
+        if (DoneTimer > ReadTime() + 1.0f) QuickAfterGuessToGiraffe();
+        return;
+    }
+
+    // ── Fase 1: adivinando ──
+    // Reproducir el árbol (una vez); queda dibujado mientras adivinás.
+    if (!bQTreeDone && V)
+    {
+        while (QRepIdx < QRec.Num() && QRec[QRepIdx].T <= QTime)
+        {
+            const FPTTutRecStamp& S = QRec[QRepIdx];
+            if (S.Mode == PTTutRecEyeMode)
+                V->AddEye(QOrigin + S.Pos, S.Size);
+            else
+                V->ApplyStamp(QOrigin + S.Pos, (EPTStampShape)S.Shape, S.Size, (EPTEditMode)S.Mode, S.Color, S.Rot, S.Scale);
+            QuickShowBrushAt(QOrigin + S.Pos, S.Size, S.Color);
+            ++QRepIdx;
+        }
+        QuickDemoVisual();
+        if (QRepIdx >= QRec.Num()) { bQTreeDone = true; if (QBrush) QBrush->SetVisibility(false); QuickHideDots(); }
+    }
+
+    // ¿Se acabó el tiempo (30 s) sin adivinar? → revelar la palabra y "la palabra era «árbol»…".
+    if (G && G->GetTurnSecondsRemaining() <= 0.f)
+    {
+        QGPhase = 3; DoneTimer = 0.f;
+        G->TurnPhase = EPTTurnPhase::TurnEnd;   // fin de turno: la palabra se muestra completa
+        QuickPushGuessMask(0, /*bAll=*/true);
+        FFormatOrderedArguments A; A.Add(FText::FromString(QWord));
+        if (Widget) Widget->Say(PTText::Format(FName(TEXT("TUT_GUESS_FAIL")), A));
+        return;
+    }
+
+    // Recordatorio periódico: escribí tu respuesta en el chat (Enter).
+    QGReminderT += Dt;
+    if (QGReminderT >= 9.f) { QGReminderT = 0.f; Say(TEXT("TUT_GUESS_REMIND")); }
+
+    // Revelar letras como PISTA (izq→der): la 1ª a los ~8 s, después cada ~10 s (deja la última sin revelar).
+    QRevealTimer += Dt;
+    const float Due = (QRevealCount == 0) ? 8.f : 10.f;
+    if (QRevealCount < QWord.Len() - 1 && QRevealTimer >= Due)
+    {
+        QRevealTimer = 0.f; QGReminderT = 0.f;
+        ++QRevealCount;
+        QuickPushGuessMask(QRevealCount, /*bAll=*/false);
+        Say(TEXT("TUT_GUESS_PISTA"));
+    }
+}
+
+void APTTutorialDirector::QuickAfterGuessToGiraffe()
+{
+    QuickEndGuessState();         // restaurar el HUD de juego (saca palabra/reloj/chat)
+    ClearClay();                  // borrar el árbol antes de la jirafa
+    if (QBrush) QBrush->SetVisibility(false);
+    QuickHideDots();
+    QuickLockSculpt(false);
+    QState = EPTQuick::Intro;
+    QTime = 0.f;
+    Say(TEXT("TUT_G_INTRO"));      // "ahora tu turno: vamos a modelar una jirafa…"
+}
+
+void APTTutorialDirector::QuickShowChoice()
+{
+    QState = EPTQuick::Idle;
+    Say(TEXT("TUT_Q_END"));
+    if (Widget) { Widget->SetProgress(-1.f, FText::GetEmpty()); Widget->SetHints(TArray<FPTTutHint>()); }
+
+    APTSculptPlayerController* P = PC.Get();
+    if (!P) { QuickMarkDoneAndExit(/*bAdvanced=*/false); return; }
+
+    ChoiceWidget = CreateWidget<UPTTutorialChoiceWidget>(P, UPTTutorialChoiceWidget::StaticClass());
+    if (!ChoiceWidget) { QuickMarkDoneAndExit(false); return; }
+    ChoiceWidget->Setup(PTText::Get(TEXT("TUT_Q_ADV_Q")), PTText::Get(TEXT("TUT_Q_ADV_YES")), PTText::Get(TEXT("TUT_Q_ADV_NO")));
+    ChoiceWidget->OnYes.AddUObject(this, &APTTutorialDirector::OnAdvancedYes);
+    ChoiceWidget->OnNo.AddUObject(this, &APTTutorialDirector::OnAdvancedNo);
+    ChoiceWidget->AddToViewport(40);
+
+    P->bShowMouseCursor = true;
+    FInputModeUIOnly Mode;
+    Mode.SetWidgetToFocus(ChoiceWidget->TakeWidget());
+    Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+    P->SetInputMode(Mode);
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>()) GI->bTutorialWantsCursor = true;
+}
+
+void APTTutorialDirector::OnAdvancedYes() { QuickMarkDoneAndExit(/*bAdvanced=*/true); }
+void APTTutorialDirector::OnAdvancedNo()  { QuickMarkDoneAndExit(/*bAdvanced=*/false); }
+
+void APTTutorialDirector::QuickMarkDoneAndExit(bool bAdvanced)
+{
+    if (bExiting) return;
+    bExiting = true;
+    if (UPTGameUserSettings* S = UPTGameUserSettings::Get()) S->SetQuickTutorialDone(true);
+    if (ChoiceWidget) { ChoiceWidget->RemoveFromParent(); ChoiceWidget = nullptr; }
+
+    UPTGameInstance* GI = GetGameInstance<UPTGameInstance>();
+    if (GI) { GI->bTutorialWantsCursor = false; GI->bTutorialMode = false; GI->bQuickTutorial = false; }
+
+    if (bAdvanced && GI) { GI->EnterTutorial(/*bQuick=*/false); return; } // abre el avanzado (re-travel)
+    if (GI) GI->ExitTutorial(); // No → al menú
 }

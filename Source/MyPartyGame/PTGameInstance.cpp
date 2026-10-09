@@ -321,9 +321,10 @@ void UPTGameInstance::DoEnterLocalPartyTravel()
     UGameplayStatics::OpenLevel(this, FName(*LocalPartyLevel), /*bAbsolute=*/true, Options);
 }
 
-void UPTGameInstance::EnterTutorial()
+void UPTGameInstance::EnterTutorial(bool bQuick)
 {
     bTutorialMode = true;
+    bQuickTutorial = bQuick;
     bLocalPartyMode = false;
     bLocalPartyOnline = false;
     bSoloTest = false;

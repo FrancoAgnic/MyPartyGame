@@ -88,8 +88,11 @@ public:
     // ── Tutorial de Sculpi (práctica de esculpido, sin conexión, en el mismo mapa de juego) ──
     UPROPERTY(BlueprintReadOnly, Category="Tutorial")
     bool bTutorialMode = false;
-    /** Abre el tutorial (lo llama el boot la primera vez y el botón "Tutorial" del menú Jugar). */
-    UFUNCTION(BlueprintCallable, Category="Tutorial") void EnterTutorial();
+    /** true = tutorial RÁPIDO (imitá a Sculpi, 1.ª vez); false = AVANZADO (el completo, botón del menú). */
+    UPROPERTY(BlueprintReadOnly, Category="Tutorial")
+    bool bQuickTutorial = false;
+    /** Abre el tutorial. bQuick=true → el rápido (boot, 1.ª vez); false → el avanzado (botón "Tutorial avanzado"). */
+    UFUNCTION(BlueprintCallable, Category="Tutorial") void EnterTutorial(bool bQuick = false);
     /** Vuelve al menú principal (terminado o saltado: queda marcado como hecho). */
     UFUNCTION(BlueprintCallable, Category="Tutorial") void ExitTutorial();
     UFUNCTION() void DoEnterTutorialTravel();
@@ -100,6 +103,10 @@ public:
     UFUNCTION(Exec) void PTTutSave();  // DEV: guardar la foto del tutorial
     UFUNCTION(Exec) void PTLang(const FString& Code); // DEV: idioma temporal (no se guarda), ej. "PTLang es"          // DEV: rellenar las guías por código (probar la medición)
     bool bTutorialWantsCursor = false; // el director lo prende en la pantalla de la foto (botones)
+    // El director lo prende durante el intro "adiviná la palabra": el HUD de juego (palabra, reloj, chat,
+    // animación de letras) sí se muestra y se maneja como una ronda real (en vez de ocultarlo como el resto
+    // del tutorial). Fuera de ese intro queda apagado y el HUD se oculta igual que siempre.
+    bool bTutorialGuessPhase = false;
 
     // Consola: abre el panel de configuración del joystick (sensibilidad / botones).
     UFUNCTION(Exec) void PTJoystick();

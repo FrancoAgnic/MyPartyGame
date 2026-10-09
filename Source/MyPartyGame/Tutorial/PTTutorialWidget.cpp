@@ -1,5 +1,6 @@
 #include "PTTutorialWidget.h"
 #include "../PTTextTable.h"
+#include "../PTGameInstance.h"
 #include "Blueprint/WidgetTree.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Components/Border.h"
@@ -101,7 +102,11 @@ void UPTTutorialPolaroid::BuildTree()
         CaptionEdit->SetFont(Font);
         CaptionEdit->SetSelectAllTextWhenFocused(true); // al hacer clic se reemplaza "Mi perro" de una
     }
-    CaptionEdit->SetHintText(PTText::Get(TEXT("TUT_NAME_HINT")));
+    {
+        const UPTGameInstance* GI = GetGameInstance<UPTGameInstance>();
+        const bool bGiraffe = GI && GI->bQuickTutorial; // tutorial rápido = jirafa (no perro)
+        CaptionEdit->SetHintText(PTText::Get(bGiraffe ? TEXT("TUT_NAME_HINT_GIRAFFE") : TEXT("TUT_NAME_HINT")));
+    }
     CaptionEdit->OnTextCommitted.AddDynamic(this, &UPTTutorialPolaroid::HandleCaptionCommitted);
     if (UHorizontalBoxSlot* S = Bottom->AddChildToHorizontalBox(CaptionEdit))
     {
@@ -502,7 +507,12 @@ void UPTTutorialWidget::ShowPhoto(UTexture2D* Photo, const FText& DefaultName)
         Polaroid->OnCaptionCommitted.RemoveAll(this);
         Polaroid->OnCaptionCommitted.AddUObject(this, &UPTTutorialWidget::HandleSavePhoto);
     }
-    if (SavedText) SavedText->SetText(PTText::Get(TEXT("TUT_NAME_HINT_LONG")));
+    if (SavedText)
+    {
+        const UPTGameInstance* GI = GetGameInstance<UPTGameInstance>();
+        const bool bGiraffe = GI && GI->bQuickTutorial;
+        SavedText->SetText(PTText::Get(bGiraffe ? TEXT("TUT_NAME_HINT_LONG_GIRAFFE") : TEXT("TUT_NAME_HINT_LONG")));
+    }
     if (SavePhotoButton) SavePhotoButton->SetVisibility(ESlateVisibility::Visible);
     if (ContinueButton) ContinueButton->SetVisibility(ESlateVisibility::Collapsed);
     if (PhotoPanel) PhotoPanel->SetVisibility(ESlateVisibility::Visible);

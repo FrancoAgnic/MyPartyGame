@@ -19,6 +19,36 @@ UENUM(BlueprintType)
 // TriPrism es en realidad un CONO (histórico). Las de abajo son primitivas nuevas para el radial.
 enum class EPTStampShape : uint8 { Sphere, Cube, Cylinder, TriPrism, Pyramid, Torus, Capsule, HexPrism, Octahedron };
 
+// ── Grabador del tutorial (dev) ───────────────────────────────────────────────
+// Captura los sellos del jugador (relativos al centro del cubo) para REPRODUCIRLOS como Sculpi en el
+// tutorial rápido. Se activa con comandos de consola (ver PTTutorialDirector.cpp). Un solo grabador a la vez.
+class APTSculptVolume;
+struct FPTTutRecStamp
+{
+    float        T = 0.f;     // segundos desde el inicio de la grabación
+    FVector      Pos = FVector::ZeroVector; // relativo al centro del cubo al grabar
+    uint8        Shape = 0;   // EPTStampShape
+    float        Size = 200.f;
+    uint8        Mode = 0;    // EPTEditMode
+    FLinearColor Color = FLinearColor::White;
+    FRotator     Rot = FRotator::ZeroRotator;
+    FVector      Scale = FVector::OneVector;
+};
+// Mode SENTINELA en la grabación: este "sello" es en realidad un OJO (se reproduce con AddEye, no
+// ApplyStamp). Size guarda el radio del ojo. Así el demo grabado también coloca los ojos.
+static constexpr uint8 PTTutRecEyeMode = 250;
+
+namespace PTTutRec
+{
+    MYPARTYGAME_API bool Start(APTSculptVolume* V);
+    MYPARTYGAME_API void Stop();
+    MYPARTYGAME_API bool IsRecording();
+    MYPARTYGAME_API const TArray<FPTTutRecStamp>& Get();
+    // La llama APTSculptVolume::ApplyStamp (no hace nada si no se está grabando).
+    MYPARTYGAME_API void Capture(const FVector& WorldPos, uint8 Shape, float Size, uint8 Mode,
+                                 const FLinearColor& Color, const FRotator& Rot, const FVector& Scale);
+}
+
 UENUM(BlueprintType)
 enum class EPTEditMode : uint8 { Add, Erase, Paint, Smooth };
 
@@ -175,6 +205,9 @@ public:
     // Se replica a todos via la propiedad Eyes → la escultura con ojos se ve igual en todos.
     void AddEye(FVector WorldPos, float Radius);
     int32 GetEyeCount() const { return Eyes.Num(); }
+    /** Recorta los ojos a los primeros 'Count' (autoritativo). Lo usa el tutorial para quitar los ojos
+     *  del DEMO de Sculpi tras restaurar el estado del jugador (LoadFieldState no toca los ojos). */
+    void SetEyeCount(int32 Count);
 
     // Acceso al ProceduralMesh (para hornear la escultura a otro componente, ej: la cabeza custom).
     UProceduralMeshComponent* GetMeshComponent() const { return Mesh; }
@@ -205,6 +238,10 @@ public:
     // Muestra/oculta el wireframe del NoPlaceZone. Debug SOLO para el creador del nivel (autoría): se prende
     // en el Level Creator y queda oculto al publicar/jugar (por defecto HiddenInGame).
     void SetNoPlaceZoneDebugVisible(bool bVisible);
+
+    /** Oculta/muestra el MARCO del cubo (los StaticMeshComponents que marcan la zona de esculpido). La
+     *  arcilla (ProceduralMesh) y los ojos NO se tocan. Lo usa el tutorial para que la foto salga limpia. */
+    void SetFrameMeshesHidden(bool bHide);
 
     /** ¿Ese punto del mundo cae DENTRO del lienzo (el BoundsBox)? Para no dejar poner cosas
      *  (ej: ojos) fuera de la zona de modelado. */

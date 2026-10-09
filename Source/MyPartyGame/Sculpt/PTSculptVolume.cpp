@@ -421,6 +421,15 @@ void APTSculptVolume::SetSculptModeVisual(bool bInside)
         if (SM) SM->SetOverlayMaterial(Ov);
 }
 
+void APTSculptVolume::SetFrameMeshesHidden(bool bHide)
+{
+    // El marco/cubo de la zona está hecho de StaticMeshComponents (en el BP). La arcilla y los ojos son
+    // ProceduralMeshComponents, así que esto no los toca: la foto sale solo con el modelo.
+    TArray<UStaticMeshComponent*> SMComps;
+    GetComponents<UStaticMeshComponent>(SMComps);
+    for (UStaticMeshComponent* SM : SMComps) if (SM) SM->SetHiddenInGame(bHide);
+}
+
 void APTSculptVolume::SetBakeScan(float Progress01, bool bActive)
 {
     if (!ClayMID) return;
@@ -1201,10 +1210,47 @@ float APTSculptVolume::StampSDF(EPTStampShape Shape, FVector P, float HalfSize)
     }
 }
 
+// ── Grabador del tutorial ─────────────────────────────────────────────────────
+namespace PTTutRec
+{
+    static bool GRecording = false;
+    static TArray<FPTTutRecStamp> GStamps;
+    static double GStart = 0.0;
+    static FVector GOrigin = FVector::ZeroVector;
+
+    bool Start(APTSculptVolume* V)
+    {
+        if (!V) return false;
+        FTransform Xf; FVector Ext;
+        if (!V->GetCanvasBox(Xf, Ext)) return false;
+        GOrigin = Xf.GetLocation();
+        GStamps.Reset();
+        GStart = FPlatformTime::Seconds();
+        GRecording = true;
+        return true;
+    }
+    void Stop() { GRecording = false; }
+    bool IsRecording() { return GRecording; }
+    const TArray<FPTTutRecStamp>& Get() { return GStamps; }
+    void Capture(const FVector& WorldPos, uint8 Shape, float Size, uint8 Mode,
+                 const FLinearColor& Color, const FRotator& Rot, const FVector& Scale)
+    {
+        if (!GRecording) return;
+        FPTTutRecStamp S;
+        S.T = (float)(FPlatformTime::Seconds() - GStart);
+        S.Pos = WorldPos - GOrigin;
+        S.Shape = Shape; S.Size = Size; S.Mode = Mode;
+        S.Color = Color; S.Rot = Rot; S.Scale = Scale;
+        GStamps.Add(S);
+    }
+}
+
 bool APTSculptVolume::ApplyStamp(FVector WorldPos, EPTStampShape Shape, float Size,
                                   EPTEditMode Mode, FLinearColor PaintColor, FRotator StampRot,
                                   FVector StampScale)
 {
+    PTTutRec::Capture(WorldPos, (uint8)Shape, Size, (uint8)Mode, PaintColor, StampRot, StampScale);
+
     // Modo SVO (experimental, detrás de flag): la geometría va por el octree adaptativo.
     if (bUseSVO)
         return ApplyStampSVO(WorldPos, Shape, Size, Mode, PaintColor, StampRot, StampScale);
@@ -2800,6 +2846,16 @@ void APTSculptVolume::AddEye(FVector WorldPos, float Radius)
     const FVector Local = GetActorTransform().InverseTransformPosition(WorldPos);
     Eyes.Add(FVector4(Local.X, Local.Y, Local.Z, FMath::Max(Radius, 1.f)));
     RebuildEyesMesh(); // el servidor no recibe OnRep; reconstruir acá
+    // Grabación del tutorial: registrar el ojo como "sello" sentinela (Size = radio) para que el demo de
+    // Sculpi también los coloque. No hace nada si no se está grabando.
+    PTTutRec::Capture(WorldPos, 0, Radius, PTTutRecEyeMode, FLinearColor::White, FRotator::ZeroRotator, FVector::OneVector);
+}
+
+void APTSculptVolume::SetEyeCount(int32 Count)
+{
+    if (!HasAuthority()) return;
+    Count = FMath::Max(0, Count);
+    if (Eyes.Num() > Count) { Eyes.SetNum(Count); RebuildEyesMesh(); }
 }
 
 void APTSculptVolume::OnRep_Eyes()

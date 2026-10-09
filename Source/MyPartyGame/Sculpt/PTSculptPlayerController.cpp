@@ -720,9 +720,10 @@ void APTSculptPlayerController::OnOpenChat()
     // Modo local: en la TV nadie escribe (se adivina desde el celular). Enter no abre el chat.
     if (const APTSculptGameState* G = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr)
         if (G->IsLocalPartyMode()) return;
-    // Tutorial: no hay chat (Enter es "¡Listo!" en la última palabra).
+    // Tutorial: normalmente no hay chat (Enter es "¡Listo!" en la foto). EXCEPTO el intro "adiviná la
+    // palabra", donde sí se escribe en el chat para adivinar.
     if (const UPTGameInstance* TGI = GetGameInstance<UPTGameInstance>())
-        if (TGI->bTutorialMode) return;
+        if (TGI->bTutorialMode && !TGI->bTutorialGuessPhase) return;
     if (GameplayHUD) GameplayHUD->FocusChat();
 }
 
@@ -1995,6 +1996,8 @@ void APTSculptPlayerController::UpdatePreviewVisual()
 
 void APTSculptPlayerController::OnStampPressed()
 {
+    if (bTutorialLockSculpt) return; // Sculpi está explicando/esculpiendo: no esculpir todavía
+
     // Modo PIVOTE: el click confirma el pivote y hornea la pieza (tiene prioridad sobre todo lo demás).
     if (bPivotMode) { ConfirmPivotBake(); return; }
 
@@ -2240,6 +2243,7 @@ void APTSculptPlayerController::Server_SetSculptPlane_Implementation(bool bEnabl
 
 void APTSculptPlayerController::OnScrollUp()
 {
+    if (bTutorialLockSculpt) return; // bloqueado mientras Sculpi explica/esculpe
     // Modo pivote: la rueda no hace nada (el pivote se coloca solo con el cursor + click).
     if (bPivotMode) return;
 
@@ -2281,6 +2285,7 @@ void APTSculptPlayerController::OnScrollUp()
 
 void APTSculptPlayerController::OnScrollDown()
 {
+    if (bTutorialLockSculpt) return; // bloqueado mientras Sculpi explica/esculpe
     // Modo pivote: la rueda no hace nada (el pivote se coloca solo con el cursor + click).
     if (bPivotMode) return;
 
@@ -2341,6 +2346,7 @@ void APTSculptPlayerController::CycleShapes()
 
 void APTSculptPlayerController::OnShapeRadialPressed()
 {
+    if (bTutorialLockSculpt) return; // bloqueado mientras Sculpi explica/esculpe
     // Modo colocar (autoría): TAB abre el radial de assets (miniaturas de los props horneados).
     if (IsPlaceMode() && EditMode == EPTEditMode::Add && !bEyesTool)
     { OpenAssetRadial(); return; }
@@ -2414,6 +2420,7 @@ void APTSculptPlayerController::OnShapeRadialReleased()
 
 void APTSculptPlayerController::SetMode(EPTEditMode M)
 {
+    if (bTutorialLockSculpt) return; // bloqueado mientras Sculpi explica/esculpe
     // No cambiar de herramienta MID-TRAZO (con el click apretado): hacerlo a mitad de un trazo bugea
     // (el sello sigue del modo viejo, cambia profundidad, etc.). Solo se cambia con el click suelto.
     if (bIsStamping) return;
@@ -2450,6 +2457,7 @@ void APTSculptPlayerController::SetModeInternal(EPTEditMode M, bool bResetAxis)
 
 void APTSculptPlayerController::SetModeEyes()
 {
+    if (bTutorialLockSculpt) return; // bloqueado mientras Sculpi explica/esculpe
     if (bIsStamping) return; // no cambiar a Ojos mid-trazo (ver SetMode)
     if (IsPlaceMode()) return; // Ojos no aplica al colocar props (edición de nivel)
     if (bAxisLock) SetAxisMode(false, bAxisHorizontal); // idem: la tool de ojos no usa el plano
@@ -2490,6 +2498,7 @@ void APTSculptPlayerController::Server_AddEye_Implementation(FVector WorldPos, f
 
 void APTSculptPlayerController::OnColorPickPressed()
 {
+    if (bTutorialLockSculpt) return; // bloqueado mientras Sculpi explica/esculpe
     if (!ColorPickerClass || ColorPicker) return;
     ColorPicker = CreateWidget<UUserWidget>(this, ColorPickerClass);
     if (!ColorPicker) return;

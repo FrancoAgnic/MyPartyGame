@@ -63,12 +63,15 @@ void UPTBootWidget::OnTitleFinished()
 
 void UPTBootWidget::GoToMainMenu()
 {
-    // Primera vez (recién eligió idioma) y sin tutorial hecho → el tutorial de Sculpi.
+    // Primera vez que se abre el juego (flag del rápido en false) → tutorial rápido "imitá a Sculpi"
+    // (obligatorio). Se dispara por el flag, NO por haber recién elegido idioma: así PT.ResetTutorial
+    // alcanza para volver a testearlo sin resetear el idioma. El AVANZADO ya no salta solo: se abre
+    // desde el botón del menú Jugar o al final del rápido (si el jugador acepta).
     const UPTGameUserSettings* S = UPTGameUserSettings::Get();
-    if (bFirstRun && S && !S->HasDoneTutorial())
+    if (S && !S->HasDoneQuickTutorial())
         if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
         {
-            GI->EnterTutorial();
+            GI->EnterTutorial(/*bQuick=*/true);
             return;
         }
     // Carga el lobby/MainMenu. Su widget reproduce su animación de entrada (SpawnMainMenu).
