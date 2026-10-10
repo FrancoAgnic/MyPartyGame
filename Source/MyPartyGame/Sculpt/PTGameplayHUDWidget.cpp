@@ -782,7 +782,13 @@ void UPTGameplayHUDWidget::RefreshTick()
     UpdateGameplaySounds(G);
 
     // Fuera del turno de dibujo, olvidar que adivinaste (el próximo turno arranca con guiones de nuevo).
-    if (G->TurnPhase != EPTTurnPhase::Drawing) bLocalGuessed = false;
+    if (G->TurnPhase != EPTTurnPhase::Drawing)
+    {
+        bLocalGuessed = false;
+        // El cartel "¡adivinaste!" se mantuvo todo el turno; recién al cerrar el turno (fin de ronda) se va.
+        if (GuessPopup && GuessPopup->GetVisibility() != ESlateVisibility::Collapsed)
+            GuessPopup->SetVisibility(ESlateVisibility::Collapsed);
+    }
 
     // Barra de herramientas: qué está equipado / qué barras se ven.
     RefreshToolbar();
@@ -974,8 +980,14 @@ void UPTGameplayHUDWidget::RefreshTick()
     // cursor que esos abren directo y la flecha desaparecía (no se podía elegir color al esculpir).
     const bool bMenuOpen    = PC && PC->IsEscapeMenuOpen();
     const bool bColorPicker = PC && PC->IsColorPickerOpen();
+    // Audiencia: durante "elegir palabra" el streamer necesita el cursor para el botón del popup
+    // "Seleccionar palabra" (abre su página privada). Solo en audiencia (bLocalPartyOnline).
+    const UPTGameInstance* HGI = GetGameInstance<UPTGameInstance>();
+    const bool bAudienceChoosing = HGI && HGI->bLocalPartyOnline && G->IsLocalPartyMode()
+                                   && G->TurnPhase == EPTTurnPhase::ChoosingWord;
     const bool bWantUI = bChatOpen || bGameOver || bMenuOpen || bColorPicker ||
                          (bSculptor && G->TurnPhase == EPTTurnPhase::ChoosingWord) ||
+                         bAudienceChoosing ||
                          // Modo local / audiencia: en la espera está el panel de configuración en la TV.
                          (G->IsLocalPartyMode() && G->TurnPhase == EPTTurnPhase::WaitingForPlayers);
     ApplyInputMode(!bWantUI);
@@ -1330,26 +1342,24 @@ void UPTGameplayHUDWidget::OnYouGuessed(const FString& Word, int32 Points)
         FFormatOrderedArguments A; A.Add(FText::AsNumber(Points));
         TxtGuessPoints->SetText(PTText::Format(FName(TEXT("GUESS_POINTS")), A));
     }
-    if (GuessPopup) GuessPopup->SetVisibility(ESlateVisibility::HitTestInvisible);
+    // El cartel queda visible HASTA que termine el turno (fin de ronda), no unos segundos: antes se iba
+    // tan rápido que no se alcanzaba a leer. Se muestra estático (sin la animación de aparecer-y-ocultar,
+    // que duraba ~1 s); el NativeTick lo colapsa cuando la fase deja de ser Drawing.
+    if (GuessPopup)
+    {
+        GuessPopup->SetRenderOpacity(1.f); // por si la animación lo había dejado en opacidad 0
+        GuessPopup->SetVisibility(ESlateVisibility::HitTestInvisible);
+    }
 
     // Revelar la palabra COMPLETA (verde) apenas adivinás.
     bLocalGuessed    = true;
     LocalGuessedWord = Word;
-
-    if (YouGuessedAnim)
-    {
-        PlayAnimation(YouGuessedAnim); // el popup se oculta cuando termina la animación (OnYouGuessedAnimFinished)
-    }
-    else if (UWorld* W = GetWorld())
-    {
-        W->GetTimerManager().SetTimer(GuessPopupTimer, this, &UPTGameplayHUDWidget::HideGuessPopup,
-                                      GuessFeedbackSeconds, false);
-    }
 }
 
 void UPTGameplayHUDWidget::OnYouGuessedAnimFinished()
 {
-    if (GuessPopup) GuessPopup->SetVisibility(ESlateVisibility::Collapsed); // ocultar el popup al terminar
+    // Ya NO se oculta al terminar la animación: el cartel "¡adivinaste!" queda hasta el fin del turno
+    // (lo colapsa el NativeTick cuando la fase deja de ser Drawing). Ver OnYouGuessed.
 }
 
 void UPTGameplayHUDWidget::HideGuessPopup()

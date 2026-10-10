@@ -11,6 +11,7 @@
 #include "../PTGameInstance.h"
 #include "../LocalParty/PTLocalPartyTVWidget.h"
 #include "../LocalParty/PTLocalPartySettingsWidget.h"
+#include "../LocalParty/PTStreamerChoosePopup.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/InputComponent.h"
 #include "GameFramework/Pawn.h"
@@ -184,4 +185,12 @@ void APTSculptPlayerController::CreateLocalPartyTV()
     // Panel de configuración de la partida (visible solo en la espera; se oculta solo).
     LocalPartySettings = CreateWidget<UPTLocalPartySettingsWidget>(this, UPTLocalPartySettingsWidget::StaticClass());
     if (LocalPartySettings) LocalPartySettings->AddToViewport(2);
+
+    // Audiencia: popup de "elegí la palabra" (contador + botón → abre tu página privada en esta PC).
+    // Se auto-muestra/oculta solo según la fase del turno; no muestra ninguna palabra ni código.
+    if (GI->bLocalPartyOnline)
+    {
+        StreamerChoosePopup = CreateWidget<UPTStreamerChoosePopup>(this, UPTStreamerChoosePopup::StaticClass());
+        if (StreamerChoosePopup) StreamerChoosePopup->AddToViewport(3);
+    }
 }

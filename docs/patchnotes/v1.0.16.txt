@@ -1,0 +1,33 @@
+TITLE:
+Sculpturillo v1.0.16 — Party Modes, Streamer Play & a New Tutorial
+
+BBCODE:
+--------------------------------------------------------------------------
+[h1]✨ What's New[/h1]
+[list]
+[*] 📺 [b]Local Party mode[/b] — Jackbox-style: one screen (the "TV") with a controller, everyone else joins from their phone. Pass the controller around and play together in the same room.
+[*] 🌐 [b]Online rooms[/b] — friends join from their phones over the internet with a simple room code.
+[*] 🎥 [b]Audience (Streamer) mode[/b] — your viewers play straight from [b]Twitch[/b] and [b]Kick[/b] chat, and the stream chat shows up in-game. Scales to hundreds of players.
+[*] 🎓 [b]Interactive tutorial[/b] — a guided first-time tutorial with Sculpi: guess what he's sculpting, then model your own giraffe step by step. Wrap up with a photo saved to your Steam screenshots. An [b]Advanced Tutorial[/b] is also available any time from the Play menu.
+[*] 🎮 [b]Controller support[/b] — fully gamepad-navigable menus plus a dedicated joystick settings panel (sensitivity, dead zone, invert Y).
+[*] 🤖 [b]Bots[/b] — each phone player gets their own character, with random skins from your Locker and the Workshop.
+[/list]
+
+[h1]🎨 Improvements[/h1]
+[list]
+[*] ⌨️ [b]Rebindable controls[/b] — remap keyboard & mouse (and the controller), with a mouse look-sensitivity slider.
+[*] 🏷️ "Word banks" are now called [b]Themes[/b] everywhere (in every language).
+[*] 👁️ New brush preview with an [b]x-ray outline[/b]: solid when it's in front of your clay, a dotted contour when it's behind — so you always see exactly where you're sculpting.
+[*] 🧱 Smoother sculpting: surface-band refinement and automatic live detail scaling per brush size (watertight, no gaps), plus performance optimizations.
+[*] 🎨 Default skins now start with a random color, and a round of translation and UI polish.
+[*] 📱 Phone page polish: Sculpturillo logo, language flags and a Steam link.
+[/list]
+
+[h1]🔧 Fixes[/h1]
+[list]
+[*] 🖼️ Fixed map thumbnails and several Locker UI issues.
+[*] 🌐 Fixed the online room URL being cut off in some setups.
+[/list]
+
+[hr][/hr]
+[i]Thanks for playing Sculpturillo! 🎨 This update brings everything from the recent test builds to everyone — tell us what you'd like to see in the next patch.[/i]

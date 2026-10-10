@@ -30,6 +30,11 @@ public:
     void SoloStart();
     UPROPERTY(EditDefaultsOnly, Category="Game") float TurnDuration      = 90.f; // seg de dibujo
     UPROPERTY(EditDefaultsOnly, Category="Game") float ChooseDuration    = 15.f; // seg para elegir palabra
+    // Audiencia: el streamer elige desde su página privada (más pasos: abrir/mirar el navegador off-stream),
+    // así que le damos más tiempo. Se usa en vez de ChooseDuration cuando IsAudienceGame().
+    UPROPERTY(EditDefaultsOnly, Category="Game|Audience") float AudienceChooseDuration = 45.f;
+    // Segundos efectivos para elegir palabra según el modo.
+    float EffectiveChooseDuration() const { return IsAudienceGame() ? AudienceChooseDuration : ChooseDuration; }
     UPROPERTY(EditDefaultsOnly, Category="Game") float TurnEndDuration   = 5.f;  // pausa de reveal
     UPROPERTY(EditDefaultsOnly, Category="Game") int32 WordChoiceCount   = 3;    // palabras ofrecidas
 

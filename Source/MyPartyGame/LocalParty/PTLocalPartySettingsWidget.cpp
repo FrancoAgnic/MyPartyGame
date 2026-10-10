@@ -171,8 +171,6 @@ void UPTLocalPartySettingsWidget::BuildTree()
 
 void UPTLocalPartySettingsWidget::BuildStreamerSection(UVerticalBox* Col)
 {
-    const FLinearColor Red(1.f, 0.36f, 0.36f, 1.f);
-
     UVerticalBox* Sec = WidgetTree->ConstructWidget<UVerticalBox>();
     StreamerSection = Sec;
     if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Sec)) S->SetPadding(FMargin(0.f, 4.f, 0.f, 10.f));
@@ -184,58 +182,14 @@ void UPTLocalPartySettingsWidget::BuildStreamerSection(UVerticalBox* Col)
     StreamerStatus->SetAutoWrapText(true);
     if (UVerticalBoxSlot* S = Sec->AddChildToVerticalBox(StreamerStatus)) S->SetPadding(FMargin(0.f, 2.f, 0.f, 6.f));
 
-    // ZONA PRIVADA: recuadro rojo fijo y marcado ANTES de mostrar nada, para que el streamer sepa
-    // exactamente qué tapar en OBS. El QR del streamer aparece solo acá (nunca en el QR público).
-    USizeBox* ZoneSize = WidgetTree->ConstructWidget<USizeBox>();
-    ZoneSize->SetWidthOverride(200.f);
-    ZoneSize->SetHeightOverride(200.f);
-    UBorder* Zone = WidgetTree->ConstructWidget<UBorder>();
-    Zone->SetBrush(FSlateRoundedBoxBrush(FLinearColor(0.f, 0.f, 0.f, 0.35f), 12.f, Red, 3.f));
-    Zone->SetPadding(FMargin(6.f));
-    Zone->SetHorizontalAlignment(HAlign_Center);
-    Zone->SetVerticalAlignment(VAlign_Center);
-    ZoneSize->SetContent(Zone);
-    UOverlay* ZoneContent = WidgetTree->ConstructWidget<UOverlay>();
-    Zone->SetContent(ZoneContent);
-    PrivateZoneHint = MakeText(14, Red, true);
-    PrivateZoneHint->SetAutoWrapText(true);
-    PrivateZoneHint->SetJustification(ETextJustify::Center);
-    PrivateZoneHint->SetText(PTText::Get(TEXT("LP_AUD_ZONE")));
-    if (UOverlaySlot* S = ZoneContent->AddChildToOverlay(PrivateZoneHint))
-    {
-        S->SetHorizontalAlignment(HAlign_Center);
-        S->SetVerticalAlignment(VAlign_Center);
-    }
-    // El QR va en una caja de tamaño FIJO (como el QR público): solo con la imagen, UMG la dibujaba
-    // al tamaño por defecto del brush (32 px) y no se podía escanear.
-    USizeBox* QrBox = WidgetTree->ConstructWidget<USizeBox>();
-    QrBox->SetWidthOverride(176.f);
-    QrBox->SetHeightOverride(176.f);
-    PrivateQr = WidgetTree->ConstructWidget<UImage>();
-    QrBox->SetContent(PrivateQr);
-    PrivateQr->SetVisibility(ESlateVisibility::Collapsed);
-    if (UOverlaySlot* S = ZoneContent->AddChildToOverlay(QrBox))
-    {
-        S->SetHorizontalAlignment(HAlign_Center);
-        S->SetVerticalAlignment(VAlign_Center);
-    }
-    PrivateZone = ZoneSize;
-    if (UVerticalBoxSlot* S = Sec->AddChildToVerticalBox(ZoneSize)) S->SetHorizontalAlignment(HAlign_Center);
-
-    // Botones: mostrar/ocultar QR · abrir en esta PC · copiar link
+    // Un SOLO botón: "Unirse como streamer" = abrir TU página privada en ESTA PC (off-stream). Ahí ves
+    // las palabras y elegís. Ya NO hay QR privado ni link para copiar → ni el código ni las palabras se
+    // pueden filtrar por el stream (antes había que tapar un recuadro rojo en OBS).
     UVerticalBox* Btns = WidgetTree->ConstructWidget<UVerticalBox>();
     StreamerButtons = Btns;
-    UButton* Toggle = MakeButton(PTText::Get(TEXT("LP_AUD_SHOW_QR")), TEXT("ShowHostQrButton"), 15, &ToggleQrText);
-    Toggle->OnClicked.AddDynamic(this, &UPTLocalPartySettingsWidget::OnToggleHostQr);
-    if (UVerticalBoxSlot* S = Btns->AddChildToVerticalBox(Toggle)) S->SetPadding(FMargin(0.f, 8.f, 0.f, 4.f));
-    // Uno debajo del otro (no en fila): en fila, "abajo" con el joystick saltaba directo al slider y
-    // estos dos botones quedaban inalcanzables.
-    UButton* Open = MakeButton(PTText::Get(TEXT("LP_AUD_OPEN_PC")), TEXT("OpenHostPcButton"), 14);
-    Open->OnClicked.AddDynamic(this, &UPTLocalPartySettingsWidget::OnOpenHostOnPC);
-    if (UVerticalBoxSlot* S = Btns->AddChildToVerticalBox(Open)) S->SetPadding(FMargin(0.f, 0.f, 0.f, 4.f));
-    UButton* Copy = MakeButton(PTText::Get(TEXT("LP_AUD_COPY")), TEXT("CopyHostLinkButton"), 14);
-    Copy->OnClicked.AddDynamic(this, &UPTLocalPartySettingsWidget::OnCopyHostLink);
-    Btns->AddChildToVerticalBox(Copy);
+    UButton* Join = MakeButton(PTText::Get(TEXT("LP_AUD_JOIN")), TEXT("JoinAsStreamerButton"), 16);
+    Join->OnClicked.AddDynamic(this, &UPTLocalPartySettingsWidget::OnOpenHostOnPC);
+    if (UVerticalBoxSlot* S = Btns->AddChildToVerticalBox(Join)) S->SetPadding(FMargin(0.f, 8.f, 0.f, 4.f));
     Sec->AddChildToVerticalBox(Btns);
 }
 
@@ -410,22 +364,8 @@ void UPTLocalPartySettingsWidget::UpdateStreamerSection()
         StreamerStatus->SetText(PTText::Get(bConnected ? TEXT("LP_AUD_HOST_OK") : TEXT("LP_AUD_HOST_STEPS")));
         StreamerStatus->SetColorAndOpacity(FSlateColor(bConnected ? FLinearColor(0.36f, 0.88f, 0.54f, 1.f) : LPS_Muted));
     }
-    auto Show = [](UWidget* W, bool bOn) { if (W) W->SetVisibility(bOn ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed); };
-    Show(PrivateZone, !bConnected);
+    // Solo el botón "Unirse como streamer": se oculta una vez que el streamer ya entró a su página.
     if (StreamerButtons) StreamerButtons->SetVisibility(bConnected ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
-
-    // El QR solo se dibuja si el streamer lo pidió (botón o mantener View / I).
-    const bool bShowQr = !bConnected && (bHostQrShown || IsRevealHeld());
-    const FString Url = (bShowQr && LP) ? LP->GetHostJoinUrl() : FString();
-    if (Url != PrivateQrUrl)
-    {
-        PrivateQrUrl = Url;
-        PrivateQrTexture = Url.IsEmpty() ? nullptr : PTQR::MakeTexture(Url, 6);
-        if (PrivateQr && PrivateQrTexture) PrivateQr->SetBrushFromTexture(PrivateQrTexture, false);
-    }
-    Show(PrivateQr, bShowQr && PrivateQrTexture);
-    Show(PrivateZoneHint, !(bShowQr && PrivateQrTexture));
-    if (ToggleQrText) ToggleQrText->SetText(PTText::Get(bHostQrShown ? TEXT("LP_AUD_HIDE_QR") : TEXT("LP_AUD_SHOW_QR")));
 }
 
 void UPTLocalPartySettingsWidget::OnToggleHostQr()

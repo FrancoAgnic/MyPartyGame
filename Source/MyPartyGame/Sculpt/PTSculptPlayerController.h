@@ -204,6 +204,8 @@ public:
     TSubclassOf<class UPTLocalPartyTVWidget> LocalPartyTVClass;
     UPROPERTY() class UPTLocalPartyTVWidget* LocalPartyTV = nullptr;
     UPROPERTY() class UPTLocalPartySettingsWidget* LocalPartySettings = nullptr;
+    // Audiencia: popup de "elegí la palabra" (contador + botón que abre tu página privada en esta PC).
+    UPROPERTY() class UPTStreamerChoosePopup* StreamerChoosePopup = nullptr;
 
     // ── Joystick (gamepad) ──────────────────────────────────────────────────
     // Esquema (Xbox): stick izq. moverse · stick der. mirar · RT esculpir · LB/RB tamaño · cruceta
