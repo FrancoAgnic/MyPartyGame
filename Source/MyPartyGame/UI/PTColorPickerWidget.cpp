@@ -43,10 +43,15 @@ void UPTColorPickerWidget::NativeConstruct()
     LoadPalette();
     RefreshRing();
 
-    // Arrancar SIEMPRE en BLANCO a brillo MÁXIMO (Val=1), no heredar el color de pintura actual: venía
-    // oscuro/negro y confundía ("¿por qué el color por defecto es negro?"). Así el default es blanco y con
-    // solo mover el mouse por la rueda ya elegís color (el brillo ya está al tope).
-    SetColor(FLinearColor::White);
+    // Arrancar en GRIS a MEDIO brillo (Val=0.5). En el editor venía blanco, pero en la BUILD empaquetada
+    // el slider de UMG a veces resetea el Value a 0 al terminar de inicializar → la rueda salía NEGRA
+    // ("sin color", nadie lo entendía). Lo seteamos acá Y lo re-aplicamos en el próximo tick para que
+    // quede firme en la build (después de que UMG termine de inicializar el slider).
+    const FLinearColor DefaultPick(0.5f, 0.5f, 0.5f, 1.f);
+    SetColor(DefaultPick);
+    if (UWorld* W = GetWorld())
+        W->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this,
+            [this, DefaultPick]() { SetColor(DefaultPick); }));
 
     // El cursor custom arranca oculto (se muestra/posiciona en el primer QuickPickTick).
     if (CursorIcon) CursorIcon->SetVisibility(ESlateVisibility::Collapsed);

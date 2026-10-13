@@ -108,6 +108,10 @@ public:
     // del tutorial). Fuera de ese intro queda apagado y el HUD se oculta igual que siempre.
     bool bTutorialGuessPhase = false;
 
+    // Audiencia (wizard de setup): true cuando el streamer ya pasó los pasos (conectar streamer → chat) y
+    // llegó a la config de la partida. El panel "¡Únete!" (QR) de la TV recién aparece cuando esto es true.
+    bool bAudienceSetupDone = false;
+
     // Consola: abre el panel de configuración del joystick (sensibilidad / botones).
     UFUNCTION(Exec) void PTJoystick();
     // DEV: simula un botón del joystick (p. ej. "PTPadKey Gamepad_DPad_Down") para probar la navegación sin uno.

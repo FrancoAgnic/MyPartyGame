@@ -39,7 +39,7 @@ public:
     UPROPERTY(EditDefaultsOnly, Category="Game") int32 WordChoiceCount   = 3;    // palabras ofrecidas
 
     // ── Puntajes y rondas (estilo Skribbl) ──────────────────────────────────
-    UPROPERTY(EditDefaultsOnly, Category="Game") int32 NumRounds          = 3;   // rondas antes de terminar
+    UPROPERTY(EditDefaultsOnly, Category="Game") int32 NumRounds          = 10;  // rondas antes de terminar
     // Puntos del que adivina: interpola de Max (adivina al instante) a Min (sobre la hora).
     UPROPERTY(EditDefaultsOnly, Category="Game") int32 MaxGuessPoints     = 100;
     UPROPERTY(EditDefaultsOnly, Category="Game") int32 MinGuessPoints     = 25;

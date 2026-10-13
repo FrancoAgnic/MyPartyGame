@@ -124,21 +124,54 @@ void UPTLocalPartySettingsWidget::BuildTree()
     UVerticalBox* Col = WidgetTree->ConstructWidget<UVerticalBox>();
     Width->SetContent(Col);
 
+    const bool bAud = IsAudience(this);
+    WizardStep = bAud ? 0 : 2; // no-audiencia (party con celulares): directo a la config
+    // El QR de la TV recién aparece al llegar a la config (en audiencia). En no-audiencia, siempre.
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>()) GI->bAudienceSetupDone = !bAud;
+
+    if (bAud)
+    {
+        BuildStreamerSection(Col); // paso 0: botón "Conectar streamer"
+        BuildChatSection(Col);     // paso 1: "Conectá el chat" (opcional)
+    }
+    BuildSettingsStep(Col);        // paso 2: tiempo / palabras / letras / temática / empezar
+
+    UpdateWizard();
+}
+
+void UPTLocalPartySettingsWidget::BuildSettingsStep(UVerticalBox* Col)
+{
+    UVerticalBox* Sec = WidgetTree->ConstructWidget<UVerticalBox>();
+    WizSettingsBox = Sec;
+    Col->AddChildToVerticalBox(Sec);
+
     UTextBlock* Title = MakeText(22, LPS_Accent, true);
     Title->SetText(PTText::Get(TEXT("LP_SETTINGS_TITLE")));
-    if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Title)) S->SetPadding(FMargin(0.f, 0.f, 0.f, 4.f));
-    if (IsAudience(this)) BuildStreamerSection(Col);
-    if (IsAudience(this)) BuildChatSection(Col);
+    if (UVerticalBoxSlot* S = Sec->AddChildToVerticalBox(Title)) S->SetPadding(FMargin(0.f, 0.f, 0.f, 4.f));
 
-    TimeSlider   = AddSliderRow(Col, TimeLabel,   30.f, 300.f, 15.f, TimeValue);
-    RoundsSlider = AddSliderRow(Col, RoundsLabel, 1.f,  IsAudience(this) ? 20.f : 10.f, 1.f, RoundsValue);
-    RevealSlider = AddSliderRow(Col, RevealLabel, 0.f,  0.9f, 0.1f, RevealValue);
+    TimeSlider   = AddSliderRow(Sec, TimeLabel,   30.f, 300.f, 15.f, TimeValue);
+    RoundsSlider = AddSliderRow(Sec, RoundsLabel, 1.f,  IsAudience(this) ? 20.f : 10.f, 1.f, RoundsValue);
+    RevealSlider = AddSliderRow(Sec, RevealLabel, 0.f,  0.9f, 0.1f, RevealValue);
     TimeLabel->SetText(PTText::Get(TEXT("LP_SET_TIME")));
     RoundsLabel->SetText(PTText::Get(IsAudience(this) ? TEXT("LP_SET_WORDS_COUNT") : TEXT("LP_SET_ROUNDS")));
     RevealLabel->SetText(PTText::Get(TEXT("LP_SET_REVEAL")));
     TimeSlider->OnValueChanged.AddDynamic(this, &UPTLocalPartySettingsWidget::OnTimeChanged);
     RoundsSlider->OnValueChanged.AddDynamic(this, &UPTLocalPartySettingsWidget::OnRoundsChanged);
     RevealSlider->OnValueChanged.AddDynamic(this, &UPTLocalPartySettingsWidget::OnRevealChanged);
+
+    // Audiencia: cuánta gente del CHAT (Twitch/Kick) puede entrar (hasta 1000). La web (svoltanic.com)
+    // queda con su límite propio aparte.
+    if (IsAudience(this))
+    {
+        ChatMaxSlider = AddSliderRow(Sec, ChatMaxLabel, 10.f, 1000.f, 10.f, ChatMaxValue);
+        ChatMaxLabel->SetText(PTText::Get(TEXT("LP_SET_CHATMAX")));
+        int32 CurMax = 150;
+        if (const UPTLocalPartySubsystem* LP = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLocalPartySubsystem>() : nullptr)
+            CurMax = LP->MaxChatPlayers;
+        ChatMaxSlider->SetValue((float)CurMax);
+        ChatMaxValue->SetText(FText::AsNumber(CurMax));
+        ChatMaxSlider->OnValueChanged.AddDynamic(this, &UPTLocalPartySettingsWidget::OnChatMaxChanged);
+    }
 
     // Banco de palabras.
     {
@@ -157,40 +190,32 @@ void UPTLocalPartySettingsWidget::BuildTree()
         UButton* Change = MakeButton(PTText::Get(TEXT("LP_SET_CHANGE")), TEXT("WordPackButton"), 15);
         Change->OnClicked.AddDynamic(this, &UPTLocalPartySettingsWidget::OnWordsClicked);
         if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(Change)) S->SetVerticalAlignment(VAlign_Center);
-        if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Row)) S->SetPadding(FMargin(0.f, 12.f, 0.f, 0.f));
+        if (UVerticalBoxSlot* S = Sec->AddChildToVerticalBox(Row)) S->SetPadding(FMargin(0.f, 12.f, 0.f, 0.f));
     }
 
     // Empezar.
     StartButton = MakeButton(PTText::Get(TEXT("LP_START")), TEXT("StartButton"), 20);
     StartButton->OnClicked.AddDynamic(this, &UPTLocalPartySettingsWidget::OnStartClicked);
-    if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(StartButton)) S->SetPadding(FMargin(0.f, 18.f, 0.f, 4.f));
+    if (UVerticalBoxSlot* S = Sec->AddChildToVerticalBox(StartButton)) S->SetPadding(FMargin(0.f, 18.f, 0.f, 4.f));
     StartHint = MakeText(14, LPS_Muted, false);
     StartHint->SetAutoWrapText(true);
-    Col->AddChildToVerticalBox(StartHint);
+    Sec->AddChildToVerticalBox(StartHint);
 }
 
 void UPTLocalPartySettingsWidget::BuildStreamerSection(UVerticalBox* Col)
 {
+    // PASO 0: solo un botón grande "Conectar streamer". Al tocarlo se abre TU página privada en esta PC
+    // (donde elegís las palabras, fuera del stream) y se pasa al paso del chat. Mínimo texto.
     UVerticalBox* Sec = WidgetTree->ConstructWidget<UVerticalBox>();
+    WizStreamerBox  = Sec;
     StreamerSection = Sec;
-    if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Sec)) S->SetPadding(FMargin(0.f, 4.f, 0.f, 10.f));
+    StreamerButtons = Sec;
+    StreamerStatus  = nullptr;
+    Col->AddChildToVerticalBox(Sec);
 
-    UTextBlock* Head = MakeText(17, LPS_Ink, true);
-    Head->SetText(PTText::Get(TEXT("LP_AUD_SECTION")));
-    Sec->AddChildToVerticalBox(Head);
-    StreamerStatus = MakeText(15, LPS_Muted, false);
-    StreamerStatus->SetAutoWrapText(true);
-    if (UVerticalBoxSlot* S = Sec->AddChildToVerticalBox(StreamerStatus)) S->SetPadding(FMargin(0.f, 2.f, 0.f, 6.f));
-
-    // Un SOLO botón: "Unirse como streamer" = abrir TU página privada en ESTA PC (off-stream). Ahí ves
-    // las palabras y elegís. Ya NO hay QR privado ni link para copiar → ni el código ni las palabras se
-    // pueden filtrar por el stream (antes había que tapar un recuadro rojo en OBS).
-    UVerticalBox* Btns = WidgetTree->ConstructWidget<UVerticalBox>();
-    StreamerButtons = Btns;
-    UButton* Join = MakeButton(PTText::Get(TEXT("LP_AUD_JOIN")), TEXT("JoinAsStreamerButton"), 16);
-    Join->OnClicked.AddDynamic(this, &UPTLocalPartySettingsWidget::OnOpenHostOnPC);
-    if (UVerticalBoxSlot* S = Btns->AddChildToVerticalBox(Join)) S->SetPadding(FMargin(0.f, 8.f, 0.f, 4.f));
-    Sec->AddChildToVerticalBox(Btns);
+    UButton* Connect = MakeButton(PTText::Get(TEXT("LP_WIZ_STREAMER")), TEXT("WizConnectStreamer"), 22);
+    Connect->OnClicked.AddDynamic(this, &UPTLocalPartySettingsWidget::OnWizConnectStreamer);
+    if (UVerticalBoxSlot* S = Sec->AddChildToVerticalBox(Connect)) S->SetPadding(FMargin(0.f, 8.f, 0.f, 4.f));
 }
 
 UEditableTextBox* UPTLocalPartySettingsWidget::AddChannelRow(UVerticalBox* Box, const FText& Platform, const FLinearColor& Color, FName Name, UTextBlock*& OutIcon, UTextBlock*& OutStatus)
@@ -232,16 +257,18 @@ UEditableTextBox* UPTLocalPartySettingsWidget::AddChannelRow(UVerticalBox* Box, 
 
 void UPTLocalPartySettingsWidget::BuildChatSection(UVerticalBox* Col)
 {
+    // PASO 1 (opcional): "Conectá el chat" → escribís tu canal de Twitch/Kick y Confirmás (o Saltás).
+    // Después pasa a la config de la partida. Mínimo texto.
     UVerticalBox* Sec = WidgetTree->ConstructWidget<UVerticalBox>();
-    if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Sec)) S->SetPadding(FMargin(0.f, 0.f, 0.f, 8.f));
+    WizChatBox = Sec;
+    Col->AddChildToVerticalBox(Sec);
 
-    UTextBlock* Head = MakeText(17, LPS_Ink, true);
-    Head->SetText(PTText::Get(TEXT("LP_CHAT_SECTION")));
+    UTextBlock* Head = MakeText(20, LPS_Ink, true);
+    Head->SetText(PTText::Get(TEXT("LP_WIZ_CHAT")));   // "Conectá el chat"
     Sec->AddChildToVerticalBox(Head);
-    UTextBlock* Hint = MakeText(13, LPS_Muted, false);
-    Hint->SetAutoWrapText(true);
-    Hint->SetText(PTText::Get(TEXT("LP_CHAT_HINT")));
-    Sec->AddChildToVerticalBox(Hint);
+    UTextBlock* Opt = MakeText(13, LPS_Muted, false);
+    Opt->SetText(PTText::Get(TEXT("LP_WIZ_OPTIONAL"))); // "(opcional)"
+    if (UVerticalBoxSlot* S = Sec->AddChildToVerticalBox(Opt)) S->SetPadding(FMargin(0.f, 0.f, 0.f, 6.f));
 
     TwitchInput = AddChannelRow(Sec, FText::FromString(TEXT("Twitch")), FLinearColor(0.66f, 0.47f, 1.f, 1.f), TEXT("TwitchChannelInput"), TwitchIcon, TwitchStatus);
     KickInput   = AddChannelRow(Sec, FText::FromString(TEXT("Kick")),   FLinearColor(0.33f, 0.98f, 0.36f, 1.f), TEXT("KickChannelInput"), KickIcon, KickStatus);
@@ -256,6 +283,14 @@ void UPTLocalPartySettingsWidget::BuildChatSection(UVerticalBox* Col)
         TwitchInput->SetText(FText::FromString(LP->GetStreamChannel(EPTChatPlatform::Twitch)));
         KickInput->SetText(FText::FromString(LP->GetStreamChannel(EPTChatPlatform::Kick)));
     }
+
+    // Confirmar / Saltar → van a la config de la partida (el canal se guarda al escribirlo, OnTwitch/KickCommitted).
+    UButton* Confirm = MakeButton(PTText::Get(TEXT("MENU_CONFIRM")), TEXT("WizChatConfirm"), 18);
+    Confirm->OnClicked.AddDynamic(this, &UPTLocalPartySettingsWidget::OnWizChatNext);
+    if (UVerticalBoxSlot* S = Sec->AddChildToVerticalBox(Confirm)) S->SetPadding(FMargin(0.f, 10.f, 0.f, 4.f));
+    UButton* Skip = MakeButton(PTText::Get(TEXT("LP_WIZ_SKIP")), TEXT("WizChatSkip"), 14);
+    Skip->OnClicked.AddDynamic(this, &UPTLocalPartySettingsWidget::OnWizChatNext);
+    Sec->AddChildToVerticalBox(Skip);
 }
 
 void UPTLocalPartySettingsWidget::UpdateChatSection()
@@ -354,18 +389,36 @@ bool UPTLocalPartySettingsWidget::IsRevealHeld() const
 
 void UPTLocalPartySettingsWidget::UpdateStreamerSection()
 {
-    if (!StreamerSection) return;
-    const UPTLocalPartySubsystem* LP = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLocalPartySubsystem>() : nullptr;
-    const bool bConnected = LP && LP->IsHostConnected();
-    if (bConnected) bHostQrShown = false; // ya entró: el QR privado no vuelve a mostrarse
+    // La visibilidad del paso del streamer ahora la maneja el WIZARD (UpdateWizard), no esto.
+}
 
-    if (StreamerStatus)
+void UPTLocalPartySettingsWidget::UpdateWizard()
+{
+    auto Show = [](UWidget* W, bool bOn){ if (W) W->SetVisibility(bOn ? ESlateVisibility::Visible : ESlateVisibility::Collapsed); };
+    Show(WizStreamerBox, WizardStep == 0);
+    Show(WizChatBox,     WizardStep == 1);
+    Show(WizSettingsBox, WizardStep == 2);
+    // Pasos 0/1 (conectar streamer / chat): tarjeta CENTRADA. Paso 2 (config): a la derecha como siempre.
+    if (CardSlot)
     {
-        StreamerStatus->SetText(PTText::Get(bConnected ? TEXT("LP_AUD_HOST_OK") : TEXT("LP_AUD_HOST_STEPS")));
-        StreamerStatus->SetColorAndOpacity(FSlateColor(bConnected ? FLinearColor(0.36f, 0.88f, 0.54f, 1.f) : LPS_Muted));
+        const bool bCenter = (WizardStep < 2);
+        CardSlot->SetHorizontalAlignment(bCenter ? HAlign_Center : HAlign_Right);
+        CardSlot->SetPadding(bCenter ? FMargin(0.f) : FMargin(0.f, 0.f, 36.f, 0.f));
     }
-    // Solo el botón "Unirse como streamer": se oculta una vez que el streamer ya entró a su página.
-    if (StreamerButtons) StreamerButtons->SetVisibility(bConnected ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+}
+
+void UPTLocalPartySettingsWidget::OnWizConnectStreamer()
+{
+    OnOpenHostOnPC();   // abre tu página privada (con las palabras) en esta PC
+    WizardStep = 1;     // → conectar el chat (opcional)
+    UpdateWizard();
+}
+
+void UPTLocalPartySettingsWidget::OnWizChatNext()
+{
+    WizardStep = 2;     // → config de la partida (el canal ya se guardó al escribirlo)
+    if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>()) GI->bAudienceSetupDone = true; // ahora sí el QR
+    UpdateWizard();
 }
 
 void UPTLocalPartySettingsWidget::OnToggleHostQr()
@@ -457,6 +510,14 @@ void UPTLocalPartySettingsWidget::UpdateState()
         else
             StartHint->SetText(FText::GetEmpty());
     }
+}
+
+void UPTLocalPartySettingsWidget::OnChatMaxChanged(float V)
+{
+    const int32 N = FMath::Clamp(FMath::RoundToInt(V / 10.f) * 10, 10, 1000);
+    if (UPTLocalPartySubsystem* LP = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTLocalPartySubsystem>() : nullptr)
+        LP->MaxChatPlayers = N; // en vivo: la gente del chat entra con este tope durante la espera
+    if (ChatMaxValue) ChatMaxValue->SetText(FText::AsNumber(N));
 }
 
 void UPTLocalPartySettingsWidget::OnTimeChanged(float V)

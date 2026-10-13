@@ -86,7 +86,7 @@ public:
     int32 Port = 8787;
     // Máximo de jugadores de celular.
     int32 MaxPlayers = 12;
-    int32 MaxPlayersOnline = 99; // audiencia (relay): espectadores por sala (+1 el streamer)
+    int32 MaxPlayersOnline = 50; // audiencia WEB (svoltanic.com): tope de los que entran por la página
 
     // Límites de texto (también se cortan en el celular).
     static constexpr int32 MaxNameLen  = 12;

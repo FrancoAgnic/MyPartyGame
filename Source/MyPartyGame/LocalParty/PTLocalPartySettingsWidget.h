@@ -13,6 +13,7 @@ class USlider;
 class UTextBlock;
 class UVerticalBox;
 class UEditableTextBox;
+class UOverlaySlot;
 
 UCLASS()
 class MYPARTYGAME_API UPTLocalPartySettingsWidget : public UPTUserWidget
@@ -33,6 +34,11 @@ private:
     void BuildTree();
     void BuildStreamerSection(UVerticalBox* Col);
     void BuildChatSection(UVerticalBox* Col);
+    void BuildSettingsStep(UVerticalBox* Col);
+    // Wizard de audiencia: muestra 1 paso a la vez (conectar streamer → chat → config) con mínimo texto.
+    void UpdateWizard();
+    UFUNCTION() void OnWizConnectStreamer();
+    UFUNCTION() void OnWizChatNext();
     void UpdateChatSection();
     UEditableTextBox* AddChannelRow(UVerticalBox* Box, const FText& Platform, const FLinearColor& Color, FName Name, UTextBlock*& OutIcon, UTextBlock*& OutStatus);
     void RefreshValues();
@@ -56,6 +62,7 @@ private:
     UFUNCTION() void OnCopyHostLink();
     UFUNCTION() void OnTwitchCommitted(const FText& Text, ETextCommit::Type Method);
     UFUNCTION() void OnKickCommitted(const FText& Text, ETextCommit::Type Method);
+    UFUNCTION() void OnChatMaxChanged(float V); // máximo de gente del chat (Twitch/Kick), hasta 1000
 
     UPROPERTY() USlider*    TimeSlider = nullptr;
     UPROPERTY() USlider*    RoundsSlider = nullptr;
@@ -67,6 +74,9 @@ private:
     UPROPERTY() UTextBlock* RoundsValue = nullptr;
     UPROPERTY() UTextBlock* RevealValue = nullptr;
     UPROPERTY() UTextBlock* WordsValue = nullptr;
+    UPROPERTY() USlider*    ChatMaxSlider = nullptr; // solo audiencia: máx. de gente del chat (hasta 1000)
+    UPROPERTY() UTextBlock* ChatMaxLabel = nullptr;
+    UPROPERTY() UTextBlock* ChatMaxValue = nullptr;
     UPROPERTY() UButton*    StartButton = nullptr;
     UPROPERTY() UTextBlock* StartHint = nullptr;
     UPROPERTY() class UPTWordPackWidget* WordPack = nullptr;
@@ -96,4 +106,11 @@ private:
     FString ShownPackTitle = TEXT("?");
     bool    bHostQrShown = false;
     FTimerHandle StateTimer;
+
+    // ── Wizard de audiencia (1 paso a la vez) ──
+    int32 WizardStep = 0; // 0=conectar streamer, 1=conectar chat (opcional), 2=config de la partida
+    UPROPERTY() UWidget* WizStreamerBox = nullptr;
+    UPROPERTY() UWidget* WizChatBox     = nullptr;
+    UPROPERTY() UWidget* WizSettingsBox = nullptr;
+    UOverlaySlot* CardSlot = nullptr; // para re-anclar la tarjeta (centro en pasos 0/1, derecha en config)
 };

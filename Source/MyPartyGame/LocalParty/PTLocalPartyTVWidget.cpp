@@ -4,6 +4,7 @@
 #include "PTSculptGameState.h"
 #include "PTSculptGameMode.h"
 #include "PTSculptPlayerController.h"
+#include "../PTGameInstance.h"
 #include "../PTTextTable.h"
 #include "../Lobby/PTPlayerState.h"
 #include "Blueprint/WidgetTree.h"
@@ -342,8 +343,13 @@ void UPTLocalPartyTVWidget::Refresh()
         }
     }
     if (PlayersTitle)
-        PlayersTitle->SetText(TotalPlayers > 0 ? FText::FromString(Fmt(TEXT("LP_PLAYERS"), FString::FromInt(TotalPlayers)))
-                                                : PTText::Get(TEXT("LP_NOBODY")));
+    {
+        // Mostrar conectados / máximo. En audiencia el tope = web (MaxPlayersOnline) + chat (MaxChatPlayers,
+        // configurable hasta 1000); en modo local, MaxPlayers.
+        const int32 MaxP = bAudience ? (LP->MaxPlayersOnline + LP->MaxChatPlayers) : LP->MaxPlayers;
+        PlayersTitle->SetText(FText::FromString(Fmt(TEXT("LP_PLAYERS"),
+            FString::Printf(TEXT("%d / %d"), TotalPlayers, MaxP))));
+    }
 
     // Qué falta para arrancar.
     int32 MinPlayers = 2;
@@ -363,8 +369,12 @@ void UPTLocalPartyTVWidget::Refresh()
     // Con la pausa abierta, el panel grande no tapa el menú.
     const APTSculptPlayerController* SPC = Cast<APTSculptPlayerController>(GetOwningPlayer());
     const bool bPaused = SPC && SPC->IsEscapeMenuOpen();
+    // Audiencia: el panel del QR "¡Únete!" recién aparece cuando el streamer terminó el wizard de setup
+    // (conectar streamer → chat). Antes de eso está oculto para no tapar el botón centrado del wizard.
+    const UPTGameInstance* PGI = Cast<UPTGameInstance>(GI);
+    const bool bWizPending = bAudience && PGI && !PGI->bAudienceSetupDone;
     // LobbyPanel contiene el botón de copiar: SelfHitTestInvisible (no HitTestInvisible, que lo apagaría).
-    if (LobbyPanel) LobbyPanel->SetVisibility(bLobby && !bPaused ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+    if (LobbyPanel) LobbyPanel->SetVisibility((bLobby && !bPaused && !bWizPending) ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
     if (CopyLinkButton)
     {
         CopyLinkButton->SetVisibility(bServerOk ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);

@@ -538,6 +538,38 @@ private:
     bool    bStrokeActive = false;
     FVector LastStampPos  = FVector::ZeroVector;
 
+    // ── Imán a la geometría (reemplaza el modo libre de Add) ──────────────────────────────────────
+    // En el modo libre (sin ALT ni eje), la brocha se IMANTA a la SUPERFICIE de la arcilla ya esculpida
+    // más cercana, dentro de un RADIO, con rango elástico para corregir. Si un trazo arranca imantado,
+    // su profundidad queda FIJA todo el trazo (así sacás un brazo DESDE el torso sin esculpir detrás).
+    // bAnchorSnap lo prende/apaga (comando dev PTAnchors) para comparar; default prendido.
+    bool    bAnchorSnap = true;
+    bool    bStrokeAnchorLocked = false;               // el trazo arrancó imantado → dibuja en plano fijo
+    // Plano FIJO del trazo: al apretar se fija un plano perpendicular a la cámara (en la posición de la
+    // brocha). Durante el trazo dibujás en 2D (X,Y) sobre ese plano → trazos RECTOS, no curvos. Cada trazo
+    // nuevo mira a la cámara, así si girás y empezás otro, va en ese plano nuevo. StrokeLockDepth es el
+    // fallback cuando el plano queda casi de canto (girás ~90° en medio del trazo) para no dispararse.
+    FVector StrokeAnchorOrigin  = FVector::ZeroVector;
+    FVector StrokeAnchorPlaneN  = FVector::ForwardVector;
+    float   StrokeLockDepth     = 0.f;
+    bool    bPawnMoving = false; // ¿el personaje se está moviendo? (quieto=plano recto, moviéndote=seguí la superficie)
+    // Suavizado (pequeño lag) de la posición de la brocha: el imán no pega "saltitos" al moverte.
+    FVector SmoothedStampPos    = FVector::ZeroVector;
+    bool    bStampSmoothInit    = false;
+    // Histéresis del imán (estable): cuando el rayo pasa la silueta y deja de tocar la geometría, la brocha
+    // se queda QUIETA en el último punto de superficie (la silueta, ~90° a la cámara); solo se suelta si el
+    // rayo se aleja de ese punto más de un margen chico. Estado por-frame (lo actualiza TryMagnetToClay, const).
+    mutable bool    bMagnetEngaged = false;
+    mutable FVector LastMagnetSurf = FVector::ZeroVector; // último punto de superficie (la silueta al rozar)
+    // Primera entrada del rayo a la arcilla (superficie FRONTAL) hasta 'MaxDist'. Así, al acercar la
+    // cámara, la brocha se para en la geometría (no la atraviesa); al alejarte, el brazo vuelve a AirDepth.
+    bool  RayMarchClayFront(const FVector& Start, const FVector& Dir, float MaxDist, FVector& OutSurf) const;
+    // Punto de la superficie de arcilla más cercano a 'Near' dentro de 'Radius' (grueso + bisección).
+    bool  FindNearestClay(const FVector& Near, float Radius, FVector& OutSurf) const;
+    // Imanta la brocha a la geometría (superficie frontal o lateral cercana), con rango elástico. true si imantó.
+    bool  TryMagnetToClay(const FVector& Start, const FVector& Dir, FVector& Out) const;
+    UFUNCTION(Exec) void PTAnchors();                  // DEV: prende/apaga el imán
+
     // Plano de esculpido bloqueado al inicio del trazo (evita que el stamp se acerque a la cámara).
     // Se usa en ALT+Add: al primer sello se congela un plano perpendicular a la vista y el resto del
     // trazo se dibuja sobre él (profundidad constante) → trazos laterales/verticales sin trepar.

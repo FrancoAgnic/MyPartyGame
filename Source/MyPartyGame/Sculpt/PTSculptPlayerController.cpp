@@ -996,6 +996,11 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
         const bool bHaveRay  = GetCameraRay(Start, Dir);
         const bool bTooSteep = bHaveRay && (FMath::Abs(Dir.Z) > AutoAxisDownThreshold);
 
+        // Durante un trazo imantado: si estás QUIETO dibujás en el plano fijo (recto); si te MOVÉS, el trazo
+        // SIGUE LA SUPERFICIE de la geometría (para rodear la figura y hacer un cinturón/pulsera). Lo decide
+        // GetStampPoint leyendo bPawnMoving.
+        bPawnMoving = bMovingNow;
+
         // Auto-recto SOLO vertical (Z). Se engancha únicamente si estás QUIETO y NO mirás muy para abajo.
         // Si te movés (volás) o mirás muy abajo → LIBRE (a distancia de brazo). Una vez enganchado, el
         // plano se MANTIENE mientras sigas quieto y de frente → trazos coplanares (no se re-congela).
@@ -1007,10 +1012,30 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
     else
     {
         bAutoAxisActive = false;            // fuera de Agregar / con eje explícito / ojos: sin auto-recto
+        bPawnMoving = false;
     }
 
     FVector Normal;
     FVector StampPos = GetStampPoint(Normal);
+
+    // Suavizado del imán: en modo libre Add, la brocha sigue el objetivo con un pequeño LAG (VInterpTo)
+    // así no pega "saltitos" al moverte. Si el salto es grande (mirar a otro lado / cambio de modo) se
+    // ajusta de una, para no "volar" lento por la pantalla. Con el imán apagado, sin lag.
+    {
+        const bool bMagnetMode = bAnchorSnap && EditMode == EPTEditMode::Add && !bEyesTool
+                                 && !IsPlaceMode() && !bAxisLock && !bSurfaceSnap;
+        if (bMagnetMode)
+        {
+            const float SnapJump = FMath::Max(StampSize * 2.f, 250.f);
+            if (!bStampSmoothInit || FVector::DistSquared(SmoothedStampPos, StampPos) > SnapJump * SnapJump)
+                SmoothedStampPos = StampPos;
+            else
+                SmoothedStampPos = FMath::VInterpTo(SmoothedStampPos, StampPos, DeltaTime, 16.f);
+            bStampSmoothInit = true;
+            StampPos = SmoothedStampPos;
+        }
+        else { bStampSmoothInit = false; bMagnetEngaged = false; }
+    }
 
     // ¿Estás apuntando fuera de la zona de modelado? El HUD lo avisa con el ícono de prohibido.
     bStampOutsideCanvas = Volume && !Volume->IsInsideCanvas(StampPos);
@@ -1602,6 +1627,51 @@ FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
         return Start + Dir * AirDepth;
     }
 
+    // ── Anclajes de profundidad: IMANTA la brocha a lo ya esculpido (modo libre Add) ──────────────
+    // Tiene PRIORIDAD sobre el auto-eje/distancia-fija (reemplaza el modo libre). No aplica con ALT
+    // (superficie) ni eje explícito (Z/X). Resuelve el problema de profundidad: snapea a los anclajes
+    // que dejaron tus trazos, así esculpís SOBRE lo que ya hiciste y no detrás.
+    const bool bFreeAdd = (EditMode == EPTEditMode::Add) && !bEyesTool && !IsPlaceMode()
+                          && !bAxisLock && !bSurfaceSnap;
+    if (bAnchorSnap && bFreeAdd)
+    {
+        if (bStrokeAnchorLocked)
+        {
+            // Si te MOVÉS durante el trazo: la brocha queda a la DISTANCIA bloqueada de la cámara. NO sigue
+            // la arcilla que vas agregando (por eso ya no trepa/escala hacia la cámara), pero al orbitar la
+            // figura a radio ~constante el trazo la RODEA igual → cinturón/pulsera, sin esculpir en un solo eje.
+            if (bPawnMoving)
+            {
+                OutNormal = -Dir;
+                const FVector Pf = Start + Dir * StrokeLockDepth;
+                return Volume ? Volume->ClampInsideCanvas(Pf, 0.f) : Pf;
+            }
+
+            // Quieto: dibujás en 2D sobre el PLANO FIJO (perpendicular a la cámara, fijado al apretar). El
+            // rayo del cursor lo interseca → trazos RECTOS (no curvos). Si girás ~90° y el plano queda de
+            // canto (rayo casi paralelo al plano), caemos a la profundidad bloqueada para no dispararse.
+            const float denom = FVector::DotProduct(Dir, StrokeAnchorPlaneN);
+            if (FMath::Abs(denom) > 0.2f)
+            {
+                const float t = FVector::DotProduct(StrokeAnchorOrigin - Start, StrokeAnchorPlaneN) / denom;
+                OutNormal = StrokeAnchorPlaneN;
+                const FVector Pf = Start + Dir * FMath::Clamp(t, 50.f, AirDepth * 3.f);
+                return Volume ? Volume->ClampInsideCanvas(Pf, 0.f) : Pf;
+            }
+            OutNormal = -Dir; // plano de canto → distancia bloqueada
+            const FVector Pf = Start + Dir * StrokeLockDepth;
+            return Volume ? Volume->ClampInsideCanvas(Pf, 0.f) : Pf;
+        }
+        // Hover (no esculpiendo todavía): imantar a la superficie de arcilla cercana para posicionar
+        // bien la profundidad.
+        FVector Snapped;
+        if (!bIsStamping && TryMagnetToClay(Start, Dir, Snapped))
+        {
+            OutNormal = -Dir;
+            return Volume ? Volume->ClampInsideCanvas(Snapped, 0.f) : Snapped;
+        }
+    }
+
     // ── Modo eje: trazo recto sobre el plano CONGELADO (fijado al activar Z/X) ───
     // Solo con la herramienta de esculpir (Add) y fuera de la tool de ojos. El rayo del cursor
     // se interseca con el plano fijo → trazos rectos; soltar/re-presionar mantiene el mismo plano.
@@ -1667,9 +1737,11 @@ FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
         // Sin superficie a la vista → brazo extendido (no pinta nada igual).
     }
 
-    // Cursor tipo SculptrVR: siempre a distancia fija (brazo extendido).
+    // Cursor tipo SculptrVR: siempre a distancia fija (brazo extendido). BORRAR usa el brazo 50% más
+    // cerca (la goma trabaja mejor pegada a la cámara; esculpir/pintar siguen a AirDepth).
     OutNormal = -Dir;
-    const FVector Air = Start + Dir * AirDepth;
+    const float Depth = (EditMode == EPTEditMode::Erase) ? AirDepth * 0.5f : AirDepth;
+    const FVector Air = Start + Dir * Depth;
     // Clamp desde el PIVOT (centro) del sello: inset 0 → el centro se frena en la cara interior del
     // área, con la mitad de la esfera adentro y la otra mitad afuera (podés dibujar sobre las paredes).
     return Volume ? Volume->ClampInsideCanvas(Air, 0.f) : Air;
@@ -1679,6 +1751,124 @@ FVector APTSculptPlayerController::GetStampPoint(FVector& OutNormal) const
 float APTSculptPlayerController::VoxelHint() const
 {
     return StampSize * 0.15f;
+}
+
+// ── Imán a la geometría ───────────────────────────────────────────────────────
+bool APTSculptPlayerController::FindNearestClay(const FVector& Near, float Radius, FVector& OutSurf) const
+{
+    if (!Volume || Radius <= 1.f) return false;
+    const float Cell = FMath::Max(Volume->VoxelSize, 1.f);
+    // Escaneo grueso: punto muestreado más cercano a 'Near' que esté dentro/tocando la arcilla (>=0).
+    const int32 K = FMath::Clamp(FMath::CeilToInt(Radius / Cell), 1, 4); // hasta 9³=729 muestras
+    const float Spacing = Radius / (float)K;
+    float BestD2 = Radius * Radius;
+    FVector Coarse = Near; bool bFound = false;
+    for (int32 i = -K; i <= K; ++i)
+    for (int32 j = -K; j <= K; ++j)
+    for (int32 k = -K; k <= K; ++k)
+    {
+        const FVector P = Near + FVector(i, j, k) * Spacing;
+        const float D2 = (P - Near).SizeSquared();
+        if (D2 > BestD2) continue;
+        if (Volume->SampleWorldDensity(P) >= 0.f) { BestD2 = D2; Coarse = P; bFound = true; }
+    }
+    if (!bFound) return false;
+
+    // Refinar: marchar de 'Near' hacia el punto grueso y afinar el cruce de superficie con bisección.
+    const FVector Dir = (Coarse - Near).GetSafeNormal();
+    float Gap = FMath::Sqrt(BestD2);
+    if (!Dir.IsNearlyZero())
+    {
+        const float Step = FMath::Max(4.f, Cell * 0.25f);
+        float tPrev = 0.f; bool bCrossed = false; float tHit = Gap;
+        for (float t = Step; t <= Gap + Step; t += Step)
+        {
+            if (Volume->SampleWorldDensity(Near + Dir * t) >= 0.f) { tHit = t; bCrossed = true; break; }
+            tPrev = t;
+        }
+        if (bCrossed)
+        {
+            float lo = tPrev, hi = tHit;
+            for (int32 b = 0; b < 6; ++b)
+            {
+                const float mid = (lo + hi) * 0.5f;
+                if (Volume->SampleWorldDensity(Near + Dir * mid) >= 0.f) hi = mid; else lo = mid;
+            }
+            Gap = hi;
+        }
+    }
+    else { Gap = 0.f; } // 'Near' ya está dentro de la arcilla
+    OutSurf = Near + Dir * Gap;
+    return true;
+}
+
+bool APTSculptPlayerController::RayMarchClayFront(const FVector& Start, const FVector& Dir, float MaxDist, FVector& OutSurf) const
+{
+    if (!Volume || MaxDist <= 1.f) return false;
+    const float Cell = FMath::Max(Volume->VoxelSize, 1.f);
+    const float Step = FMath::Max(8.f, Cell);
+    float prevD = Volume->SampleWorldDensity(Start); // <0 fuera, >0 dentro
+    for (float t = Step; t <= MaxDist; t += Step)
+    {
+        const float d = Volume->SampleWorldDensity(Start + Dir * t);
+        if (prevD <= 0.f && d > 0.f) // cruce: entró a la arcilla → superficie frontal
+        {
+            float lo = t - Step, hi = t;
+            for (int32 b = 0; b < 6; ++b)
+            {
+                const float mid = (lo + hi) * 0.5f;
+                if (Volume->SampleWorldDensity(Start + Dir * mid) > 0.f) hi = mid; else lo = mid;
+            }
+            OutSurf = Start + Dir * hi;
+            return true;
+        }
+        prevD = d;
+    }
+    return false;
+}
+
+bool APTSculptPlayerController::TryMagnetToClay(const FVector& Start, const FVector& Dir, FVector& Out) const
+{
+    // Margen para SOLTARSE de la silueta: chico → apenas te pasás del borde, vuelve al brazo normal.
+    const float ReleaseMargin = FMath::Max(StampSize * 0.5f, 45.f);
+
+    // (a) La geometría está DELANTE (el rayo la toca) y más cerca que el brazo (AirDepth): la brocha se
+    //     APOYA en su superficie frontal. A medida que movés el cursor hacia el borde, el punto de contacto
+    //     RUEDA suave por la superficie hasta la silueta (~90° a la cámara). Estable: sale del ray-march.
+    FVector Surf;
+    if (RayMarchClayFront(Start, Dir, AirDepth, Surf))
+    {
+        bMagnetEngaged = true;
+        LastMagnetSurf = Surf;
+        Out = Surf;
+        return true;
+    }
+
+    // (b) Pasaste la silueta (el rayo ya no toca la geometría): en vez de quedar CLAVADO en un punto (se
+    //     sentía pegado), la brocha SIGUE al cursor a la profundidad de la silueta, dentro de un margen
+    //     chico. Se mueve suave sin recalcular (así no oscila). Solo se SUELTA cuando el cursor se aleja de
+    //     la silueta más que ReleaseMargin (un pelín afuera del borde) → vuelve al brazo normal.
+    if (bMagnetEngaged)
+    {
+        const float holdT = FVector::DotProduct(LastMagnetSurf - Start, Dir); // profundidad de la silueta
+        const FVector RayAtDepth = Start + Dir * holdT;                        // el cursor, a esa profundidad
+        const float perp = (LastMagnetSurf - RayAtDepth).Size();              // cuánto te alejaste de la silueta
+        if (holdT > 50.f && perp <= ReleaseMargin)
+        {
+            Out = RayAtDepth;              // sigue el cursor, pegado a la profundidad de la silueta
+            return true;
+        }
+        bMagnetEngaged = false;            // te saliste del borde → soltar (vuelve a AirDepth)
+    }
+    return false;
+}
+
+void APTSculptPlayerController::PTAnchors()
+{
+    bAnchorSnap = !bAnchorSnap;
+    if (!bAnchorSnap) bStrokeAnchorLocked = false;
+    if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 2.5f, bAnchorSnap ? FColor::Green : FColor::Orange,
+        FString::Printf(TEXT("Iman a la geometria: %s"), bAnchorSnap ? TEXT("ON") : TEXT("OFF")));
 }
 
 // ── Preview mesh ─────────────────────────────────────────────────────────────
@@ -2023,6 +2213,25 @@ void APTSculptPlayerController::OnStampPressed()
         else
             Server_BeginStroke();      // trazo normal sobre la base (undo por trazo)
     }
+
+    // Imán: si el trazo arranca IMANTADO a la geometría, FIJAR su profundidad a ese punto (plano
+    // perpendicular a la vista) → el trazo entero sale a la profundidad correcta aunque muevas la
+    // cámara/pawn (p. ej. un brazo DESDE el torso, no detrás).
+    bStrokeAnchorLocked = false;
+    if (bAnchorSnap && EditMode == EPTEditMode::Add && !bEyesTool && !bAxisLock && !bSurfaceSnap)
+    {
+        FVector S, D, Snapped;
+        if (GetCameraRay(S, D) && TryMagnetToClay(S, D, Snapped))
+        {
+            bStrokeAnchorLocked = true;
+            // Fijar el PLANO del trazo (perpendicular a la cámara) en la posición donde la brocha SE VE.
+            const FVector BrushPos = bStampSmoothInit ? SmoothedStampPos : Snapped;
+            StrokeAnchorOrigin = BrushPos;
+            StrokeAnchorPlaneN = -D;
+            StrokeLockDepth    = FMath::Max(FVector::DotProduct(BrushPos - S, D), 50.f);
+        }
+    }
+
     // NOTA: el plano del modo eje EXPLÍCITO (Z/X) NO se recalcula al apretar (se fijó al activar el modo).
     // Así soltar y re-presionar el esculpido sigue en el MISMO plano.
     // El auto-recto (default/arm) NO se congela acá: lo maneja el Tick (engancha al estar quieto, también
@@ -2034,6 +2243,8 @@ void APTSculptPlayerController::OnStampReleased()
     // Cerrar el trazo (base o detalle) con EndStroke: el volumen guarda el respaldo de pintura del trazo
     // (para el undo del color). Para detalle, el respaldo va a la pila de capas (DetailUndoStack).
     if (bIsStamping && CanLocalPlayerSculpt()) Server_EndStroke();
+    bStrokeAnchorLocked = false; // soltar el trazo libera el plano imantado
+
     bIsStamping     = false;
     bStrokeIsDetail = false;
     bErasePropsHeld = false; // soltar el click corta el borrado continuo de assets

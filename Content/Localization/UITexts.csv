@@ -341,8 +341,8 @@ GPA_PAUSE,Pausa,Pause,Pausa,Pause,Pause,Pausa
 GP_ON,Sí,On,Sim,An,Oui,Sì
 GP_OFF,No,Off,Não,Aus,Non,No
 MENU_ONLINE_MODE,Modo audiencia,Audience mode,Modo audiência,Publikumsmodus,Mode public,Modalità pubblico
-LP_ONLINE_STEP1,"Desde cualquier celular o PC, entra a:","From any phone or PC, go to:","De qualquer celular ou PC, entre em:",Öffne auf einem Handy oder PC:,"Depuis un téléphone ou un PC, va sur :","Da qualsiasi telefono o PC, vai su:"
-LP_ONLINE_CODE,Código de sala:,Room code:,Código da sala:,Raumcode:,Code de la salle :,Codice stanza:
+LP_ONLINE_STEP1,Entrá a:,Go to:,Entre em:,Geh zu:,Va sur :,Vai su:
+LP_ONLINE_CODE,Sala:,Room:,Sala:,Raum:,Salle :,Stanza:
 LP_ONLINE_CONNECTING,Conectando al servidor online…,Connecting to the online server…,Conectando ao servidor online…,Verbinde mit dem Online-Server…,Connexion au serveur en ligne…,Connessione al server online…
 LP_ONLINE_ERROR,No se pudo conectar al servidor online. Reintentando…,Couldn't reach the online server. Retrying…,Não foi possível conectar ao servidor online. Tentando de novo…,Online-Server nicht erreichbar. Neuer Versuch…,Impossible de joindre le serveur en ligne. Nouvel essai…,Impossibile raggiungere il server online. Nuovo tentativo…
 LP_SETTINGS_TITLE,Configuración de la partida,Game settings,Configurações da partida,Spieleinstellungen,Paramètres de la partie,Impostazioni partita
@@ -359,18 +359,18 @@ LP_AUD_HOST_QR,QR PRIVADO del streamer: ¡no lo muestres en el stream!,Streamer'
 LP_AUD_HOST_MISSING,Falta que el streamer se conecte con su QR privado,Waiting for the streamer to join with their private QR,Falta o streamer entrar com o QR privado,Der Streamer muss sich noch mit seinem privaten QR verbinden,Le streamer doit encore se connecter avec son QR privé,Manca che lo streamer si colleghi con il suo QR privato
 LP_AUD_READY,¡Listo! El streamer empieza desde su celular o la TV,Ready! The streamer starts from their phone or the TV,Pronto! O streamer começa pelo celular ou pela TV,Bereit! Der Streamer startet vom Handy oder vom TV,Prêt ! Le streamer lance depuis son téléphone ou la TV,Pronti! Lo streamer avvia dal telefono o dalla TV
 LP_AUD_CHOOSING,El streamer está eligiendo la palabra…,The streamer is picking a word…,O streamer está escolhendo a palavra…,Der Streamer wählt ein Wort…,Le streamer choisit un mot…,Lo streamer sta scegliendo la parola…
-LP_AUD_GET_READY,¡Prepárense para adivinar desde el celular!,Get ready to guess from your phone!,Preparem-se para adivinhar pelo celular!,Macht euch bereit zum Raten am Handy!,Préparez-vous à deviner sur votre téléphone !,Preparatevi a indovinare dal telefono!
+LP_AUD_GET_READY,¡Prepárense para adivinar desde el celular o el chat!,Get ready to guess from your phone or chat!,Preparem-se para adivinhar do celular ou do chat!,Macht euch bereit zum Raten per Handy oder Chat!,Préparez-vous à deviner depuis le téléphone ou le chat !,Preparatevi a indovinare dal telefono o dalla chat!
 LP_AND_MORE,y {0} más,and {0} more,e mais {0},und {0} weitere,et {0} de plus,e altri {0}
-LP_AUD_SECTION,Conectar al streamer,Connect the streamer,Conectar o streamer,Streamer verbinden,Connecter le streamer,Collega lo streamer
-LP_AUD_HOST_STEPS,"Abrí tu página privada en ESTA PC (dejala fuera del stream, en otra ventana o monitor). Ahí ves y elegís las palabras; nunca aparecen en pantalla.",Open your private page on THIS PC (keep it off stream — another window or monitor). You see and pick the words there; they never show on screen.,"Abra sua página privada NESTE PC (mantenha fora da stream, em outra janela ou monitor). Lá você vê e escolhe as palavras; nunca aparecem na tela.","Öffne deine private Seite auf DIESEM PC (abseits vom Stream, anderes Fenster/Monitor). Dort siehst und wählst du die Wörter; sie erscheinen nie am Bildschirm.","Ouvre ta page privée sur CE PC (hors du stream, autre fenêtre ou écran). Tu y vois et choisis les mots ; ils n'apparaissent jamais à l'écran.","Apri la tua pagina privata su QUESTO PC (fuori dalla stream, altra finestra o monitor). Lì vedi e scegli le parole; non appaiono mai a schermo."
+LP_AUD_SECTION,1. Conectá el streamer,1. Connect the streamer,1. Conecte o streamer,1. Streamer verbinden,1. Connecte le streamer,1. Collega lo streamer
+LP_AUD_HOST_STEPS,Abrí tu página privada acá (no la muestres en el stream).,Opens your private page here (keep it off stream).,Abre sua página privada aqui (fora da stream).,Öffnet deine private Seite hier (nicht im Stream zeigen).,Ouvre ta page privée ici (hors du stream).,Apre la tua pagina privata qui (fuori dalla stream).
 LP_AUD_ZONE,ZONA PRIVADA: tu QR de streamer aparece solo aquí,PRIVATE ZONE: your streamer QR only shows here,ZONA PRIVADA: seu QR de streamer aparece só aqui,PRIVATER BEREICH: dein Streamer-QR erscheint nur hier,ZONE PRIVÉE : ton QR de streamer apparaît seulement ici,ZONA PRIVATA: il tuo QR da streamer appare solo qui
 LP_AUD_SHOW_QR,Mostrar mi QR privado,Show my private QR,Mostrar meu QR privado,Meinen privaten QR zeigen,Afficher mon QR privé,Mostra il mio QR privato
 LP_AUD_HIDE_QR,Ocultar QR,Hide QR,Ocultar QR,QR ausblenden,Masquer le QR,Nascondi QR
 LP_AUD_OPEN_PC,Abrir en esta PC,Open on this PC,Abrir neste PC,Auf diesem PC öffnen,Ouvrir sur ce PC,Apri su questo PC
 LP_AUD_COPY,Copiar link,Copy link,Copiar link,Link kopieren,Copier le lien,Copia link
 LP_AUD_COPIED,¡Copiado!,Copied!,Copiado!,Kopiert!,Copié !,Copiato!
-LP_CHAT_SECTION,Chat del stream (opcional),Stream chat (optional),Chat da live (opcional),Stream-Chat (optional),Chat du stream (facultatif),Chat della live (facoltativo)
-LP_CHAT_HINT,Escribe tu canal: tu chat entra con !unirse y adivina escribiendo.,Type your channel: your chat joins with !join and guesses by typing.,Digite seu canal: seu chat entra com !entrar e adivinha digitando.,Gib deinen Kanal ein: dein Chat macht mit !beitreten mit und rät per Chat.,Entre ta chaîne : ton chat rejoint avec !rejoindre et devine en écrivant.,Scrivi il tuo canale: la chat entra con !unisciti e indovina scrivendo.
+LP_CHAT_SECTION,2. Conectá el chat (opcional),2. Connect the chat (optional),2. Conecte o chat (opcional),2. Chat verbinden (optional),2. Connecte le chat (option),2. Collega la chat (opzionale)
+LP_CHAT_HINT,Poné tu canal; el chat juega con !unirse.,Enter your channel; chat plays with !join.,Coloque seu canal; o chat joga com !entrar.,Kanal eingeben; Chat spielt mit !beitreten.,Mets ta chaîne ; le chat joue avec !rejoindre.,Inserisci il canale; la chat gioca con !unisci.
 LP_CHAT_CHANNEL_HINT,tu canal,your channel,seu canal,dein Kanal,ta chaîne,il tuo canale
 LP_CHAT_ST_OFF,Sin conectar,Not connected,Não conectado,Nicht verbunden,Non connecté,Non collegato
 LP_CHAT_ST_CONNECTING,Conectando…,Connecting…,Conectando…,Verbinde…,Connexion…,Connessione…
@@ -378,7 +378,7 @@ LP_CHAT_ST_OK,Leyendo el chat ✓,Reading chat ✓,Lendo o chat ✓,Chat wird ge
 LP_CHAT_ST_RETRY,"Sin conexión, reintentando…","No connection, retrying…","Sem conexão, tentando de novo…","Keine Verbindung, neuer Versuch…","Pas de connexion, nouvel essai…","Nessuna connessione, riprovo…"
 LP_CHAT_ST_NOTFOUND,No existe ese canal,That channel doesn't exist,Esse canal não existe,Diesen Kanal gibt es nicht,Cette chaîne n'existe pas,Questo canale non esiste
 LP_CHAT_PLAYERS,{0} jugando desde el chat,{0} playing from chat,{0} jogando pelo chat,{0} spielen über den Chat,{0} jouent depuis le chat,{0} giocano dalla chat
-LP_CHAT_JOIN_TV,o escribe !unirse en el chat,or type !join in chat,ou digite !entrar no chat,oder schreib !beitreten in den Chat,ou écris !rejoindre dans le chat,o scrivi !unisciti in chat
+LP_CHAT_JOIN_TV,o !unirse en el chat,or !join in chat,ou !entrar no chat,oder !beitreten im Chat,ou !rejoindre dans le chat,o !unisci in chat
 LP_CHAT_CMD,!unirse,!join,!entrar,!beitreten,!rejoindre,!unisciti
 LP_AUD_LAST_WORD,¡Última palabra: puntos dobles!,Last word: double points!,Última palavra: pontos em dobro!,Letztes Wort: doppelte Punkte!,Dernier mot : points doublés !,Ultima parola: punti doppi!
 CHAT_LAST_WORD_BONUS,¡Última palabra! Vale x{1} puntos,Last word! Worth x{1} points,Última palavra! Vale x{1} pontos,Letztes Wort! Zählt x{1} Punkte,Dernier mot ! Vaut x{1} points,Ultima parola! Vale x{1} punti
@@ -533,3 +533,8 @@ LP_AUD_JOIN,Unirse como streamer,Join as streamer,Entrar como streamer,Als Strea
 LP_AUD_PICK_TITLE,¡Tu turno! Elegí la palabra,Your turn! Pick the word,Sua vez! Escolha a palavra,Du bist dran! Wähl das Wort,À toi ! Choisis le mot,Tocca a te! Scegli la parola
 LP_AUD_PICK_BTN,Seleccionar palabra,Pick the word,Escolher palavra,Wort wählen,Choisir le mot,Scegli la parola
 LP_AUD_PICK_HINT,Elegila en tu página privada (no se muestra en el stream).,Pick it on your private page (it never shows on stream).,Escolha na sua página privada (não aparece na stream).,Wähl es auf deiner privaten Seite (nie im Stream sichtbar).,Choisis-le sur ta page privée (jamais visible à l'écran).,Scegliila nella tua pagina privata (non appare nella stream).
+LP_WIZ_STREAMER,Conectar streamer,Connect streamer,Conectar streamer,Streamer verbinden,Connecter streamer,Collega streamer
+LP_WIZ_CHAT,Conectá el chat,Connect the chat,Conectar o chat,Chat verbinden,Connecter le chat,Collega la chat
+LP_WIZ_OPTIONAL,(opcional),(optional),(opcional),(optional),(option),(opzionale)
+LP_WIZ_SKIP,Saltar,Skip,Pular,Überspringen,Passer,Salta
+LP_SET_CHATMAX,Máx. en el chat,Max in chat,Máx. no chat,Max. im Chat,Max. dans le chat,Max in chat

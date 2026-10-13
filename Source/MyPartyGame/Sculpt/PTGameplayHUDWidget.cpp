@@ -1568,9 +1568,12 @@ FString UPTGameplayHUDWidget::BuildScoreboard() const
 
     Players.Sort([](const APTPlayerState& A, const APTPlayerState& B){ return A.GameScore > B.GameScore; });
 
+    // Solo los 10 primeros: con mucha gente (audiencia) el leaderboard se hacía gigante y tapaba los
+    // botones de "Jugar de nuevo" / "Volver al menú".
     FString Out;
-    for (APTPlayerState* PT : Players)
-        Out += FString::Printf(TEXT("%s: %d\n"), *NameFor(PT).Left(10), PT->GameScore);
+    const int32 Shown = FMath::Min(Players.Num(), 10);
+    for (int32 i = 0; i < Shown; ++i)
+        Out += FString::Printf(TEXT("%s: %d\n"), *NameFor(Players[i]).Left(10), Players[i]->GameScore);
     return Out;
 }
 
