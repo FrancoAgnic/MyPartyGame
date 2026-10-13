@@ -26,6 +26,8 @@ class MYPARTYGAME_API UPTMainMenuWidget : public UPTUserWidget
     GENERATED_BODY()
 
 public:
+    UPTMainMenuWidget(const FObjectInitializer& ObjectInitializer);
+
     /**
      * Inicializar y mostrar el menú. Llamar desde el PlayerController en BeginPlay.
      * @param InNumPublicConnections  Capacidad por defecto para la sesión a crear.

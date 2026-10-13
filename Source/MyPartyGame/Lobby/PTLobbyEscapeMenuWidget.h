@@ -16,6 +16,8 @@ class MYPARTYGAME_API UPTLobbyEscapeMenuWidget : public UPTUserWidget
     GENERATED_BODY()
 
 public:
+    UPTLobbyEscapeMenuWidget(const FObjectInitializer& ObjectInitializer);
+
     /** Alternar abierto/cerrado. Llamar desde el PlayerController al togglear el input de Escape. */
     UFUNCTION(BlueprintCallable, Category = "Lobby")
     void ToggleMenu();

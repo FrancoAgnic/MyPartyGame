@@ -268,7 +268,7 @@ void UPTTutorialWidget::BuildTree()
         PRow->SetVisibility(ESlateVisibility::Collapsed);
     }
 
-    // ── Aviso arriba a la derecha: cómo saltar ──
+    // ── Aviso arriba a la derecha: cómo saltar (debajo del logo de Sculpturillo del HUD, que ocupa la esquina) ──
     {
         UTextBlock* Skip = MakeText(15, TUT_Muted, false);
         Skip->SetText(PTText::Get(TEXT("TUT_SKIP_HINT")));
@@ -276,7 +276,7 @@ void UPTTutorialWidget::BuildTree()
         {
             S->SetHorizontalAlignment(HAlign_Right);
             S->SetVerticalAlignment(VAlign_Top);
-            S->SetPadding(FMargin(0.f, 18.f, 28.f, 0.f));
+            S->SetPadding(FMargin(0.f, 106.f, 28.f, 0.f));
         }
     }
 

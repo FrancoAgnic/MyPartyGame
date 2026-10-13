@@ -40,6 +40,17 @@
 #include "Components/AudioComponent.h"
 #include "Animation/WidgetAnimation.h"
 
+UPTGameplayHUDWidget::UPTGameplayHUDWidget(const FObjectInitializer& ObjectInitializer)
+    : Super(ObjectInitializer)
+{
+    // Logo de Sculpturillo arriba a la derecha (esa esquina está libre: marcador a la izquierda, reloj al
+    // centro, herramientas abajo). Un poco más chico y transparente para no robar atención.
+    bShowGameLogo   = true;
+    GameLogoWidth   = 230.f;
+    GameLogoOffset  = FVector2D(-28.f, 22.f);
+    GameLogoOpacity = 0.85f;
+}
+
 bool UPTGameplayHUDWidget::Initialize()
 {
     if (!Super::Initialize()) return false;

@@ -31,6 +31,16 @@
 // Inicialización
 // ==========================================================================
 
+UPTMainMenuWidget::UPTMainMenuWidget(const FObjectInitializer& ObjectInitializer)
+    : Super(ObjectInitializer)
+{
+    // Logo de Sculpturillo arriba a la derecha (los botones están a la izquierda). Ajustable en Details → Branding.
+    bShowGameLogo  = true;
+    GameLogoWidth  = 340.f;
+    GameLogoOffset = FVector2D(-36.f, 30.f);
+    GameLogoOpacity = 1.f;
+}
+
 bool UPTMainMenuWidget::Initialize()
 {
     if (!Super::Initialize()) return false;

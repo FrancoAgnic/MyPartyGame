@@ -21,6 +21,8 @@ class MYPARTYGAME_API UPTGameplayHUDWidget : public UPTUserWidget
     GENERATED_BODY()
 
 public:
+    UPTGameplayHUDWidget(const FObjectInitializer& ObjectInitializer);
+
     /** Llamar desde el PlayerController al crear el HUD (mismo patrón que el lobby). */
     UFUNCTION(BlueprintCallable, Category="Game")
     void ShowHUD();
@@ -59,6 +61,8 @@ public:
 
 protected:
     virtual bool Initialize() override;
+    // El logo de Sculpturillo (arriba a la derecha) es para la partida: en el editor de mapas no va.
+    virtual bool ShouldShowGameLogo() const override { return Super::ShouldShowGameLogo() && !IsAuthorMode(); }
     // Preview en el DISEÑADOR: puebla el hotbar con celdas representativas para poder acomodarlo
     // viéndolo (WYSIWYG), en vez de a ciegas. Solo corre en design time; en juego no hace nada.
     virtual void NativePreConstruct() override;

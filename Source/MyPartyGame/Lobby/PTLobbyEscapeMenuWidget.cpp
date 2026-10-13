@@ -16,6 +16,20 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "../PTTextTable.h"
 
+UPTLobbyEscapeMenuWidget::UPTLobbyEscapeMenuWidget(const FObjectInitializer& ObjectInitializer)
+    : Super(ObjectInitializer)
+{
+    // Logo de Sculpturillo grande, centrado justo ENCIMA del panel de pausa (el panel está centrado en
+    // pantalla y mide ~316 de alto). Mientras la pausa está abierta se esconde el logo chico de la esquina
+    // (HUD / menú principal) para que no haya dos. Ajustable en Details → Branding.
+    bShowGameLogo   = true;
+    bGameLogoHidesOthers = true;
+    GameLogoWidth   = 460.f;
+    GameLogoAnchor  = FVector2D(0.5f, 0.5f);
+    GameLogoOffset  = FVector2D(0.f, -255.f);
+    GameLogoOpacity = 1.f;
+}
+
 bool UPTLobbyEscapeMenuWidget::Initialize()
 {
     if (!Super::Initialize()) return false;

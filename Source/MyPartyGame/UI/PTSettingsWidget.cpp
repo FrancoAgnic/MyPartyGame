@@ -18,6 +18,20 @@
 #include "../Sculpt/PTSculptGameState.h"
 #include "../PTTextTable.h"
 
+UPTSettingsWidget::UPTSettingsWidget(const FObjectInitializer& ObjectInitializer)
+    : Super(ObjectInitializer)
+{
+    // Logo de Sculpturillo apoyado sobre el borde de arriba del panel (lo sigue: en el menú el panel es más
+    // alto por la fila de idioma). Mientras Settings está abierto se esconden los demás logos (esquina/pausa).
+    bShowGameLogo        = true;
+    bGameLogoOnPanel     = true;
+    bGameLogoHidesOthers = true;
+    GameLogoWidth        = 340.f;
+    GameLogoOffset       = FVector2D::ZeroVector;
+    GameLogoPanelOverlap = 0.3f;
+    GameLogoOpacity      = 1.f;
+}
+
 bool UPTSettingsWidget::Initialize()
 {
     if (!Super::Initialize()) return false;

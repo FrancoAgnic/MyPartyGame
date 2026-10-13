@@ -23,6 +23,8 @@ class MYPARTYGAME_API UPTSettingsWidget : public UPTUserWidget
     GENERATED_BODY()
 
 public:
+    UPTSettingsWidget(const FObjectInitializer& ObjectInitializer);
+
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void ShowPanel();
 
