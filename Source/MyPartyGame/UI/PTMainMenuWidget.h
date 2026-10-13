@@ -92,6 +92,13 @@ protected:
     // WBP con nombre "SpawnMainMenu"; se reproduce sola cuando aparece el menú (MenuSetup).
     UPROPERTY(Transient, meta = (BindWidgetAnimOptional)) class UWidgetAnimation* SpawnMainMenu = nullptr;
 
+    // Animación del logo que queda en LOOP para siempre. Crearla en el WBP con nombre "LogoLoop".
+    // Arranca sola cuando TERMINA SpawnMainMenu (ya apareció el logo y spawneó todo); se repite infinito.
+    UPROPERTY(Transient, meta = (BindWidgetAnimOptional)) class UWidgetAnimation* LogoLoop = nullptr;
+
+    // Al terminar SpawnMainMenu: lanza LogoLoop en bucle infinito.
+    UFUNCTION() void OnSpawnMainMenuFinished();
+
     // Fase 4 — Texto de error de conexión (ej: "Contraseña incorrecta")
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* ErrorText;
 

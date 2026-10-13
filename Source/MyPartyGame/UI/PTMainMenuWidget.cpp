@@ -105,7 +105,22 @@ void UPTMainMenuWidget::MenuSetup(int32 InNumPublicConnections, FString InLobbyP
     SetVisibility(ESlateVisibility::Visible);
 
     // Animación de entrada (botones deslizándose desde los lados) al aparecer el menú.
-    if (SpawnMainMenu) PlayAnimation(SpawnMainMenu);
+    // Cuando termina, arranca LogoLoop en bucle infinito (ver OnSpawnMainMenuFinished).
+    if (SpawnMainMenu)
+    {
+        // Rebind limpio: MenuSetup puede llamarse más de una vez sobre el mismo widget (volver al menú)
+        // y no queremos acumular bindings → disparar el loop dos veces.
+        UnbindAllFromAnimationFinished(SpawnMainMenu);
+        FWidgetAnimationDynamicEvent Finished;
+        Finished.BindUFunction(this, FName("OnSpawnMainMenuFinished"));
+        BindToAnimationFinished(SpawnMainMenu, Finished);
+        PlayAnimation(SpawnMainMenu);
+    }
+    else
+    {
+        // Sin animación de entrada en el WBP: arrancar el loop del logo directamente.
+        OnSpawnMainMenuFinished();
+    }
     // No SetIsFocusable(true) acá: el teclado tiene que quedar para el juego (WASD/Space), no
     // para este widget. Los botones se clickean con mouse únicamente (ver nota de arriba).
 
@@ -173,6 +188,14 @@ void UPTMainMenuWidget::MenuSetup(int32 InNumPublicConnections, FString InLobbyP
 
         Sessions->Login();
     }
+}
+
+void UPTMainMenuWidget::OnSpawnMainMenuFinished()
+{
+    // Ya apareció el logo y spawneó todo (SpawnMainMenu terminó): el logo queda latiendo para siempre.
+    // NumLoopsToPlay = 0 → bucle infinito.
+    if (LogoLoop)
+        PlayAnimation(LogoLoop, /*StartAtTime=*/0.f, /*NumLoopsToPlay=*/0, EUMGSequencePlayMode::Forward);
 }
 
 void UPTMainMenuWidget::NativeDestruct()

@@ -81,6 +81,16 @@ public:
     UPROPERTY(EditAnywhere, Category="Tutorial") TSoftObjectPtr<USoundBase> CountdownSound;
     UPROPERTY(EditAnywhere, Category="Tutorial") TSoftObjectPtr<USoundBase> ShutterSound;
     UPROPERTY(EditAnywhere, Category="Tutorial") TSoftObjectPtr<class UTexture2D> LogoTexture;
+    /** Meme del final del tutorial rápido: jirafa "muy realista" que se muestra como resultado del tutorial
+     *  AVANZADO, al lado de la foto de TU jirafa (resultado del básico). Importá la imagen en /Game/Tutorial. */
+    UPROPERTY(EditAnywhere, Category="Tutorial") TSoftObjectPtr<class UTexture2D> RealisticGiraffeTexture;
+    /** Si todavía no asignaste la imagen de la jirafa realista, se muestra ESTE texto en su lugar (placeholder). */
+    UPROPERTY(EditAnywhere, Category="Tutorial") FText RealisticGiraffeText = FText::FromString(TEXT("🦒\nJirafa realista"));
+    /** Velocidad del demo de Sculpi (reproducción de la grabación). 2 = el doble de rápido. */
+    UPROPERTY(EditAnywhere, Category="Tutorial") float QuickDemoSpeed = 2.f;
+    /** Margen de error (unidades de mundo) al medir si copiaste la guía: se acepta arcilla hasta esta
+     *  distancia del punto de muestra. Más alto = más permisivo. */
+    UPROPERTY(EditAnywhere, Category="Tutorial") float QuickFillTolerance = 30.f;
     /** Material de las guías fantasma (translúcido, se ve la arcilla adentro). Parámetro "Color". */
     UPROPERTY(EditAnywhere, Category="Tutorial") TSoftObjectPtr<class UMaterialInterface> GhostMaterial;
     /** Si GhostMaterial no existe, se prueban estos en orden. */
@@ -254,7 +264,12 @@ private:
     UPROPERTY() TArray<UProceduralMeshComponent*> QDots; // línea punteada de la cara de Sculpi al trazo
     bool bQSculpiAtWork = false; // durante el demo: Sculpi se pone frente al trazo que "esculpe"
     UPROPERTY() class UPTTutorialChoiceWidget* ChoiceWidget = nullptr;
-    void QuickLockSculpt(bool bLock); // bloquea/desbloquea el esculpido del jugador
+    // bloquea/desbloquea el esculpido del jugador. bAtWork=true → además Sculpi "trabaja" frente al trazo
+    // (demo). Para la lección del color se llama con bAtWork=false (bloquea esculpir pero deja el picker).
+    void QuickLockSculpt(bool bLock, bool bAtWork = true);
+    // Un sample de la guía cuenta como "lleno" si hay arcilla EN el punto o a ±QuickFillTolerance de él
+    // (margen de error: no hace falta copiar la guía perfecta).
+    bool IsGhostSampleSolid(const FVector& P) const;
     void QuickDemoVisual();           // Sculpi mirando el trazo + línea punteada hasta la brocha
     void QuickHideDots();
     void QuickTick(float Dt);

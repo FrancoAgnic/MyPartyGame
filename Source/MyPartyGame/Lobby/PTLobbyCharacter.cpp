@@ -1981,11 +1981,14 @@ static void PT_UploadWholeTex(UTexture2D* Tex, const TArray<FColor>& Px)
     Tex->UpdateResource();
 }
 
-void APTLobbyCharacter::PushHeadPaintUndo()
+bool APTLobbyCharacter::PushHeadPaintUndo()
 {
-    if (HeadPaintPixels.Num() == 0) return;
+    if (HeadPaintPixels.Num() == 0) return false; // sin textura de pintura todavía → no hay nada que apilar
     HeadPaintUndoStack.Add(HeadPaintPixels); // copia del estado ANTES del trazo
+    // Al pasarse del tope se descarta el trazo MÁS VIEJO. El controller reconcilia su orden de undo con
+    // GetHeadPaintUndoDepth() antes de cada undo, así nunca queda un marcador sin snapshot.
     while (HeadPaintUndoStack.Num() > MaxPaintUndo) HeadPaintUndoStack.RemoveAt(0);
+    return true;
 }
 bool APTLobbyCharacter::UndoHeadPaint()
 {

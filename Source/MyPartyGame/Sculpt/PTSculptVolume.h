@@ -352,6 +352,12 @@ public:
 
     bool CanUndo() const { return VolumeUndoStack.Num() > 0; }
 
+    // Cuántos pasos de geometría se pueden deshacer AHORA (base + capas de detalle). Cada UndoOnce()
+    // consume exactamente UNA entrada de UndoOrder, así que esta es la profundidad real de la pila ya
+    // acotada por el tope del volumen. El undo de cabeza la usa para reconciliar su orden maestro y no
+    // dejar marcadores de geometría sin respaldo (que harían "saltar" el undo a otra herramienta).
+    int32 GetUndoDepth() const { return UndoOrder.Num(); }
+
     // Preview de la forma del sello (malla fantasma que sigue al cursor).
     static void BuildStampPreview(EPTStampShape Shape, float Size, float VoxSz,
                                   TArray<FVector>& OutVerts, TArray<int32>& OutTris,

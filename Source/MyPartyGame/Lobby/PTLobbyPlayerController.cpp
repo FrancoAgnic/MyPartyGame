@@ -866,7 +866,7 @@ void APTLobbyPlayerController::PlayerTick(float DeltaTime)
                 HeadStampRotation = FRotator::ZeroRotator;
                 HeadEyes.Reset(); RebuildEyesLiveMesh();
                 HeadUndoKinds.Reset();
-                if (C) C->ClearHeadPaint();
+                if (C) { C->ClearHeadPaint(); C->ClearPaintUndo(); } // reset total → nada que deshacer antes del borrón
                 bHeadSessionHeadDirty = true; // resetear la cabeza también es un cambio a guardar
             }
             // Sonido de "borrar todo" (mantener Backspace).
@@ -1310,9 +1310,10 @@ void APTLobbyPlayerController::OnHeadStampPressed()
     }
     else if (HeadEditMode == EPTEditMode::Paint)
     {
-        // Trazo de pintura de la CABEZA: snapshot para el undo.
-        if (Char) Char->PushHeadPaintUndo();
-        HeadUndoKinds.Add(1);
+        // Trazo de pintura de la CABEZA: snapshot para el undo. Solo marcamos el tipo 1 si realmente se
+        // apiló un snapshot. La sincronía con la pila (si el tope descartó trazos viejos) la garantiza
+        // ReconcileHeadUndo() justo antes de cada undo → un Backspace nunca salta de herramienta.
+        if (Char && Char->PushHeadPaintUndo()) HeadUndoKinds.Add(1);
     }
     else if (HeadVolume && (HeadEditMode == EPTEditMode::Add || HeadEditMode == EPTEditMode::Erase))
     {
@@ -1390,11 +1391,14 @@ void APTLobbyPlayerController::OnHeadClearReleased()
         }
         else if (HeadUndoKinds.Num() > 0)
         {
-            // El stack de "tipos" puede desincronizarse con las pilas reales (trazos que no generaron
-            // entrada, ojos restaurados por un undo de geometría, topes distintos) → antes eso hacía que
-            // un Backspace "saltee" un cambio o borre uno anterior. Ahora cada undo REPORTA si deshizo
-            // algo y se descartan los tipos sin respaldo, reintentando hacia abajo hasta deshacer UN
-            // cambio real (un Backspace = un cambio real, sin saltear ni borrar de más).
+            // HeadUndoKinds es el ORDEN MAESTRO de acciones (0=geo, 1=paint, 3=ojos). Cada herramienta
+            // tiene su propia pila con su propio tope (geo 8, paint 10, ojos sin tope), así que al desalojar
+            // lo viejo podía quedar un marcador sin respaldo → el undo "saltaba" a otra herramienta (p.ej.
+            // te borraba los ojos en vez del último trazo de paint). Reconciliar PRIMERO deja el orden 1:1
+            // con el respaldo real de cada pila (descartando los marcadores MÁS VIEJOS sobrantes), para que
+            // el undo sea EXACTAMENTE la última acción que hiciste, hacia atrás, sin importar la herramienta.
+            ReconcileHeadUndo();
+
             bool bDone = false;
             while (!bDone && HeadUndoKinds.Num() > 0)
             {
@@ -1402,7 +1406,7 @@ void APTLobbyPlayerController::OnHeadClearReleased()
                 if      (Kind == 0 && HeadVolume) bDone = HeadVolume->UndoOnce();
                 else if (Kind == 1 && Char)       bDone = Char->UndoHeadPaint();
                 else if (Kind == 3)               { if (HeadEyes.Num() > 0) { HeadEyes.Pop(); RebuildEyesLiveMesh(); bDone = true; } }
-                HeadUndoKinds.Pop(); // consumir el tipo (si estaba stale, seguir con el siguiente)
+                HeadUndoKinds.Pop(); // consumir el tipo (safety net: si aun así quedó stale, seguir abajo)
             }
         }
         if (SculptSounds) // sonido de undo simple (toque corto de Backspace)
@@ -1414,6 +1418,35 @@ void APTLobbyPlayerController::OnHeadClearReleased()
     bHeadClearHeld    = false;
     HeadClearHoldTime = 0.f;
     bHeadClearFired   = false;
+}
+void APTLobbyPlayerController::ReconcileHeadUndo()
+{
+    // Alinea el ORDEN MAESTRO (HeadUndoKinds) con la profundidad REAL de cada pila de respaldo. Las pilas
+    // topan y descartan lo MÁS VIEJO, así que si un tipo aparece más veces de las que su pila puede deshacer,
+    // sobran los marcadores MÁS VIEJOS de ese tipo → se descartan (preservando el orden de lo reciente).
+    // Resultado: cada marcador que queda tiene respaldo y el undo va 1:1 hacia atrás, sin saltos.
+    APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(GetPawn());
+    const int32 GeoDepth   = HeadVolume ? HeadVolume->GetUndoDepth() : 0;        // tipo 0
+    const int32 PaintDepth = Char       ? Char->GetHeadPaintUndoDepth() : 0;     // tipo 1
+    const int32 EyeDepth   = HeadEyes.Num();                                     // tipo 3
+
+    // Cuántos marcadores de cada tipo hay que descartar (los más viejos) por falta de respaldo.
+    int32 c0 = 0, c1 = 0, c3 = 0;
+    for (const uint8 K : HeadUndoKinds) { if (K == 0) ++c0; else if (K == 1) ++c1; else if (K == 3) ++c3; }
+    int32 Drop0 = FMath::Max(0, c0 - GeoDepth);
+    int32 Drop1 = FMath::Max(0, c1 - PaintDepth);
+    int32 Drop3 = FMath::Max(0, c3 - EyeDepth);
+    if (Drop0 == 0 && Drop1 == 0 && Drop3 == 0) return;
+
+    // Recorrer del MÁS VIEJO (índice 0) al más nuevo, sacando los sobrantes de cada tipo.
+    for (int32 i = 0; i < HeadUndoKinds.Num() && (Drop0 || Drop1 || Drop3); )
+    {
+        const uint8 K = HeadUndoKinds[i];
+        if      (K == 0 && Drop0 > 0) { HeadUndoKinds.RemoveAt(i); --Drop0; }
+        else if (K == 1 && Drop1 > 0) { HeadUndoKinds.RemoveAt(i); --Drop1; }
+        else if (K == 3 && Drop3 > 0) { HeadUndoKinds.RemoveAt(i); --Drop3; }
+        else ++i;
+    }
 }
 bool APTLobbyPlayerController::IsHeadUndoFlashing() const
 {

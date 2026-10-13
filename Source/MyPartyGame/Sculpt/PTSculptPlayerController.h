@@ -262,6 +262,9 @@ public:
     /** Tutorial: mientras Sculpi explica/esculpe, se BLOQUEA el esculpido y las herramientas (solo podés
      *  moverte). Lo prende/apaga APTTutorialDirector. */
     bool bTutorialLockSculpt = false;
+    /** Tutorial: excepción al lock de arriba para la lección del COLOR → aunque el esculpido esté bloqueado
+     *  (no podés esculpir hasta elegir amarillo), el color picker SÍ se puede abrir. Lo maneja el director. */
+    bool bTutorialAllowColorPick = false;
 
     /** Forma activa. Leer desde Blueprint para mostrar HUD. */
     UPROPERTY(BlueprintReadOnly, Category="Sculpt")

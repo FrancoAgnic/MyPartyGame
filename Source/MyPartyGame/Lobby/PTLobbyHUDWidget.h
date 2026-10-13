@@ -54,6 +54,14 @@ protected:
     // botón de Start manual en el flujo normal (StartGameButton queda como override de debug).
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      ReadyButton;
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock*   ReadyButtonText;
+    // Tilde/aspa de listo DENTRO del botón Ready (el mismo que aparece en la fila de la lista). Nombralo
+    // EXACTO "ReadyButtonCheck" (Image) en el WBP; el código le cambia la textura (ReadyTex/NotReadyTex) y
+    // lo tiñe verde(listo)/rojo(no listo), igual que el check de la fila. Opcional: sin él, el botón queda
+    // solo con texto como antes.
+    UPROPERTY(meta = (BindWidgetOptional)) class UImage* ReadyButtonCheck;
+    // Border de fondo del botón Ready. Nombralo EXACTO "BorderBackground" (Border) en el WBP. El código le
+    // cambia el color según el estado (verde listo / rojo no listo). Opcional.
+    UPROPERTY(meta = (BindWidgetOptional)) class UBorder* BorderBackground;
     // Casillero: abre el Locker desde el lobby en sesión (al lado de Listo / Game Settings).
     UPROPERTY(meta = (BindWidgetOptional)) UButton*      LockerButton;
 
@@ -83,6 +91,16 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Lobby") int32 MaxNameChars = 14;
     UPROPERTY(EditAnywhere, Category = "Lobby") FLinearColor ReadyColor    = FLinearColor(0.10f, 0.80f, 0.12f, 1.f); // verde intenso
     UPROPERTY(EditAnywhere, Category = "Lobby") FLinearColor NotReadyColor = FLinearColor(0.90f, 0.10f, 0.10f, 1.f); // rojo intenso
+    // Texturas del tilde del botón Ready (mismas que las de la fila). Asignar en Details del WBP del HUD:
+    // ReadyTex = con tilde (listo); NotReadyTex = aspa/vacía (no listo). Solo se usan si existe ReadyButtonCheck.
+    UPROPERTY(EditAnywhere, Category = "Lobby") UTexture2D* ReadyTex    = nullptr;
+    UPROPERTY(EditAnywhere, Category = "Lobby") UTexture2D* NotReadyTex = nullptr;
+    // Brush del Border del botón Ready: TOGGLE entre dos materiales (igual que el check entre dos texturas).
+    // ReadyBorderMaterial = brush cuando estás LISTO; NotReadyBorderMaterial = brush cuando NO estás listo.
+    // El código intercambia el brush del Border según el estado. Si dejás alguno vacío, para ese estado cae
+    // al tinte directo (SetBrushColor con ReadyColor/NotReadyColor).
+    UPROPERTY(EditAnywhere, Category = "Lobby") class UMaterialInterface* ReadyBorderMaterial    = nullptr;
+    UPROPERTY(EditAnywhere, Category = "Lobby") class UMaterialInterface* NotReadyBorderMaterial = nullptr;
     // Shadow del texto de ReadyButtonText (configurable en el class default del widget).
     UPROPERTY(EditAnywhere, Category = "Lobby") FLinearColor ReadyTextShadowColor    = FLinearColor(0.f, 0.f, 0.f, 1.f);
     UPROPERTY(EditAnywhere, Category = "Lobby") FLinearColor NotReadyTextShadowColor = FLinearColor(0.f, 0.f, 0.f, 1.f);

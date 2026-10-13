@@ -503,11 +503,17 @@ public:
 
     // Undo de PINTURA (snapshot por trazo). El controller llama Push* al empezar un trazo de Paint y
     // Undo* al deshacer. Acotado a MaxPaintUndo niveles; se limpia al salir del modo G.
-    void PushHeadPaintUndo();
+    // PushHeadPaintUndo devuelve true si APILÓ un snapshot (false = no había pixeles → el controller NO
+    // debe marcar el tipo en su orden de undo).
+    bool PushHeadPaintUndo();
     bool UndoHeadPaint();
     void PushBodyPaintUndo();
     bool UndoBodyPaint();
     void ClearPaintUndo() { HeadPaintUndoStack.Reset(); BodyPaintUndoStack.Reset(); }
+
+    // Cuántos trazos de pintura de la cabeza se pueden deshacer AHORA (profundidad real de la pila). El
+    // controller la usa para reconciliar su orden de undo (HeadUndoKinds) y no dejar marcadores fantasma.
+    int32 GetHeadPaintUndoDepth() const { return HeadPaintUndoStack.Num(); }
 
     // Presupuesto de pintura: peso REAL (PNG) cacheado de cada textura, para limitar cuánto se puede
     // pintar y no pasarse del tamaño replicable. Se recalcula al pintar/deshacer/borrar (no por frame).
@@ -526,7 +532,10 @@ private:
     // Pilas de undo de pintura (copias de los buffers antes de cada trazo). Acotadas.
     TArray<TArray<FColor>> HeadPaintUndoStack;
     TArray<TArray<FColor>> BodyPaintUndoStack;
-    static constexpr int32 MaxPaintUndo = 5;
+    // Niveles de undo de pintura. Cada snapshot pesa HeadPaintTexSize² * 4 bytes (a 1024 = 4 MB), así que
+    // esto es memoria: 10 niveles ≈ 40 MB por pila (cabeza/cuerpo). Subido de 5 → 10 para dar más margen
+    // al corregir trazos sin que el historial se quede corto (ver el fix de sincronización con HeadUndoKinds).
+    static constexpr int32 MaxPaintUndo = 10;
 
     // Peso PNG cacheado de cada textura de pintura (para el presupuesto).
     int32 CachedHeadPngBytes = 0;

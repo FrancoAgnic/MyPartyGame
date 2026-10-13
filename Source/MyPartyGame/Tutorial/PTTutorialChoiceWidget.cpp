@@ -4,6 +4,7 @@
 #include "Components/Button.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
+#include "Components/Image.h"
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
 #include "Components/SizeBox.h"
@@ -11,6 +12,7 @@
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
+#include "Engine/Texture2D.h"
 
 namespace
 {
@@ -28,10 +30,63 @@ void UPTTutorialChoiceWidget::Setup(const FText& Question, const FText& YesLabel
     if (NoText)       NoText->SetText(NoLabel);
 }
 
+void UPTTutorialChoiceWidget::SetMeme(UTexture2D* BasicImg, UTexture2D* AdvancedImg, const FText& BasicCaption, const FText& AdvancedCaption,
+                                      const FText& AdvancedPlaceholder)
+{
+    PendingBasicImg = BasicImg; PendingAdvImg = AdvancedImg;
+    PendingBasicCaption = BasicCaption; PendingAdvCaption = AdvancedCaption;
+    PendingAdvPlaceholder = AdvancedPlaceholder;
+    // Se arma en BuildTree (se llama antes de AddToViewport, igual que Setup).
+}
+
 TSharedRef<SWidget> UPTTutorialChoiceWidget::RebuildWidget()
 {
     if (WidgetTree && !WidgetTree->RootWidget) BuildTree();
     return Super::RebuildWidget();
+}
+
+UWidget* UPTTutorialChoiceWidget::MakeMemeColumn(UTexture2D* Img, const FText& Caption, const FText& Placeholder)
+{
+    UVerticalBox* Col = WidgetTree->ConstructWidget<UVerticalBox>();
+
+    // Imagen enmarcada (recuadro claro para que resalte sobre el panel oscuro).
+    UBorder* Frame = WidgetTree->ConstructWidget<UBorder>();
+    Frame->SetBrush(FSlateRoundedBoxBrush(FLinearColor(1.f, 1.f, 1.f, 0.10f), 10.f));
+    Frame->SetPadding(FMargin(6.f));
+    USizeBox* Box = WidgetTree->ConstructWidget<USizeBox>();
+    Box->SetWidthOverride(230.f);
+    Box->SetHeightOverride(230.f);
+    if (Img)
+    {
+        UImage* Pic = WidgetTree->ConstructWidget<UImage>();
+        FSlateBrush B; B.SetResourceObject(Img); B.ImageSize = FVector2D(230.f, 230.f);
+        B.DrawAs = ESlateBrushDrawType::Image; Pic->SetBrush(B);
+        Box->SetContent(Pic);
+    }
+    else
+    {
+        // Sin imagen asignada: placeholder de texto centrado (p. ej. mientras no importaste la jirafa realista).
+        UTextBlock* Ph = WidgetTree->ConstructWidget<UTextBlock>();
+        { FSlateFontInfo F = Ph->GetFont(); F.Size = 40; F.TypefaceFontName = FName(TEXT("Bold")); Ph->SetFont(F); }
+        Ph->SetColorAndOpacity(FSlateColor(TCW_Ink));
+        Ph->SetJustification(ETextJustify::Center);
+        Ph->SetAutoWrapText(true);
+        Ph->SetText(Placeholder);
+        Box->SetContent(Ph);
+    }
+    Frame->SetContent(Box);
+    Col->AddChildToVerticalBox(Frame);
+
+    // Cartelito debajo.
+    UTextBlock* Cap = WidgetTree->ConstructWidget<UTextBlock>();
+    { FSlateFontInfo F = Cap->GetFont(); F.Size = 16; F.TypefaceFontName = FName(TEXT("Bold")); Cap->SetFont(F); }
+    Cap->SetColorAndOpacity(FSlateColor(TCW_Ink));
+    Cap->SetJustification(ETextJustify::Center);
+    Cap->SetAutoWrapText(true);
+    Cap->SetText(Caption);
+    if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Cap)) S->SetPadding(FMargin(0.f, 10.f, 0.f, 0.f));
+
+    return Col;
 }
 
 UButton* UPTTutorialChoiceWidget::MakeButton(const FText& Label, FName Name, const FLinearColor& Fill, UTextBlock** OutText)
@@ -75,6 +130,17 @@ void UPTTutorialChoiceWidget::BuildTree()
 
     UVerticalBox* Col = WidgetTree->ConstructWidget<UVerticalBox>();
     CardSize->SetContent(Col);
+
+    // Meme "expectativa vs realidad" arriba de la pregunta: TU jirafa (básico) | jirafa realista (avanzado).
+    if (PendingBasicImg || PendingAdvImg)
+    {
+        UHorizontalBox* MemeRow = WidgetTree->ConstructWidget<UHorizontalBox>();
+        if (UHorizontalBoxSlot* S = MemeRow->AddChildToHorizontalBox(MakeMemeColumn(PendingBasicImg, PendingBasicCaption, FText::GetEmpty())))
+            { S->SetPadding(FMargin(0.f, 0.f, 8.f, 0.f)); S->SetHorizontalAlignment(HAlign_Center); }
+        if (UHorizontalBoxSlot* S = MemeRow->AddChildToHorizontalBox(MakeMemeColumn(PendingAdvImg, PendingAdvCaption, PendingAdvPlaceholder)))
+            { S->SetPadding(FMargin(8.f, 0.f, 0.f, 0.f)); S->SetHorizontalAlignment(HAlign_Center); }
+        if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(MemeRow)) S->SetPadding(FMargin(0.f, 0.f, 0.f, 20.f));
+    }
 
     QuestionText = WidgetTree->ConstructWidget<UTextBlock>();
     { FSlateFontInfo F = QuestionText->GetFont(); F.Size = 26; F.TypefaceFontName = FName(TEXT("Bold")); QuestionText->SetFont(F); }

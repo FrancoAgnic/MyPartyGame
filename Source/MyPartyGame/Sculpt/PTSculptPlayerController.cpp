@@ -2709,7 +2709,7 @@ void APTSculptPlayerController::Server_AddEye_Implementation(FVector WorldPos, f
 
 void APTSculptPlayerController::OnColorPickPressed()
 {
-    if (bTutorialLockSculpt) return; // bloqueado mientras Sculpi explica/esculpe
+    if (bTutorialLockSculpt && !bTutorialAllowColorPick) return; // bloqueado mientras Sculpi explica/esculpe (salvo la lección del color)
     if (!ColorPickerClass || ColorPicker) return;
     ColorPicker = CreateWidget<UUserWidget>(this, ColorPickerClass);
     if (!ColorPicker) return;

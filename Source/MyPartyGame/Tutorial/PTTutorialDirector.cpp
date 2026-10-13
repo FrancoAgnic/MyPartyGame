@@ -271,6 +271,8 @@ APTTutorialDirector::APTTutorialDirector()
     CountdownSound = TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Game/Template/SFX/SFX_PerSecondGame.SFX_PerSecondGame")));
     ShutterSound   = TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Game/Template/SFX/SFX_Unlock-03.SFX_Unlock-03")));
     LogoTexture    = TSoftObjectPtr<UTexture2D>(FSoftObjectPath(TEXT("/Game/Template/UI/Titulo-LogoOrange.Titulo-LogoOrange")));
+    // Meme del final: jirafa "muy realista" (resultado del tutorial avanzado). Importá la imagen acá.
+    RealisticGiraffeTexture = TSoftObjectPtr<UTexture2D>(FSoftObjectPath(TEXT("/Game/Tutorial/T_GiraffeRealistic.T_GiraffeRealistic")));
     // Material de las guías: el que armes en Content/Tutorial (instancia o material, con parámetro "Color");
     // si no existe, el brillo de bordes del modo Suavizar (sin color).
     GhostMaterial  = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Tutorial/M_TutorialGhost_Inst.M_TutorialGhost_Inst")));
@@ -538,13 +540,26 @@ int32 APTTutorialDirector::AddGhost(const TArray<FPTGhostPart>& Parts, const FLi
     return Ghosts.Add(MoveTemp(G));
 }
 
+bool APTTutorialDirector::IsGhostSampleSolid(const FVector& P) const
+{
+    const APTSculptVolume* V = Volume.Get();
+    if (!V) return false;
+    if (V->SampleWorldDensity(P) > 0.f) return true;
+    const float T = QuickFillTolerance;
+    if (T <= 0.f) return false;
+    // Margen de error: aceptar arcilla hasta ±T en cada eje (6 vecinos) — no hace falta copiar la guía exacta.
+    static const FVector Offs[6] = { {1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1} };
+    for (const FVector& O : Offs) if (V->SampleWorldDensity(P + O * T) > 0.f) return true;
+    return false;
+}
+
 float APTTutorialDirector::MeasureFill(int32 Idx)
 {
     if (!Ghosts.IsValidIndex(Idx) || !Volume.IsValid()) return 0.f;
     FPTGhost& G = Ghosts[Idx];
     if (G.Samples.Num() == 0) return 0.f;
     int32 Solid = 0;
-    for (const FVector& P : G.Samples) if (Volume->SampleWorldDensity(P) > 0.f) ++Solid;
+    for (const FVector& P : G.Samples) if (IsGhostSampleSolid(P)) ++Solid; // con margen de error (radio)
     G.Fill = Solid / (float)G.Samples.Num();
     // La guía se pone verde a medida que se llena.
     UpdateGhostColor(Idx);
@@ -579,7 +594,7 @@ float APTTutorialDirector::QuickLegsMinFill() const
     {
         const int32 q = (P.X >= C.X ? 1 : 0) + (P.Y >= C.Y ? 2 : 0);
         ++Tot[q];
-        if (Volume->SampleWorldDensity(P) > 0.f) ++Solid[q];
+        if (IsGhostSampleSolid(P)) ++Solid[q]; // con margen de error (radio)
     }
     float MinF = 1.f; int32 Used = 0;
     const int32 MinSamples = FMath::Max(3, NS / 20); // ignorar cuadrantes casi vacíos (ruido)
@@ -1869,10 +1884,14 @@ void APTTutorialDirector::QuickShowBrushAt(const FVector& P, float Size, const F
     QBrush->SetVisibility(true);
 }
 
-void APTTutorialDirector::QuickLockSculpt(bool bLock)
+void APTTutorialDirector::QuickLockSculpt(bool bLock, bool bAtWork)
 {
-    if (APTSculptPlayerController* P = PC.Get()) P->bTutorialLockSculpt = bLock;
-    bQSculpiAtWork = bLock; // mientras está bloqueado (demo), Sculpi "trabaja" frente al trazo
+    if (APTSculptPlayerController* P = PC.Get())
+    {
+        P->bTutorialLockSculpt     = bLock;
+        P->bTutorialAllowColorPick = false; // por defecto el lock también tapa el picker; se re-habilita aparte
+    }
+    bQSculpiAtWork = bLock && bAtWork; // Sculpi "trabaja" frente al trazo solo en el demo, no en la lección del color
     if (!bLock) QuickHideDots();
 }
 
@@ -1958,11 +1977,12 @@ void APTTutorialDirector::QuickBeginLesson(int32 Idx)
 
     if (Idx >= QNumLessons) { QuickBeginFree(); return; }
 
-    if (Idx == 0) // color amarillo (sin demo): el jugador puede operar (elegir color)
+    if (Idx == 0) // color amarillo (sin demo): NO se puede esculpir hasta elegir amarillo, pero el picker sí
     {
         QPhase = EPTQPhase::Copy;
         bQSawPicker = false;
-        QuickLockSculpt(false);
+        QuickLockSculpt(true, /*bAtWork=*/false);
+        if (APTSculptPlayerController* P = PC.Get()) P->bTutorialAllowColorPick = true;
         Say(TEXT("TUT_G_COLOR"));
         SetHintsFor({ TEXT("ColorPick") }, true, false);
         return;
@@ -2095,8 +2115,10 @@ void APTTutorialDirector::QuickTick(float Dt)
     {
         if (bQRecorded) // REPRODUCIR la grabación con arcilla REAL (como un jugador), luego borrarla
         {
+            // QuickDemoSpeed acelera el demo (2 = el doble). Escala el "reloj" de reproducción.
+            const float PlayT = QTime * FMath::Max(0.1f, QuickDemoSpeed);
             APTSculptVolume* V = Volume.Get();
-            while (V && QRepIdx < QRec.Num() && QRec[QRepIdx].T <= QTime)
+            while (V && QRepIdx < QRec.Num() && QRec[QRepIdx].T <= PlayT)
             {
                 const FPTTutRecStamp& S = QRec[QRepIdx];
                 if (S.Mode == PTTutRecEyeMode)
@@ -2108,7 +2130,7 @@ void APTTutorialDirector::QuickTick(float Dt)
             }
             QuickDemoVisual(); // Sculpi mirando el trazo + línea punteada
             const float LastT = QRec.Num() ? QRec.Last().T : 0.f;
-            if (QRepIdx >= QRec.Num() && QTime > LastT + 1.3f)
+            if (QRepIdx >= QRec.Num() && PlayT > LastT + 1.3f)
             {
                 if (V) { V->LoadFieldState(QSnapshot); V->SetEyeCount(QEyesSnapshot); } // saca arcilla Y ojos del demo
                 QuickBuildGhostFromRec();             // la guía sale de los sellos grabados (los ojos se ignoran)
@@ -2368,7 +2390,9 @@ void APTTutorialDirector::QuickAfterGuessToGiraffe()
     ClearClay();                  // borrar el árbol antes de la jirafa
     if (QBrush) QBrush->SetVisibility(false);
     QuickHideDots();
-    QuickLockSculpt(false);
+    // No se puede esculpir todavía: primero hay que elegir el color amarillo. El picker sí se permite.
+    QuickLockSculpt(true, /*bAtWork=*/false);
+    if (APTSculptPlayerController* P = PC.Get()) P->bTutorialAllowColorPick = true;
     QState = EPTQuick::Intro;
     QTime = 0.f;
     Say(TEXT("TUT_G_INTRO"));      // "ahora tu turno: vamos a modelar una jirafa…"
@@ -2385,7 +2409,15 @@ void APTTutorialDirector::QuickShowChoice()
 
     ChoiceWidget = CreateWidget<UPTTutorialChoiceWidget>(P, UPTTutorialChoiceWidget::StaticClass());
     if (!ChoiceWidget) { QuickMarkDoneAndExit(false); return; }
+    // Reutilizar la MISMA foto: sacar el panel de la foto (no un segundo pop-up encima) y mostrarla dentro
+    // del meme, al costado de la jirafa realista.
+    if (Widget) Widget->HidePhoto();
     ChoiceWidget->Setup(PTText::Get(TEXT("TUT_Q_ADV_Q")), PTText::Get(TEXT("TUT_Q_ADV_YES")), PTText::Get(TEXT("TUT_Q_ADV_NO")));
+    // Meme "resultados": tu jirafa (foto del básico) | jirafa muy realista (resultado del avanzado). Si todavía
+    // no importaste la imagen realista, en su lugar se muestra el texto RealisticGiraffeText (placeholder).
+    ChoiceWidget->SetMeme(PhotoTex, RealisticGiraffeTexture.LoadSynchronous(),
+                          PTText::Get(TEXT("TUT_MEME_BASIC")), PTText::Get(TEXT("TUT_MEME_ADV")),
+                          RealisticGiraffeText);
     ChoiceWidget->OnYes.AddUObject(this, &APTTutorialDirector::OnAdvancedYes);
     ChoiceWidget->OnNo.AddUObject(this, &APTTutorialDirector::OnAdvancedNo);
     ChoiceWidget->AddToViewport(40);

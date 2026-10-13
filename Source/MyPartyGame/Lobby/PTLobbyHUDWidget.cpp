@@ -21,6 +21,7 @@
 #include "Engine/Engine.h"
 #include "../PTNetStats.h"
 #include "Components/Image.h"
+#include "Components/Border.h"                      // border de fondo del botón Ready (toggle de material)
 #include "../PTGameInstance.h" // modo captura dev (Player N)
 #include "../UI/PTLoadingScreenWidget.h" // transición de entrada a la partida
 #include "../PTWordBank.h"
@@ -293,6 +294,22 @@ void UPTLobbyHUDWidget::RefreshPlayerList()
             ReadyButtonText->SetText(PTText::Get(bReady ? TEXT("LOBBY_BTN_READY") : TEXT("LOBBY_BTN_NOT_READY")));
             ReadyButtonText->SetColorAndOpacity(bReady ? ReadyColor : NotReadyColor);
             ReadyButtonText->SetShadowColorAndOpacity(bReady ? ReadyTextShadowColor : NotReadyTextShadowColor);
+        }
+        // Mismo tilde que la fila de la lista: textura según estado + tinte verde(listo)/rojo(no listo),
+        // así se entiende de un vistazo si estás listo (la gente no distinguía el estado solo por el texto).
+        if (ReadyButtonCheck)
+        {
+            if (UTexture2D* Tex = bReady ? ReadyTex : NotReadyTex) ReadyButtonCheck->SetBrushFromTexture(Tex);
+            ReadyButtonCheck->SetColorAndOpacity(bReady ? ReadyColor : NotReadyColor);
+        }
+        // Border de fondo del botón: TOGGLE de material según el estado (uno para listo, otro para no listo),
+        // igual que el check intercambia textura. Si falta el material de ese estado, cae al tinte directo.
+        if (BorderBackground)
+        {
+            if (UMaterialInterface* Mat = bReady ? ReadyBorderMaterial : NotReadyBorderMaterial)
+                BorderBackground->SetBrushFromMaterial(Mat);
+            else
+                BorderBackground->SetBrushColor(bReady ? ReadyColor : NotReadyColor);
         }
     }
 

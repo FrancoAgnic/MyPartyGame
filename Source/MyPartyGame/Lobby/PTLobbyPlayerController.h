@@ -482,8 +482,12 @@ protected:
     UPROPERTY(EditAnywhere, Category="Head") float HeadClearHoldDuration = 3.f;   // mantener → borrar todo
     UPROPERTY(EditAnywhere, Category="Head") float HeadUndoTapMaxTime    = 0.35f; // toque → undo
     bool bHeadStrokeActive = false; // hay un trazo de geometría abierto (para el undo)
-    // Orden de los trazos para el undo unificado: 0=geometría (volumen), 1=pintura cabeza, 2=pintura cuerpo.
+    // Orden MAESTRO de las acciones para el undo unificado de la cabeza: 0=geometría (volumen), 1=pintura
+    // cabeza, 3=ojos. El undo (Backspace) deshace de atrás hacia adelante EXACTO este orden, sin importar
+    // la herramienta. Cada tipo delega en su pila (volumen/character/HeadEyes); ReconcileHeadUndo() las
+    // mantiene 1:1 antes de cada undo para que nunca se salte ni quede un marcador sin respaldo.
     TArray<uint8> HeadUndoKinds;
+    void ReconcileHeadUndo(); // alinea HeadUndoKinds con la profundidad real de cada pila (ver el .cpp)
 
     // ── ALT en la cabeza: detallar pegado a la superficie (como el gameplay) ──
     // Con Alt mantenido en Add, el sello se pega a la superficie de la cabeza (raymarch) para detallar

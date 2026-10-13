@@ -1,0 +1,29 @@
+TITLE:
+Sculpturillo v1.0.17 — Sculpt Magnet & Audience Mode Polish
+
+BBCODE:
+--------------------------------------------------------------------------
+[h1]✨ What's New[/h1]
+[list]
+[*] 🧲 [b]Sculpt magnet[/b] — the brush now snaps onto the surface of your existing clay, so depth is no longer guesswork. Each stroke locks to a flat plane facing your camera, and when you move mid-stroke it holds its distance — perfect for wrapping belts, bracelets and bands around a figure without the clay creeping toward you.
+[*] 🧙 [b]New Audience setup wizard[/b] — a clean 3-step flow for streamers: connect the streamer page, (optionally) connect your Twitch/Kick chat, then set up the match and show the QR. No more wall of text.
+[/list]
+
+[h1]🎨 Improvements[/h1]
+[list]
+[*] 📺 [b]Audience mode[/b] — 45 seconds to pick a word, with an in-game popup and a "Pick word" button so you never miss your turn.
+[*] 💬 [b]Bigger chat crowds[/b] — Twitch/Kick chat players are now configurable up to 1000 from the settings.
+[*] 👥 [b]Player count[/b] — the lobby now shows connected players out of the max.
+[*] 🏆 [b]Cleaner final scoreboard[/b] — shows the top 10 so the Play Again / Menu buttons always stay on screen.
+[*] 🔢 Matches now default to 10 rounds.
+[/list]
+
+[h1]🔧 Fixes[/h1]
+[list]
+[*] 🎨 Fixed the color picker opening pitch-black in packaged builds — it now starts on a neutral gray.
+[*] ✅ The "You guessed it!" banner now stays up until the next round instead of flashing away.
+[*] 📱 Fixed multi-word masked guesses running together on the phone page (correct spacing between words).
+[/list]
+
+[hr][/hr]
+[i]Thanks for playing Sculpturillo! 🎨 Keep the feedback coming — tell us what you'd like to see in the next patch.[/i]
