@@ -428,6 +428,7 @@ public:
     UFUNCTION(Exec) void PTBBBots(int32 N);     // DEV (host): agrega N bots que esculpen y votan al azar
     UFUNCTION(Exec) void PTBBVote(int32 Stars); // DEV: vota la escultura en exhibición (igual que las teclas 1-5)
     UFUNCTION(Exec) void PTBBScribble();        // DEV: unos sellos al azar en tu lienzo por la vía normal (probar en red sin mouse)
+    UFUNCTION(Exec) void PTBBDemo();            // DEV (host): tu jugador esculpe y vota solo (para ver una corrida entera)
     UFUNCTION(Exec) void PTMatchTime(int32 Seconds, int32 Rounds); // DEV (host): tiempo de turno y rondas de la próxima partida
                                                 //   (máscara + letras revelándose), como un adivinador, mientras esculpe
 
@@ -534,6 +535,9 @@ private:
     int32 BBVoteShowcaseIndex = -1;  // a qué exhibición corresponde BBMyVote (se resetea al cambiar)
     FString BBLastLogKey;            // log de estado local en cada cambio de fase (para depurar el prototipo)
     int32   BBLogCountdown = 0;      // el log sale unos frames después (cuando los lienzos ya aplicaron su visibilidad)
+    bool    bBBAutoVote = false;     // PTBBDemo: vota solo cada escultura ajena
+    double  BBShowcaseSeenAt = 0.0;  // cuándo apareció la escultura actual (para el voto automático)
+    float   BBAutoVoteDelay = 3.f;
     void LogBuildBattleState(const class APTSculptGameState* G);
     /** Cada frame (local): apunta Volume a tu lienzo, crea el widget y toma las teclas 1-5 para votar. */
     void TickBuildBattle();

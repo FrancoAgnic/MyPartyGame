@@ -23,9 +23,13 @@ adivinan) sigue intacto y es el default.
   terminó).
 - Solo para partidas online/listen server. En modo local/audiencia y en el tutorial siempre es clásico.
 
-### Probar solo
+### Probar solo / ver una corrida entera
 
-- `PTBBBots 3` agrega 3 bots que esculpen bolas al azar y votan al azar (con 1 humano + bots ya arranca).
+- `PTBBBots 3` agrega 3 bots con cuerpo (flotan alrededor del cubo con su nombre) que esculpen una figura
+  cada uno (muñeco de nieve, árbol, hongo, bicho, casita) y votan al azar. Con 1 humano + bots ya arranca.
+- `PTBBDemo` (host): tu jugador también esculpe una figura y vota solo. Corrida completa sin tocar nada:
+  `-ExecCmds="PTMatchTime 45 3,PTBuildBattle,PTBBDemo,PTBBBots 4"` sobre `Lvl-01?listen` — es lo que hace
+  **`SimularBuildBattle.bat`** (doble click).
 - `PTMatchTime 30 2` → próxima partida con 30 s de esculpido y 2 rondas.
 - `PTBBVote 4` vota por consola; `PTBBScribble` hace unos sellos en tu cubo por la vía normal (para probar en
   red sin mouse).

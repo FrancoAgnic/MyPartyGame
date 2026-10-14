@@ -83,8 +83,18 @@ void APTSculptPlayerController::TickBuildBattle()
     {
         BBVoteShowcaseIndex = G->BBShowcaseIndex;
         BBMyVote = 0; // escultura nueva: todavía no la votaste
+        BBShowcaseSeenAt = W->GetTimeSeconds();
+        BBAutoVoteDelay  = FMath::FRandRange(2.f, 4.f);
     }
     if (G->IsLocalShowcaseOwn() || (GameplayHUD && GameplayHUD->IsChatOpen())) return;
+
+    // PTBBDemo: vota solo, unos segundos después de que aparece cada escultura.
+    if (bBBAutoVote && BBMyVote == 0 && W->GetTimeSeconds() - BBShowcaseSeenAt > BBAutoVoteDelay)
+    {
+        BBMyVote = FMath::RandRange(3, 5);
+        Server_BuildBattleVote(BBMyVote);
+        return;
+    }
 
     static const FKey Row[5] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five };
     static const FKey Pad[5] = { EKeys::NumPadOne, EKeys::NumPadTwo, EKeys::NumPadThree, EKeys::NumPadFour, EKeys::NumPadFive };
@@ -146,6 +156,15 @@ void APTSculptPlayerController::PTBBScribble()
         Server_ApplyStamp(BoxXf.TransformPosition(FMath::VRand() * Ext * 0.3f), EPTStampShape::Sphere, 160.f,
                           EPTEditMode::Add, FLinearColor::MakeRandomColor(), FRotator::ZeroRotator, false, FVector::OneVector);
     Server_EndStroke();
+}
+
+void APTSculptPlayerController::PTBBDemo()
+{
+    APTSculptGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<APTSculptGameMode>() : nullptr;
+    if (!GM) { UE_LOG(LogTemp, Warning, TEXT("[BuildBattle] PTBBDemo solo funciona en el host.")); return; }
+    GM->SetBuildBattleDemoPlayer(GetPlayerState<APTPlayerState>()); // tu lienzo se esculpe solo (desde la próxima ronda)
+    bBBAutoVote = true;
+    UE_LOG(LogTemp, Log, TEXT("[BuildBattle] DEV: modo demo ON (tu jugador esculpe y vota solo)."));
 }
 
 void APTSculptPlayerController::PTMatchTime(int32 Seconds, int32 Rounds)

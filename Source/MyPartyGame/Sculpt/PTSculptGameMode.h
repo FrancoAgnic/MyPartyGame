@@ -175,8 +175,10 @@ public:
     APTSculptVolume* GetBuildCanvasFor(const APTPlayerState* PS) const;
     /** [server] Voto (1..5) a la escultura en exhibición. Se puede cambiar hasta que pasa a la próxima. */
     void HandleBuildBattleVote(APTPlayerState* Voter, int32 Stars);
-    /** DEV: agrega N jugadores bot (sin controller) que esculpen y votan al azar. Para probar solo. */
+    /** DEV: agrega N jugadores bot (con cuerpo, como los del modo local) que esculpen figuras y votan al azar. */
     void AddBuildBattleBots(int32 Count);
+    /** DEV (comando PTBBDemo): este jugador también esculpe solo, igual que los bots (para ver una corrida entera). */
+    void SetBuildBattleDemoPlayer(APTPlayerState* PS) { BuildDemoPlayer = PS; }
     /** DEV: alterna Clásico/Build Battle. Aplica a la próxima partida (o ya, si está esperando / terminó). */
     EPTGameType ToggleGameType();
 
@@ -313,7 +315,11 @@ private:
 
     // Bots de prueba (DEV): PlayerStates sin controller, como los jugadores del celular.
     TArray<TWeakObjectPtr<APTPlayerState>> BuildBots;
-    TMap<TWeakObjectPtr<APTPlayerState>, FVector> BuildBotCursor; // dónde está "esculpiendo" cada bot
+    TWeakObjectPtr<APTPlayerState> BuildDemoPlayer; // PTBBDemo: un jugador real que esculpe solo
+    // Cada bot arma una figura (muñeco de nieve, árbol, hongo...) de a partes a lo largo del tiempo de esculpido.
+    struct FBuildBotPlan { int32 Figure = 0; int32 Step = 0; float Scale = 1.f; };
+    TMap<TWeakObjectPtr<APTPlayerState>, FBuildBotPlan> BuildBotPlans;
+    double       BuildRoundStartTime = 0.0;
     FTimerHandle BuildBotTimer;
     int32        NextBuildBotId = 1;
     void BuildBotsSculptTick();

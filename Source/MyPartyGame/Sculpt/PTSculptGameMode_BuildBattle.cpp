@@ -157,9 +157,21 @@ void APTSculptGameMode::StartBuildRound()
     GetWorldTimerManager().ClearTimer(PhaseTimer);
     GetWorldTimerManager().SetTimer(PhaseTimer, this, &APTSculptGameMode::EndBuildPhase, TurnDuration, false);
 
-    BuildBotCursor.Reset();
+    // Bots (y el jugador en modo demo): cada uno arma una figura distinta, a lo largo del tiempo de esculpido.
+    BuildBotPlans.Reset();
+    BuildRoundStartTime = G->GetServerWorldTimeSeconds();
+    TArray<TWeakObjectPtr<APTPlayerState>> AutoSculptors = BuildBots;
+    if (BuildDemoPlayer.IsValid()) AutoSculptors.Add(BuildDemoPlayer);
+    const int32 FirstFigure = FMath::RandRange(0, 99);
+    for (int32 i = 0; i < AutoSculptors.Num(); ++i)
+    {
+        FBuildBotPlan Plan;
+        Plan.Figure = FirstFigure + i; // se reduce con el módulo al usarlo (ver BuildBotsSculptTick)
+        Plan.Scale  = FMath::FRandRange(0.85f, 1.f);
+        BuildBotPlans.Add(AutoSculptors[i], Plan);
+    }
     GetWorldTimerManager().ClearTimer(BuildBotTimer);
-    if (BuildBots.Num() > 0)
+    if (AutoSculptors.Num() > 0)
         GetWorldTimerManager().SetTimer(BuildBotTimer, this, &APTSculptGameMode::BuildBotsSculptTick,
                                         FMath::Max(0.05f, BuildBotStampInterval), true, 0.5f);
 }
@@ -310,6 +322,117 @@ void APTSculptGameMode::AdvanceBuildRound()
 
 // ── Bots de prueba (DEV) ─────────────────────────────────────────────────────
 
+namespace
+{
+    // Una parte de una figura de bot. Coordenadas en fracciones del medio lado del cubo: X = hacia la cámara del
+    // host, Y = a su derecha, Z = arriba. Size = diámetro (misma unidad). bEye = es un ojo (AddEye), no arcilla.
+    struct FBBFigurePart
+    {
+        FVector       Pos;
+        EPTStampShape Shape;
+        float         Size;
+        FLinearColor  Color;
+        FVector       Scale;
+        bool          bEye;
+    };
+
+    FBBFigurePart BBF_Clay(float X, float Y, float Z, EPTStampShape Shape, float Size, const FLinearColor& C,
+                           const FVector& Scale = FVector::OneVector)
+    {
+        return FBBFigurePart{ FVector(X, Y, Z), Shape, Size, C, Scale, false };
+    }
+    FBBFigurePart BBF_Eye(float X, float Y, float Z, float Size)
+    {
+        return FBBFigurePart{ FVector(X, Y, Z), EPTStampShape::Sphere, Size, FLinearColor::White, FVector::OneVector, true };
+    }
+
+    // Figuras simples y reconocibles, en el orden en que se esculpen (de abajo hacia arriba).
+    const TArray<TArray<FBBFigurePart>>& BBF_Figures()
+    {
+        static TArray<TArray<FBBFigurePart>> Figures;
+        if (Figures.Num() > 0) return Figures;
+        using S = EPTStampShape;
+        const FLinearColor Snow(0.92f, 0.95f, 1.f), Black(0.04f, 0.04f, 0.05f), Carrot(1.f, 0.42f, 0.05f);
+        const FLinearColor Bark(0.33f, 0.19f, 0.09f), Leaf(0.16f, 0.62f, 0.2f), Apple(0.9f, 0.08f, 0.08f);
+        const FLinearColor Cream(0.96f, 0.9f, 0.75f), Cap(0.85f, 0.1f, 0.12f), Purple(0.55f, 0.25f, 0.85f);
+        const FLinearColor Yellow(1.f, 0.85f, 0.15f), Wall(0.95f, 0.82f, 0.6f), Roof(0.75f, 0.18f, 0.12f);
+        const FLinearColor Glass(0.55f, 0.85f, 1.f), Stone(0.5f, 0.5f, 0.55f);
+
+        // Muñeco de nieve.
+        Figures.Add({
+            BBF_Clay(0.f, 0.f, -0.55f, S::Sphere, 0.78f, Snow),
+            BBF_Clay(0.f, 0.f, -0.05f, S::Sphere, 0.58f, Snow),
+            BBF_Clay(0.f, 0.f, 0.38f, S::Sphere, 0.44f, Snow),
+            BBF_Clay(0.28f, 0.f, -0.02f, S::Sphere, 0.08f, Black),
+            BBF_Clay(0.27f, 0.f, -0.15f, S::Sphere, 0.08f, Black),
+            BBF_Clay(0.f, 0.3f, 0.f, S::Sphere, 0.07f, Bark), BBF_Clay(0.f, 0.38f, 0.07f, S::Sphere, 0.06f, Bark),
+            BBF_Clay(0.f, 0.46f, 0.14f, S::Sphere, 0.05f, Bark),
+            BBF_Clay(0.f, -0.3f, 0.f, S::Sphere, 0.07f, Bark), BBF_Clay(0.f, -0.38f, 0.07f, S::Sphere, 0.06f, Bark),
+            BBF_Clay(0.f, -0.46f, 0.14f, S::Sphere, 0.05f, Bark),
+            BBF_Clay(0.22f, 0.f, 0.36f, S::Sphere, 0.08f, Carrot), BBF_Clay(0.28f, 0.f, 0.35f, S::Sphere, 0.05f, Carrot),
+            BBF_Clay(0.f, 0.f, 0.58f, S::Cylinder, 0.44f, Black, FVector(1.f, 1.f, 0.12f)),
+            BBF_Clay(0.f, 0.f, 0.68f, S::Cylinder, 0.28f, Black, FVector(1.f, 1.f, 0.8f)),
+            BBF_Eye(0.19f, -0.07f, 0.45f, 0.08f), BBF_Eye(0.19f, 0.07f, 0.45f, 0.08f),
+        });
+        // Árbol con manzanas.
+        Figures.Add({
+            BBF_Clay(0.f, 0.f, -0.78f, S::Cylinder, 0.24f, Bark), BBF_Clay(0.f, 0.f, -0.58f, S::Cylinder, 0.22f, Bark),
+            BBF_Clay(0.f, 0.f, -0.38f, S::Cylinder, 0.2f, Bark),
+            BBF_Clay(0.f, 0.f, 0.f, S::Sphere, 0.6f, Leaf),
+            BBF_Clay(0.08f, 0.26f, 0.12f, S::Sphere, 0.46f, Leaf), BBF_Clay(-0.06f, -0.26f, 0.14f, S::Sphere, 0.46f, Leaf),
+            BBF_Clay(0.f, 0.f, 0.36f, S::Sphere, 0.46f, Leaf), BBF_Clay(0.16f, 0.f, 0.2f, S::Sphere, 0.36f, Leaf),
+            BBF_Clay(0.32f, 0.08f, 0.04f, S::Sphere, 0.09f, Apple), BBF_Clay(0.28f, -0.2f, 0.24f, S::Sphere, 0.09f, Apple),
+            BBF_Clay(0.26f, 0.28f, 0.3f, S::Sphere, 0.09f, Apple), BBF_Clay(0.2f, 0.f, 0.5f, S::Sphere, 0.09f, Apple),
+        });
+        // Hongo con cara.
+        Figures.Add({
+            BBF_Clay(0.f, 0.f, -0.7f, S::Cylinder, 0.36f, Cream), BBF_Clay(0.f, 0.f, -0.45f, S::Cylinder, 0.32f, Cream),
+            BBF_Clay(0.f, 0.f, -0.08f, S::Sphere, 0.9f, Cap, FVector(1.f, 1.f, 0.55f)),
+            BBF_Clay(0.41f, 0.f, 0.02f, S::Sphere, 0.12f, Snow), BBF_Clay(0.3f, 0.26f, 0.04f, S::Sphere, 0.1f, Snow),
+            BBF_Clay(0.3f, -0.26f, 0.04f, S::Sphere, 0.1f, Snow), BBF_Clay(0.2f, 0.17f, 0.12f, S::Sphere, 0.1f, Snow),
+            BBF_Clay(0.2f, -0.17f, 0.12f, S::Sphere, 0.09f, Snow),
+            BBF_Clay(0.17f, 0.f, -0.6f, S::Sphere, 0.06f, Cap),
+            BBF_Eye(0.16f, -0.06f, -0.48f, 0.07f), BBF_Eye(0.16f, 0.06f, -0.48f, 0.07f),
+        });
+        // Bicho violeta con antenas.
+        Figures.Add({
+            BBF_Clay(0.12f, 0.12f, -0.68f, S::Cylinder, 0.12f, Purple, FVector(1.f, 1.f, 2.5f)),
+            BBF_Clay(0.12f, -0.12f, -0.68f, S::Cylinder, 0.12f, Purple, FVector(1.f, 1.f, 2.5f)),
+            BBF_Clay(-0.12f, 0.12f, -0.68f, S::Cylinder, 0.12f, Purple, FVector(1.f, 1.f, 2.5f)),
+            BBF_Clay(-0.12f, -0.12f, -0.68f, S::Cylinder, 0.12f, Purple, FVector(1.f, 1.f, 2.5f)),
+            BBF_Clay(0.f, 0.f, -0.25f, S::Sphere, 0.72f, Purple),
+            BBF_Clay(0.35f, 0.f, -0.32f, S::Sphere, 0.07f, Black),
+            BBF_Clay(0.f, 0.08f, 0.11f, S::Sphere, 0.09f, Black), BBF_Clay(0.f, 0.1f, 0.18f, S::Sphere, 0.09f, Black),
+            BBF_Clay(0.f, 0.12f, 0.25f, S::Sphere, 0.09f, Black), BBF_Clay(0.f, 0.14f, 0.32f, S::Sphere, 0.09f, Black),
+            BBF_Clay(0.f, 0.16f, 0.4f, S::Sphere, 0.13f, Yellow),
+            BBF_Clay(0.f, -0.08f, 0.11f, S::Sphere, 0.09f, Black), BBF_Clay(0.f, -0.1f, 0.18f, S::Sphere, 0.09f, Black),
+            BBF_Clay(0.f, -0.12f, 0.25f, S::Sphere, 0.09f, Black), BBF_Clay(0.f, -0.14f, 0.32f, S::Sphere, 0.09f, Black),
+            BBF_Clay(0.f, -0.16f, 0.4f, S::Sphere, 0.13f, Yellow),
+            BBF_Eye(0.3f, -0.11f, -0.12f, 0.12f), BBF_Eye(0.3f, 0.11f, -0.12f, 0.12f),
+        });
+        // Casita.
+        Figures.Add({
+            BBF_Clay(0.f, 0.f, -0.45f, S::Cube, 0.72f, Wall),
+            BBF_Clay(0.f, 0.f, 0.12f, S::Pyramid, 0.86f, Roof, FVector(1.f, 1.f, 0.6f)),
+            BBF_Clay(0.f, 0.22f, 0.25f, S::Cube, 0.14f, Stone, FVector(1.f, 1.f, 1.8f)),
+            BBF_Clay(0.37f, 0.f, -0.62f, S::Cube, 0.24f, Bark, FVector(0.2f, 0.75f, 1.4f)),
+            BBF_Clay(0.37f, 0.22f, -0.32f, S::Cube, 0.15f, Glass, FVector(0.2f, 1.f, 1.f)),
+            BBF_Clay(0.37f, -0.22f, -0.32f, S::Cube, 0.15f, Glass, FVector(0.2f, 1.f, 1.f)),
+            BBF_Clay(0.4f, 0.07f, -0.6f, S::Sphere, 0.04f, Yellow),
+        });
+        return Figures;
+    }
+
+    // Cada parte de arcilla se esculpe en 3 sellos que la hacen "crecer" (55% → 80% → 100%); un ojo, en uno.
+    constexpr int32 BBF_StampsPerPart = 3;
+    int32 BBF_TotalSteps(const TArray<FBBFigurePart>& Parts)
+    {
+        int32 N = 0;
+        for (const FBBFigurePart& P : Parts) N += P.bEye ? 1 : BBF_StampsPerPart;
+        return N;
+    }
+}
+
 void APTSculptGameMode::AddBuildBattleBots(int32 Count)
 {
     UWorld* W = GetWorld();
@@ -332,6 +455,7 @@ void APTSculptGameMode::AddBuildBattleBots(int32 Count)
         PS->PartyColor  = FLinearColor::MakeFromHSV8((uint8)FMath::RandRange(0, 255), 170, 235);
         PS->GameScore   = 0;
         BuildBots.Add(PS);
+        SpawnPartyBot(PS); // cuerpo que flota alrededor del cubo, con su nombre (igual que en el modo local)
         UE_LOG(LogTemp, Log, TEXT("[BuildBattle] DEV: bot '%s' agregado."), *Name);
     }
     CheckStart(); // con los bots puede que ya alcance para arrancar
@@ -342,26 +466,54 @@ void APTSculptGameMode::BuildBotsSculptTick()
     const APTSculptGameState* G = GS();
     if (!G || G->TurnPhase != EPTTurnPhase::Drawing) return;
 
-    for (const TWeakObjectPtr<APTPlayerState>& B : BuildBots)
+    // Las figuras se terminan a ~75% del tiempo: se ve cómo crecen y queda un rato para mirarlas.
+    const double Elapsed  = G->GetServerWorldTimeSeconds() - BuildRoundStartTime;
+    const float  Progress = FMath::Clamp((float)(Elapsed / FMath::Max(1.f, TurnDuration * 0.75f)), 0.f, 1.f);
+    const TArray<TArray<FBBFigurePart>>& Figures = BBF_Figures();
+
+    // De frente a la cámara del host (si no hay, eje X del mundo).
+    const APlayerController* HostPC = GetWorld()->GetFirstPlayerController();
+    const APawn* HostPawn = HostPC ? HostPC->GetPawn() : nullptr;
+
+    for (TPair<TWeakObjectPtr<APTPlayerState>, FBuildBotPlan>& KV : BuildBotPlans)
     {
-        APTPlayerState* Bot = B.Get();
-        APTSculptVolume* V = GetBuildCanvasFor(Bot);
+        APTSculptVolume* V = GetBuildCanvasFor(KV.Key.Get());
         FTransform BoxXf;
         FVector    Ext;
         if (!V || !V->GetCanvasBox(BoxXf, Ext)) continue;
 
-        // Paseo al azar desde abajo del centro (espacio local del lienzo): sale un bicho de bolas y bloques.
-        FVector& Cur = BuildBotCursor.FindOrAdd(Bot, FVector(0.f, 0.f, -Ext.Z * 0.4f));
-        Cur += FMath::VRand() * Ext.GetMin() * 0.12f;
-        Cur = Cur.BoundToBox(-Ext * 0.55f, Ext * 0.55f);
+        FBuildBotPlan& Plan = KV.Value;
+        const TArray<FBBFigurePart>& Parts = Figures[Plan.Figure % Figures.Num()];
+        const int32 Target = FMath::RoundToInt(Progress * BBF_TotalSteps(Parts));
+        if (Plan.Step >= Target) continue;
 
-        const bool bPaint = FMath::FRand() < 0.15f; // de vez en cuando pinta encima, con otro tono
-        const EPTStampShape Shape = (FMath::FRand() < 0.6f)
-            ? EPTStampShape::Sphere : static_cast<EPTStampShape>(FMath::RandRange(1, 8));
-        const FLinearColor Col = bPaint ? FLinearColor::MakeRandomColor() : Bot->PartyColor;
-        V->Multicast_ApplyStamp(BoxXf.TransformPosition(Cur), Shape, FMath::FRandRange(80.f, 200.f),
-            bPaint ? EPTEditMode::Paint : EPTEditMode::Add, Col,
-            FRotator(FMath::FRandRange(-45.f, 45.f), FMath::FRandRange(0.f, 360.f), 0.f),
-            /*bDetail=*/false, FVector::OneVector);
+        // Ubicar el paso actual: qué parte y qué sello dentro de la parte.
+        int32 Step = Plan.Step++;
+        int32 PartIdx = 0;
+        for (; PartIdx < Parts.Num(); ++PartIdx)
+        {
+            const int32 N = Parts[PartIdx].bEye ? 1 : BBF_StampsPerPart;
+            if (Step < N) break;
+            Step -= N;
+        }
+        if (!Parts.IsValidIndex(PartIdx)) continue;
+        const FBBFigurePart& Part = Parts[PartIdx];
+
+        const FVector Center = BoxXf.GetLocation();
+        const float   Unit   = (Ext * BoxXf.GetScale3D()).GetMin() * Plan.Scale;
+        FVector Front = HostPawn ? (HostPawn->GetActorLocation() - Center).GetSafeNormal2D() : FVector::ForwardVector;
+        if (Front.IsNearlyZero()) Front = FVector::ForwardVector;
+        const FVector Right = FVector::CrossProduct(FVector::UpVector, Front);
+        const FVector World = Center + Front * Part.Pos.X * Unit + Right * Part.Pos.Y * Unit
+                            + FVector::UpVector * Part.Pos.Z * Unit;
+
+        if (Part.bEye)
+        {
+            V->AddEye(World, Part.Size * Unit * 0.5f);
+            continue;
+        }
+        static const float Grow[BBF_StampsPerPart] = { 0.55f, 0.8f, 1.f };
+        V->Multicast_ApplyStamp(World, Part.Shape, Part.Size * Unit * Grow[Step], EPTEditMode::Add, Part.Color,
+                                FRotator(0.f, Front.Rotation().Yaw, 0.f), /*bDetail=*/false, Part.Scale);
     }
 }
