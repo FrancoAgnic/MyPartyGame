@@ -18,6 +18,7 @@ void APTGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
     DOREPLIFETIME(APTGameState, MatchNumRounds);
     DOREPLIFETIME(APTGameState, MatchRevealFraction);
     DOREPLIFETIME(APTGameState, bMatchFriendsOnly);
+    DOREPLIFETIME(APTGameState, bMatchStreamChat);
     DOREPLIFETIME(APTGameState, MatchWordPackTitle);
     DOREPLIFETIME(APTGameState, MatchWordPackId);
     DOREPLIFETIME(APTGameState, MatchWordPackPreviewURL);

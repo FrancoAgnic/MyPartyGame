@@ -56,6 +56,8 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") int32   MatchNumRounds      = 3;
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") float   MatchRevealFraction = 0.3f;
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") bool    bMatchFriendsOnly   = false;
+    // El host prendió el chat del stream (su chat de Twitch / Kick puede unirse a la partida clásica).
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") bool    bMatchStreamChat    = false;
     // Título del banco de palabras activo. Vacío = banco por defecto.
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") FString MatchWordPackTitle;
     // Id + URL de miniatura del banco activo (para que TODOS vean la miniatura en el lobby).

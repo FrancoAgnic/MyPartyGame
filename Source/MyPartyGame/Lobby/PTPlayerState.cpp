@@ -34,6 +34,7 @@ void APTPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     DOREPLIFETIME(APTPlayerState, bIsLocalPartyTV);
     DOREPLIFETIME(APTPlayerState, bIsPhonePlayer);
     DOREPLIFETIME(APTPlayerState, PartyColor);
+    DOREPLIFETIME(APTPlayerState, StreamPlatform);
 }
 
 void APTPlayerState::CopyProperties(APlayerState* NewPlayerState)

@@ -48,6 +48,7 @@
 #include "PTGameplayHUDWidget.h"
 #include "PTSculptSoundComponent.h"
 #include "../PTSpectatorComponent.h"
+#include "../LocalParty/PTStreamChatSubsystem.h"
 #include "../PTGameInstance.h"
 #include "Misc/Compression.h"
 
@@ -545,6 +546,25 @@ void APTSculptPlayerController::PTSolo()
     }
 }
 
+void APTSculptPlayerController::PTStreamChat(const FString& Arg)
+{
+    // DEV (host): "PTStreamChat micanal" = prende el chat del stream leyendo ese canal de Twitch;
+    // "PTStreamChat off" = apaga; sin nada = alterna. (La consola corta lo que sigue a "//": solo el nombre.)
+    UPTStreamChatSubsystem* SC = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTStreamChatSubsystem>() : nullptr;
+    if (!SC || !HasAuthority()) { UE_LOG(LogTemp, Warning, TEXT("[StreamChat] Solo el host.")); return; }
+    const FString A = Arg.TrimStartAndEnd();
+    if (A.Equals(TEXT("off"), ESearchCase::IgnoreCase)) SC->SetEnabled(false);
+    else if (A.IsEmpty()) SC->SetEnabled(!SC->IsEnabled());
+    else { SC->SetChannel(EPTChatPlatform::Twitch, A); SC->SetEnabled(true); }
+    UE_LOG(LogTemp, Log, TEXT("[StreamChat] %s (Twitch: '%s', Kick: '%s')."), SC->IsEnabled() ? TEXT("ON") : TEXT("OFF"),
+        *SC->GetChannel(EPTChatPlatform::Twitch), *SC->GetChannel(EPTChatPlatform::Kick));
+}
+
+void APTSculptPlayerController::PTChatTab(int32 Tab)
+{
+    if (GameplayHUD) GameplayHUD->SetStreamChatTab(Tab == 2);
+}
+
 void APTSculptPlayerController::PTLOD()
 {
     // DEV: prende/apaga el LOD REAL de props (la reducción de triángulos), sin marcadores. En el editor el LOD
@@ -751,6 +771,13 @@ bool APTSculptPlayerController::IsEscapeMenuOpen() const
 void APTSculptPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
+
+    // Chat del stream (modo clásico): Shift+1 = chat del juego, Shift+2 = chat del stream.
+    if (GameplayHUD && IsChatTabChordHeld())
+    {
+        if (WasInputKeyJustPressed(EKeys::One))      GameplayHUD->SetStreamChatTab(false);
+        else if (WasInputKeyJustPressed(EKeys::Two)) GameplayHUD->SetStreamChatTab(true);
+    }
 
     // Mantener el modo espectador tras el viaje lobby → Lvl-01: si tu PlayerState viene con
     // bIsDevSpectator (persiste por CopyProperties), activar el free-cam automáticamente. One-shot,
@@ -2629,8 +2656,16 @@ void APTSculptPlayerController::OnShapeRadialReleased()
     bShowMouseCursor = false;
 }
 
+bool APTSculptPlayerController::IsChatTabChordHeld() const
+{
+    const APTSculptGameState* G = GetWorld() ? GetWorld()->GetGameState<APTSculptGameState>() : nullptr;
+    if (!G || !G->bStreamChat) return false;
+    return IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift);
+}
+
 void APTSculptPlayerController::SetMode(EPTEditMode M)
 {
+    if (IsChatTabChordHeld()) return; // Shift+1 / Shift+2 cambian la pestaña del chat, no la herramienta
     if (bTutorialLockSculpt) return; // bloqueado mientras Sculpi explica/esculpe
     // No cambiar de herramienta MID-TRAZO (con el click apretado): hacerlo a mitad de un trazo bugea
     // (el sello sigue del modo viejo, cambia profundidad, etc.). Solo se cambia con el click suelto.
@@ -2668,6 +2703,7 @@ void APTSculptPlayerController::SetModeInternal(EPTEditMode M, bool bResetAxis)
 
 void APTSculptPlayerController::SetModeEyes()
 {
+    if (IsChatTabChordHeld()) return; // con Shift, los números son de las pestañas del chat
     if (bTutorialLockSculpt) return; // bloqueado mientras Sculpi explica/esculpe
     if (bIsStamping) return; // no cambiar a Ojos mid-trazo (ver SetMode)
     if (IsPlaceMode()) return; // Ojos no aplica al colocar props (edición de nivel)

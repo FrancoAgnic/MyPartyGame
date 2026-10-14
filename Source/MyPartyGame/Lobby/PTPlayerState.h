@@ -70,6 +70,13 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
     FLinearColor PartyColor = FLinearColor::White;
 
+    // Modo clásico con chat del stream: espectador que se unió con !unirse desde el chat (PlayerState sin
+    // controller). 0 = jugador normal, 1 = Twitch, 2 = Kick (mismo código que EPTChatPlatform + 1). Solo adivina
+    // por el chat: nunca esculpe ni cuenta para "adivinaron todos"; va en su propia sección del marcador.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
+    uint8 StreamPlatform = 0;
+    bool IsStreamViewer() const { return StreamPlatform != 0; }
+
     // Idioma elegido por el jugador ("es", "en", "pt", ...). El cliente lo manda al servidor para
     // que el GameMode le muestre la palabra a adivinar EN SU IDIOMA (ver Server_SetLanguage).
     // Viaja el CÓDIGO y no el índice: si dos jugadores tuvieran CSV distintos, el código sigue

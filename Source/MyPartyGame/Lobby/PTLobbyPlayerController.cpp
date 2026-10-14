@@ -27,6 +27,8 @@
 #include "../PTGameUserSettings.h"
 #include "../Multiplayer/MultiplayerSessionsSubsystem.h"
 #include "../PTGameInstance.h"
+#include "../LocalParty/PTStreamChatSubsystem.h"
+#include "../UI/PTStreamChatSetupWidget.h"
 #include "../PTGamepad.h"
 #include "../PTInputBindings.h"
 #include "../PTTextTable.h"
@@ -295,6 +297,27 @@ void APTLobbyPlayerController::PTSolo()
         GI->bSoloTest = true;
     UE_LOG(LogTemp, Log, TEXT("[PTSolo] Modo solo ON: viajando a la partida con 1 jugador."));
     Server_RequestStartGame(); // chequea bIsHost adentro y hace TravelToGame
+}
+
+void APTLobbyPlayerController::PTStreamChat(const FString& Arg)
+{
+    // DEV (host): "PTStreamChat micanal" = prende el chat del stream leyendo ese canal de Twitch;
+    // "PTStreamChat off" = apaga; sin nada = alterna. (La consola corta lo que sigue a "//": solo el nombre.)
+    UPTStreamChatSubsystem* SC = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPTStreamChatSubsystem>() : nullptr;
+    if (!SC || !HasAuthority()) { UE_LOG(LogTemp, Warning, TEXT("[StreamChat] Solo el host.")); return; }
+    const FString A = Arg.TrimStartAndEnd();
+    if (A.Equals(TEXT("off"), ESearchCase::IgnoreCase)) SC->SetEnabled(false);
+    else if (A.IsEmpty()) SC->SetEnabled(!SC->IsEnabled());
+    else { SC->SetChannel(EPTChatPlatform::Twitch, A); SC->SetEnabled(true); }
+    UE_LOG(LogTemp, Log, TEXT("[StreamChat] %s (Twitch: '%s', Kick: '%s')."), SC->IsEnabled() ? TEXT("ON") : TEXT("OFF"),
+        *SC->GetChannel(EPTChatPlatform::Twitch), *SC->GetChannel(EPTChatPlatform::Kick));
+}
+
+void APTLobbyPlayerController::PTStreamChatSetup()
+{
+    if (!IsLocalController() || !HasAuthority()) return;
+    if (UPTStreamChatSetupWidget* W = CreateWidget<UPTStreamChatSetupWidget>(this, UPTStreamChatSetupWidget::StaticClass()))
+        W->AddToViewport(60);
 }
 
 void APTLobbyPlayerController::Client_PrepareModMap_Implementation(const FString& ModId, const FString& MapPath)

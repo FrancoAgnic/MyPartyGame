@@ -51,6 +51,11 @@ struct FPTMatchSettings
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Match") int32 NumRounds      = 10;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Match") float RevealFraction = 0.3f; // 0..0.95 (default 30%, igual que el game mode)
 
+    // Modo clásico con CHAT DEL STREAM: el chat de Twitch / Kick del host puede unirse con !unirse y adivinar
+    // desde el chat mientras el host juega con sus amigos. Los canales son los del modo audiencia (se guardan
+    // en GameUserSettings). No aplica en modo local / audiencia (ahí el chat ya funciona por su lado).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Match") bool bStreamChat = false;
+
     // Palabras subidas por el host (CSV). Si bUseCustomWords, reemplazan el banco default.
     UPROPERTY(BlueprintReadWrite, Category="Match") TArray<FPTWordEntry> CustomWords;
     UPROPERTY(BlueprintReadWrite, Category="Match") bool bUseCustomWords = false;

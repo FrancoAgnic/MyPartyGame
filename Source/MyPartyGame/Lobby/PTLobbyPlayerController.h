@@ -72,6 +72,8 @@ public:
     UFUNCTION(Exec) void PTSpecSmooth(float N); // suavizado/lag de la cámara (bajo = más suave)
     UFUNCTION(Exec) void PTLocal();             // DEV: entrar al modo local (celulares + joystick) sin el botón
     UFUNCTION(Exec) void PTSolo();              // DEV: jugar solo → marca solo y arranca la partida ya
+    UFUNCTION(Exec) void PTStreamChat(const FString& Arg); // DEV (host): chat del stream en el clásico (canal / off)
+    UFUNCTION(Exec) void PTStreamChatSetup();   // DEV (host): abre el popup "Chat del stream" sin pasar por Game Settings
     UFUNCTION(Exec) void PTMapMod(int32 Index); // DEV (mapas M1): monta el mod local #Index y viaja a su mapa
     UFUNCTION(Exec) void PTExportSkin(int32 N);  // DEV: exporta la SKIN equipada a DefaultSkins/default_skin_<N>.bin (para las skins default)
 

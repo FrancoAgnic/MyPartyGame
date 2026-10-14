@@ -418,6 +418,8 @@ public:
     UFUNCTION(Exec) void PTPropStats();         // DEV: diagnóstico de props (assets/instancias/triángulos/memoria)
     UFUNCTION(Exec) void PTNarrowBand();        // DEV: togglea el refinamiento en banda de superficie (A/B del costo de sello)
     UFUNCTION(Exec) void PTGuessPreview();      // DEV/TikTok "¿adivinás?": el escultor ve SU palabra CON FILTRO
+    UFUNCTION(Exec) void PTStreamChat(const FString& Arg); // DEV (host): chat del stream en el clásico (canal / off)
+    UFUNCTION(Exec) void PTChatTab(int32 Tab);  // DEV: pestaña del chat (1 = juego, 2 = stream), como Shift+1 / Shift+2
                                                 //   (máscara + letras revelándose), como un adivinador, mientras esculpe
 
     /** DEV/TikTok: true = al escultor local se le muestra su palabra con el filtro de adivinador (no revelada).
@@ -895,6 +897,8 @@ private:
     void SetMode(EPTEditMode M);                           // 1/2/3: Add/Erase/Paint
     // bResetAxis=false lo usa el modo eje al auto-equipar Add (si no, se apagaría a sí mismo).
     void SetModeInternal(EPTEditMode M, bool bResetAxis);
+    /** Chat del stream: Shift apretado = los números cambian la pestaña del chat (no la herramienta). */
+    bool IsChatTabChordHeld() const;
     void SetModeAdd()   { SetMode(EPTEditMode::Add);   }
     void SetModeErase() { SetMode(EPTEditMode::Erase); }
     void SetModePaint() { SetMode(EPTEditMode::Paint); }

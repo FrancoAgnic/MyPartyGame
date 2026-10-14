@@ -63,6 +63,35 @@ namespace
     }
 }
 
+namespace
+{
+    // Comandos para entrar / salir desde el chat. El idioma del comando es el idioma del jugador.
+    struct FPTChatCmd { const TCHAR* Cmd; const TCHAR* Lang; };
+    const FPTChatCmd GChatJoinCmds[] = {
+        { TEXT("!unirse"), TEXT("es") }, { TEXT("!unirme"), TEXT("es") }, { TEXT("!jugar"), TEXT("es") },
+        { TEXT("!join"), TEXT("en") },   { TEXT("!play"), TEXT("en") },
+        { TEXT("!entrar"), TEXT("pt") }, { TEXT("!jogar"), TEXT("pt") },
+        { TEXT("!beitreten"), TEXT("de") }, { TEXT("!mitspielen"), TEXT("de") },
+        { TEXT("!rejoindre"), TEXT("fr") }, { TEXT("!jouer"), TEXT("fr") },
+        { TEXT("!unisciti"), TEXT("it") }, { TEXT("!gioca"), TEXT("it") },
+    };
+    const TCHAR* GChatLeaveCmds[] = { TEXT("!salir"), TEXT("!leave"), TEXT("!sair"), TEXT("!verlassen"), TEXT("!quitter"), TEXT("!esci") };
+}
+
+bool FPTStreamChat::ParseJoinCommand(const FString& Cmd, FString& OutLang)
+{
+    for (const FPTChatCmd& J : GChatJoinCmds)
+        if (Cmd == J.Cmd) { OutLang = J.Lang; return true; }
+    return false;
+}
+
+bool FPTStreamChat::IsLeaveCommand(const FString& Cmd)
+{
+    for (const TCHAR* L : GChatLeaveCmds)
+        if (Cmd == L) return true;
+    return false;
+}
+
 FPTStreamChat::~FPTStreamChat()
 {
     CloseSocket();

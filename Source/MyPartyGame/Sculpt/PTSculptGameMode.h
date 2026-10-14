@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "../Lobby/PTLobbyGameMode.h"
 #include "../PTMatchSettings.h"
+#include "PTSculptGameState.h" // EPTChatType (pestaña del chat del stream)
 #include "PTSculptGameMode.generated.h"
 
 class APTPlayerState;
@@ -152,6 +153,27 @@ public:
     FString LocalParty_GetSecretWordFor(const APTPlayerState* PS) const;
     int32 LocalParty_GetMinPlayers() const { return MinToStart(); }
 
+    // ── CHAT DEL STREAM en el modo clásico (lo maneja UPTStreamChatSubsystem) ───────────────────
+    // El host juega con sus amigos y su chat de Twitch / Kick se suma con !unirse: cada espectador es una
+    // PlayerState sin controller (StreamPlatform != 0) que solo adivina por el chat. No esculpe, no cuenta para
+    // arrancar ni para "adivinaron todos", y sus mensajes van a la pestaña del stream (no al chat del juego).
+    /** ¿La partida admite el chat del stream? (switch del host; nunca en modo local / audiencia / tutorial) */
+    bool IsStreamChatGame() const;
+    /** El subsistema engancha / suelta esta partida: avisa a los clientes (pestañas del chat). Platforms = qué
+     *  chats lee el host (bit 0 Twitch, bit 1 Kick). */
+    void StreamChat_SetActive(bool bActive, uint8 Platforms = 0);
+    APTPlayerState* StreamChat_AddViewer(const FString& Name, const FString& Language, FLinearColor Color,
+                                         uint8 Platform, bool bAnnounce);
+    void StreamChat_RemoveViewer(APTPlayerState* PS, bool bAnnounce);
+    /** Mensaje de un espectador unido: intento de adivinar / charla (va a la pestaña del stream). */
+    void StreamChat_Message(APTPlayerState* PS, const FString& Text);
+    // Tope de líneas NORMALES por segundo hacia la pestaña del stream (un chat muy activo no satura la red).
+    // Aciertos y avisos pasan siempre.
+    UPROPERTY(EditDefaultsOnly, Category="Game|StreamChat") float StreamFeedMaxLinesPerSec = 6.f;
+    // ¿Los aciertos del chat le dan puntos al escultor? Default no: con 50 espectadores el escultor se dispararía
+    // y la partida entre amigos dejaría de ser pareja.
+    UPROPERTY(EditDefaultsOnly, Category="Game|StreamChat") bool bStreamViewersGiveSculptorPoints = false;
+
 public:
     /** [server] Manda la palabra secreta actual a TODOS los dev-espectadores (para verla al espectar
      *  al escultor). Word vacío = limpiar. */
@@ -219,7 +241,14 @@ private:
     void PushMaskedWords();
 
     APTSculptGameState* GS() const;
+    // Jugadores de la partida (sin espectadores dev, sin la TV del modo local, sin el chat del stream).
     TArray<APTPlayerState*> GetActivePlayers() const;
+    // Espectadores del chat del stream que se unieron (modo clásico con chat).
+    TArray<APTPlayerState*> GetStreamViewers() const;
+    // Manda una línea a la pestaña del stream. Las Normal pasan por el tope de StreamFeedMaxLinesPerSec.
+    void PushStreamFeed(const APTPlayerState* PS, const FString& Text, EPTChatType Type, int32 Points);
+    double StreamFeedTokens = 0.0;
+    double StreamFeedLastRefill = 0.0;
     void ResetSculpture();    // al EMPEZAR el turno: el cubo reaparece con rebote (0→1)
     void CollapseSculpture();  // al TERMINAR el turno: el cubo colapsa (1→0) y borra la escultura
     // Espera entre el colapso (fin de turno) y el arranque del nuevo turno (para que el colapso se vea

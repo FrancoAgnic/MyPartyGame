@@ -919,21 +919,6 @@ void UPTLocalPartySubsystem::NotifyTurnStarted(const APTPlayerState* Sculptor)
 
 // ── Chat del stream (Twitch / Kick) ─────────────────────────────────────────
 
-namespace
-{
-    // Comandos para entrar / salir desde el chat. El idioma del comando es el idioma del jugador.
-    struct FPTChatCmd { const TCHAR* Cmd; const TCHAR* Lang; };
-    const FPTChatCmd GChatJoinCmds[] = {
-        { TEXT("!unirse"), TEXT("es") }, { TEXT("!unirme"), TEXT("es") }, { TEXT("!jugar"), TEXT("es") },
-        { TEXT("!join"), TEXT("en") },   { TEXT("!play"), TEXT("en") },
-        { TEXT("!entrar"), TEXT("pt") }, { TEXT("!jogar"), TEXT("pt") },
-        { TEXT("!beitreten"), TEXT("de") }, { TEXT("!mitspielen"), TEXT("de") },
-        { TEXT("!rejoindre"), TEXT("fr") }, { TEXT("!jouer"), TEXT("fr") },
-        { TEXT("!unisciti"), TEXT("it") }, { TEXT("!gioca"), TEXT("it") },
-    };
-    const TCHAR* GChatLeaveCmds[] = { TEXT("!salir"), TEXT("!leave"), TEXT("!sair"), TEXT("!verlassen"), TEXT("!quitter"), TEXT("!esci") };
-}
-
 void UPTLocalPartySubsystem::StartStreamChats()
 {
     if (!bOnlineTransport) return;
@@ -1016,10 +1001,9 @@ void UPTLocalPartySubsystem::HandleStreamChat(const FPTStreamChatMessage& M)
         FString Cmd = Text, Rest;
         Text.Split(TEXT(" "), &Cmd, &Rest);
         Cmd = Cmd.ToLower();
-        for (const FPTChatCmd& J : GChatJoinCmds)
-            if (Cmd == J.Cmd) { if (!P) JoinFromChat(M, Key, J.Lang); return; }
-        for (const TCHAR* L : GChatLeaveCmds)
-            if (Cmd == L) { if (P) RemovePlayer(P->Id); return; }
+        FString Lang;
+        if (FPTStreamChat::ParseJoinCommand(Cmd, Lang)) { if (!P) JoinFromChat(M, Key, Lang); return; }
+        if (FPTStreamChat::IsLeaveCommand(Cmd)) { if (P) RemovePlayer(P->Id); return; }
         return; // comandos de otros bots del canal: no son intentos
     }
     if (!P) return; // no se unió: es chat normal del stream

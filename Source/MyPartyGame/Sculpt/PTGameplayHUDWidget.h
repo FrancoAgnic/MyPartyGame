@@ -38,6 +38,11 @@ public:
     /** Aviso PRIVADO "¡casi!" (estuviste cerca de adivinar): línea de chat con estilo aparte, solo local. */
     void ShowCloseGuessNotice();
 
+    /** Modo clásico con chat del stream: qué pestaña muestra el chat (false = juego · Shift+1, true = stream ·
+     *  Shift+2). Sin chat del stream siempre es la del juego. */
+    void SetStreamChatTab(bool bStream);
+    bool IsStreamChatTab() const { return bStreamTab; }
+
     /** Rellena la lista de controles desde PTInput::GetBindings() (fuente de verdad única).
      *  Llamar de nuevo tras un rebind y la UI queda actualizada. */
     void RebuildControls();
@@ -303,6 +308,8 @@ private:
     FString      ChatLog;
     TArray<FString> ChatLines;             // historial; se muestran los últimos MaxVisibleChatLines
     UPROPERTY(EditAnywhere, Category="UI") int32 MaxVisibleChatLines = 8;
+    // Chat del stream (modo clásico): cuántos espectadores se listan en el marcador (los de más puntos).
+    UPROPERTY(EditAnywhere, Category="UI") int32 MaxStreamViewerRows = 5;
     bool         bChatBound     = false;
     bool         bChatStickToEnd = false; // mantener el chat scrolleado al final unos frames tras un mensaje
     float        ChatStickElapsed = 0.f;
@@ -314,6 +321,20 @@ private:
 
     APTSculptGameState*        GetGS() const;
     APTSculptPlayerController* GetSculptPC() const;
+
+    // ── Pestañas del chat (modo clásico con chat del stream) ──
+    // El chat del juego (amigos) y el del stream (los del chat que se unieron) van en dos listas; el log
+    // muestra la de la pestaña activa y la otra cuenta los mensajes sin leer.
+    bool            bStreamTab   = false;
+    bool            bStreamBound = false;
+    TArray<FString> StreamLines;
+    int32           UnreadGame   = 0;
+    int32           UnreadStream = 0;
+    FDelegateHandle StreamLineHandle;
+    UPROPERTY() class UPTChatTabsWidget* ChatTabs = nullptr;
+    void OnStreamChatLine(const FPTStreamChatLine& L);
+    void RenderChatLog();   // TxtChat ← líneas de la pestaña activa (+ auto-scroll)
+    void UpdateChatTabs();  // crea / ubica / actualiza las pestañas encima del panel del chat
 
     // ── Modo autoría (crear mapa) ──
     bool IsAuthorMode() const;      // true si el GameMode es APTMapAuthorGameMode

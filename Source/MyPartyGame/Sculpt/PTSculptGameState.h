@@ -36,6 +36,18 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPTOnYouGuessed, const FString&, Wo
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPTOnSomeoneGuessed, APTPlayerState*, Guesser, int32, Points);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FPTOnAllGuessed);
 
+// Una línea del chat del STREAM (modo clásico con chat): lo que escriben los espectadores que se unieron con
+// !unirse, sus aciertos y avisos (entró / salió). Va en la pestaña "Stream" del chat (Shift+2).
+struct FPTStreamChatLine
+{
+    FString      Name;
+    uint8        Platform = 1; // 1 = Twitch, 2 = Kick
+    FString      Text;         // Normal: el mensaje (palabra tapada) · System: clave de PTText ({0} = Name)
+    EPTChatType  Type = EPTChatType::Normal;
+    int32        Points = 0;   // Correct: puntos que sumó
+};
+DECLARE_MULTICAST_DELEGATE_OneParam(FPTOnStreamChatLine, const FPTStreamChatLine&);
+
 UCLASS()
 class MYPARTYGAME_API APTSculptGameState : public APTGameState
 {
@@ -111,6 +123,24 @@ public:
 
     UFUNCTION(BlueprintPure, Category="Game")
     bool IsLocalPartyMode() const { return bLocalParty; }
+
+    // ── Modo clásico con chat del stream ────────────────────────────────────
+    // true si el host activó "Chat del stream": su chat de Twitch / Kick puede unirse y adivinar. Los clientes
+    // lo usan para mostrar las pestañas del chat (Shift+1 juego / Shift+2 stream).
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
+    bool bStreamChat = false;
+
+    // Qué chats lee el host (bit 0 = Twitch, bit 1 = Kick): el nombre de la pestaña ("Twitch", "Kick"...).
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Game")
+    uint8 StreamChatPlatforms = 0;
+
+    /** El HUD se suscribe: llega una línea para la pestaña del stream. */
+    FPTOnStreamChatLine OnStreamChatLine;
+
+    /** [server → todos] Línea del chat del stream. Para System, Text es una CLAVE de PTText (cada cliente la
+     *  traduce a su idioma) y {0} se reemplaza por Name. */
+    UFUNCTION(NetMulticast, Reliable)
+    void Multicast_StreamChatLine(const FString& Name, uint8 Platform, const FString& Text, EPTChatType Type, int32 Points);
 
     // ¿Este PlayerState puede esculpir en el turno actual? El escultor del turno, o en modo local la
     // PlayerState de la TV (el joystick esculpe por el escultor, que solo existe en su celular).

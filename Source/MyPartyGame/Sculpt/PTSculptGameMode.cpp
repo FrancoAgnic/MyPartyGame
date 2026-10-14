@@ -31,6 +31,7 @@ void APTSculptGameMode::InitGameState()
 {
     Super::InitGameState();
     if (APTSculptGameState* G = GS()) G->bLocalParty = IsLocalPartyGame();
+    // (bStreamChat lo prende UPTStreamChatSubsystem al enganchar la partida: puede activarse a mitad de juego.)
 }
 
 void APTSculptGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -86,7 +87,8 @@ TArray<APTPlayerState*> APTSculptGameMode::GetActivePlayers() const
         {
             if (APTPlayerState* PT = Cast<APTPlayerState>(PS))
             {
-                if (!PT->IsInactive() && !PT->IsOnlyASpectator() && !PT->bIsDevSpectator && !PT->bIsLocalPartyTV)
+                if (!PT->IsInactive() && !PT->IsOnlyASpectator() && !PT->bIsDevSpectator && !PT->bIsLocalPartyTV
+                    && !PT->IsStreamViewer())
                     Out.Add(PT);
             }
         }
@@ -269,8 +271,9 @@ void APTSculptGameMode::StartGame()
     TArray<APTPlayerState*> Players = GetActivePlayers();
     if (Players.Num() < MinToStart()) { GoToWaiting(); return; }
 
-    // Puntajes en cero y rondas desde el principio.
+    // Puntajes en cero y rondas desde el principio (también los del chat del stream).
     for (APTPlayerState* PT : Players) PT->GameScore = 0;
+    for (APTPlayerState* V : GetStreamViewers()) V->GameScore = 0;
     UsedWordKeys.Reset(); // nueva partida: ninguna palabra usada todavía
     G->CurrentSculptor  = nullptr;       // el primer turno elige escultor al azar
     G->CurrentRound     = 1;
@@ -314,8 +317,9 @@ void APTSculptGameMode::StartChoosingPhase()
     TArray<APTPlayerState*> Players = GetActivePlayers();
     if (Players.Num() < MinToStart()) { GoToWaiting(); return; }
 
-    // Resetear "adivinó" de todos al empezar el turno.
+    // Resetear "adivinó" de todos al empezar el turno (el chat del stream también vuelve a adivinar).
     for (APTPlayerState* PT : Players) PT->bHasGuessedThisTurn = false;
+    for (APTPlayerState* V : GetStreamViewers()) V->bHasGuessedThisTurn = false;
     if (APTSculptGameState* G0 = GS()) G0->bTurnEndedAllGuessed = false; // razón de fin del turno anterior
 
     // Lienzo en blanco para el nuevo turno (en todos los clientes).
@@ -521,6 +525,16 @@ void APTSculptGameMode::EndGame()
     if (Winner)
         G->Multicast_SystemLine(TEXT("CHAT_WINNER"), Winner->GetPlayerName(), Winner->GameScore);
 
+    // Chat del stream: el mejor espectador también tiene su anuncio (en el chat del juego y en su pestaña).
+    APTPlayerState* TopViewer = nullptr;
+    for (APTPlayerState* V : GetStreamViewers())
+        if (!TopViewer || V->GameScore > TopViewer->GameScore) TopViewer = V;
+    if (TopViewer && TopViewer->GameScore > 0)
+    {
+        G->Multicast_SystemLine(TEXT("STREAM_TOP_VIEWER"), TopViewer->GetPlayerName(), TopViewer->GameScore);
+        PushStreamFeed(TopViewer, TEXT("STREAM_TOP_VIEWER"), EPTChatType::System, TopViewer->GameScore);
+    }
+
     UE_LOG(LogTemp, Log, TEXT("[SculptGM] Fin de la partida. Ganador: %s"),
            Winner ? *Winner->GetPlayerName() : TEXT("(nadie)"));
 }
@@ -551,8 +565,9 @@ int32 APTSculptGameMode::AwardGuessPoints(APTPlayerState* Guesser)
     const int32 GuesserPts = MinGuessPoints + FMath::RoundToInt((MaxGuessPoints - MinGuessPoints) * Frac);
     Guesser->GameScore += GuesserPts;
 
-    // El escultor gana por cada acierto (premia una escultura reconocible).
-    if (G->CurrentSculptor)
+    // El escultor gana por cada acierto (premia una escultura reconocible). Los del chat del stream no cuentan
+    // (salvo que se active en el BP): si no, con muchos espectadores el escultor se dispara.
+    if (G->CurrentSculptor && (!Guesser->IsStreamViewer() || bStreamViewersGiveSculptorPoints))
         G->CurrentSculptor->GameScore += SculptorPointsPerGuess;
 
     return GuesserPts;
@@ -601,15 +616,28 @@ void APTSculptGameMode::HandlePlayerGuessedCorrectly(APTPlayerState* Guesser)
     if (UPTLocalPartySubsystem* LP = LocalParty())
         LP->NotifyGuessed(Guesser, CurrentWord.ForLang(Guesser->GetLanguageIndex()), Pts);
 
-    // Aviso a TODOS (mini-popup junto a su nombre). Sin la palabra: anti-spoiler.
-    G->Multicast_SomeoneGuessed(Guesser, Pts);
+    // Aviso a TODOS (mini-popup junto a su nombre). Sin la palabra: anti-spoiler. Los del chat del stream van a
+    // su pestaña (con muchos espectadores, el popup + sonido por cada acierto taparía la partida).
+    if (Guesser->IsStreamViewer()) PushStreamFeed(Guesser, FString(), EPTChatType::Correct, Pts);
+    else                           G->Multicast_SomeoneGuessed(Guesser, Pts);
 
-    // ¿Adivinaron todos los que no esculpen? → cerrar el turno antes de tiempo.
+    // ¿Adivinaron todos los que no esculpen? → cerrar el turno antes de tiempo. Cuentan los JUGADORES (el chat
+    // del stream no frena ni apura a los amigos); si no hay ningún jugador que adivine (el streamer juega solo
+    // con su chat), cuentan los del chat.
     bool bAllGuessed = true;
+    int32 Guessers = 0;
     for (APTPlayerState* PT : GetActivePlayers())
     {
         if (PT == G->CurrentSculptor) continue;
+        ++Guessers;
         if (!PT->bHasGuessedThisTurn) { bAllGuessed = false; break; }
+    }
+    if (bAllGuessed && Guessers == 0)
+    {
+        const TArray<APTPlayerState*> Viewers = GetStreamViewers();
+        for (APTPlayerState* V : Viewers)
+            if (!V->bHasGuessedThisTurn) { bAllGuessed = false; break; }
+        bAllGuessed = bAllGuessed && Viewers.Num() > 0;
     }
     if (bAllGuessed)
     {
@@ -632,6 +660,7 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
 
     APTSculptGameState* G = GS();
     const FString Name = Sender->GetPlayerName();
+    const bool bViewer = Sender->IsStreamViewer(); // chat del stream: todo va a su pestaña, nada al chat del juego
 
     // Durante el dibujo: detectar aciertos y bloquear que la palabra aparezca en el chat.
     if (G && G->TurnPhase == EPTTurnPhase::Drawing && CurrentWord.IsValidEntry())
@@ -645,6 +674,7 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
             // (no el idioma configurado del jugador): si jugás en español y escribís "apple", muestra la
             // bandera de INGLÉS. El código va en Message; el HUD lo renderiza como <img id="EN"/>. La palabra
             // se revela recién al final del turno.
+            if (bViewer) { HandlePlayerGuessedCorrectly(Sender); return; } // su acierto lo anuncia la pestaña del stream
             const TArray<FPTLanguage>& Langs = PTText::GetAvailableLanguages();
             const FString LangCode = Langs.IsValidIndex(GuessLang) ? Langs[GuessLang].Code : Sender->Language;
             G->Multicast_ChatLine(Name, LangCode, EPTChatType::Correct);
@@ -661,6 +691,7 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
         // se enviaba nada.
         if (bEligibleGuesser && IsCloseGuess(Text))
         {
+            if (bViewer) { PushStreamFeed(Sender, Text, EPTChatType::Normal, 0); return; }
             G->Multicast_ChatLine(Name, Text, EPTChatType::Normal);
             if (APTLobbyCharacter* Char = Cast<APTLobbyCharacter>(Sender->GetPawn()))
                 Char->Multicast_ShowChatBubble(Text, false);
@@ -674,6 +705,8 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
         // spoilearía escribiéndola en otro idioma). El mensaje se muestra igual, con la palabra tapada.
         Text = MaskSpoilers(Text);
     }
+
+    if (bViewer) { PushStreamFeed(Sender, Text, EPTChatType::Normal, 0); return; }
 
     // Mensaje normal → a todos.
     if (G) G->Multicast_ChatLine(Name, Text, EPTChatType::Normal);

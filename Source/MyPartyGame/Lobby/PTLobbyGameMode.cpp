@@ -57,6 +57,7 @@ void APTLobbyGameMode::SyncMatchSettingsToState()
     {
         const FPTMatchSettings& S = GI->PendingMatchSettings;
         PTGS->MatchTurnDuration   = S.TurnDuration;
+        PTGS->bMatchStreamChat    = S.bStreamChat;
         PTGS->MatchNumRounds      = S.NumRounds;
         PTGS->MatchRevealFraction = S.RevealFraction;
         PTGS->MatchWordPackTitle      = GI->SelectedWordPackTitle;

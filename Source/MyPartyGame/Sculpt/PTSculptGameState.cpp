@@ -38,6 +38,20 @@ void APTSculptGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
     DOREPLIFETIME(APTSculptGameState, TotalRounds);
     DOREPLIFETIME(APTSculptGameState, bTurnEndedAllGuessed);
     DOREPLIFETIME(APTSculptGameState, bLocalParty);
+    DOREPLIFETIME(APTSculptGameState, bStreamChat);
+    DOREPLIFETIME(APTSculptGameState, StreamChatPlatforms);
+}
+
+void APTSculptGameState::Multicast_StreamChatLine_Implementation(const FString& Name, uint8 Platform, const FString& Text,
+                                                                 EPTChatType Type, int32 Points)
+{
+    FPTStreamChatLine L;
+    L.Name = Name;
+    L.Platform = Platform;
+    L.Text = Text;
+    L.Type = Type;
+    L.Points = Points;
+    OnStreamChatLine.Broadcast(L);
 }
 
 float APTSculptGameState::GetTurnSecondsRemaining() const

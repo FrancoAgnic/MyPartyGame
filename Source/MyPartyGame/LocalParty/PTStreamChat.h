@@ -51,6 +51,11 @@ public:
     /** "https://www.twitch.tv/micanal" → "micanal" (minúsculas, solo caracteres válidos). */
     static FString NormalizeChannel(EPTChatPlatform Platform, const FString& In);
 
+    /** Comandos del chat para entrar / salir del juego (los comparten el modo audiencia y el clásico con chat).
+     *  Cmd = la primera palabra del mensaje, en minúsculas. El idioma del comando es el idioma del jugador. */
+    static bool ParseJoinCommand(const FString& Cmd, FString& OutLang);
+    static bool IsLeaveCommand(const FString& Cmd);
+
     FOnMessage OnMessage;
 
 private:

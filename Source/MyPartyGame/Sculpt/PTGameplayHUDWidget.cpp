@@ -38,6 +38,9 @@
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
 #include "Components/AudioComponent.h"
+#include "PTChatTabsWidget.h"
+#include "Blueprint/SlateBlueprintLibrary.h" // ubicar las pestañas del chat sobre el panel del WBP
+#include "Blueprint/WidgetTree.h"
 #include "Animation/WidgetAnimation.h"
 
 UPTGameplayHUDWidget::UPTGameplayHUDWidget(const FObjectInitializer& ObjectInitializer)
@@ -747,6 +750,12 @@ void UPTGameplayHUDWidget::RefreshTick()
         if (ThemePanel) ThemePanel->SetVisibility(ESlateVisibility::Collapsed); // oculto hasta el inicio
         bChatBound = true;
     }
+    if (G && !bStreamBound)
+    {
+        StreamLineHandle = G->OnStreamChatLine.AddUObject(this, &UPTGameplayHUDWidget::OnStreamChatLine);
+        bStreamBound = true;
+    }
+    UpdateChatTabs();
 
     // Modo AUTORÍA de mapa: no hay partida (sin APTSculptGameState). Mostrar el hotbar de esculpido y los
     // controles de autoría (Guardar/Salir); ocultar toda la UI de partida. Se maneja aparte y se corta acá.
@@ -1174,6 +1183,7 @@ void UPTGameplayHUDWidget::UpdateNetIcons()
 void UPTGameplayHUDWidget::FocusChat()
 {
     if (bChatOpen) return;
+    SetStreamChatTab(false); // se escribe en el chat del juego (el del stream es solo lectura)
     bChatOpen = true;
     if (ChatInput) ChatInput->SetVisibility(ESlateVisibility::Visible);
     ApplyInputMode(false); // GameAndUI + cursor
@@ -1302,13 +1312,97 @@ void UPTGameplayHUDWidget::OnChatLine(const FString& Name, const FString& Messag
     ChatLines.Add(Line);
     const int32 Keep = FMath::Max(1, MaxVisibleChatLines);
     if (ChatLines.Num() > Keep) ChatLines.RemoveAt(0, ChatLines.Num() - Keep);
-    ChatLog = FString::Join(ChatLines, TEXT("\n"));
+    if (bStreamTab) { ++UnreadGame; UpdateChatTabs(); return; } // mirando el chat del stream: queda sin leer
+    RenderChatLog();
+}
+
+void UPTGameplayHUDWidget::RenderChatLog()
+{
+    ChatLog = FString::Join(bStreamTab ? StreamLines : ChatLines, TEXT("\n"));
     if (TxtChat) TxtChat->SetText(FText::FromString(ChatLog));
     // Auto-scroll robusto: "pegar" al final por unos frames (el RichText con Auto Wrap recalcula su alto
     // DESPUÉS de setear el texto; un solo ScrollToEnd queda corto y los mensajes nuevos no se ven).
     if (ChatScroll) ChatScroll->ScrollToEnd();
     bChatStickToEnd = true;
     ChatStickElapsed = 0.f;
+}
+
+void UPTGameplayHUDWidget::OnStreamChatLine(const FPTStreamChatLine& L)
+{
+    // Lo que escriben los del chat del stream que se unieron, sus aciertos y avisos (entró / salió / mejor del chat).
+    const FString ShortName = L.Name.Left(10);
+    FString Line;
+    switch (L.Type)
+    {
+    case EPTChatType::Correct:
+        Line = FString::Printf(TEXT("<name>%s</> <correct>%s</> +%d"), *ShortName,
+                               *PTText::GetStr(TEXT("CHAT_GUESSED_IT")), L.Points);
+        break;
+    case EPTChatType::System:
+    {
+        FFormatOrderedArguments Args;
+        Args.Add(FText::FromString(L.Name));
+        Args.Add(FText::AsNumber(L.Points));
+        Line = PTText::Format(FName(*L.Text), Args).ToString();
+        break;
+    }
+    default:
+        Line = FString::Printf(TEXT("<name>%s</>: %s"), *ShortName, *L.Text);
+        break;
+    }
+    StreamLines.Add(Line);
+    const int32 Keep = FMath::Max(1, MaxVisibleChatLines);
+    if (StreamLines.Num() > Keep) StreamLines.RemoveAt(0, StreamLines.Num() - Keep);
+    if (!bStreamTab) { ++UnreadStream; UpdateChatTabs(); return; }
+    RenderChatLog();
+}
+
+void UPTGameplayHUDWidget::SetStreamChatTab(bool bStream)
+{
+    const APTSculptGameState* G = GetGS();
+    if (!G || !G->bStreamChat) bStream = false;
+    if (bStream == bStreamTab) return;
+    bStreamTab = bStream;
+    (bStreamTab ? UnreadStream : UnreadGame) = 0; // la que abrís queda leída
+    RenderChatLog();
+    UpdateChatTabs();
+}
+
+void UPTGameplayHUDWidget::UpdateChatTabs()
+{
+    const APTSculptGameState* G = GetGS();
+    const bool bWanted = G && G->bStreamChat;
+    if (!bWanted && bStreamTab) SetStreamChatTab(false); // el host apagó el chat del stream: volver al del juego
+
+    // Las pestañas se ubican justo ENCIMA del panel del chat del WBP (se mide en pantalla: funciona con
+    // cualquier layout). Si el chat o el HUD están ocultos, también se ocultan.
+    UWidget* Anchor = ChatPanel ? ChatPanel : (ChatScroll ? (UWidget*)ChatScroll : (UWidget*)TxtChat);
+    const bool bAnchorVisible = Anchor && Anchor->IsVisible() && IsVisible()
+                              && Anchor->GetCachedGeometry().GetLocalSize().X > 1.f;
+    if (!bWanted || !bAnchorVisible)
+    {
+        if (ChatTabs && ChatTabs->GetVisibility() != ESlateVisibility::Collapsed)
+            ChatTabs->SetVisibility(ESlateVisibility::Collapsed);
+        return;
+    }
+    if (!ChatTabs)
+    {
+        ChatTabs = CreateWidget<UPTChatTabsWidget>(GetOwningPlayer(), UPTChatTabsWidget::StaticClass());
+        if (!ChatTabs) return;
+        ChatTabs->AddToViewport(2); // arriba del HUD (que va en el orden por defecto)
+        ChatTabs->SetAlignmentInViewport(FVector2D(0.f, 1.f)); // su esquina inferior izquierda apoya en el chat
+    }
+    if (ChatTabs->GetVisibility() != ESlateVisibility::HitTestInvisible)
+        ChatTabs->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+    FVector2D Pixel, ViewportPos;
+    USlateBlueprintLibrary::LocalToViewport(this, Anchor->GetCachedGeometry(), FVector2D::ZeroVector, Pixel, ViewportPos);
+    ChatTabs->SetPositionInViewport(ViewportPos + FVector2D(0.f, -4.f), /*bRemoveDPIScale=*/false);
+
+    const uint8 P = G->StreamChatPlatforms;
+    const FText StreamLabel = FText::FromString(P == 1 ? TEXT("Twitch") : P == 2 ? TEXT("Kick")
+                                              : P == 3 ? TEXT("Twitch + Kick") : TEXT("Stream"));
+    ChatTabs->SetState(bStreamTab, UnreadGame, UnreadStream, StreamLabel);
 }
 
 void UPTGameplayHUDWidget::ShowCloseGuessNotice()
@@ -1595,11 +1689,15 @@ void UPTGameplayHUDWidget::RebuildScoreboard()
     if (!G) return;
 
     TArray<APTPlayerState*> Players;
+    TArray<APTPlayerState*> Viewers; // chat del stream (modo clásico): sección aparte, solo el top
     for (APlayerState* PS : G->PlayerArray)
         if (APTPlayerState* PT = Cast<APTPlayerState>(PS))
             if (!PT->bIsDevSpectator && !PT->bIsLocalPartyTV) // ni los espectadores dev ni la TV del modo local
-                Players.Add(PT);
+                (PT->IsStreamViewer() ? Viewers : Players).Add(PT);
     Players.Sort([](const APTPlayerState& A, const APTPlayerState& B){ return A.GameScore > B.GameScore; });
+    Viewers.Sort([](const APTPlayerState& A, const APTPlayerState& B){ return A.GameScore > B.GameScore; });
+    const int32 TotalViewers = Viewers.Num();
+    if (Viewers.Num() > MaxStreamViewerRows) Viewers.SetNum(MaxStreamViewerRows);
     // Modo audiencia: puede haber 100 espectadores → en la TV solo el top 10.
     if (const UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
         if (GI->bLocalPartyMode && GI->bLocalPartyOnline && Players.Num() > 10)
@@ -1621,6 +1719,9 @@ void UPTGameplayHUDWidget::RebuildScoreboard()
         Sig += FString::Printf(TEXT("%s:%d:%d:%d:%d:%s|"), *NameFor(PT),
                                PT->GameScore, PT == G->CurrentSculptor ? 1 : 0, IsFlashing(PT) ? 1 : 0,
                                PT->bHasGuessedThisTurn ? 1 : 0, *PT->Language);
+    Sig += FString::Printf(TEXT("#v%d|"), TotalViewers);
+    for (APTPlayerState* PT : Viewers)
+        Sig += FString::Printf(TEXT("%s:%d:%d|"), *NameFor(PT), PT->GameScore, PT->bHasGuessedThisTurn ? 1 : 0);
     if (Sig == CachedScoreSig) return;
     CachedScoreSig = Sig;
 
@@ -1642,6 +1743,29 @@ void UPTGameplayHUDWidget::RebuildScoreboard()
             Row->AnimateScore(PT->GameScore - Earned, PT->GameScore, 1.5f);
         }
         ScoreboardBox->AddChild(Row);
+    }
+
+    // Sección del chat del stream: "Chat (12)" + el top de los que se unieron.
+    if (TotalViewers > 0 && WidgetTree)
+    {
+        UTextBlock* Header = WidgetTree->ConstructWidget<UTextBlock>();
+        FSlateFontInfo F = Header->GetFont();
+        F.Size = 13;
+        F.TypefaceFontName = FName(TEXT("Bold"));
+        Header->SetFont(F);
+        Header->SetColorAndOpacity(FSlateColor(FLinearColor(1.f, 0.85f, 0.4f, 1.f)));
+        Header->SetShadowOffset(FVector2D(1.f, 1.f));
+        FFormatOrderedArguments Args;
+        Args.Add(FText::AsNumber(TotalViewers));
+        Header->SetText(PTText::Format(TEXT("STREAM_SCOREBOARD"), Args));
+        ScoreboardBox->AddChild(Header);
+        for (APTPlayerState* PT : Viewers)
+        {
+            UPTScoreRowWidget* Row = CreateWidget<UPTScoreRowWidget>(GetOwningPlayer(), ScoreRowClass);
+            if (!Row) continue;
+            Row->SetRow(NameFor(PT), PT->GameScore, false, PT->bHasGuessedThisTurn, PT->Language);
+            ScoreboardBox->AddChild(Row);
+        }
     }
 }
 

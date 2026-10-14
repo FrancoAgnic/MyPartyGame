@@ -9,6 +9,8 @@
 //   RoundsText/RoundsMinus/RoundsPlus
 //   RevealText/RevealMinus/RevealPlus
 //   LibraryButton (Button) → pide abrir la Biblioteca (el WBP_WordPack vive en el HUD ahora)
+//   StreamChatButton (Button) → "Chat del stream: ON/OFF" (abre su popup). OPCIONAL: si el WBP no lo trae,
+//                               C++ crea uno en una fila nueva debajo de la de LibraryButton.
 //   WordBankText / MapText (TextBlock) → debajo de Library: "Word: X" / "Map: Default" (opcionales)
 //   CloseButton   (Button) → cerrar (Back/Apply; los ajustes se aplican en vivo)
 //   TitleText (TextBlock)
@@ -57,6 +59,7 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UButton*    RevealMinus;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*    RevealPlus;
     UPROPERTY(meta = (BindWidgetOptional)) UButton*    LibraryButton;
+    UPROPERTY(meta = (BindWidgetOptional)) UButton*    StreamChatButton; // chat de Twitch/Kick en el modo clásico
     // Debajo de "Library Mods": qué está activo ahora mismo. Word = banco elegido (o Default);
     // Map = mapa custom (bloqueado por ahora → siempre "Default").
     UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* WordBankText; // "Word: Title Movies"
@@ -78,10 +81,13 @@ protected:
     UFUNCTION() void OnRevealMinus();   UFUNCTION() void OnRevealPlus();
     UFUNCTION() void OnFriendsOnlyChanged(bool bIsChecked);
     UFUNCTION() void OnLibraryClicked();
+    UFUNCTION() void OnStreamChatClicked();
     UFUNCTION() void OnCloseClicked();
 
 private:
     UPTGameInstance* GetGI() const;
+    UButton* CreateRowButton(FName Name); // botón por código en una fila nueva debajo de la de la Biblioteca
+    UPROPERTY() class UPTStreamChatSetupWidget* StreamChatPopup = nullptr;
     void RefreshUI();
     void RefreshPackTexts(); // actualiza "Word:" / "Map:" (también en OnSelectedWordPackChanged)
     void RefreshThumbnails(); // miniaturas de mapa/banco (lee del GameState replicado; default si no hay)
