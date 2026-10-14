@@ -189,6 +189,10 @@ protected:
     virtual void PostLogin(APlayerController* NewPlayer) override;
     virtual void HandleSeamlessTravelPlayer(AController*& C) override;
     virtual void Logout(AController* Exiting) override;
+    // Los espectadores del chat del stream NO viajan (el motor se lleva todas las PlayerStates): si no, al volver
+    // al lobby aparecían como jugadores de la sala y en la próxima partida se duplicaban. Se sacan ANTES de viajar
+    // (Destroy los quita del PlayerArray). Su lista vive en UPTStreamChatSubsystem, que los recrea en la próxima partida.
+    virtual void ProcessServerTravel(const FString& URL, bool bAbsolute = false) override;
 
 private:
     FTimerHandle PhaseTimer;

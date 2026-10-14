@@ -4,6 +4,7 @@
 #include "../PTGameInstance.h"
 #include "../PTGameUserSettings.h"
 #include "Engine/World.h"
+#include "GameFramework/GameMode.h" // MatchState::LeavingMap
 #include "HAL/PlatformTime.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPTStreamChatSub, Log, All);
@@ -69,8 +70,12 @@ FString UPTStreamChatSubsystem::GetError(EPTChatPlatform Platform) const
 APTSculptGameMode* UPTStreamChatSubsystem::FindGameMode() const
 {
     const UWorld* W = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr;
-    APTSculptGameMode* GM = W ? W->GetAuthGameMode<APTSculptGameMode>() : nullptr;
-    return (GM && GM->IsStreamChatGame()) ? GM : nullptr;
+    // Durante un viaje (partida → lobby y vuelta) el GameMode viejo sigue vivo en el mapa de transición: ahí no
+    // se crea nada (crasheaba). Los espectadores se recrean al llegar a la próxima partida.
+    if (!W || W->IsInSeamlessTravel()) return nullptr;
+    APTSculptGameMode* GM = W->GetAuthGameMode<APTSculptGameMode>();
+    if (!GM || !GM->HasActorBegunPlay() || GM->GetMatchState() == MatchState::LeavingMap) return nullptr;
+    return GM->IsStreamChatGame() ? GM : nullptr;
 }
 
 void UPTStreamChatSubsystem::Tick(float DeltaTime)
@@ -151,8 +156,8 @@ void UPTStreamChatSubsystem::HandleMessage(const FPTStreamChatMessage& M)
     const double Now = FPlatformTime::Seconds();
     if (Now - V.LastChatAt < GuessCooldown) return;
     V.LastChatAt = Now;
-    APTSculptGameMode* GM = BoundGM.Get();
-    if (GM && V.PS.IsValid()) GM->StreamChat_Message(V.PS.Get(), Text.Left(MaxMsgLen));
+    APTSculptGameMode* GM = FindGameMode();
+    if (GM && GM == BoundGM.Get() && V.PS.IsValid()) GM->StreamChat_Message(V.PS.Get(), Text.Left(MaxMsgLen));
 }
 
 void UPTStreamChatSubsystem::Join(const FPTStreamChatMessage& M, const FString& Key, const FString& Lang)
@@ -183,7 +188,7 @@ void UPTStreamChatSubsystem::Join(const FPTStreamChatMessage& M, const FString& 
         const FLinearColor C = FLinearColor::FromSRGBColor(FColor::FromHex(M.Color));
         if (C.GetLuminance() > 0.12f) V.Color = C;
     }
-    if (APTSculptGameMode* GM = BoundGM.Get())
+    if (APTSculptGameMode* GM = FindGameMode(); GM && GM == BoundGM.Get())
         V.PS = GM->StreamChat_AddViewer(V.Name, V.Lang, V.Color, V.Platform, /*bAnnounce=*/true);
     Viewers.Add(V);
     UE_LOG(LogPTStreamChatSub, Log, TEXT("Se unió '%s' desde %s (%d en total)."), *Name,
@@ -193,7 +198,7 @@ void UPTStreamChatSubsystem::Join(const FPTStreamChatMessage& M, const FString& 
 void UPTStreamChatSubsystem::Leave(int32 Index, bool bAnnounce)
 {
     if (!Viewers.IsValidIndex(Index)) return;
-    if (APTSculptGameMode* GM = BoundGM.Get())
+    if (APTSculptGameMode* GM = FindGameMode(); GM && GM == BoundGM.Get())
         if (APTPlayerState* PS = Viewers[Index].PS.Get()) GM->StreamChat_RemoveViewer(PS, bAnnounce);
     Viewers.RemoveAt(Index);
 }

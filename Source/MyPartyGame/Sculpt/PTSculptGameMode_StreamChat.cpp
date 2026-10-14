@@ -15,6 +15,14 @@ bool APTSculptGameMode::IsStreamChatGame() const
     return GI && GI->PendingMatchSettings.bStreamChat;
 }
 
+void APTSculptGameMode::ProcessServerTravel(const FString& URL, bool bAbsolute)
+{
+    // Antes de viajar, no durante: si quedaban en el PlayerArray sin viajar, el GameState llegaba al otro mapa con
+    // punteros muertos (crash). Super pasa la partida a LeavingMap → el subsistema no los vuelve a crear acá.
+    for (APTPlayerState* V : GetStreamViewers()) V->Destroy();
+    Super::ProcessServerTravel(URL, bAbsolute);
+}
+
 void APTSculptGameMode::StreamChat_SetActive(bool bActive, uint8 Platforms)
 {
     if (APTSculptGameState* G = GS())

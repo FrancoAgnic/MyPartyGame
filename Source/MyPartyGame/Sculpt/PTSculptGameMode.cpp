@@ -621,23 +621,15 @@ void APTSculptGameMode::HandlePlayerGuessedCorrectly(APTPlayerState* Guesser)
     if (Guesser->IsStreamViewer()) PushStreamFeed(Guesser, FString(), EPTChatType::Correct, Pts);
     else                           G->Multicast_SomeoneGuessed(Guesser, Pts);
 
-    // ¿Adivinaron todos los que no esculpen? → cerrar el turno antes de tiempo. Cuentan los JUGADORES (el chat
-    // del stream no frena ni apura a los amigos); si no hay ningún jugador que adivine (el streamer juega solo
-    // con su chat), cuentan los del chat.
-    bool bAllGuessed = true;
-    int32 Guessers = 0;
+    // ¿Adivinaron todos los que no esculpen? → cerrar el turno antes de tiempo. Solo cuentan los JUGADORES: el
+    // chat del stream participa como espectador (si los jugadores adivinan rápido, los del chat que no llegaron
+    // ya no pueden adivinar esa palabra). Un acierto del chat nunca cierra el turno.
+    bool bAllGuessed = !Guesser->IsStreamViewer();
     for (APTPlayerState* PT : GetActivePlayers())
     {
+        if (!bAllGuessed) break;
         if (PT == G->CurrentSculptor) continue;
-        ++Guessers;
-        if (!PT->bHasGuessedThisTurn) { bAllGuessed = false; break; }
-    }
-    if (bAllGuessed && Guessers == 0)
-    {
-        const TArray<APTPlayerState*> Viewers = GetStreamViewers();
-        for (APTPlayerState* V : Viewers)
-            if (!V->bHasGuessedThisTurn) { bAllGuessed = false; break; }
-        bAllGuessed = bAllGuessed && Viewers.Num() > 0;
+        if (!PT->bHasGuessedThisTurn) bAllGuessed = false;
     }
     if (bAllGuessed)
     {

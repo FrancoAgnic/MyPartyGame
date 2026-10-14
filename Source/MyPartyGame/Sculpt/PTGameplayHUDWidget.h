@@ -67,7 +67,9 @@ public:
 protected:
     virtual bool Initialize() override;
     // El logo de Sculpturillo (arriba a la derecha) es para la partida: en el editor de mapas no va.
-    virtual bool ShouldShowGameLogo() const override { return Super::ShouldShowGameLogo() && !IsAuthorMode(); }
+    // Con chat del stream, arriba a la derecha va la cámara del streamer (y su zona privada): el logo se esconde.
+    virtual bool ShouldShowGameLogo() const override
+    { return Super::ShouldShowGameLogo() && !IsAuthorMode() && !bStreamerZoneActive; }
     // Preview en el DISEÑADOR: puebla el hotbar con celdas representativas para poder acomodarlo
     // viéndolo (WYSIWYG), en vez de a ciegas. Solo corre en design time; en juego no hace nada.
     virtual void NativePreConstruct() override;
@@ -308,8 +310,8 @@ private:
     FString      ChatLog;
     TArray<FString> ChatLines;             // historial; se muestran los últimos MaxVisibleChatLines
     UPROPERTY(EditAnywhere, Category="UI") int32 MaxVisibleChatLines = 8;
-    // Chat del stream (modo clásico): cuántos espectadores se listan en el marcador (los de más puntos).
-    UPROPERTY(EditAnywhere, Category="UI") int32 MaxStreamViewerRows = 5;
+    // Chat del stream (modo clásico): cuántos del chat se listan en su tabla (Shift+2), los de más puntos.
+    UPROPERTY(EditAnywhere, Category="UI") int32 MaxStreamViewerRows = 10;
     bool         bChatBound     = false;
     bool         bChatStickToEnd = false; // mantener el chat scrolleado al final unos frames tras un mensaje
     float        ChatStickElapsed = 0.f;
@@ -332,6 +334,13 @@ private:
     int32           UnreadStream = 0;
     FDelegateHandle StreamLineHandle;
     UPROPERTY() class UPTChatTabsWidget* ChatTabs = nullptr;
+
+    // ── Zona de la cámara del streamer (chat del stream + sos el host) ──
+    // Lo que el chat no tiene que ver (las palabras para elegir, tu palabra, la que adivinaste, lo que escribís)
+    // va arriba a la derecha, donde el streamer pone su cámara en el stream. En el resto de la pantalla, nada.
+    bool bStreamerZoneActive = false;
+    UPROPERTY() class UPTStreamerZoneWidget* StreamerZone = nullptr;
+    void UpdateStreamerZone(class APTSculptGameState* G, bool bSculptor);
     void OnStreamChatLine(const FPTStreamChatLine& L);
     void RenderChatLog();   // TxtChat ← líneas de la pestaña activa (+ auto-scroll)
     void UpdateChatTabs();  // crea / ubica / actualiza las pestañas encima del panel del chat

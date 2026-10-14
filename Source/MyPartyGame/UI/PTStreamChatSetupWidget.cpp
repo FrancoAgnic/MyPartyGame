@@ -170,6 +170,11 @@ void UPTStreamChatSetupWidget::BuildTree()
     Keys->SetAutoWrapText(true);
     Keys->SetText(PTText::Get(TEXT("SC_KEYS")));
     if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Keys)) S->SetPadding(FMargin(0.f, 10.f, 0.f, 0.f));
+    // Recomendación: la cámara arriba a la derecha tapa la zona donde el streamer elige y ve su palabra.
+    UTextBlock* Cam = MakeText(14, FLinearColor(1.f, 0.85f, 0.4f, 1.f), true);
+    Cam->SetAutoWrapText(true);
+    Cam->SetText(PTText::Get(TEXT("SC_CAM")));
+    if (UVerticalBoxSlot* S = Col->AddChildToVerticalBox(Cam)) S->SetPadding(FMargin(0.f, 8.f, 0.f, 0.f));
 
     UTextBlock* DoneText = nullptr;
     UButton* Done = MakeButton(PTText::Get(TEXT("MENU_CONFIRM")), TEXT("StreamChatDone"), &DoneText);
