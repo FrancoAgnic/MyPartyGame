@@ -540,3 +540,26 @@ LP_WIZ_CHAT,Conectá el chat,Connect the chat,Conectar o chat,Chat verbinden,Con
 LP_WIZ_OPTIONAL,(opcional),(optional),(opcional),(optional),(option),(opzionale)
 LP_WIZ_SKIP,Saltar,Skip,Pular,Überspringen,Passer,Salta
 LP_SET_CHATMAX,Máx. en el chat,Max in chat,Máx. no chat,Max. im Chat,Max. dans le chat,Max in chat
+GS_MODE_CLASSIC,Modo: Clásico,Mode: Classic,Modo: Clássico,Modus: Klassisch,Mode : Classique,Modalità: Classica
+GS_MODE_BB,Modo: Build Battle,Mode: Build Battle,Modo: Build Battle,Modus: Build Battle,Mode : Build Battle,Modalità: Build Battle
+BB_TITLE,BUILD BATTLE,BUILD BATTLE,BUILD BATTLE,BUILD BATTLE,BUILD BATTLE,BUILD BATTLE
+BB_INTRO,Todos esculpen la misma palabra a la vez. Después se exhibe cada escultura y se vota del 1 al 5.,Everyone sculpts the same word at the same time. Then each sculpture is shown and rated from 1 to 5.,Todos esculpem a mesma palavra ao mesmo tempo. Depois cada escultura é exibida e votada de 1 a 5.,Alle formen gleichzeitig dasselbe Wort. Danach wird jede Skulptur gezeigt und mit 1 bis 5 bewertet.,"Tout le monde sculpte le même mot en même temps. Ensuite, chaque sculpture est montrée et notée de 1 à 5.",Tutti scolpiscono la stessa parola contemporaneamente. Poi ogni scultura viene mostrata e votata da 1 a 5.
+BB_INTRO_WORD,Palabra: {0},Word: {0},Palavra: {0},Wort: {0},Mot : {0},Parola: {0}
+BB_SHOWCASE_HEADER,Escultura {0} de {1},Sculpture {0} of {1},Escultura {0} de {1},Skulptur {0} von {1},Sculpture {0} sur {1},Scultura {0} di {1}
+BB_VOTE_PROMPT,¿Qué tan buena es? Votá con las teclas 1 a 5,How good is it? Vote with keys 1 to 5,Quão boa ela é? Vote com as teclas 1 a 5,Wie gut ist sie? Stimme mit den Tasten 1 bis 5 ab,Elle est bien ? Vote avec les touches 1 à 5,Quanto è bella? Vota con i tasti da 1 a 5
+BB_VOTE_OWN,¡Es tu escultura! Mirá cómo la votan.,It's your sculpture! Watch them vote.,É a sua escultura! Veja como votam.,"Das ist deine Skulptur! Schau zu, wie abgestimmt wird.",C'est ta sculpture ! Regarde les votes.,È la tua scultura! Guarda come la votano.
+BB_VOTE_SENT,Votaste. Podés cambiar el voto hasta que termine el tiempo.,Vote sent. You can change it until time runs out.,Voto enviado. Você pode mudar até acabar o tempo.,"Stimme abgegeben. Du kannst sie ändern, bis die Zeit um ist.",Vote envoyé. Tu peux le changer jusqu'à la fin du temps.,Voto inviato. Puoi cambiarlo finché non scade il tempo.
+BB_VOTE_1,Fea,Ugly,Feia,Hässlich,Moche,Brutta
+BB_VOTE_2,Meh,Meh,Meh,Naja,Bof,Mah
+BB_VOTE_3,Bien,Good,Boa,Gut,Bien,Bella
+BB_VOTE_4,¡Genial!,Great!,Ótima!,Super!,Génial !,Fantastica!
+BB_VOTE_5,¡Obra maestra!,Masterpiece!,Obra-prima!,Meisterwerk!,Chef-d'œuvre !,Capolavoro!
+BB_RESULTS_TITLE,Resultados de la ronda {0},Round {0} results,Resultados da rodada {0},Ergebnisse von Runde {0},Résultats de la manche {0},Risultati del round {0}
+BB_RESULTS_WINNER,¡Ganó {0}!,{0} wins!,{0} venceu!,{0} gewinnt!,{0} gagne !,Vince {0}!
+BB_RESULTS_NO_VOTES,Nadie votó en esta ronda,Nobody voted this round,Ninguém votou nesta rodada,Niemand hat in dieser Runde abgestimmt,Personne n'a voté cette manche,Nessuno ha votato in questo round
+BB_RESULTS_VOTES,{0} votos,{0} votes,{0} votos,{0} Stimmen,{0} votes,{0} voti
+BB_RESULTS_NEXT,Sigue en {0} s,Next in {0} s,Continua em {0} s,Weiter in {0} s,Suite dans {0} s,Si continua tra {0} s
+BB_YOU,(vos),(you),(você),(du),(toi),(tu)
+BB_CHAT_ROUND_START,Build Battle: ¡todos esculpen {0}!,Build Battle: everyone sculpts {0}!,Build Battle: todos esculpem {0}!,Build Battle: alle formen {0}!,Build Battle : tout le monde sculpte {0} !,Build Battle: tutti scolpiscono {0}!
+BB_CHAT_VOTE_START,¡Tiempo! Ahora se vota cada escultura (teclas 1 a 5).,Time's up! Now rate each sculpture (keys 1 to 5).,Tempo esgotado! Agora vote em cada escultura (teclas 1 a 5).,Zeit ist um! Jetzt jede Skulptur bewerten (Tasten 1 bis 5).,Temps écoulé ! Note chaque sculpture (touches 1 à 5).,Tempo scaduto! Ora vota ogni scultura (tasti da 1 a 5).
+BB_CHAT_ROUND_WINNER,{0} ganó la ronda (+{1} puntos),{0} won the round (+{1} points),{0} venceu a rodada (+{1} pontos),{0} gewinnt die Runde (+{1} Punkte),{0} remporte la manche (+{1} points),{0} vince il round (+{1} punti)

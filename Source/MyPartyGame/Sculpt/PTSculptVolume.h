@@ -243,6 +243,17 @@ public:
      *  arcilla (ProceduralMesh) y los ojos NO se tocan. Lo usa el tutorial para que la foto salga limpia. */
     void SetFrameMeshesHidden(bool bHide);
 
+    // ── Build Battle (prototipo) ─────────────────────────────────────────────
+    // Cada jugador esculpe en su LIENZO: una copia del cubo del nivel que spawnea el server, en el mismo
+    // lugar que el original, con el controller del jugador de dueño. Los lienzos están apilados: cada
+    // máquina muestra solo el que corresponde (el tuyo al esculpir, el exhibido al votar) y ninguno choca.
+    bool IsBuildBattleCanvas() const { return bBuildBattleCanvas; }
+    /** [server, ANTES de FinishSpawning] Marca el actor como lienzo de Build Battle. Siempre relevante: si
+     *  dejara de serlo por distancia, el cliente lo destruiría y perdería lo esculpido (llega por multicast). */
+    void MarkAsBuildBattleCanvas() { bBuildBattleCanvas = true; bAlwaysRelevant = true; }
+    /** El cubo ORIGINAL del nivel (el único que no es lienzo de Build Battle), o null. */
+    static APTSculptVolume* FindLevelCanvas(const UWorld* World);
+
     /** ¿Ese punto del mundo cae DENTRO del lienzo (el BoundsBox)? Para no dejar poner cosas
      *  (ej: ojos) fuera de la zona de modelado. */
     UFUNCTION(BlueprintPure, Category="Sculpt")
@@ -397,6 +408,15 @@ private:
 
     // Ojos colocados (local al volumen: XYZ=centro, W=radio). Replicado → todos ven los mismos.
     UPROPERTY(ReplicatedUsing=OnRep_Eyes) TArray<FVector4> Eyes;
+
+    // Build Battle: ver MarkAsBuildBattleCanvas. Viaja en el bunch inicial → el cliente ya lo tiene en BeginPlay.
+    UPROPERTY(Replicated) bool bBuildBattleCanvas = false;
+    int8 BBShownState = -1; // última visibilidad aplicada por UpdateBuildBattlePresence (-1 = nunca)
+    /** Copia la config del cubo del nivel (props editables + caja del lienzo). Se llama en BeginPlay de los
+     *  lienzos, en el server Y en cada cliente: así todos usan la config de la instancia del nivel. */
+    void CopyCanvasSettingsFrom(const APTSculptVolume* Src);
+    /** Visibilidad/colisión según la fase del Build Battle (local a cada máquina). Corre en Tick. */
+    void UpdateBuildBattlePresence();
 
     // ── Undo: lo que el campo NO cubre (pintura del atlas + ojos) ───────────
     // La geometría la respalda FPTSculptField (copy-on-write por brick). Acá va el resto, con una

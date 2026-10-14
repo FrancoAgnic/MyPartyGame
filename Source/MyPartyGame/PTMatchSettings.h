@@ -40,11 +40,26 @@ struct FPTWordEntry
     bool IsValidEntry() const { return !Primary().IsEmpty(); }
 };
 
+// Tipo de partida que elige el host en el lobby.
+//  · Classic     → un escultor por turno y los demás adivinan (estilo skribbl).
+//  · BuildBattle → PROTOTIPO: todos esculpen la MISMA palabra a la vez y después se vota cada escultura.
+// OJO: agregar siempre al final (viaja como uint8).
+UENUM(BlueprintType)
+enum class EPTGameType : uint8
+{
+    Classic     UMETA(DisplayName="Clásico"),
+    BuildBattle UMETA(DisplayName="Build Battle")
+};
+
 // Config de la partida que el host elige en el lobby. Viaja lobby→Lvl-01 por el GameInstance.
 USTRUCT(BlueprintType)
 struct FPTMatchSettings
 {
     GENERATED_BODY()
+
+    // Modo de juego. En Build Battle, TurnDuration es el tiempo para esculpir (todos a la vez) y
+    // RevealFraction no se usa (la palabra la saben todos).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Match") EPTGameType GameType = EPTGameType::Classic;
 
     // Tuneables numéricos.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Match") float TurnDuration   = 90.f; // seg de dibujo

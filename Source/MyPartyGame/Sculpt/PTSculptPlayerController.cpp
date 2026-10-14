@@ -752,6 +752,9 @@ void APTSculptPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
 
+    // Build Battle: tu lienzo, el widget de votación y las teclas 1-5 (no hace nada en el clásico).
+    TickBuildBattle();
+
     // Mantener el modo espectador tras el viaje lobby → Lvl-01: si tu PlayerState viene con
     // bIsDevSpectator (persiste por CopyProperties), activar el free-cam automáticamente. One-shot,
     // con una ventana de gracia para esperar a que el flag replique (en clientes puede tardar 1-2 frames).
@@ -2295,15 +2298,12 @@ void APTSculptPlayerController::OnClearAllReleased()
 
 void APTSculptPlayerController::Server_BeginStroke_Implementation()
 {
-    if (!Volume)
-        Volume = Cast<APTSculptVolume>(
-            UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
-    if (Volume) Volume->Multicast_BeginStroke();
+    if (APTSculptVolume* V = ResolveServerVolume()) V->Multicast_BeginStroke();
 }
 
 void APTSculptPlayerController::Server_EndStroke_Implementation()
 {
-    if (Volume) Volume->Multicast_EndStroke();
+    if (APTSculptVolume* V = ResolveServerVolume()) V->Multicast_EndStroke();
 }
 
 void APTSculptPlayerController::Server_Undo_Implementation()
@@ -2315,10 +2315,7 @@ void APTSculptPlayerController::Server_Undo_Implementation()
             !G->IsActingSculptor(GetPlayerState<APTPlayerState>()))
             return;
     }
-    if (!Volume)
-        Volume = Cast<APTSculptVolume>(
-            UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
-    if (Volume) Volume->Multicast_Undo(); // todos deshacen su propio respaldo del último trazo
+    if (APTSculptVolume* V = ResolveServerVolume()) V->Multicast_Undo(); // todos deshacen su propio respaldo del último trazo
 }
 
 void APTSculptPlayerController::Server_ClearSculpture_Implementation()
@@ -2330,10 +2327,7 @@ void APTSculptPlayerController::Server_ClearSculpture_Implementation()
             !G->IsActingSculptor(GetPlayerState<APTPlayerState>()))
             return;
     }
-    if (!Volume)
-        Volume = Cast<APTSculptVolume>(
-            UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
-    if (Volume) Volume->Multicast_ClearAll(); // lienzo en blanco en TODOS
+    if (APTSculptVolume* V = ResolveServerVolume()) V->Multicast_ClearAll(); // lienzo en blanco en TODOS
 }
 
 void APTSculptPlayerController::OnShapeRotatePressed()
@@ -2701,10 +2695,7 @@ void APTSculptPlayerController::Server_AddEye_Implementation(FVector WorldPos, f
             !G->IsActingSculptor(GetPlayerState<APTPlayerState>()))
             return;
     }
-    if (!Volume)
-        Volume = Cast<APTSculptVolume>(
-            UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
-    if (Volume) Volume->AddEye(WorldPos, Radius);
+    if (APTSculptVolume* V = ResolveServerVolume()) V->AddEye(WorldPos, Radius);
 }
 
 void APTSculptPlayerController::OnColorPickPressed()
@@ -2877,11 +2868,8 @@ void APTSculptPlayerController::Server_ApplyStamp_Implementation(FVector WorldPo
             !G->IsActingSculptor(GetPlayerState<APTPlayerState>()))
             return;
     }
-    if (!Volume)
-        Volume = Cast<APTSculptVolume>(
-            UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
-    if (Volume)
-        Volume->Multicast_ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot, bDetail, InStampScale);
+    if (APTSculptVolume* V = ResolveServerVolume())
+        V->Multicast_ApplyStamp(WorldPos, Shape, Size, Mode, PaintColor, StampRot, bDetail, InStampScale);
 }
 
 void APTSculptPlayerController::Server_BeginDetailLayer_Implementation()
@@ -2893,10 +2881,7 @@ void APTSculptPlayerController::Server_BeginDetailLayer_Implementation()
             !G->IsActingSculptor(GetPlayerState<APTPlayerState>()))
             return;
     }
-    if (!Volume)
-        Volume = Cast<APTSculptVolume>(
-            UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass()));
-    if (Volume) Volume->Multicast_BeginDetailLayer();
+    if (APTSculptVolume* V = ResolveServerVolume()) V->Multicast_BeginDetailLayer();
 }
 
 // ── Snapshot de la escultura para (re)conexiones tardías ─────────────────────

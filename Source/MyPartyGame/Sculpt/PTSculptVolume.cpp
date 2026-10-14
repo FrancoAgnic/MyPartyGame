@@ -17,6 +17,7 @@
 #include "GameFramework/PlayerState.h"
 #include "Components/PrimitiveComponent.h"
 #include "../Lobby/PTLobbyCharacter.h" // BuildEyesSection (esferas/mesh de ojos)
+#include "EngineUtils.h"               // TActorIterator (Build Battle: buscar el cubo del nivel)
 
 // ─── Marching Cubes lookup tables (Bourke / Lorensen & Cline) ──────────────
 // EdgeTable[i]: bitmask of the 12 edges intersected when corners have sign pattern i.
@@ -378,6 +379,83 @@ void APTSculptVolume::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(APTSculptVolume, Eyes);
+    DOREPLIFETIME_CONDITION(APTSculptVolume, bBuildBattleCanvas, COND_InitialOnly);
+}
+
+APTSculptVolume* APTSculptVolume::FindLevelCanvas(const UWorld* World)
+{
+    if (!World) return nullptr;
+    for (TActorIterator<APTSculptVolume> It(const_cast<UWorld*>(World)); It; ++It)
+        if (!It->bBuildBattleCanvas) return *It;
+    return nullptr;
+}
+
+void APTSculptVolume::CopyCanvasSettingsFrom(const APTSculptVolume* Src)
+{
+    if (!Src || Src == this || Src->GetClass() != GetClass()) return;
+
+    // Las props editables de esta clase (C++ y las variables del BP): si la instancia del nivel pisa
+    // algún default (VoxelSize, SVO, materiales...), el lienzo queda igual. Se saltean los subobjetos
+    // instanciados (componentes) y lo replicado / transitorio.
+    const uint64 Skip = CPF_Transient | CPF_Net | CPF_InstancedReference | CPF_ContainsInstancedReference;
+    for (TFieldIterator<FProperty> It(GetClass()); It; ++It)
+    {
+        FProperty* P = *It;
+        const UClass* OwnerClass = P->GetOwnerClass();
+        if (!OwnerClass || !OwnerClass->IsChildOf(APTSculptVolume::StaticClass())) continue;
+        if (!P->HasAnyPropertyFlags(CPF_Edit) || P->HasAnyPropertyFlags(Skip)) continue;
+        P->CopyCompleteValue_InContainer(this, Src);
+    }
+
+    // La caja del lienzo y la zona libre son componentes: copiar su tamaño y ubicación a mano.
+    if (BoundsBox && Src->BoundsBox)
+    {
+        BoundsBox->SetRelativeTransform(Src->BoundsBox->GetRelativeTransform());
+        BoundsBox->SetBoxExtent(Src->BoundsBox->GetUnscaledBoxExtent(), false);
+    }
+    if (NoPlaceZone && Src->NoPlaceZone)
+    {
+        NoPlaceZone->SetRelativeTransform(Src->NoPlaceZone->GetRelativeTransform());
+        NoPlaceZone->SetBoxExtent(Src->NoPlaceZone->GetUnscaledBoxExtent(), false);
+    }
+}
+
+void APTSculptVolume::UpdateBuildBattlePresence()
+{
+    const UWorld* W = GetWorld();
+    const APTSculptGameState* GS = W ? W->GetGameState<APTSculptGameState>() : nullptr;
+    const bool bBB = GS && GS->IsBuildBattle();
+    if (!bBB && !bBuildBattleCanvas && BBShownState < 0) return; // partida clásica: no se toca nada
+
+    bool bShow = false;
+    if (bBB)
+    {
+        APTSculptVolume* Mine = GS->GetLocalBuildCanvas();
+        // Qué lienzo va en pantalla en esta máquina según la fase (null = ninguno → se ve el cubo vacío del nivel).
+        APTSculptVolume* OnStage = nullptr;
+        switch (GS->TurnPhase)
+        {
+        case EPTTurnPhase::Drawing:      OnStage = Mine; break;                 // cada uno ve SOLO el suyo
+        case EPTTurnPhase::Showcase:
+        case EPTTurnPhase::RoundResults: OnStage = GS->BBShowcaseVolume; break; // la exhibida / la ganadora
+        default: break;
+        }
+        bShow = bBuildBattleCanvas ? (OnStage == this) : (OnStage == nullptr);
+    }
+    else
+    {
+        bShow = !bBuildBattleCanvas; // se apagó el modo: lienzos ocultos, cubo del nivel visible
+    }
+
+    if ((int8)bShow != BBShownState)
+    {
+        SetActorHiddenInGame(!bShow);
+        BBShownState = (int8)bShow;
+    }
+
+    // Los lienzos NUNCA chocan: están apilados y la arcilla invisible de otro jugador te frenaría. Igual en
+    // el server y en los clientes → el movimiento no se corrige.
+    if (bBuildBattleCanvas && GetActorEnableCollision()) SetActorEnableCollision(false);
 }
 
 void APTSculptVolume::OnConstruction(const FTransform& Transform)
@@ -389,6 +467,11 @@ void APTSculptVolume::OnConstruction(const FTransform& Transform)
 
 void APTSculptVolume::BeginPlay()
 {
+    // Build Battle: el lienzo copia la config del cubo del nivel ANTES de inicializarse (en el server y en
+    // cada cliente: todas las máquinas cargan el mismo cubo del mapa, así que quedan iguales).
+    if (bBuildBattleCanvas)
+        CopyCanvasSettingsFrom(FindLevelCanvas(GetWorld()));
+
     Super::BeginPlay();
     Field.VoxelSize        = VoxelSize;
     Field.DisplaySmoothing = DisplaySmoothing;
@@ -464,6 +547,9 @@ void APTSculptVolume::Tick(float DeltaTime)
 
     // Animación de transición de turno (colapso + rebote). Escala el actor entero (mesh + colisión).
     TickTurnAnim(DeltaTime);
+
+    // Build Battle: qué lienzo se ve en esta máquina (el tuyo / el exhibido) y que no choquen.
+    UpdateBuildBattlePresence();
 
     // Apagar la fuente de partículas cuando pasa un ratito sin sellar (soltaste el click). No se
     // desactiva de golpe al soltar para que la "fuente" no corte seca; se deja terminar el chorro.

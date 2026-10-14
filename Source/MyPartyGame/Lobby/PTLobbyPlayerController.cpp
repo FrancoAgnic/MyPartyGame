@@ -297,6 +297,19 @@ void APTLobbyPlayerController::PTSolo()
     Server_RequestStartGame(); // chequea bIsHost adentro y hace TravelToGame
 }
 
+void APTLobbyPlayerController::PTBuildBattle()
+{
+    // DEV: alterna el modo de la próxima partida (lo mismo que el botón "Modo" del panel de ajustes).
+    UPTGameInstance* GI = GetGameInstance<UPTGameInstance>();
+    APTLobbyGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<APTLobbyGameMode>() : nullptr;
+    if (!GI || !GM) { UE_LOG(LogTemp, Warning, TEXT("[BuildBattle] Solo el host puede cambiar el modo.")); return; }
+    EPTGameType& Type = GI->PendingMatchSettings.GameType;
+    Type = (Type == EPTGameType::BuildBattle) ? EPTGameType::Classic : EPTGameType::BuildBattle;
+    GM->SyncMatchSettingsToState(); // que los clientes lo vean
+    UE_LOG(LogTemp, Log, TEXT("[BuildBattle] Modo de la próxima partida: %s"),
+        Type == EPTGameType::BuildBattle ? TEXT("Build Battle") : TEXT("Clasico"));
+}
+
 void APTLobbyPlayerController::Client_PrepareModMap_Implementation(const FString& ModId, const FString& MapPath)
 {
     // (Cliente) montar el pak del mapa que eligió el host. Si no lo tiene, suscribir+bajar y pollear.

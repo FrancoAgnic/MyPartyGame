@@ -30,7 +30,11 @@ APTSculptGameMode::APTSculptGameMode()
 void APTSculptGameMode::InitGameState()
 {
     Super::InitGameState();
-    if (APTSculptGameState* G = GS()) G->bLocalParty = IsLocalPartyGame();
+    if (APTSculptGameState* G = GS())
+    {
+        G->bLocalParty  = IsLocalPartyGame();
+        G->bBuildBattle = IsBuildBattle(); // ya en la espera, para que el HUD anuncie el modo
+    }
 }
 
 void APTSculptGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -137,8 +141,7 @@ void APTSculptGameMode::PostLogin(APlayerController* NewPlayer)
         {
             APTSculptPlayerController* PC = WeakPC.Get();
             if (!PC || !GetWorld()) return;
-            if (APTSculptVolume* Vol = Cast<APTSculptVolume>(
-                    UGameplayStatics::GetActorOfClass(GetWorld(), APTSculptVolume::StaticClass())))
+            if (APTSculptVolume* Vol = APTSculptVolume::FindLevelCanvas(GetWorld())) // el cubo del nivel, no un lienzo de Build Battle
             {
                 TArray<uint8> Blob; Vol->SaveSnapshot(Blob); // geometría + pintura
                 if (Blob.Num() > 0) PC->SendSculptSnapshot(Blob);
@@ -275,6 +278,12 @@ void APTSculptGameMode::StartGame()
     G->CurrentSculptor  = nullptr;       // el primer turno elige escultor al azar
     G->CurrentRound     = 1;
     G->TotalRounds      = NumRounds;
+
+    // Build Battle: una ronda = una palabra que esculpen todos a la vez (ver PTSculptGameMode_BuildBattle.cpp).
+    G->bBuildBattle = IsBuildBattle();
+    if (G->bBuildBattle) { StartBuildRound(); return; }
+    DestroyBuildCanvases(); // por si se cambió de modo entre partidas (comando dev)
+
     TurnsLeftThisRound  = IsAudienceGame() ? 1 : Players.Num(); // una ronda = todos esculpen una vez (audiencia: una palabra)
 
     // Primer turno (o "Jugar de nuevo"): sin colapso previo → limpiar el lienzo de una (instantáneo).
@@ -292,6 +301,8 @@ void APTSculptGameMode::GoToWaiting()
     APTSculptGameState* G = GS();
     if (!G) return;
     GetWorldTimerManager().ClearTimer(PhaseTimer);
+    GetWorldTimerManager().ClearTimer(BuildBotTimer);
+    DestroyBuildCanvases(); // Build Battle: la ronda en curso se descarta
     G->TurnPhase         = EPTTurnPhase::WaitingForPlayers;
     G->CurrentSculptor   = nullptr;
     G->MaskedWords.Reset();
@@ -506,6 +517,7 @@ void APTSculptGameMode::EndGame()
     if (!G) return;
 
     GetWorldTimerManager().ClearTimer(PhaseTimer);
+    GetWorldTimerManager().ClearTimer(BuildBotTimer);
     G->TurnPhase         = EPTTurnPhase::GameOver;
     G->CurrentSculptor   = nullptr;
     G->MaskedWords.Reset();
@@ -634,7 +646,8 @@ void APTSculptGameMode::HandleChat(APTPlayerState* Sender, const FString& Messag
     const FString Name = Sender->GetPlayerName();
 
     // Durante el dibujo: detectar aciertos y bloquear que la palabra aparezca en el chat.
-    if (G && G->TurnPhase == EPTTurnPhase::Drawing && CurrentWord.IsValidEntry())
+    // (Build Battle no: la palabra la saben todos y nadie adivina.)
+    if (G && G->TurnPhase == EPTTurnPhase::Drawing && CurrentWord.IsValidEntry() && !G->IsBuildBattle())
     {
         const bool bEligibleGuesser = (Sender != G->CurrentSculptor && !Sender->bHasGuessedThisTurn && !Sender->bIsDevSpectator);
 

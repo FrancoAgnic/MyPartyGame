@@ -15,7 +15,28 @@ enum class EPTTurnPhase : uint8
     ChoosingWord      UMETA(DisplayName="Eligiendo palabra"),
     Drawing           UMETA(DisplayName="Esculpiendo"),
     TurnEnd           UMETA(DisplayName="Fin de turno"),
-    GameOver          UMETA(DisplayName="Fin de la partida")
+    GameOver          UMETA(DisplayName="Fin de la partida"),
+    // ── Build Battle (prototipo). Se esculpe en Drawing (todos a la vez); después vienen estas dos. ──
+    // OJO: agregar siempre al final (TurnPhase se replica como uint8).
+    Showcase          UMETA(DisplayName="Exhibición y votación"),
+    RoundResults      UMETA(DisplayName="Resultados de la ronda")
+};
+
+// Resultado de UNA escultura en una ronda de Build Battle. Se replica recién al cerrar la votación de la
+// ronda (mientras se vota nadie ve los votos).
+USTRUCT(BlueprintType)
+struct FPTBuildBattleResult
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category="BuildBattle") APTPlayerState* Player = nullptr;
+    // Nombre guardado aparte: si el jugador se fue antes de los resultados, igual aparece en la tabla.
+    UPROPERTY(BlueprintReadOnly, Category="BuildBattle") FString Name;
+    // Promedio de los votos (1..5). 0 = nadie la votó.
+    UPROPERTY(BlueprintReadOnly, Category="BuildBattle") float AvgStars = 0.f;
+    UPROPERTY(BlueprintReadOnly, Category="BuildBattle") int32 NumVotes = 0;
+    // Puntos que sumó en la ronda.
+    UPROPERTY(BlueprintReadOnly, Category="BuildBattle") int32 Points = 0;
 };
 
 // Tipo de línea de chat, para que el HUD la formatee:
@@ -114,7 +135,37 @@ public:
 
     // ¿Este PlayerState puede esculpir en el turno actual? El escultor del turno, o en modo local la
     // PlayerState de la TV (el joystick esculpe por el escultor, que solo existe en su celular).
+    // Build Battle: mientras se esculpe, TODOS los jugadores (cada uno en su lienzo).
     bool IsActingSculptor(const APlayerState* PS) const;
+
+    // ── Build Battle (prototipo) ────────────────────────────────────────────
+    // Todos esculpen la misma palabra a la vez, cada uno en SU lienzo (copias del cubo del nivel, apiladas
+    // en el mismo lugar: cada máquina muestra solo el que corresponde). Después se exhibe cada escultura
+    // y se vota; los votos se ven recién al cerrar la votación de la ronda.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="BuildBattle")
+    bool bBuildBattle = false;
+
+    UFUNCTION(BlueprintPure, Category="BuildBattle")
+    bool IsBuildBattle() const { return bBuildBattle; }
+
+    // Escultura en exhibición (Showcase) o la ganadora de la ronda (RoundResults).
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="BuildBattle")
+    class APTSculptVolume* BBShowcaseVolume = nullptr;
+
+    // "Escultura 2 de 5" (1-based) durante la exhibición.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="BuildBattle") int32 BBShowcaseIndex = 0;
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="BuildBattle") int32 BBShowcaseCount = 0;
+
+    // Tabla de la ronda (ordenada, la ganadora primero). Vacía hasta que cierra la votación.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="BuildBattle")
+    TArray<FPTBuildBattleResult> BBRoundResults;
+
+    /** Lienzo del jugador LOCAL en esta ronda (el server lo spawnea con su controller de dueño, y el dueño
+     *  replica → solo SU máquina sabe cuál es el suyo). null si no tiene (espectador / entró a mitad de ronda). */
+    class APTSculptVolume* GetLocalBuildCanvas() const;
+
+    /** ¿La escultura en exhibición es la del jugador local? (no puede votarse a sí mismo) */
+    bool IsLocalShowcaseOwn() const;
 
     // El HUD (BP) se suscribe para redibujar cuando cambia la fase.
     UPROPERTY(BlueprintAssignable, Category="Game")

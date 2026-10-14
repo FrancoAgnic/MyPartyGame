@@ -13,6 +13,11 @@
 #include "Components/Image.h"
 #include "../Mods/PTWordPackSubsystem.h" // FPTWordPack (miniatura del banco)
 #include "../Mods/PTMapModSubsystem.h"   // FPTMapMod (miniatura del mapa)
+#include "../UI/PTWidgetUtils.h"          // etiqueta del botón de modo
+#include "Blueprint/WidgetTree.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
+#include "Brushes/SlateRoundedBoxBrush.h" // estilo del botón de modo creado por código
 #include "ImageUtils.h"                   // ImportFileAsTexture2D / ImportBufferAsTexture2D
 #include "Misc/Paths.h"
 #include "HttpModule.h"
@@ -32,6 +37,9 @@ bool UPTGameSettingsWidget::Initialize()
     if (RevealPlus)    RevealPlus->OnClicked.AddDynamic(this, &UPTGameSettingsWidget::OnRevealPlus);
     if (FriendsOnlyCheckbox) FriendsOnlyCheckbox->OnCheckStateChanged.AddDynamic(this, &UPTGameSettingsWidget::OnFriendsOnlyChanged);
     if (LibraryButton) LibraryButton->OnClicked.AddDynamic(this, &UPTGameSettingsWidget::OnLibraryClicked);
+    // Modo de juego (Build Battle es un prototipo): si el WBP no trae su botón, se crea uno por código.
+    if (!GameModeButton && !IsDesignTime()) GameModeButton = CreateGameModeButton();
+    if (GameModeButton) GameModeButton->OnClicked.AddDynamic(this, &UPTGameSettingsWidget::OnGameModeClicked);
     if (CloseButton)         CloseButton->OnClicked.AddDynamic(this, &UPTGameSettingsWidget::OnCloseClicked);
     if (Btn_Back)            Btn_Back->OnClicked.AddDynamic(this, &UPTGameSettingsWidget::OnCloseClicked);
     if (CloseSettingsButton) CloseSettingsButton->OnClicked.AddDynamic(this, &UPTGameSettingsWidget::OnCloseClicked);
@@ -204,6 +212,55 @@ void UPTGameSettingsWidget::OnFriendsOnlyChanged(bool bIsChecked)
     PushSettingsToState(); // que los clientes vean el cambio de "Sala privada"
 }
 
+UButton* UPTGameSettingsWidget::CreateGameModeButton()
+{
+    // La Biblioteca está dentro de cajas anidadas (botón → ScaleBox → fila horizontal → caja vertical). El botón
+    // de modo va en una fila NUEVA justo debajo: después del primer ancestro que vive en una caja vertical.
+    UWidget* Row = LibraryButton;
+    while (Row && !(Row->GetParent() && Row->GetParent()->IsA<UVerticalBox>())) Row = Row->GetParent();
+    UVerticalBox* Box = Row ? Cast<UVerticalBox>(Row->GetParent()) : nullptr;
+    if (!Box || !WidgetTree)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[BuildBattle] No encontré dónde poner el botón de modo en %s: agregá un Button 'GameModeButton' en el WBP."),
+            *GetClass()->GetName());
+        return nullptr;
+    }
+
+    UButton* Btn = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("GameModeButton"));
+    FButtonStyle Style = Btn->GetStyle();
+    const FLinearColor Fill(0.35f, 0.20f, 0.45f, 1.f);
+    Style.Normal  = FSlateRoundedBoxBrush(Fill, 10.f);
+    Style.Hovered = FSlateRoundedBoxBrush(Fill * 1.3f, 10.f);
+    Style.Pressed = FSlateRoundedBoxBrush(Fill * 0.8f, 10.f);
+    Style.NormalPadding  = FMargin(18.f, 6.f);
+    Style.PressedPadding = FMargin(18.f, 6.f);
+    Btn->SetStyle(Style);
+
+    UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>();
+    FSlateFontInfo Font = Label->GetFont();
+    Font.Size = 16;
+    Font.TypefaceFontName = FName(TEXT("Bold"));
+    Label->SetFont(Font);
+    Label->SetColorAndOpacity(FSlateColor(FLinearColor(1.f, 0.97f, 0.92f, 1.f)));
+    Btn->AddChild(Label);
+
+    if (UVerticalBoxSlot* S = Cast<UVerticalBoxSlot>(Box->InsertChildAt(Box->GetChildIndex(Row) + 1, Btn)))
+    {
+        S->SetHorizontalAlignment(HAlign_Center);
+        S->SetPadding(FMargin(0.f, 8.f, 0.f, 4.f));
+    }
+    return Btn;
+}
+
+void UPTGameSettingsWidget::OnGameModeClicked()
+{
+    UPTGameInstance* GI = GetGI();
+    if (!GI) return;
+    EPTGameType& Type = GI->PendingMatchSettings.GameType;
+    Type = (Type == EPTGameType::BuildBattle) ? EPTGameType::Classic : EPTGameType::BuildBattle;
+    RefreshUI(); // etiqueta + replicar a los clientes
+}
+
 void UPTGameSettingsWidget::OnLibraryClicked()
 {
     // El WBP_WordPack vive en el HUD; le pedimos que lo abra.
@@ -219,6 +276,9 @@ void UPTGameSettingsWidget::RefreshUI()
     if (TurnTimeText) TurnTimeText->SetText(FText::FromString(FString::Printf(TEXT("%d s"), FMath::RoundToInt(S.TurnDuration))));
     if (RoundsText)   RoundsText->SetText(FText::FromString(FString::Printf(TEXT("%d"), S.NumRounds)));
     if (RevealText)   RevealText->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::RoundToInt(S.RevealFraction * 100.f))));
+    if (GameModeButton)
+        PTWidgetUtils::SetButtonLabel(GameModeButton, PTText::Get(
+            S.GameType == EPTGameType::BuildBattle ? TEXT("GS_MODE_BB") : TEXT("GS_MODE_CLASSIC")));
 
     RefreshPackTexts();
 }

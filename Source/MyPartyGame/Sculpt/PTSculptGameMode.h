@@ -152,6 +152,34 @@ public:
     FString LocalParty_GetSecretWordFor(const APTPlayerState* PS) const;
     int32 LocalParty_GetMinPlayers() const { return MinToStart(); }
 
+    // ── BUILD BATTLE (prototipo; lógica en PTSculptGameMode_BuildBattle.cpp) ──────────────────────
+    // Todos esculpen la MISMA palabra a la vez durante TurnDuration, cada uno en su lienzo. Después se
+    // exhibe cada escultura (anónima, en orden al azar) y todos la votan de 1 a 5 sin ver los votos. Al
+    // cerrar la votación de la ronda se revela la tabla y cada uno suma puntos según su promedio.
+    /** ¿La partida es Build Battle? Lo elige el host en el lobby. Nunca en modo local ni en el tutorial. */
+    bool IsBuildBattle() const;
+    // Segundos que se exhibe cada escultura para votarla.
+    UPROPERTY(EditDefaultsOnly, Category="Game|BuildBattle") float ShowcaseDuration = 15.f;
+    // Si ya votaron todos (o no hay quién vote), la exhibición se acorta: quedan ShowcaseAllVotedGrace
+    // segundos, pero nunca menos de ShowcaseMinDuration desde que apareció (para poder mirarla).
+    UPROPERTY(EditDefaultsOnly, Category="Game|BuildBattle") float ShowcaseAllVotedGrace = 2.f;
+    UPROPERTY(EditDefaultsOnly, Category="Game|BuildBattle") float ShowcaseMinDuration = 5.f;
+    // Pausa con la tabla de la ronda (la ganadora queda en exhibición).
+    UPROPERTY(EditDefaultsOnly, Category="Game|BuildBattle") float RoundResultsDuration = 10.f;
+    // Puntos de una escultura votada 5 por todos. Escala con el promedio: 3.5 → 70.
+    UPROPERTY(EditDefaultsOnly, Category="Game|BuildBattle") int32 BuildBattleMaxPoints = 100;
+    // DEV (comando PTBBBots): cada cuánto agrega arcilla cada bot mientras se esculpe.
+    UPROPERTY(EditDefaultsOnly, Category="Game|BuildBattle") float BuildBotStampInterval = 0.25f;
+
+    /** [server] Lienzo de este jugador en la ronda actual. null si no tiene (entró a mitad de ronda). */
+    APTSculptVolume* GetBuildCanvasFor(const APTPlayerState* PS) const;
+    /** [server] Voto (1..5) a la escultura en exhibición. Se puede cambiar hasta que pasa a la próxima. */
+    void HandleBuildBattleVote(APTPlayerState* Voter, int32 Stars);
+    /** DEV: agrega N jugadores bot (sin controller) que esculpen y votan al azar. Para probar solo. */
+    void AddBuildBattleBots(int32 Count);
+    /** DEV: alterna Clásico/Build Battle. Aplica a la próxima partida (o ya, si está esperando / terminó). */
+    EPTGameType ToggleGameType();
+
 public:
     /** [server] Manda la palabra secreta actual a TODOS los dev-espectadores (para verla al espectar
      *  al escultor). Word vacío = limpiar. */
@@ -256,4 +284,37 @@ private:
     static void ScheduleRevealsFor(const FString& Word, float Fraction, TArray<int32>& OutQueue);
     static FString Normalize(const FString& In); // minúsculas, sin tildes, trim
     void SeedDefaultWords();
+
+    // ── Build Battle (estado del server) ──
+    struct FBuildEntry
+    {
+        TWeakObjectPtr<APTPlayerState>  Author;
+        TWeakObjectPtr<APTSculptVolume> Canvas;
+        FString                         AuthorName; // por si se va antes de los resultados
+        TMap<TWeakObjectPtr<APTPlayerState>, int32> Votes; // votante → estrellas (1..5). No se replica.
+    };
+    TArray<FBuildEntry> BuildEntries;  // una por jugador que esculpe en esta ronda
+    TArray<int32>       ShowcaseOrder; // índices de BuildEntries en orden de exhibición (al azar)
+    int32               ShowcasePos = 0;
+    double              ShowcaseStartTime = 0.0; // tiempo de server en que apareció la escultura actual
+
+    void StartBuildRound();      // palabra nueva + un lienzo por jugador + reloj de esculpido
+    void EndBuildPhase();        // se acabó el tiempo: arma el orden de exhibición
+    void ShowCurrentSculpture(); // exhibe ShowcaseOrder[ShowcasePos] y abre la votación
+    void AdvanceShowcase();
+    void RevealRoundResults();   // cuenta votos, suma puntos y publica la tabla
+    void AdvanceBuildRound();    // próxima ronda o fin de la partida
+    void DestroyBuildCanvases();
+    APTSculptVolume* SpawnBuildCanvas(APTPlayerState* PS);
+    /** Votantes que todavía no votaron la escultura E (todos los activos menos el autor). */
+    int32 CountPendingVoters(const FBuildEntry& E) const;
+    /** Si ya no falta nadie por votar la escultura en exhibición, acorta su reloj (ver ShowcaseAllVotedGrace). */
+    void MaybeShortenShowcase();
+
+    // Bots de prueba (DEV): PlayerStates sin controller, como los jugadores del celular.
+    TArray<TWeakObjectPtr<APTPlayerState>> BuildBots;
+    TMap<TWeakObjectPtr<APTPlayerState>, FVector> BuildBotCursor; // dónde está "esculpiendo" cada bot
+    FTimerHandle BuildBotTimer;
+    int32        NextBuildBotId = 1;
+    void BuildBotsSculptTick();
 };

@@ -56,6 +56,7 @@ void APTLobbyGameMode::SyncMatchSettingsToState()
     if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
     {
         const FPTMatchSettings& S = GI->PendingMatchSettings;
+        PTGS->MatchGameType       = S.GameType;
         PTGS->MatchTurnDuration   = S.TurnDuration;
         PTGS->MatchNumRounds      = S.NumRounds;
         PTGS->MatchRevealFraction = S.RevealFraction;

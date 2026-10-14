@@ -4,6 +4,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/GameState.h"
+#include "../PTMatchSettings.h" // EPTGameType
 #include "PTGameState.generated.h"
 
 UENUM(BlueprintType)
@@ -56,6 +57,8 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") int32   MatchNumRounds      = 3;
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") float   MatchRevealFraction = 0.3f;
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") bool    bMatchFriendsOnly   = false;
+    // Modo de juego elegido (Clásico / Build Battle). Los clientes lo ven en su panelcito del lobby.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") EPTGameType MatchGameType = EPTGameType::Classic;
     // Título del banco de palabras activo. Vacío = banco por defecto.
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Match") FString MatchWordPackTitle;
     // Id + URL de miniatura del banco activo (para que TODOS vean la miniatura en el lobby).

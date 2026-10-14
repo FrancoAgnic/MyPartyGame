@@ -1,4 +1,6 @@
 #include "PTSculptGameState.h"
+#include "PTSculptVolume.h"
+#include "EngineUtils.h" // TActorIterator
 #include "../Lobby/PTPlayerState.h"
 #include "../PTGameUserSettings.h"
 #include "../PTTextTable.h"
@@ -38,6 +40,26 @@ void APTSculptGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
     DOREPLIFETIME(APTSculptGameState, TotalRounds);
     DOREPLIFETIME(APTSculptGameState, bTurnEndedAllGuessed);
     DOREPLIFETIME(APTSculptGameState, bLocalParty);
+    DOREPLIFETIME(APTSculptGameState, bBuildBattle);
+    DOREPLIFETIME(APTSculptGameState, BBShowcaseVolume);
+    DOREPLIFETIME(APTSculptGameState, BBShowcaseIndex);
+    DOREPLIFETIME(APTSculptGameState, BBShowcaseCount);
+    DOREPLIFETIME(APTSculptGameState, BBRoundResults);
+}
+
+APTSculptVolume* APTSculptGameState::GetLocalBuildCanvas() const
+{
+    UWorld* W = GetWorld();
+    const APlayerController* PC = W ? W->GetFirstPlayerController() : nullptr;
+    if (!PC) return nullptr;
+    for (TActorIterator<APTSculptVolume> It(W); It; ++It)
+        if (It->IsBuildBattleCanvas() && It->GetOwner() == PC) return *It;
+    return nullptr;
+}
+
+bool APTSculptGameState::IsLocalShowcaseOwn() const
+{
+    return BBShowcaseVolume && BBShowcaseVolume == GetLocalBuildCanvas();
 }
 
 float APTSculptGameState::GetTurnSecondsRemaining() const
@@ -49,7 +71,7 @@ float APTSculptGameState::GetTurnSecondsRemaining() const
 
 bool APTSculptGameState::IsLocalPlayerSculptor() const
 {
-    if (!CurrentSculptor) return false;
+    if (!CurrentSculptor && !bBuildBattle) return false; // Build Battle no tiene "el" escultor: esculpen todos
     // Cliente: hay un solo PlayerController local; su PlayerState es el del jugador local.
     if (const APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
         return IsActingSculptor(PC->PlayerState);
@@ -58,6 +80,11 @@ bool APTSculptGameState::IsLocalPlayerSculptor() const
 
 bool APTSculptGameState::IsActingSculptor(const APlayerState* PS) const
 {
+    if (bBuildBattle)
+    {
+        const APTPlayerState* PT = Cast<APTPlayerState>(PS);
+        return TurnPhase == EPTTurnPhase::Drawing && PT && !PT->bIsDevSpectator && !PT->IsOnlyASpectator();
+    }
     if (!CurrentSculptor || !PS) return false;
     if (PS == CurrentSculptor) return true;
     const APTPlayerState* PT = Cast<APTPlayerState>(PS);

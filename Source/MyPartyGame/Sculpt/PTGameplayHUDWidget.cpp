@@ -828,6 +828,8 @@ void UPTGameplayHUDWidget::RefreshTick()
     // aplica (necesita ver las 3 palabras para elegir).
     const bool bGuessPreview = PC && PC->IsDevGuessPreview() && bSculptor;
     if (bGuessPreview && G->TurnPhase == EPTTurnPhase::Drawing) bRevealWord = false;
+    // Build Battle: la palabra la saben todos y llega completa en la máscara → texto plano, sin "pistas" verdes.
+    if (G->IsBuildBattle()) bRevealWord = false;
 
     // ── Cartel de TEMA: visible para los que ADIVINAN mientras el escultor elige la palabra; el escultor
     //    (o quien lo especta) NO lo ve. La animación (escala/opacidad) la hace NativeTick por frame. ──
@@ -879,6 +881,8 @@ void UPTGameplayHUDWidget::RefreshTick()
         else                      WordText = G->MaskedWord;
         break;
     case EPTTurnPhase::TurnEnd:
+    case EPTTurnPhase::Showcase:     // Build Battle: la palabra de la ronda sigue arriba mientras se vota
+    case EPTTurnPhase::RoundResults:
         WordText = G->MaskedWord; // ya revelada
         break;
     case EPTTurnPhase::WaitingForPlayers:
@@ -1444,6 +1448,9 @@ void UPTGameplayHUDWidget::UpdateGameplaySounds(APTSculptGameState* G)
     {
         StopCountdownSound(); // cortar cualquier clip de countdown de la fase anterior
 
+        // Build Battle: se acabó el tiempo de esculpir → a votar.
+        if (PrevSoundPhase == EPTTurnPhase::Drawing && Phase == EPTTurnPhase::Showcase && SndTimeUp)
+            UGameplayStatics::PlaySound2D(this, SndTimeUp);
         if (PrevSoundPhase == EPTTurnPhase::Drawing && Phase == EPTTurnPhase::TurnEnd)
         {
             if (G->bTurnEndedAllGuessed) { if (SndAllGuessed) UGameplayStatics::PlaySound2D(this, SndAllGuessed); }

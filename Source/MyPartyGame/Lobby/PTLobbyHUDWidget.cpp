@@ -358,7 +358,11 @@ void UPTLobbyHUDWidget::RefreshSettingsView()
     if (SV_RoundsText)
     {
         FFormatOrderedArguments Args; Args.Add(FText::AsNumber(PTGS->MatchNumRounds));
-        SV_RoundsText->SetText(PTText::Format(TEXT("SV_ROUNDS"), Args));
+        FText Rounds = PTText::Format(TEXT("SV_ROUNDS"), Args);
+        // Build Battle (prototipo): el panelcito no tiene renglón propio para el modo → va junto a las rondas.
+        if (PTGS->MatchGameType == EPTGameType::BuildBattle)
+            Rounds = FText::FromString(Rounds.ToString() + TEXT("  ·  ") + PTText::GetStr(TEXT("GS_MODE_BB")));
+        SV_RoundsText->SetText(Rounds);
     }
     if (SV_RevealText)
     {

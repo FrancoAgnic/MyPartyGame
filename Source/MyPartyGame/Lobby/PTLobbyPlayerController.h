@@ -72,6 +72,7 @@ public:
     UFUNCTION(Exec) void PTSpecSmooth(float N); // suavizado/lag de la cámara (bajo = más suave)
     UFUNCTION(Exec) void PTLocal();             // DEV: entrar al modo local (celulares + joystick) sin el botón
     UFUNCTION(Exec) void PTSolo();              // DEV: jugar solo → marca solo y arranca la partida ya
+    UFUNCTION(Exec) void PTBuildBattle();       // DEV (host): alterna el modo Clásico / Build Battle
     UFUNCTION(Exec) void PTMapMod(int32 Index); // DEV (mapas M1): monta el mod local #Index y viaja a su mapa
     UFUNCTION(Exec) void PTExportSkin(int32 N);  // DEV: exporta la SKIN equipada a DefaultSkins/default_skin_<N>.bin (para las skins default)
 

@@ -385,6 +385,12 @@ public:
     UFUNCTION(Server, Reliable) void Server_BeginStroke();
     UFUNCTION(Server, Reliable) void Server_EndStroke();
 
+    // ── Build Battle (prototipo; ver PTSculptPlayerController_BuildBattle.cpp) ──
+    /** Voto (1..5) a la escultura en exhibición (teclas 1-5). El server lo guarda sin difundirlo. */
+    UFUNCTION(Server, Reliable) void Server_BuildBattleVote(int32 Stars);
+    /** Voto que mandó el jugador local a la escultura en exhibición (0 = todavía no votó). */
+    int32 GetBuildBattleVote() const { return BBMyVote; }
+
     /** Palabra secreta del turno y las 3 opciones (solo se setean en el cliente del
      *  escultor). El HUD puede leerlas directo, o suscribirse a los delegates de abajo. */
     UPROPERTY(BlueprintReadOnly, Category="Game")
@@ -418,6 +424,11 @@ public:
     UFUNCTION(Exec) void PTPropStats();         // DEV: diagnóstico de props (assets/instancias/triángulos/memoria)
     UFUNCTION(Exec) void PTNarrowBand();        // DEV: togglea el refinamiento en banda de superficie (A/B del costo de sello)
     UFUNCTION(Exec) void PTGuessPreview();      // DEV/TikTok "¿adivinás?": el escultor ve SU palabra CON FILTRO
+    UFUNCTION(Exec) void PTBuildBattle();       // DEV (host): alterna Clásico / Build Battle
+    UFUNCTION(Exec) void PTBBBots(int32 N);     // DEV (host): agrega N bots que esculpen y votan al azar
+    UFUNCTION(Exec) void PTBBVote(int32 Stars); // DEV: vota la escultura en exhibición (igual que las teclas 1-5)
+    UFUNCTION(Exec) void PTBBScribble();        // DEV: unos sellos al azar en tu lienzo por la vía normal (probar en red sin mouse)
+    UFUNCTION(Exec) void PTMatchTime(int32 Seconds, int32 Rounds); // DEV (host): tiempo de turno y rondas de la próxima partida
                                                 //   (máscara + letras revelándose), como un adivinador, mientras esculpe
 
     /** DEV/TikTok: true = al escultor local se le muestra su palabra con el filtro de adivinador (no revelada).
@@ -513,6 +524,19 @@ private:
     // pone en null al destruirse el actor.
     UPROPERTY()
     APTSculptVolume* Volume = nullptr;
+    /** [server] Volumen donde caen los RPC de esculpido de ESTE jugador: su lienzo en Build Battle (nunca el
+     *  de otro), o el cubo del nivel en el clásico. */
+    APTSculptVolume* ResolveServerVolume();
+
+    // ── Build Battle (local) ──
+    UPROPERTY() class UPTBuildBattleWidget* BuildBattleWidget = nullptr;
+    int32 BBMyVote = 0;              // voto local a la escultura en exhibición (para marcarlo en el widget)
+    int32 BBVoteShowcaseIndex = -1;  // a qué exhibición corresponde BBMyVote (se resetea al cambiar)
+    FString BBLastLogKey;            // log de estado local en cada cambio de fase (para depurar el prototipo)
+    int32   BBLogCountdown = 0;      // el log sale unos frames después (cuando los lienzos ya aplicaron su visibilidad)
+    void LogBuildBattleState(const class APTSculptGameState* G);
+    /** Cada frame (local): apunta Volume a tu lienzo, crea el widget y toma las teclas 1-5 para votar. */
+    void TickBuildBattle();
     UPROPERTY() class UPTLobbyEscapeMenuWidget* EscapeMenu = nullptr;
     void OnPausePressed();
     void OnOpenChat();
