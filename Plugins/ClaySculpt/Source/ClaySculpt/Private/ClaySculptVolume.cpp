@@ -1,5 +1,20 @@
 #include "ClaySculptVolume.h"
 
+#if WITH_EDITOR
+#include "MeshDescription.h"
+#include "StaticMeshAttributes.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/StaticMeshActor.h"
+#include "Components/StaticMeshComponent.h"
+#include "Materials/MaterialInterface.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "UObject/Package.h"
+#include "UObject/SavePackage.h"
+#include "Misc/PackageName.h"
+#include "Misc/MessageDialog.h"
+#include "ProceduralMeshComponent.h"
+#endif
+
 // ─── Constructor ─────────────────────────────────────────────────────────────
 AClaySculptVolume::AClaySculptVolume()
 {
@@ -239,3 +254,154 @@ void AClaySculptVolume::ClearAll()
 	if (Mesh) Mesh->ClearAllMeshSections();
 	TimeSinceRebuild = 0.f;
 }
+
+#if WITH_EDITOR
+void AClaySculptVolume::BakeToStaticMesh()
+{
+	if (!Mesh || Mesh->GetNumSections() == 0)
+	{
+		FMessageDialog::Open(EAppMsgType::Ok, NSLOCTEXT("ClaySculpt", "BakeEmpty",
+			"No hay nada esculpido para hornear."));
+		return;
+	}
+
+	// ── 1) Construir una MeshDescription a partir de las secciones del ProceduralMesh ──
+	FMeshDescription MeshDesc;
+	FStaticMeshAttributes Attrs(MeshDesc);
+	Attrs.Register();
+
+	TVertexInstanceAttributesRef<FVector2f> UVs = Attrs.GetVertexInstanceUVs();
+	UVs.SetNumChannels(1);
+	TVertexAttributesRef<FVector3f>       Positions   = Attrs.GetVertexPositions();
+	TVertexInstanceAttributesRef<FVector3f> InstNormals = Attrs.GetVertexInstanceNormals();
+	TVertexInstanceAttributesRef<FVector4f> InstColors  = Attrs.GetVertexInstanceColors();
+
+	const FPolygonGroupID PolyGroup = MeshDesc.CreatePolygonGroup();
+	Attrs.GetPolygonGroupMaterialSlotNames()[PolyGroup] = FName(TEXT("Clay"));
+
+	int32 TotalTris = 0;
+	for (int32 s = 0; s < Mesh->GetNumSections(); ++s)
+	{
+		const FProcMeshSection* Sec = Mesh->GetProcMeshSection(s);
+		if (!Sec || Sec->ProcIndexBuffer.Num() < 3) continue;
+
+		// Un VertexID por vértice de la sección (posición en espacio LOCAL, igual que el actor).
+		TArray<FVertexID> VtxIDs;
+		VtxIDs.Reserve(Sec->ProcVertexBuffer.Num());
+		for (const FProcMeshVertex& V : Sec->ProcVertexBuffer)
+		{
+			const FVertexID Vid = MeshDesc.CreateVertex();
+			Positions[Vid] = (FVector3f)V.Position;
+			VtxIDs.Add(Vid);
+		}
+
+		// Triángulos → polígonos (3 vertex-instances cada uno), copiando normal, color y UV.
+		for (int32 i = 0; i + 2 < Sec->ProcIndexBuffer.Num(); i += 3)
+		{
+			const uint32 I0 = Sec->ProcIndexBuffer[i];
+			const uint32 I1 = Sec->ProcIndexBuffer[i + 1];
+			const uint32 I2 = Sec->ProcIndexBuffer[i + 2];
+			if (!VtxIDs.IsValidIndex(I0) || !VtxIDs.IsValidIndex(I1) || !VtxIDs.IsValidIndex(I2)) continue;
+
+			TArray<FVertexInstanceID, TInlineAllocator<3>> Corners;
+			for (uint32 Idx : { I0, I1, I2 })
+			{
+				const FProcMeshVertex& V = Sec->ProcVertexBuffer[Idx];
+				const FVertexInstanceID Vi = MeshDesc.CreateVertexInstance(VtxIDs[Idx]);
+				InstNormals[Vi] = (FVector3f)V.Normal;
+				// El color de vértice se guarda LINEAL tal cual (el material lo lee lineal) → sin conversión sRGB.
+				InstColors[Vi]  = FVector4f(V.Color.R / 255.f, V.Color.G / 255.f, V.Color.B / 255.f, V.Color.A / 255.f);
+				UVs.Set(Vi, 0, FVector2f(V.UV0));
+				Corners.Add(Vi);
+			}
+			MeshDesc.CreatePolygon(PolyGroup, Corners);
+			++TotalTris;
+		}
+	}
+
+	if (TotalTris == 0)
+	{
+		FMessageDialog::Open(EAppMsgType::Ok, NSLOCTEXT("ClaySculpt", "BakeNoTris",
+			"La escultura no tiene triángulos válidos para hornear."));
+		return;
+	}
+
+	// ── 2) Nombre/paquete único en BakeFolder ──
+	FString BaseName = GetActorLabel();
+	BaseName = FPaths::MakeValidFileName(BaseName).Replace(TEXT(" "), TEXT("_"));
+	if (BaseName.IsEmpty()) BaseName = TEXT("ClaySculpt");
+	BaseName = TEXT("SM_") + BaseName;
+
+	FString Folder = BakeFolder;
+	if (!Folder.StartsWith(TEXT("/"))) Folder = TEXT("/Game/") + Folder;
+	Folder.RemoveFromEnd(TEXT("/"));
+
+	FString AssetName = BaseName;
+	FString PackageName = Folder / AssetName;
+	int32 Suffix = 1;
+	while (FPackageName::DoesPackageExist(PackageName))
+	{
+		AssetName = FString::Printf(TEXT("%s_%d"), *BaseName, Suffix++);
+		PackageName = Folder / AssetName;
+	}
+
+	UPackage* Package = CreatePackage(*PackageName);
+	if (!Package)
+	{
+		FMessageDialog::Open(EAppMsgType::Ok, NSLOCTEXT("ClaySculpt", "BakePkgFail",
+			"No se pudo crear el paquete del asset."));
+		return;
+	}
+
+	// ── 3) Crear el Static Mesh desde la MeshDescription ──
+	UStaticMesh* StaticMesh = NewObject<UStaticMesh>(Package, *AssetName, RF_Public | RF_Standalone);
+	StaticMesh->InitResources();
+	StaticMesh->SetLightingGuid();
+	UMaterialInterface* Mat = ClayMaterial ? ClayMaterial : Mesh->GetMaterial(0);
+	StaticMesh->GetStaticMaterials().Add(FStaticMaterial(Mat, FName(TEXT("Clay"))));
+
+	UStaticMesh::FBuildMeshDescriptionsParams BuildParams;
+	BuildParams.bBuildSimpleCollision = true;
+	BuildParams.bFastBuild = true;
+	TArray<const FMeshDescription*> Descs; Descs.Add(&MeshDesc);
+	StaticMesh->BuildFromMeshDescriptions(Descs, BuildParams);
+	StaticMesh->PostEditChange();
+
+	FAssetRegistryModule::AssetCreated(StaticMesh);
+	Package->MarkPackageDirty();
+
+	// Guardar a disco.
+	const FString FileName = FPackageName::LongPackageNameToFilename(PackageName, FPackageName::GetAssetPackageExtension());
+	FSavePackageArgs SaveArgs;
+	SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+	SaveArgs.SaveFlags = SAVE_NoError;
+	UPackage::SavePackage(Package, StaticMesh, *FileName, SaveArgs);
+
+	// ── 4) Opcional: reemplazar la escultura por un StaticMeshActor con la malla horneada ──
+	if (bSpawnActorOnBake)
+	{
+		if (UWorld* W = GetWorld())
+		{
+			FActorSpawnParameters SP;
+			SP.Name = MakeUniqueObjectName(W->GetCurrentLevel(), AStaticMeshActor::StaticClass(), *AssetName);
+			AStaticMeshActor* SMA = W->SpawnActor<AStaticMeshActor>(GetActorLocation(), GetActorRotation(), SP);
+			if (SMA)
+			{
+				SMA->SetActorLabel(AssetName);
+				if (UStaticMeshComponent* SMC = SMA->GetStaticMeshComponent())
+				{
+					SMC->SetMobility(EComponentMobility::Movable);
+					SMC->SetStaticMesh(StaticMesh);
+					if (Mat) SMC->SetMaterial(0, Mat);
+				}
+				SMA->SetActorScale3D(GetActorScale3D());
+			}
+		}
+		SetActorHiddenInGame(true);
+		if (Mesh) Mesh->SetVisibility(false);
+	}
+
+	FMessageDialog::Open(EAppMsgType::Ok, FText::FromString(
+		FString::Printf(TEXT("Horneado:\n%s\n\n%d triángulos."), *PackageName, TotalTris)));
+}
+#endif // WITH_EDITOR

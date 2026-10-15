@@ -13,6 +13,12 @@
 	"CanContainContent": true,
 	"IsBetaVersion": true,
 	"Installed": false,
+	"Plugins": [
+		{
+			"Name": "ProceduralMeshComponent",
+			"Enabled": true
+		}
+	],
 	"Modules": [
 		{
 			"Name": "ClaySculpt",

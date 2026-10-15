@@ -58,6 +58,20 @@ public:
 
 	UProceduralMeshComponent* GetMesh() const { return Mesh; }
 
+#if WITH_EDITORONLY_DATA
+	/** Carpeta del Content Browser donde se guardan los Static Mesh horneados. */
+	UPROPERTY(EditAnywhere, Category="Clay Sculpt|Bake") FString BakeFolder = TEXT("/Game/ClaySculpt");
+	/** Si está activo, al hornear se spawnea un StaticMeshActor con la malla y se oculta este volumen. */
+	UPROPERTY(EditAnywhere, Category="Clay Sculpt|Bake") bool bSpawnActorOnBake = true;
+#endif
+
+#if WITH_EDITOR
+	/** Hornea la escultura actual a un Static Mesh (asset en BakeFolder) conservando el color de vértice, y
+	 *  (opcional) reemplaza esta escultura por un StaticMeshActor con esa malla. Botón en el panel Details. */
+	UFUNCTION(CallInEditor, Category="Clay Sculpt|Bake")
+	void BakeToStaticMesh();
+#endif
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
