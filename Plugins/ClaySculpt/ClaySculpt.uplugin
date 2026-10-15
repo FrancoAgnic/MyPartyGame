@@ -1,0 +1,28 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1",
+	"FriendlyName": "Clay Sculpt",
+	"Description": "SDF / Surface-Nets clay sculpting (Add/Erase/Smooth + vertex color) with an editor tool to model scenery and bake to Static Mesh. Reusable across projects.",
+	"Category": "Modeling",
+	"CreatedBy": "",
+	"CreatedByURL": "",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"CanContainContent": true,
+	"IsBetaVersion": true,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "ClaySculpt",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "ClaySculptEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		}
+	]
+}

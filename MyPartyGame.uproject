@@ -62,6 +62,14 @@
 		{
 			"Name": "GameplayDebugger",
 			"Enabled": false
+		},
+		{
+			"Name": "ProceduralMeshComponent",
+			"Enabled": true
+		},
+		{
+			"Name": "ClaySculpt",
+			"Enabled": true
 		}
 	]
 }
