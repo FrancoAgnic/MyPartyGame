@@ -48,3 +48,8 @@ Packaged/
 /Releases/
 /MapMods_Output/
 /MapMods/
+
+# Dependencias de herramientas (node): basura local, NO versionar.
+# outputs/node_modules es un symlink al cache de Codex (~8500 archivos) que inflaba el diff.
+node_modules/
+outputs/node_modules/
