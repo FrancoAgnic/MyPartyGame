@@ -1,29 +1,37 @@
 # Game Base — roadmap (rama `game-base`)
 
-Objetivo: una **base técnica online reutilizable**, sacada de sculpturillo (`main`) pero **sin nada de
-sculpturillo**. Debe poder: crear sala, que otros se unan, invitar por el juego y por Steam, lobby diegético
-(personaje + escena) con **Listo** → countdown → **arranca la partida en otro nivel** (vacío de gameplay).
+Objetivo: un **TEMPLATE / base técnica online reutilizable**, forkeada de sculpturillo (`main`). Conserva
+TODO el código (workshop, locker, tutorial, modo local, head-sculpt, etc.) pero **arranca limpio** como pura
+base online: crear sala, que otros se unan, invitar por el juego y por Steam, lobby diegético (personaje +
+escena) con **Listo** → countdown → **arranca la partida en otro nivel** (`GameLevel` vacío). Cada juego que
+forkee esta base PRENDE/REEMPLAZA las piezas que necesite.
 
-Regla: forkear juegos NUEVOS desde `game-base`; nunca commitear un juego de vuelta a esta base.
+Enfoque elegido: **B (ocultar por comportamiento, no borrar)**. Las features de sculpturillo quedan en el
+proyecto detrás de flags, apagadas por defecto.
 
 ## Fases
-- [x] **F0** — rama `game-base` desde `main` (base multiplayer actual).
-- [~] **F1 — Funcional primero**: la partida viaja a un `GameLevel` vacío en vez del nivel de esculpir.
-  - [x] `PTLobbyGameMode::GameMapPath` → `/Game/Template/levels/GameLevel`.
-  - [ ] (editor) crear `Content/Template/levels/GameLevel`: nivel básico con piso + PlayerStart, World
-        Settings → GameMode = `MyPartyGameGameMode` (tercera persona del template). Guardar.
-  - [ ] probar: crear sala → Listo → arranca en GameLevel con el personaje.
-- [ ] **F2 — Pelar el gameplay de esculpir** (`Sculpt/`): reemplazar `PTSculptGameMode` por un GameMode base
-      mínimo; borrar SVO, volume, HUD de gameplay de sculpt, y sus referencias.
-- [ ] **F3 — Pelar módulos de sculpturillo**: `Tutorial/`, `LocalParty/` (audiencia), `Mods/` (workshop maps),
-      `PTWordBank`, locker, head-sculpt del lobby. Desenganchar de `PTGameInstance`.
-- [ ] **F4 — Limpiar menús/UI**: dejar crear/unir/código/invitar; sacar Workshop, temáticas, Locker,
-      Level Creator, y toda la UI específica de sculpt.
-- [ ] **F5 — Invitaciones de Steam nativas**: activar (en sculpturillo estaban planeadas, no terminadas) +
-      mantener las in-game.
-- [ ] **F6 — Identidad**: nombre del módulo/proyecto, íconos, y limpieza final de `Content`.
+- [x] **F0** — rama `game-base` desde `main`.
+- [x] **F1** — la partida viaja a `GameLevel` en vez del nivel de esculpir (`PTLobbyGameMode::GameMapPath`).
+  - [ ] (editor) crear `Content/Template/levels/GameLevel`: piso + PlayerStart, World Settings → GameMode =
+        `MyPartyGameGameMode`. Guardar.
+- [x] **F2 — Base arranca limpia (flags)**:
+  - [x] Menú: `bEnableSculpturilloFeatures=false` (default) oculta Locker/Workshop/Level Creator/Modo local/
+        Modo online/Tutorial. Quedan Jugar/Crear/Unirse/Código/Opciones (+Invitar en el lobby).
+  - [x] Boot: `bEnableTutorialOnFirstRun=false` (default) → primer arranque va directo al menú (sin tutorial).
+  - [x] Compila sin borrar nada (todo el código sigue disponible para reactivar por juego).
+- [ ] **F3 — Steam invites nativas**: activar las invitaciones por overlay de Steam (en sculpturillo estaban
+      planeadas) + mantener las in-game. (Opcional según el juego.)
+- [ ] **F4 — Identidad**: cuando se forkee un juego concreto, renombrar módulo/proyecto e íconos, y prender/
+      reemplazar las features (workshop/locker/tutorial/gameplay) con las de ESE juego.
+
+## Cómo forkear un juego nuevo desde esta base
+1. Rama nueva desde `game-base`.
+2. Poner el gameplay del juego en `GameLevel` (o un nivel nuevo) + su GameMode.
+3. Prender las features que reuses: `bEnableSculpturilloFeatures` (menú), `bEnableTutorialOnFirstRun` (boot),
+   o reemplazar esas piezas por las del juego.
+4. Nunca commitear el juego de vuelta a `game-base`.
 
 ## Notas
 - Compilar con el editor CERRADO: `Build.bat MyPartyGameEditor Win64 Development -Project=... -WaitMutex`.
-- La base online vive en: `Multiplayer/` (MultiplayerSessionsSubsystem + PTSteamWorldwideSearch),
-  `PTGameInstance` (parte online), `UI/PTMainMenuWidget` (menús), `Lobby/` (lobby → travel).
+- Online base: `Multiplayer/` (sessions + Steam search), `PTGameInstance` (online+invites),
+  `UI/PTMainMenuWidget` (menús), `Lobby/` (lobby → travel a GameLevel).

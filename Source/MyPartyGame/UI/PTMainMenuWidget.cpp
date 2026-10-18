@@ -52,24 +52,37 @@ bool UPTMainMenuWidget::Initialize()
     if (EnterCodeButton) EnterCodeButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnEnterCodeClicked);
     if (QuitButton)      QuitButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnQuitClicked);
     if (SettingsButton)  SettingsButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnSettingsClicked);
-    if (LockerButton)    LockerButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnLockerClicked);
-    if (WorkshopButton)  WorkshopButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnWorkshopClicked);
-    if (CreateLevelButton) CreateLevelButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnCreateLevelClicked);
-    if (!LocalModeButton)  LocalModeButton = CreateFallbackLocalModeButton();
-    if (LocalModeButton)   LocalModeButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnLocalModeClicked);
-    if (!OnlinePartyButton && LocalModeButton)
-        OnlinePartyButton = PTWidgetUtils::CloneButtonAfter(this, LocalModeButton, TEXT("OnlinePartyButton"), PTText::Get(TEXT("MENU_ONLINE_MODE")));
-    if (OnlinePartyButton) OnlinePartyButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnOnlinePartyClicked);
-    // Tutorial: si el WBP no trae TutorialButton, se clona debajo del de audiencia (como los otros).
-    if (!TutorialButton && OnlinePartyButton)
-        TutorialButton = PTWidgetUtils::CloneButtonAfter(this, OnlinePartyButton, TEXT("TutorialButton"), PTText::Get(TEXT("MENU_TUTORIAL")));
-    if (TutorialButton)    TutorialButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnTutorialClicked);
 
-    // Traducir el label de los botones de modo local/audiencia: si vienen del WBP (tu amigo los agregó
-    // ahí) traen texto HARDCODEADO y nunca pasaban por PTText → no se traducían. Se los forzamos acá.
-    if (LocalModeButton)   PTWidgetUtils::SetButtonLabel(LocalModeButton,   PTText::Get(TEXT("MENU_LOCAL_MODE")));
-    if (TutorialButton)    PTWidgetUtils::SetButtonLabel(TutorialButton,    PTText::Get(TEXT("MENU_TUTORIAL")));
-    if (OnlinePartyButton) PTWidgetUtils::SetButtonLabel(OnlinePartyButton, PTText::Get(TEXT("MENU_ONLINE_MODE")));
+    // Botones específicos del JUEGO (sculpturillo): solo se crean/enganchan si el template los habilita.
+    // En la base online quedan ocultos (su código sigue en el proyecto, listo para que cada juego lo use).
+    if (bEnableSculpturilloFeatures)
+    {
+        if (LockerButton)    LockerButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnLockerClicked);
+        if (WorkshopButton)  WorkshopButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnWorkshopClicked);
+        if (CreateLevelButton) CreateLevelButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnCreateLevelClicked);
+        if (!LocalModeButton)  LocalModeButton = CreateFallbackLocalModeButton();
+        if (LocalModeButton)   LocalModeButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnLocalModeClicked);
+        if (!OnlinePartyButton && LocalModeButton)
+            OnlinePartyButton = PTWidgetUtils::CloneButtonAfter(this, LocalModeButton, TEXT("OnlinePartyButton"), PTText::Get(TEXT("MENU_ONLINE_MODE")));
+        if (OnlinePartyButton) OnlinePartyButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnOnlinePartyClicked);
+        // Tutorial: si el WBP no trae TutorialButton, se clona debajo del de audiencia (como los otros).
+        if (!TutorialButton && OnlinePartyButton)
+            TutorialButton = PTWidgetUtils::CloneButtonAfter(this, OnlinePartyButton, TEXT("TutorialButton"), PTText::Get(TEXT("MENU_TUTORIAL")));
+        if (TutorialButton)    TutorialButton->OnClicked.AddDynamic(this, &UPTMainMenuWidget::OnTutorialClicked);
+
+        // Traducir el label de los botones de modo local/audiencia: si vienen del WBP (tu amigo los agregó
+        // ahí) traen texto HARDCODEADO y nunca pasaban por PTText → no se traducían. Se los forzamos acá.
+        if (LocalModeButton)   PTWidgetUtils::SetButtonLabel(LocalModeButton,   PTText::Get(TEXT("MENU_LOCAL_MODE")));
+        if (TutorialButton)    PTWidgetUtils::SetButtonLabel(TutorialButton,    PTText::Get(TEXT("MENU_TUTORIAL")));
+        if (OnlinePartyButton) PTWidgetUtils::SetButtonLabel(OnlinePartyButton, PTText::Get(TEXT("MENU_ONLINE_MODE")));
+    }
+    else
+    {
+        // Base online: ocultar los botones específicos del juego que el WBP pudiera traer.
+        auto HideBtn = [](UButton* B) { if (B) B->SetVisibility(ESlateVisibility::Collapsed); };
+        HideBtn(LockerButton); HideBtn(WorkshopButton); HideBtn(CreateLevelButton);
+        HideBtn(LocalModeButton); HideBtn(OnlinePartyButton); HideBtn(TutorialButton);
+    }
 
     // Si hay un PlayButton, arrancar en la pantalla principal (submenú Host/Find/EnterCode oculto).
     // Si el WBP todavía no tiene PlayButton, no se toca nada (comportamiento previo, todo visible).
@@ -226,9 +239,12 @@ void UPTMainMenuWidget::SetPlaySubmenuVisible(bool bVisible)
     // Pantalla "PLAY": Host/Find/EnterCode + su título + Back.
     if (HostButton)             HostButton->SetVisibility(bVisible ? Shown : Hidden);
     if (FindButton)             FindButton->SetVisibility(bVisible ? Shown : Hidden);
-    if (LocalModeButton)        LocalModeButton->SetVisibility(bVisible ? Shown : Hidden);
-    if (TutorialButton)         TutorialButton->SetVisibility(bVisible ? Shown : Hidden);
-    if (OnlinePartyButton)      OnlinePartyButton->SetVisibility(bVisible ? Shown : Hidden);
+    if (bEnableSculpturilloFeatures) // los de modo local/online/tutorial solo en el juego (no en la base)
+    {
+        if (LocalModeButton)        LocalModeButton->SetVisibility(bVisible ? Shown : Hidden);
+        if (TutorialButton)         TutorialButton->SetVisibility(bVisible ? Shown : Hidden);
+        if (OnlinePartyButton)      OnlinePartyButton->SetVisibility(bVisible ? Shown : Hidden);
+    }
     if (EnterCodeButton)        EnterCodeButton->SetVisibility(bVisible ? Shown : Hidden);
     if (PlayBackButton)         PlayBackButton->SetVisibility(bVisible ? Shown : Hidden);
     if (PlaySubmenuHeaderPanel) PlaySubmenuHeaderPanel->SetVisibility(bVisible ? Shown : Hidden);
@@ -237,9 +253,12 @@ void UPTMainMenuWidget::SetPlaySubmenuVisible(bool bVisible)
     if (PlayButton)          PlayButton->SetVisibility(bVisible ? Hidden : Shown);
     if (SettingsButton)      SettingsButton->SetVisibility(bVisible ? Hidden : Shown);
     if (QuitButton)          QuitButton->SetVisibility(bVisible ? Hidden : Shown);
-    if (LockerButton)        LockerButton->SetVisibility(bVisible ? Hidden : Shown); // no solapar en el submenú Play
-    if (WorkshopButton)      WorkshopButton->SetVisibility(bVisible ? Hidden : Shown); // idem: es de la pantalla principal
-    if (CreateLevelButton)   CreateLevelButton->SetVisibility(bVisible ? Hidden : Shown); // idem: no solapar en el submenú Play
+    if (bEnableSculpturilloFeatures) // Locker/Workshop/Level Creator solo en el juego (ocultos en la base)
+    {
+        if (LockerButton)        LockerButton->SetVisibility(bVisible ? Hidden : Shown); // no solapar en el submenú Play
+        if (WorkshopButton)      WorkshopButton->SetVisibility(bVisible ? Hidden : Shown); // idem: es de la pantalla principal
+        if (CreateLevelButton)   CreateLevelButton->SetVisibility(bVisible ? Hidden : Shown); // idem: no solapar en el submenú Play
+    }
     if (MainMenuHeaderPanel) MainMenuHeaderPanel->SetVisibility(bVisible ? Hidden : Shown);
 }
 

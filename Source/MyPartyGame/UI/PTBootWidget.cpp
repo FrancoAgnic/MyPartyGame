@@ -67,8 +67,10 @@ void UPTBootWidget::GoToMainMenu()
     // (obligatorio). Se dispara por el flag, NO por haber recién elegido idioma: así PT.ResetTutorial
     // alcanza para volver a testearlo sin resetear el idioma. El AVANZADO ya no salta solo: se abre
     // desde el botón del menú Jugar o al final del rápido (si el jugador acepta).
+    // Base online (template): el tutorial NO salta solo. Un juego que forkee esto prende
+    // bEnableTutorialOnFirstRun para recuperar el comportamiento de sculpturillo.
     const UPTGameUserSettings* S = UPTGameUserSettings::Get();
-    if (S && !S->HasDoneQuickTutorial())
+    if (bEnableTutorialOnFirstRun && S && !S->HasDoneQuickTutorial())
         if (UPTGameInstance* GI = GetGameInstance<UPTGameInstance>())
         {
             GI->EnterTutorial(/*bQuick=*/true);

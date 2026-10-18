@@ -28,6 +28,8 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional)) UPTLanguageSelectWidget* LanguageSelectPanel = nullptr;
 
     UPROPERTY(EditAnywhere, Category = "Boot") FString MainMenuMap = TEXT("MainMenu");
+    // Template/base: con false, el primer arranque va directo al menú (sin tutorial). Un juego lo prende.
+    UPROPERTY(EditAnywhere, Category = "Template") bool bEnableTutorialOnFirstRun = false;
     // Si no hay TitleAnim: cuántos segundos esperar antes de ir al menú.
     UPROPERTY(EditAnywhere, Category = "Boot") float FallbackTitleSeconds = 3.0f;
 

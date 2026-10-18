@@ -41,6 +41,12 @@ protected:
     virtual bool Initialize() override;
     virtual void NativeDestruct() override;
 
+    // TEMPLATE / base online: con false (por defecto) el menú muestra SOLO lo online (Jugar/Crear/Unirse/
+    // Código/Opciones/Invitar) y OCULTA los botones específicos del juego (Locker/Workshop/Level Creator/
+    // Modo local/Modo online/Tutorial). Cada juego que forkee esta base lo prende (o reemplaza esas piezas).
+    // El código de todas esas features queda en el proyecto, solo que no aparece en la base.
+    UPROPERTY(EditAnywhere, Category="Template") bool bEnableSculpturilloFeatures = false;
+
     // ------------------------------------------------------------------
     // Botones principales (nombres deben coincidir exactamente en el WBP)
     // ------------------------------------------------------------------
