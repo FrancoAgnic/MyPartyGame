@@ -37,6 +37,7 @@ public:
     float EffectiveChooseDuration() const { return IsAudienceGame() ? AudienceChooseDuration : ChooseDuration; }
     UPROPERTY(EditDefaultsOnly, Category="Game") float TurnEndDuration   = 5.f;  // pausa de reveal
     UPROPERTY(EditDefaultsOnly, Category="Game") int32 WordChoiceCount   = 3;    // palabras ofrecidas
+    // Recarga de palabra: cada palabra se puede recargar UNA sola vez por turno (botón de un solo uso).
 
     // ── Puntajes y rondas (estilo Skribbl) ──────────────────────────────────
     UPROPERTY(EditDefaultsOnly, Category="Game") int32 NumRounds          = 10;  // rondas antes de terminar
@@ -80,6 +81,8 @@ public:
 
     // Llamado por el PlayerController del escultor cuando elige una de las 3 palabras.
     void HandleWordChosen(APTPlayerState* Chooser, int32 ChoiceIndex);
+    // Recarga UNA de las palabras ofrecidas por otra del pool (botón por palabra). Gasta 1 del presupuesto.
+    void RerollChoice(APTPlayerState* Chooser, int32 ChoiceIndex);
 
     // Llamado desde el sistema de chat (Fase 4) cuando alguien acierta.
     void HandlePlayerGuessedCorrectly(APTPlayerState* Guesser);
@@ -198,6 +201,8 @@ private:
     // se replica: a los clientes solo les llegan las MÁSCARAS.
     FPTWordEntry           CurrentWord;
     TArray<FPTWordEntry>   CurrentChoices; // las 3 opciones, cada una con todas sus traducciones
+    int32                  RerolledMask = 0;      // bit i = la palabra i ya se recargó este turno (un solo uso)
+    void SendChoicesToSculptor();          // manda CurrentChoices (en el idioma del escultor) + la máscara al escultor
     int32                  TurnsLeftThisRound = 0; // turnos que faltan para cerrar la ronda
 
     // Palabras ya ESCULPIDAS en esta partida (la que se eligió de las 3, por su texto primario). No

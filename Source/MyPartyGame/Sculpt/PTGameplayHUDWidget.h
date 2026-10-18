@@ -87,6 +87,13 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      Txt_Easy;      // dentro de BtnWord0
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      Txt_Mid;       // dentro de BtnWord1
     UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      Txt_Hard;      // dentro de BtnWord2
+    // Botones de "recargar" cada palabra (↻): cambian ESA palabra por otra. Presupuesto compartido de 3
+    // por turno; al agotarse se deshabilitan. Nombres EXACTOS en el WBP (opcionales): BtnReroll0/1/2.
+    UPROPERTY(meta=(BindWidgetOptional)) UButton*         BtnReroll0;
+    UPROPERTY(meta=(BindWidgetOptional)) UButton*         BtnReroll1;
+    UPROPERTY(meta=(BindWidgetOptional)) UButton*         BtnReroll2;
+    // (Opcional) texto con las recargas restantes (ej. "Cambios: 3"). Nombre EXACTO: Txt_RerollsLeft.
+    UPROPERTY(meta=(BindWidgetOptional)) UTextBlock*      Txt_RerollsLeft;
     UPROPERTY(meta=(BindWidgetOptional)) UScrollBox*          ChatScroll;
 
     // ── Lista de controles completa (opcional: para una pantalla de ayuda/settings) ────
@@ -253,6 +260,9 @@ protected:
     UFUNCTION() void OnBtnWord0();
     UFUNCTION() void OnBtnWord1();
     UFUNCTION() void OnBtnWord2();
+    UFUNCTION() void OnBtnReroll0();
+    UFUNCTION() void OnBtnReroll1();
+    UFUNCTION() void OnBtnReroll2();
     UFUNCTION() void OnChatCommitted(const FText& Text, ETextCommit::Type CommitMethod);
     UFUNCTION() void OnChatTextChanged(const FText& Text); // sonido de tipeo por tecla
     UFUNCTION() void OnChatLine(const FString& Name, const FString& Message, EPTChatType Type);
@@ -335,6 +345,7 @@ private:
     UPROPERTY(Transient) TArray<class UPTOffscreenChatWidget*> OffscreenPool;          // pool reutilizable
     void UpdateOffscreenChat(float Dt);
     void ChooseWord(int32 Index);
+    void RerollWord(int32 Index);
     void ApplyInputMode(bool bGameOnly);
     FString BuildScoreboard() const; // "Nombre: pts" ordenado por puntaje desc. (para resultados)
     // Nombre a mostrar respetando el modo captura dev ("Player N" en vez del nick de Steam).

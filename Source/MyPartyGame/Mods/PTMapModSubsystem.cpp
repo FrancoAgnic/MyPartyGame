@@ -240,6 +240,7 @@ void UPTMapModSubsystem::AddModFromFolder(const FString& Folder, const FString& 
     Mod.MapName       = Obj->GetStringField(TEXT("MapName"));
     Mod.Title         = Obj->HasField(TEXT("Title"))  ? Obj->GetStringField(TEXT("Title"))  : FPaths::GetCleanFilename(Folder);
     Mod.Author        = Obj->HasField(TEXT("Author")) ? Obj->GetStringField(TEXT("Author")) : FString();
+    Mod.Description    = Obj->HasField(TEXT("Description")) ? Obj->GetStringField(TEXT("Description")) : FString();
     // Los mapas de props no montan pak → siempre "listos"; los .pak, según estén montados.
     Mod.bMounted      = Mod.bPropMap || MountedPakPaths.Contains(PakPath);
 

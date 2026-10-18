@@ -58,6 +58,9 @@ bool UPTGameplayHUDWidget::Initialize()
     if (BtnWord0) BtnWord0->OnClicked.AddDynamic(this, &UPTGameplayHUDWidget::OnBtnWord0);
     if (BtnWord1) BtnWord1->OnClicked.AddDynamic(this, &UPTGameplayHUDWidget::OnBtnWord1);
     if (BtnWord2) BtnWord2->OnClicked.AddDynamic(this, &UPTGameplayHUDWidget::OnBtnWord2);
+    if (BtnReroll0) BtnReroll0->OnClicked.AddDynamic(this, &UPTGameplayHUDWidget::OnBtnReroll0);
+    if (BtnReroll1) BtnReroll1->OnClicked.AddDynamic(this, &UPTGameplayHUDWidget::OnBtnReroll1);
+    if (BtnReroll2) BtnReroll2->OnClicked.AddDynamic(this, &UPTGameplayHUDWidget::OnBtnReroll2);
     if (ChatInput) ChatInput->OnTextCommitted.AddDynamic(this, &UPTGameplayHUDWidget::OnChatCommitted);
     if (BtnPlayAgain)   BtnPlayAgain->OnClicked.AddDynamic(this, &UPTGameplayHUDWidget::OnBtnPlayAgain);
     if (BtnReturnLobby) BtnReturnLobby->OnClicked.AddDynamic(this, &UPTGameplayHUDWidget::OnBtnReturnLobby);
@@ -869,6 +872,24 @@ void UPTGameplayHUDWidget::RefreshTick()
             if (Txt_Easy) Txt_Easy->SetText(FText::FromString(Ch.IsValidIndex(0) ? Ch[0] : FString()));
             if (Txt_Mid)  Txt_Mid->SetText(FText::FromString(Ch.IsValidIndex(1) ? Ch[1] : FString()));
             if (Txt_Hard) Txt_Hard->SetText(FText::FromString(Ch.IsValidIndex(2) ? Ch[2] : FString()));
+            // Botones de recarga: cada palabra se puede recargar UNA vez. Al usarla, su botón queda
+            // deshabilitado y semitransparente (bit i de la máscara = palabra i ya recargada).
+            const int32 Mask = PC ? PC->CurrentWordRerolledMask : 0;
+            auto SetReroll = [](UButton* B, bool bUsed)
+            {
+                if (!B) return;
+                B->SetIsEnabled(!bUsed);
+                B->SetRenderOpacity(bUsed ? 0.35f : 1.f);
+            };
+            SetReroll(BtnReroll0, (Mask & 1) != 0);
+            SetReroll(BtnReroll1, (Mask & 2) != 0);
+            SetReroll(BtnReroll2, (Mask & 4) != 0);
+            if (Txt_RerollsLeft)
+            {
+                const int32 Left = 3 - (((Mask & 1) != 0) + ((Mask & 2) != 0) + ((Mask & 4) != 0));
+                FFormatOrderedArguments A; A.Add(FText::AsNumber(Left));
+                Txt_RerollsLeft->SetText(PTText::Format(TEXT("HUD_REROLLS_LEFT"), A));
+            }
         }
         break;
     // (el contador de elección lo maneja el bloque del reloj de abajo)
@@ -1222,6 +1243,18 @@ void UPTGameplayHUDWidget::ChooseWord(int32 Index)
         PC->Server_ChooseWord(Index);
     if (WordPickPanel)
         WordPickPanel->SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UPTGameplayHUDWidget::OnBtnReroll0() { RerollWord(0); }
+void UPTGameplayHUDWidget::OnBtnReroll1() { RerollWord(1); }
+void UPTGameplayHUDWidget::OnBtnReroll2() { RerollWord(2); }
+
+void UPTGameplayHUDWidget::RerollWord(int32 Index)
+{
+    // Pide al servidor cambiar ESA palabra por otra. El server valida el presupuesto y re-manda las
+    // opciones (el panel se refresca solo). No cerramos el panel: seguís eligiendo.
+    if (APTSculptPlayerController* PC = GetSculptPC())
+        PC->Server_RerollWord(Index);
 }
 
 void UPTGameplayHUDWidget::OnChatCommitted(const FText& Text, ETextCommit::Type CommitMethod)

@@ -2776,10 +2776,11 @@ void APTSculptPlayerController::OnColorConfirmed(FLinearColor NewColor)
 
 // ── Partida (Sculpturillo) ───────────────────────────────────────────────────
 
-void APTSculptPlayerController::Client_ReceiveWordChoices_Implementation(const TArray<FString>& Choices)
+void APTSculptPlayerController::Client_ReceiveWordChoices_Implementation(const TArray<FString>& Choices, int32 RerolledMask)
 {
     CurrentWordChoices = Choices;
-    UE_LOG(LogTemp, Log, TEXT("[SculptPC] Palabras para elegir: %s"), *FString::Join(Choices, TEXT(", ")));
+    CurrentWordRerolledMask = RerolledMask;
+    UE_LOG(LogTemp, Log, TEXT("[SculptPC] Palabras para elegir: %s (máscara recargas: %d)"), *FString::Join(Choices, TEXT(", ")), RerolledMask);
     OnWordChoicesReceived.Broadcast(Choices);
 }
 
@@ -2817,6 +2818,12 @@ void APTSculptPlayerController::Server_ChooseWord_Implementation(int32 Index)
 {
     if (APTSculptGameMode* GM = GetWorld()->GetAuthGameMode<APTSculptGameMode>())
         GM->HandleWordChosen(GetPlayerState<APTPlayerState>(), Index);
+}
+
+void APTSculptPlayerController::Server_RerollWord_Implementation(int32 Index)
+{
+    if (APTSculptGameMode* GM = GetWorld()->GetAuthGameMode<APTSculptGameMode>())
+        GM->RerollChoice(GetPlayerState<APTPlayerState>(), Index);
 }
 
 void APTSculptPlayerController::Server_SendChat_Implementation(const FString& Message)

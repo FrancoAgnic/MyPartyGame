@@ -27,6 +27,7 @@ struct FPTMapMod
     UPROPERTY(BlueprintReadOnly, Category="MapMod") FString Id;         // "local:<carpeta>" o (a futuro) workshop id
     UPROPERTY(BlueprintReadOnly, Category="MapMod") FString Title;
     UPROPERTY(BlueprintReadOnly, Category="MapMod") FString Author;
+    UPROPERTY(BlueprintReadOnly, Category="MapMod") FString Description; // del mod.json (lo escribe SaveAuthoredMapMeta)
     UPROPERTY(BlueprintReadOnly, Category="MapMod") FString MapName;    // ruta de paquete a la que se viaja
     UPROPERTY(BlueprintReadOnly, Category="MapMod") FString PakPath;    // ruta absoluta al map.pak (mapa .pak)
     UPROPERTY(BlueprintReadOnly, Category="MapMod") FString BlobPath;   // ruta absoluta al sculpt.bin (mapa de PROPS)

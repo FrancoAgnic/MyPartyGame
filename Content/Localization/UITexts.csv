@@ -540,3 +540,4 @@ LP_WIZ_CHAT,Conectá el chat,Connect the chat,Conectar o chat,Chat verbinden,Con
 LP_WIZ_OPTIONAL,(opcional),(optional),(opcional),(optional),(option),(opzionale)
 LP_WIZ_SKIP,Saltar,Skip,Pular,Überspringen,Passer,Salta
 LP_SET_CHATMAX,Máx. en el chat,Max in chat,Máx. no chat,Max. im Chat,Max. dans le chat,Max in chat
+HUD_REROLLS_LEFT,Cambios: {0},Rerolls: {0},Trocas: {0},Wechsel: {0},Changements : {0},Cambi: {0}

@@ -112,7 +112,7 @@ void UPTWordPackRowWidget::InitMap(const FPTMapMod& InMap, bool bSelected, UPTWo
     }
     if (UseButton)     UseButton->SetIsEnabled(!bSelected);
     if (UseButtonText) UseButtonText->SetText(PTText::Get(bSelected ? TEXT("WORDPACK_INUSE") : TEXT("WORDPACK_USE")));
-    if (DescText)      DescText->SetText(FText::GetEmpty());
+    if (DescText)      DescText->SetText(FText::FromString(InMap.Description.TrimStartAndEnd()));
     if (TypeTagText)   TypeTagText->SetText(PTText::Get(TEXT("WORKSHOP_TAG_MAP")));
 
     if (ThumbnailImage)

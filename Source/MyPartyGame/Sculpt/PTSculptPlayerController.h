@@ -308,9 +308,9 @@ public:
     void Server_AckSnapChunk();
 
     // ── Partida (Sculpturillo) ──────────────────────────────────────────────
-    /** El servidor manda las 3 palabras SOLO al escultor. */
+    /** El servidor manda las 3 palabras SOLO al escultor (+ bitmask de cuáles ya se recargaron: bit i = palabra i usada). */
     UFUNCTION(Client, Reliable)
-    void Client_ReceiveWordChoices(const TArray<FString>& Choices);
+    void Client_ReceiveWordChoices(const TArray<FString>& Choices, int32 RerolledMask);
 
     /** El servidor confirma la palabra elegida (solo la ve el escultor). */
     UFUNCTION(Client, Reliable)
@@ -337,6 +337,10 @@ public:
     /** El escultor elige una de las 3 (cliente → servidor). Llamar desde el HUD. */
     UFUNCTION(Server, Reliable, BlueprintCallable, Category="Game")
     void Server_ChooseWord(int32 Index);
+
+    /** El escultor "recarga" una de las palabras ofrecidas (cliente → servidor). Gasta 1 del presupuesto. */
+    UFUNCTION(Server, Reliable, BlueprintCallable, Category="Game")
+    void Server_RerollWord(int32 Index);
 
     /** Envía un mensaje de chat / intento de adivinanza (cliente → servidor).
      *  El servidor decide si es acierto (anti-spoiler) o mensaje normal. Llamar desde el HUD. */
@@ -394,6 +398,9 @@ public:
     FString SpectateSecretWord;
     UPROPERTY(BlueprintReadOnly, Category="Game")
     TArray<FString> CurrentWordChoices;
+    /** Bitmask de qué palabras ya se recargaron este turno (bit i = palabra i ya usó su recarga). */
+    UPROPERTY(BlueprintReadOnly, Category="Game")
+    int32 CurrentWordRerolledMask = 0;
 
     /** El HUD se suscribe: llegan las 3 palabras (solo al escultor). */
     UPROPERTY(BlueprintAssignable, Category="Game")

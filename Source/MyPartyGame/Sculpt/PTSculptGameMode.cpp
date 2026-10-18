@@ -346,6 +346,7 @@ void APTSculptGameMode::StartChoosingPhase()
     }
 
     CurrentWord          = FPTWordEntry();
+    RerolledMask         = 0; // ninguna palabra recargada todavía este turno
     G->CurrentSculptor   = Sculptor;
     G->TurnPhase         = EPTTurnPhase::ChoosingWord;
     G->MaskedWords.Reset();
@@ -356,11 +357,7 @@ void APTSculptGameMode::StartChoosingPhase()
     G->OnTurnPhaseChanged.Broadcast();
 
     // Mandarle las opciones SOLO al escultor, EN SU IDIOMA (fallback si falta la traducción).
-    const int32 SculptorLang = Sculptor->GetLanguageIndex();
-    TArray<FString> ChoiceTexts;
-    for (const FPTWordEntry& E : CurrentChoices) ChoiceTexts.Add(E.ForLang(SculptorLang));
-    if (APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(Sculptor->GetOwningController()))
-        PC->Client_ReceiveWordChoices(ChoiceTexts);
+    SendChoicesToSculptor();
     // Modo local: el escultor elige en SU celular (las opciones viajan en su estado) → vibrarle.
     if (UPTLocalPartySubsystem* LP = LocalParty()) LP->NotifyTurnStarted(Sculptor);
     // Audiencia: avisar que la última palabra vale más (el final queda abierto).
@@ -388,6 +385,41 @@ void APTSculptGameMode::HandleWordChosen(APTPlayerState* Chooser, int32 ChoiceIn
     if (Chooser != G->CurrentSculptor) return; // solo el escultor elige
     GetWorldTimerManager().ClearTimer(PhaseTimer);
     BeginDrawing(ChoiceIndex);
+}
+
+void APTSculptGameMode::SendChoicesToSculptor()
+{
+    APTSculptGameState* G = GS();
+    APTPlayerState* Sculptor = G ? G->CurrentSculptor : nullptr;
+    if (!Sculptor) return;
+    const int32 SculptorLang = Sculptor->GetLanguageIndex();
+    TArray<FString> ChoiceTexts;
+    for (const FPTWordEntry& E : CurrentChoices) ChoiceTexts.Add(E.ForLang(SculptorLang));
+    if (APTSculptPlayerController* PC = Cast<APTSculptPlayerController>(Sculptor->GetOwningController()))
+        PC->Client_ReceiveWordChoices(ChoiceTexts, RerolledMask);
+}
+
+void APTSculptGameMode::RerollChoice(APTPlayerState* Chooser, int32 ChoiceIndex)
+{
+    APTSculptGameState* G = GS();
+    if (!G || G->TurnPhase != EPTTurnPhase::ChoosingWord) return;
+    if (Chooser != G->CurrentSculptor) return;          // solo el escultor
+    if (!CurrentChoices.IsValidIndex(ChoiceIndex)) return;
+    if (RerolledMask & (1 << ChoiceIndex)) return;      // esa palabra ya se recargó (un solo uso)
+
+    // Elegir una palabra NUEVA del pool que no sea ninguna de las que ya están ofrecidas.
+    TArray<FPTWordEntry> Pool = BuildEligibleWordPool();
+    Pool.RemoveAll([this](const FPTWordEntry& E)
+    {
+        for (const FPTWordEntry& C : CurrentChoices)
+            if (C.Primary().Equals(E.Primary(), ESearchCase::IgnoreCase)) return true;
+        return false;
+    });
+    if (Pool.Num() == 0) return; // no hay otra palabra distinta disponible
+
+    CurrentChoices[ChoiceIndex] = Pool[FMath::RandRange(0, Pool.Num() - 1)];
+    RerolledMask |= (1 << ChoiceIndex);                 // marcar esa palabra como ya recargada
+    SendChoicesToSculptor(); // re-manda las opciones actualizadas + la máscara al escultor
 }
 
 void APTSculptGameMode::BeginDrawing(int32 ChoiceIndex)
