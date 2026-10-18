@@ -44,7 +44,9 @@ public:
 
     /** Ruta del mapa de juego. Asignar en BP_LobbyGameMode si se quiere cambiar sin recompilar. */
     UPROPERTY(EditDefaultsOnly, Category="Travel")
-    FString GameMapPath = TEXT("/Game/Template/levels/Lvl-01");
+    // Nivel de GAMEPLAY al que viaja la partida al arrancar. En la base online genérica es un nivel vacío
+    // (GameLevel); cada juego que forkee esta base pone acá su propio nivel. (Antes: Lvl-01 de sculpturillo.)
+    FString GameMapPath = TEXT("/Game/Template/levels/GameLevel");
 
     /** GameMode de esculpido (BP), que se FUERZA por la URL al viajar a un mapa de MOD. Así el mapa del
      *  creador no necesita configurar su GameMode: solo PlayerStarts + un APTSculptVolume + escenografía. */
