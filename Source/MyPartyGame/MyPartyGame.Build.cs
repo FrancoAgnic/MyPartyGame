@@ -25,7 +25,10 @@ public class MyPartyGame : ModuleRules
 			"OnlineSubsystemUtils",
 			"CoreOnline",
 			// Fase 5 — FPlatformApplicationMisc::ClipboardCopy (compartir código de sesión privada)
-			"ApplicationCore"
+			"ApplicationCore",
+			// Stone Splash — física realista de agua: Water (UBuoyancyComponent/olas) + Niagara (splash).
+			"Water",
+			"Niagara"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
@@ -45,6 +48,8 @@ public class MyPartyGame : ModuleRules
 
 		PublicIncludePaths.AddRange(new string[] {
 			"MyPartyGame",
+			"MyPartyGame/Stone",
+			"MyPartyGame/Water",
 			"MyPartyGame/Multiplayer",
 			"MyPartyGame/UI",
 			"MyPartyGame/Lobby",
